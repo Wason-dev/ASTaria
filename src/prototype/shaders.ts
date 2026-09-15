@@ -1,0 +1,221 @@
+export const vertexShader = /* glsl */ `
+varying vec2 vUv;
+void main() {
+  vUv = uv;
+  gl_Position = vec4(position.xy, 0.0, 1.0);
+}
+`
+
+// Schwarzschild null rays: r_s = 1, ISCO = 3. Emission is sampled at
+// actual equatorial-plane crossings; the disk is never a stack of tori.
+export const fragmentShader = /* glsl */ `
+precision highp float;
+varying vec2 vUv;
+uniform vec2 uResolution;
+uniform float uTime;
+uniform float uNight;
+uniform float uInclination;
+uniform float uZoom;
+uniform float uRoll;
+uniform vec2 uCenter;
+uniform float uLens;
+uniform float uDoppler;
+uniform float uQuality;
+uniform sampler2D uStars;
+uniform float uBurst;
+uniform sampler2D uGeodesics;
+uniform sampler2D uTermination;
+uniform vec2 uLutSize;
+uniform float uMaxPhi;
+uniform float uCriticalImpact;
+uniform float uMaxImpact;
+uniform float uCameraRadius;
+const float PI = 3.14159265359;
+
+float hash(vec2 p) {
+  vec3 p3 = fract(vec3(p.xyx) * .1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
+}
+float noise(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  vec2 w = f*f*(3.0-2.0*f);
+  return mix(mix(hash(i),hash(i+vec2(1,0)),w.x),
+             mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),w.x),w.y);
+}
+float fbm(vec2 p) {
+  return .57*noise(p) + .28*noise(p*2.03+13.1) + .15*noise(p*4.09+21.7);
+}
+mat2 rotate(float a) { return mat2(cos(a),sin(a),-sin(a),cos(a)); }
+
+// Periodic angular coordinates remove the atan seam. Each radius advects
+// its own phase at Keplerian angular velocity, omega = k / r^1.5.
+vec4 disk(vec3 p, vec3 ray, float order) {
+  float r = length(p.xz);
+  float inner = smoothstep(2.95,3.24,r);
+  float outer = 1.0-smoothstep(8.0,14.5,r);
+  float phase = atan(p.z,p.x) - uTime * 1.9 / pow(max(r,3.0),1.5);
+  vec2 orbit = vec2(cos(phase),sin(phase));
+  float turbulence = fbm(orbit*3.7 + vec2(r*.45,r*.7));
+  float fine = noise(orbit*13.0 + vec2(r*9.0,-r*5.0));
+  // Unequal stream widths: domain-warp the radial coordinate before
+  // sampling a multi-scale density field. No evenly spaced concentric rings.
+  float radialWarp = r + .20*noise(vec2(r*1.9,0.0)) + .09*turbulence;
+  float broad = noise(vec2(radialWarp*5.1,0.0) + orbit*.28);
+  float mid = noise(vec2(radialWarp*17.3,4.7) + orbit*.44);
+  float thin = noise(vec2(radialWarp*48.0,11.3) + orbit*.7);
+  float silk = noise(vec2(radialWarp*103.0,21.7) + orbit*.55);
+  // Derivative filtering prevents fine streams from flickering at grazing
+  // angles and in the mobile/low-resolution views.
+  thin = mix(thin,.5,smoothstep(.3,1.1,fwidth(radialWarp)*48.0));
+  silk = mix(silk,.5,smoothstep(.3,1.1,fwidth(radialWarp)*103.0));
+  float density = (.08 + .85*pow(broad,1.8) + .7*pow(mid,2.0)
+                 + .35*thin + .14*silk) * (.52+.8*turbulence);
+  float heat = pow(3.0/max(r,3.0),1.9) * inner * outer;
+  float beta = .30 * sqrt(3.0/max(r,3.0));
+  vec3 velocity = normalize(vec3(-p.z,0.0,p.x));
+  float lineVelocity = dot(velocity,-normalize(ray));
+  float doppler = sqrt(1.0-beta*beta)/(1.0-beta*lineVelocity);
+  float boost = mix(1.0,pow(doppler,3.0),uDoppler);
+  float radiance = heat * density * boost * 6.7;
+  vec3 warm = mix(vec3(.24,.095,.029), vec3(1.0,.76,.46), clamp(heat*2.0,0.0,1.0));
+  warm = mix(warm,vec3(1.0,.955,.86),smoothstep(.55,1.3,radiance));
+  vec3 light = warm * radiance;
+  float ink = heat * (.65+.65*density) * (.65+.35*boost);
+  // Optical depth varies across the flow; gaps reveal secondary images.
+  float opticalDepth = density * (1.6 + heat*2.8);
+  float opacity = inner*outer*(1.0-exp(-opticalDepth));
+  // The same material changes absorption/emission with paper transmission.
+  vec3 material = mix(vec3(.12,.115,.105)*ink,light,uNight);
+  material += (fine-.5)*.009*uNight*outer*inner;
+  return vec4(material,opacity * mix(1.0,.60,order));
+}
+
+vec3 sky(vec3 direction, vec2 p) {
+  // The two distant star populations drift at different angular speeds.
+  // Sampling after geodesic deflection makes their paths stretch into arcs.
+  vec3 farDirection = direction;
+  farDirection.xz = rotate(uTime*.0032)*farDirection.xz;
+  vec2 uv = vec2(atan(farDirection.x,-farDirection.z)/(2.0*PI)+.5,
+                 asin(clamp(farDirection.y,-1.0,1.0))/PI+.5);
+  vec3 stars = texture2D(uStars,fract(uv)).rgb;
+  vec3 distantStars = texture2D(uStars,fract(uv*1.37+vec2(.413+uTime*.00017,.219))).rgb;
+
+  // Sparse, advected interstellar dust: locally luminous filaments alternate
+  // with absorbing lanes. Most of the sky retains its deep black floor.
+  vec2 skyPlane = vec2(farDirection.x,farDirection.y)*vec2(1.15,1.0);
+  vec2 current = skyPlane*4.1+vec2(uTime*.008,-uTime*.004);
+  float warp = fbm(current*1.8+vec2(12.7,3.1));
+  float clouds = fbm(current*3.2+warp*1.3);
+  float filaments = fbm(current*9.0+vec2(warp*2.1,clouds));
+  float lane = exp(-pow((skyPlane.x*.58+skyPlane.y*.82+.12+warp*.12)/.19,2.0));
+  float veil = lane*pow(max(0.0,clouds-.34),1.7);
+  float absorption = smoothstep(.28,.69,filaments);
+  vec3 night = vec3(.00045,.00055,.0008);
+  night += vec3(.003,.0035,.0045)*veil*absorption;
+  night += vec3(.002,.0015,.001)*veil*pow(filaments,3.0);
+  // Outside the strong lens, resolve a locally planar star atlas at pixel
+  // scale. Near the hole, use the exact curved-ray celestial coordinates.
+  vec2 localSkyUv = vUv*.18+vec2(.32+uTime*.000035,.47-uTime*.000012);
+  vec3 crispStars = texture2D(uStars,fract(localSkyUv)).rgb;
+  float strongLens = 1.0-smoothstep(4.0,7.5,length(p));
+  night += mix(crispStars,stars,strongLens)*.42 + distantStars*.012*strongLens;
+  float grain = hash(gl_FragCoord.xy)-.5;
+  vec3 paper = vec3(.92,.905,.87) + grain*.012;
+  float shade = exp(-max(0.0,length(p)-2.5)*.72)*.12;
+  paper -= shade;
+  return mix(paper,night,smoothstep(.05,.95,uNight));
+}
+
+void main() {
+  float aspect = uResolution.x/uResolution.y;
+  vec2 center = aspect < .8 ? vec2(.5)+(uCenter-vec2(.5))*vec2(.2,6.0) : uCenter;
+  float scale = (aspect < .8 ? 13.8 : 10.2)/uZoom;
+  vec2 screen = (vUv-center)*vec2(aspect,1.0)*scale;
+  vec2 p = rotate(-uRoll)*screen;
+  vec3 origin = vec3(0.0,cos(uInclination),sin(uInclination))*30.0;
+  vec3 forward = -normalize(origin);
+  vec3 right = vec3(1,0,0);
+  vec3 up = normalize(cross(right,forward));
+  vec3 ray = normalize(forward*30.0 + right*p.x + up*p.y);
+  vec3 e1 = normalize(origin);
+  vec3 tangentPart = ray - dot(ray,e1)*e1;
+  vec3 e2 = length(tangentPart) > 1e-6 ? normalize(tangentPart) : up;
+  float b = uCameraRadius*length(cross(e1,ray))/sqrt(1.0-1.0/uCameraRadius);
+  float delta = b-uCriticalImpact;
+  float span = delta < 0.0 ? uCriticalImpact : uMaxImpact-uCriticalImpact;
+  float q = sign(delta)*pow(abs(delta)/span,1.0/3.0);
+  float lutX = ((q+1.0)*.5*(uLutSize.x-1.0)+.5)/uLutSize.x;
+  vec4 terminal = texture2D(uTermination,vec2(lutX,.5));
+  float phi0 = mod(atan(-e1.y,e2.y)+PI,PI);
+  vec3 color = vec3(0.0);
+  float transmission = 1.0;
+  float hit = 0.0;
+  float edgeAngle = atan(p.y,p.x);
+  vec2 edgeDirection = vec2(cos(edgeAngle),sin(edgeAngle));
+  float paperFiber = (noise(edgeDirection*190.0)-.5)*.026
+                   + (noise(edgeDirection*431.0)-.5)*.012;
+  float paperCapture = 1.0-smoothstep(uCriticalImpact+paperFiber-scale/uResolution.y*.5,
+                                      uCriticalImpact+paperFiber+scale/uResolution.y*.5,b);
+  float horizonAA = max(fwidth(b)*.75, .0005);
+  float shadowCoverage = 1.0-smoothstep(uCriticalImpact-horizonAA,uCriticalImpact+horizonAA,b);
+  float swallowed = mix(paperCapture,shadowCoverage,uNight);
+  if (uLens > .5) {
+    for(int i=0;i<3;i++) {
+      float phi = phi0+float(i)*PI;
+      if(phi >= terminal.r) break;
+      float lutY = (phi/uMaxPhi*(uLutSize.y-1.0)+.5)/uLutSize.y;
+      float invR = texture2D(uGeodesics,vec2(lutX,lutY)).r;
+      float r = 1.0/max(invR,.0001);
+      if(r > 2.95 && r < 14.5) {
+        vec3 radial = e1*cos(phi)+e2*sin(phi);
+        vec3 tangential = -e1*sin(phi)+e2*cos(phi);
+        float row = 1.0/uLutSize.y;
+        float w = (texture2D(uGeodesics,vec2(lutX,lutY+row)).r-
+                   texture2D(uGeodesics,vec2(lutX,lutY-row)).r)/
+                   (2.0*uMaxPhi/(uLutSize.y-1.0));
+        vec3 localRay = normalize(-w/sqrt(max(.01,1.0-invR))*radial+invR*tangential);
+        vec4 sampleDisk = disk(radial*r,localRay,min(float(i),1.0));
+        color += transmission*sampleDisk.rgb*sampleDisk.a;
+        transmission *= 1.0-sampleDisk.a;
+        hit += 1.0;
+      }
+    }
+    ray = e1*cos(terminal.r)+e2*sin(terminal.r);
+  } else {
+    float dist = -origin.y/ray.y;
+    if(dist > 0.0) {
+      vec3 intersect = origin+ray*dist;
+      vec4 sampleDisk = disk(intersect,ray,0.0);
+      color = sampleDisk.rgb*sampleDisk.a;
+      transmission = 1.0-sampleDisk.a;
+      hit = sampleDisk.a > 0.0 ? 1.0 : 0.0;
+    }
+    swallowed = length(cross(origin,ray)) < 1.0 ? 1.0 : 0.0;
+  }
+  vec3 background = sky(normalize(ray),p);
+  vec3 horizon = mix(vec3(.014,.012,.01),vec3(.00002),uNight);
+  color += transmission*mix(background,horizon,swallowed);
+  // A subpixel SDF ring has a sharp threshold and a separate decaying
+  // scattering shoulder. The radius is the critical impact parameter.
+  float theta = atan(p.y,p.x);
+  float fiber = (noise(vec2(cos(theta),sin(theta))*180.0)-.5)*.018*(1.0-uNight);
+  float edge = abs(b-2.598-fiber);
+  float pixel = scale/uResolution.y;
+  float ringWidth = max(fwidth(b)*.64,pixel*.42);
+  float ring = exp(-.5*pow(edge/ringWidth,2.0));
+  float shoulder = exp(-edge*85.0)*.16;
+  float ringGrain = .94+.06*noise(vec2(cos(theta),sin(theta))*93.0);
+  float side = mix(.65,1.6,smoothstep(-2.6,2.6,p.x));
+  color += vec3(1.0,.77,.52)*(ring*.25+shoulder)*ringGrain*side*uNight*transmission*uLens;
+  // Photographic compression preserves fine hot strands, without bloom.
+  vec3 mapped = color/(1.0+color);
+  vec3 nightColor = pow(max(mapped,vec3(0.0)),vec3(.4545));
+  // Ink absorbs light continuously at the thinning outer edge. Adding the
+  // paper a second time would create a white halo around the daytime disk.
+  vec3 dayColor = color;
+  vec3 finalColor = mix(dayColor,nightColor,uNight);
+  finalColor += (hash(gl_FragCoord.xy+vec2(7,13))-.5)/255.0;
+  gl_FragColor = vec4(clamp(finalColor,0.0,1.0),1.0);
+}
+`

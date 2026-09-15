@@ -1,0 +1,102 @@
+{
+  "changedBaselineFiles": [
+    "index.html",
+    "src/main.tsx",
+    "src/prototype/BlackHolePrototype.tsx",
+    "src/prototype/prototype.css"
+  ],
+  "businessFilesUnchanged": true,
+  "implementation": [
+    {
+      "file": "src/prototype/BlackHolePrototype.tsx",
+      "lines": 141,
+      "added": 137,
+      "removed": 5,
+      "sha256": "cbdfacd9bd24044f0aa83526623821c05c145789725d6747ae90eac2cc385fb2"
+    },
+    {
+      "file": "src/prototype/prototype.css",
+      "lines": 9,
+      "added": 9,
+      "removed": 3,
+      "sha256": "fd96fbfbf82522426fb89380806c56391649ca59c3e688e759ec93d407120160"
+    },
+    {
+      "file": "src/main.tsx",
+      "lines": 20,
+      "added": 2,
+      "removed": 1,
+      "sha256": "d131bb37832708c880c79bc07e254ea2d659fd672ac6e4aef56b598be900811c"
+    },
+    {
+      "file": "src/prototype/BlackHoleRenderer.ts",
+      "lines": 757,
+      "added": 757,
+      "removed": 0,
+      "sha256": "3bb8225e5e3edc0d85b8db5ec63e0a99b22d0a9d1f88df3890552771085bcbb3"
+    },
+    {
+      "file": "src/prototype/geodesics.ts",
+      "lines": 185,
+      "added": 185,
+      "removed": 0,
+      "sha256": "39fb9b2d044c745bd4adb948a620c2d4315ce7fc2c07ee3c8536ec7d0b9f7950"
+    },
+    {
+      "file": "src/prototype/shaders.ts",
+      "lines": 221,
+      "added": 221,
+      "removed": 0,
+      "sha256": "d8894ae6dd67bd2de442f78c78a4965a99a8bfe273f7f6d5af869cb65fdb191e"
+    },
+    {
+      "file": "src/prototype/StarInfall.ts",
+      "lines": 319,
+      "added": 319,
+      "removed": 0,
+      "sha256": "f6a0a0858e96a908e457ea143331980e5694a98dcf4f670b261703ab1b45a904"
+    },
+    {
+      "file": "src/prototype/postprocessing.ts",
+      "lines": 200,
+      "added": 200,
+      "removed": 0,
+      "sha256": "017067deb464c5b55d45058a2bc5518ce761846d3285622af4911ac8528e0296"
+    },
+    {
+      "file": "scripts/capture-p0.mjs",
+      "lines": 139,
+      "added": 139,
+      "removed": 0,
+      "sha256": "06a130cf09c22e33a033bf190c161399284737a6605b12ddc0e7ac206e5094bf"
+    },
+    {
+      "file": "scripts/summarize-trace.mjs",
+      "lines": 808,
+      "added": 808,
+      "removed": 0,
+      "sha256": "758937ddc2ca417219423fe306a19e71b8f100fa8bf125a5e575a2f38cf1d55c"
+    },
+    {
+      "file": "scripts/summarize-trace.test.mjs",
+      "lines": 759,
+      "added": 759,
+      "removed": 0,
+      "sha256": "8a799b4832f38cb90572d969679be9912b736bc1620def127aa7b17d443aaf0d"
+    },
+    {
+      "file": "scripts/summarize-presentation.mjs",
+      "lines": 237,
+      "added": 237,
+      "removed": 0,
+      "sha256": "f62eef501ee84e53430a0054e62c1a7de0339d76d03e5f4530836f1b6a3828c4"
+    },
+    {
+      "file": "scripts/verify-geodesics.mjs",
+      "lines": 217,
+      "added": 217,
+      "removed": 0,
+      "sha256": "b8a39f50ed7efeb1cf0d7a0389eb31fc4baf059c7f6f3e3d76c232c9cf89e29a"
+    }
+  ]
+}

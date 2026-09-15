@@ -1,0 +1,20 @@
+import { StrictMode } from 'react'
+import { createRoot } from 'react-dom/client'
+import App from './App'
+import BlackHolePrototype from './prototype/BlackHolePrototype'
+import './index.css'
+
+const container = document.getElementById('root')
+
+if (!container) {
+  throw new Error('Root container #root not found')
+}
+
+// P0 is the default entry; the existing application remains at #/app.
+const Root = window.location.hash === '#/app' ? App : BlackHolePrototype
+
+createRoot(container).render(
+  <StrictMode>
+    <Root />
+  </StrictMode>,
+)

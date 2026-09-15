@@ -1,0 +1,37 @@
+✔ accepts both {"traceEvents":[...]} and a bare array (1.072333ms)
+✔ parses trace text with a UTF-8 BOM (0.200875ms)
+✔ converts microsecond timestamps and durations to milliseconds (0.306709ms)
+✔ separates threads by pid+tid and ignores non-CrRendererMain threads (0.281417ms)
+✔ outputs every matching CrRendererMain thread instead of only the first (0.151958ms)
+✔ long task threshold is exactly dur > 50000 us (strict) (0.112834ms)
+✔ frame interval thresholds are strict at 20 ms and 33.34 ms (0.092625ms)
+✔ frame interval distribution reports avg/p50/p95/p99/max, fps and over-threshold counts (0.092375ms)
+✔ percentile helper uses R-7 linear interpolation (0.049292ms)
+✔ empty trace yields an explicit, non-crashing empty report (0.143875ms)
+✔ a trace with events but no thread_name metadata finds no thread (0.070833ms)
+✔ incomplete and unpaired events are ignored and counted, never guessed (0.116667ms)
+✔ without RAF events the frame data is unavailable and no fps is invented (0.16925ms)
+✔ a single FireAnimationFrame start is not enough for an interval distribution (0.048333ms)
+✔ other frame-like event names are never used as a substitute for FireAnimationFrame (0.043334ms)
+✔ CLI writes a machine JSON report and leaves the input trace untouched (28.06675ms)
+✔ CLI prints JSON to stdout when no output path is given (30.001167ms)
+✔ CLI refuses to write the report over the input trace (41.09125ms)
+✔ CLI reports usage, read and format errors with JSON on stderr (124.130375ms)
+✔ the report echoes the command it was run with (0.293208ms)
+✔ modern Chromium task aliases are recognized without double-counting nested wrappers (0.114208ms)
+✔ nested B/E slices reconstruct task duration while anonymous E closes the innermost slice (0.107292ms)
+✔ B/E slices cannot pair across threads or process boundaries (0.080125ms)
+✔ a renderer without recorded task events reports unavailable instead of zero long tasks (0.057ms)
+✔ FireAnimationFrame B/E pairs contribute one start each and exclude E timestamps (0.112792ms)
+✔ multiple RAF callbacks remain callback observations and are not relabeled as presented frames (0.117542ms)
+✔ metadata zero timestamps do not inflate the recording window and displayTimeUnit does not rescale events (0.080375ms)
+✔ CLI refuses symlink and hard-link output aliases without changing the original trace (51.046209ms)
+✔ CLI reads compressed DevTools exports by gzip signature and preserves their exact bytes (25.638542ms)
+ℹ tests 29
+ℹ suites 0
+ℹ pass 29
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 343.701291

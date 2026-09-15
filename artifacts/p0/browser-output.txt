@@ -1,0 +1,110 @@
+[
+  {
+    "name": "pause stops idle rendering and simulation",
+    "pass": true,
+    "details": {
+      "pause1": {
+        "fps": 0,
+        "frameMs": 0,
+        "p95": 0,
+        "quality": "ultra",
+        "requestedQuality": "ultra",
+        "width": 1440,
+        "height": 900,
+        "drawCalls": 6,
+        "stars": 50000,
+        "paused": true,
+        "reducedMotion": false,
+        "renderedFrames": 99,
+        "simulationTime": 1.6332359999999984,
+        "visibilityPaused": false,
+        "zoom": 0.7,
+        "roll": 18,
+        "inclination": 83,
+        "centerX": 0.65,
+        "centerY": 0.51,
+        "view": "panorama",
+        "cameraTransition": false,
+        "pointerActive": false,
+        "pointerStrength": 0,
+        "pointerX": 0.5,
+        "pointerY": 0.5
+      },
+      "pause2": {
+        "fps": 0,
+        "frameMs": 0,
+        "p95": 0,
+        "quality": "ultra",
+        "requestedQuality": "ultra",
+        "width": 1440,
+        "height": 900,
+        "drawCalls": 6,
+        "stars": 50000,
+        "paused": true,
+        "reducedMotion": false,
+        "renderedFrames": 99,
+        "simulationTime": 1.6332359999999984,
+        "visibilityPaused": false,
+        "zoom": 0.7,
+        "roll": 18,
+        "inclination": 83,
+        "centerX": 0.65,
+        "centerY": 0.51,
+        "view": "panorama",
+        "cameraTransition": false,
+        "pointerActive": false,
+        "pointerStrength": 0,
+        "pointerX": 0.5,
+        "pointerY": 0.5
+      }
+    }
+  },
+  {
+    "name": "390px viewport fits",
+    "pass": true
+  },
+  {
+    "name": "reduced motion stops ambient frames",
+    "pass": true
+  },
+  {
+    "name": "reduced motion controls still render",
+    "pass": true
+  },
+  {
+    "name": "minimum tier renders",
+    "pass": true,
+    "details": {
+      "fps": 60.001348344906624,
+      "frameMs": 16.666292134831462,
+      "p95": 16.800000000000182,
+      "quality": "safe",
+      "requestedQuality": "safe",
+      "width": 936,
+      "height": 585,
+      "drawCalls": 6,
+      "stars": 8000,
+      "paused": false,
+      "reducedMotion": false,
+      "renderedFrames": 197,
+      "simulationTime": 3.1165359999999964,
+      "visibilityPaused": false,
+      "zoom": 0.7,
+      "roll": 18,
+      "inclination": 83,
+      "centerX": 0.65,
+      "centerY": 0.51,
+      "view": "panorama",
+      "cameraTransition": false,
+      "pointerActive": false,
+      "pointerStrength": 0,
+      "pointerX": 0.5,
+      "pointerY": 0.5
+    }
+  },
+  {
+    "name": "no runtime exceptions",
+    "pass": true,
+    "errors": []
+  }
+]

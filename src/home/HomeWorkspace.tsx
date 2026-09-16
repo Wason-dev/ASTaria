@@ -29,6 +29,7 @@ export function HomeWorkspace({ readCamera, onViewChange, sceneUnavailable }: Pr
   const progress = sceneUnavailable || cameraMissing ? Number(chatOpen) : Math.max(0, Math.min(1, (camera.zoom - .7) / (2.05 - .7)))
   const [menuOpen, setMenuOpen] = useState(false)
   const [draft, setDraft] = useState(readDraft)
+  const [typing, setTyping] = useState(false)
   const [draftWarning, setDraftWarning] = useState('')
   const [saveError, setSaveError] = useState('')
   const [savedIds, setSavedIds] = useState<string[]>([])
@@ -43,6 +44,7 @@ export function HomeWorkspace({ readCamera, onViewChange, sceneUnavailable }: Pr
   const compose = useRef<HTMLTextAreaElement>(null)
   const informationToggle = useRef<HTMLButtonElement>(null)
   const menuTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const typingTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const menuOpenedByHover = useRef(false)
   const focusAfterTransition = useRef(false)
   const taskOpener = useRef<HTMLElement | null>(null)
@@ -72,6 +74,14 @@ export function HomeWorkspace({ readCamera, onViewChange, sceneUnavailable }: Pr
     return () => observer.disconnect()
   }, [])
   useEffect(() => () => clearTimeout(menuTimer.current), [])
+  useEffect(() => () => clearTimeout(typingTimer.current), [])
+  const stopTyping = () => { clearTimeout(typingTimer.current); setTyping(false) }
+  const lightInput = () => {
+    clearTimeout(typingTimer.current)
+    setTyping(true)
+    typingTimer.current = setTimeout(() => setTyping(false), 950)
+  }
+  useEffect(() => { if (!chatOpen || (compact && informationActive)) stopTyping() }, [chatOpen, compact, informationActive])
   useEffect(() => {
     if (!menuOpen) { menuOpenedByHover.current = false; return }
     const dismiss = (event: PointerEvent) => {
@@ -131,6 +141,7 @@ export function HomeWorkspace({ readCamera, onViewChange, sceneUnavailable }: Pr
       const task = await data.create({ title, notes: lines.slice(1).join('\n') })
       setSavedIds(ids => [...ids, task.id])
       setDraft('')
+      stopTyping()
       compose.current?.focus()
     } catch (reason) { setSaveError(reason instanceof Error ? reason.message : '保存失败，请保留原文后重试') }
   }
@@ -150,9 +161,9 @@ export function HomeWorkspace({ readCamera, onViewChange, sceneUnavailable }: Pr
     })
   }
   const startTop = layout.taskBottom + 12
-  const endTop = Math.max(84, layout.height * .19)
   const endWidth = Math.min(300, layout.width - (layout.width <= 600 ? 44 : 68))
-  const endHeight = Math.max(180, Math.min(390, layout.height - endTop - 65))
+  const endHeight = Math.max(180, Math.min(390, layout.height - 149))
+  const endTop = Math.max(84, (layout.height - endHeight) / 2)
   const width = 128 + (endWidth - 128) * progress
   // Extend only the UI surface, reading the existing camera transition.
   const extendedWidth = width + (compact ? 0 : endWidth * Math.max(0, (progress - .5) / .5))
@@ -208,10 +219,14 @@ export function HomeWorkspace({ readCamera, onViewChange, sceneUnavailable }: Pr
         </div>
         <form onSubmit={event => void submit(event)}>
           <label className="p0-sr-only" htmlFor="home-compose">写下你的事情，第一行是标题，其余是备注</label>
+          <div className="home-input-shell" data-typing={typing}>
+          <span className="home-input-glow" aria-hidden="true" />
+          <span className="home-input-rim" aria-hidden="true" />
           <textarea ref={compose} id="home-compose" placeholder="写下你的事情" rows={2} maxLength={2161} value={draft} disabled={data.saving}
-            onChange={event => setDraft(event.target.value)} onKeyDown={event => {
+            onChange={event => { setDraft(event.target.value); lightInput() }} onCompositionUpdate={lightInput} onBlur={stopTyping} onKeyDown={event => {
               if (event.key === 'Enter' && (event.metaKey || event.ctrlKey) && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit() }
             }} />
+          </div>
           <div className="home-compose-actions"><small>对话稍后接入</small><button className="home-capture" type="submit" disabled={data.saving || data.loading || Boolean(data.loadError) || !draft.trim()}>{data.saving ? '正在保存' : '记为事项'}</button></div>
           {(saveError || draftWarning || data.loadError) && <p className="home-form-error" role="alert">{saveError || draftWarning || data.loadError}{data.loadError && <button type="button" onClick={data.retry}>重试读取</button>}</p>}
         </form>

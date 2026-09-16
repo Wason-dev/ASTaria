@@ -66,6 +66,14 @@
       "pass": true
     },
     {
+      "name": "expanded chat and agenda sit on the horizontal centerline",
+      "pass": true
+    },
+    {
+      "name": "rounded composer border has clear space above the capture button",
+      "pass": true
+    },
+    {
       "name": "calendar and empty agenda are real and all sections exist",
       "pass": true
     },
@@ -74,11 +82,35 @@
       "pass": true
     },
     {
+      "name": "month navigation animates an inert outgoing grid without moving agenda rows",
+      "pass": true
+    },
+    {
+      "name": "reversing a month animation changes its direction immediately",
+      "pass": true
+    },
+    {
+      "name": "rapid month navigation reaches the final month and removes stale grids",
+      "pass": true
+    },
+    {
+      "name": "keyboard month transitions retain the selected day focus",
+      "pass": true
+    },
+    {
       "name": "month navigation moves forward and back without losing the selected date",
       "pass": true
     },
     {
       "name": "material matches chosen transparency and low rim with no reflection",
+      "pass": true
+    },
+    {
+      "name": "typing wakes the warm-gold edge light",
+      "pass": true
+    },
+    {
+      "name": "edge movement pauses after typing and the glow fades",
       "pass": true
     },
     {
@@ -110,7 +142,15 @@
       "pass": true
     },
     {
+      "name": "reduced motion disables the input light orbit",
+      "pass": true
+    },
+    {
       "name": "chat and composer fit 390x844",
+      "pass": true
+    },
+    {
+      "name": "composer and capture button stay separated at 390x844",
       "pass": true
     },
     {
@@ -122,11 +162,23 @@
       "pass": true
     },
     {
+      "name": "composer and capture button stay separated at 320x568",
+      "pass": true
+    },
+    {
       "name": "agenda paging fits 320x568 without hidden focus or scroll drift",
       "pass": true
     },
     {
       "name": "chat and composer fit 844x390",
+      "pass": true
+    },
+    {
+      "name": "composer and capture button stay separated at 844x390",
+      "pass": true
+    },
+    {
+      "name": "short touch screens can scroll to validation feedback without clipping the form",
       "pass": true
     },
     {

@@ -7,18 +7,27 @@
 .home-agenda-scroll:focus-visible { outline: 1px solid var(--p0-line); outline-offset: 2px }
 .home-month-controls { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 3px }
 .home-month-controls strong { font-size: 11px; font-weight: 400; font-variant-numeric: tabular-nums }
+.home-month-controls strong > span { display: inline-block }
+.home-month-label-enter { animation: home-month-label-in 300ms cubic-bezier(.22,.68,0,1) both }
 .home-month-controls > div { display: flex; align-items: center; gap: 3px }
 .p0 .home-month-controls button { width: 24px; height: 24px; padding: 0; font-size: 16px; line-height: 1; border-radius: 6px }
 .p0 .home-month-controls .home-month-today { width: 30px; font-size: 10px; color: var(--p0-muted) }
+.home-month-window { --month-travel: 24px; position: relative; overflow: hidden; isolation: isolate }
+.home-month-window[data-direction=previous] { --month-travel: -24px }
+.home-month-grid-enter { animation: home-month-in 300ms cubic-bezier(.22,.68,0,1) both }
+.home-month-grid-exit { position: absolute; inset: 0; pointer-events: none; animation: home-month-out 300ms cubic-bezier(.22,.68,0,1) both }
 .home-month-grid { width: 100%; table-layout: fixed; border-collapse: collapse; text-align: center }
 .home-month-grid th { height: 18px; font-size: 9px; font-weight: 400; color: var(--p0-muted) }
 .home-month-grid td { padding: 0 }
-.p0 .home-month-grid button { position: relative; display: block; width: 100%; height: 22px; padding: 0; font-size: 10px; line-height: 20px; border-radius: 6px; font-variant-numeric: tabular-nums }
-.home-month-grid button[data-outside=true] { color: #aaa8a2 }
-.home-month-grid button[aria-current=date] { box-shadow: inset 0 0 0 1px var(--p0-line) }
-.home-month-grid button[aria-pressed=true] { background: #ffffff17; color: #fff }
-.home-month-grid button i { position: absolute; left: calc(50% - 1px); bottom: 1px; width: 2px; height: 2px; border-radius: 50%; background: currentColor }
+.p0 .home-month-grid button, .home-month-day { position: relative; display: block; width: 100%; height: 22px; padding: 0; font-size: 10px; line-height: 20px; border-radius: 6px; font-variant-numeric: tabular-nums }
+.home-month-grid button[data-outside=true], .home-month-day[data-outside=true] { color: #aaa8a2 }
+.home-month-grid button[aria-current=date], .home-month-day[data-today=true] { box-shadow: inset 0 0 0 1px var(--p0-line) }
+.home-month-grid button[aria-pressed=true], .home-month-day[data-selected=true] { background: #ffffff17; color: #fff }
+.home-month-grid button i, .home-month-day i { position: absolute; left: calc(50% - 1px); bottom: 1px; width: 2px; height: 2px; border-radius: 50%; background: currentColor }
 .p0 .home-month-grid button:focus-visible { outline-offset: -1px; outline-color: #eeeae3 }
+@keyframes home-month-in { from { opacity: 0; transform: translateX(var(--month-travel)) } to { opacity: 1; transform: translateX(0) } }
+@keyframes home-month-out { from { opacity: 1; transform: translateX(0) } to { opacity: 0; transform: translateX(calc(-1 * var(--month-travel))) } }
+@keyframes home-month-label-in { from { opacity: .3; transform: translateY(3px) } to { opacity: 1; transform: translateY(0) } }
 .home-agenda-section { padding-top: 8px; margin-top: 8px; border-top: 1px solid var(--p0-line) }
 .home-agenda-section h3 { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 4px; font-size: 11px; font-weight: 400 }
 .home-agenda-section h3 > span, .home-agenda-undated summary > span { font-size: 10px; font-variant-numeric: tabular-nums; color: var(--p0-muted) }
@@ -41,10 +50,15 @@
 @media (hover: hover) { .home-month-controls button:hover, .home-month-grid button:hover, .home-agenda-list button:hover { background: #ffffff0a } }
 .home-morph[data-compact=true] .home-agenda { border-left: 0 }
 @media (pointer: coarse) {
-  .p0 .home-month-grid button { height: 30px }
+  .p0 .home-month-grid button, .home-month-day { height: 30px }
   .p0 .home-month-controls button { min-width: 30px; height: 30px }
   .p0 .home-agenda-back { min-height: 44px }
   .p0 .home-agenda-list button { min-height: 44px }
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-month-window, .home-month-window[data-direction=previous] { --month-travel: 0px }
+  .home-month-grid-enter, .home-month-grid-exit { animation-duration: 80ms; animation-timing-function: linear }
+  .home-month-label-enter { animation: none }
 }
 @media (max-height: 520px) {
   .home-agenda { padding: 10px 16px }

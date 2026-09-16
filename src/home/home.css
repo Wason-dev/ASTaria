@@ -41,8 +41,20 @@
 .home-receipt { font-size: 12px; overflow-wrap: anywhere; flex-shrink: 0 }
 .home-receipt > span { display: block; color: var(--p0-muted); font-size: 10px; margin-bottom: 3px }
 .p0 .home-receipt button { text-align: left; padding: 0; line-height: 1.6 }
-.home-xixi form { border-top: 1px solid var(--p0-line); padding-top: 10px }
-.home-xixi textarea { display: block; width: 100%; min-height: 54px; max-height: 130px; border: 0; border-radius: 8px; padding: 4px 0; background: transparent; resize: none; font-size: 12px; line-height: 1.7; text-shadow: 0 1px 3px #0009 }
+.home-xixi form { flex-shrink: 0; border-top: 1px solid var(--p0-line); padding-top: 10px }
+@property --home-input-angle { syntax: '<angle>'; inherits: false; initial-value: 35deg }
+.home-input-shell { position: relative; isolation: isolate; border-radius: 10px; margin-bottom: 14px; background: #080a0e0a; box-shadow: inset 0 0 0 1px #ffffff12; transition: box-shadow 600ms ease, background 600ms ease }
+.home-input-shell:focus-within { box-shadow: inset 0 0 0 1px #eacb914a, 0 0 8px #eebd6010 }
+.home-input-shell:focus-within[data-typing=true] { box-shadow: inset 0 0 0 1px #f9d99b6b, 0 0 9px #edb96028; background: #d79a3906; transition-duration: 180ms }
+.home-input-glow, .home-input-rim { position: absolute; pointer-events: none; inset: 0; border-radius: inherit; padding: 1px; opacity: 0; background: conic-gradient(from var(--home-input-angle), #e6ac3e00 0deg, #e6ac3e14 40deg, #f5c671b3 69deg, #fff7de 82deg, #edba64a6 96deg, #e6ac3e00 132deg, #e6ac3e00 212deg, #edb65380 248deg, #fff3cbdd 262deg, #e6ac3e00 292deg); mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); mask-composite: exclude; animation: home-input-orbit 4s linear infinite paused; transition: opacity 850ms cubic-bezier(.2,.7,.2,1) }
+.home-input-glow { inset: -1px; padding: 2px; filter: blur(3.5px) drop-shadow(0 0 5px #efbc6399); mask: none; background: none }
+.home-input-glow::before { content: ''; position: absolute; inset: 0; border-radius: inherit; padding: inherit; background: conic-gradient(from var(--home-input-angle), transparent 20deg, #ffdfa6 80deg, transparent 138deg, transparent 208deg, #efb747bb 263deg, transparent 300deg); mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); mask-composite: exclude; animation: home-input-orbit 4s linear infinite paused }
+.home-input-shell:focus-within .home-input-rim { opacity: .3 }
+.home-input-shell:focus-within[data-typing=true] :is(.home-input-rim, .home-input-glow) { opacity: 1; animation-play-state: running; transition-duration: 160ms }
+.home-input-shell:focus-within[data-typing=true] .home-input-glow::before { animation-play-state: running }
+.home-xixi textarea { position: relative; display: block; width: 100%; min-height: 54px; max-height: 130px; border: 0; border-radius: inherit; padding: 8px 10px; background: transparent; resize: none; font-size: 12px; line-height: 1.7; text-shadow: 0 1px 3px #0009; caret-color: #ffe0a4 }
+.p0 .home-xixi textarea:focus-visible { outline: 1px solid #f7d99a70; outline-offset: -1px }
+@keyframes home-input-orbit { from { --home-input-angle: 35deg } to { --home-input-angle: 395deg } }
 .home-xixi textarea::placeholder { color: #d4d0c9; opacity: 1 }
 .home-compose-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px }
 .home-compose-actions small { color: var(--p0-muted); font-size: 10px }
@@ -78,10 +90,19 @@
   .home-launch::before { content: ''; position: absolute; inset: -3px 0 }
 }
 @media (pointer: coarse) and (max-width: 600px) { .home-clock { top: 31px } }
-@media (prefers-reduced-motion: reduce) { .home-menu, .home-nav-hint, .home-pane-track { transition: none } }
+@media (prefers-reduced-motion: reduce) {
+  .home-menu, .home-nav-hint, .home-pane-track { transition: none }
+  .home-input-rim, .home-input-glow, .home-input-glow::before { animation: none }
+  .home-input-shell, .home-input-rim, .home-input-glow { transition-duration: 120ms }
+}
+@media (forced-colors: active) {
+  .home-input-rim, .home-input-glow { display: none }
+  .p0 .home-xixi textarea:focus-visible { outline: 1px solid Highlight }
+}
 @media (max-height: 520px) {
   .home-xixi { padding: 10px 16px }
-  .home-xixi > header { padding-bottom: 5px }
-  .home-conversation { padding: 8px 0; min-height: 26px }
+  .home-xixi > header { flex-shrink: 0; padding-bottom: 5px }
+  .home-conversation { padding: 8px 0; min-height: 0 }
+  .home-xixi form { flex-shrink: 1; min-height: 0; overflow: auto; scrollbar-width: thin; overscroll-behavior: contain; margin-inline: -6px; padding-inline: 6px; padding-bottom: 5px }
   .home-xixi textarea { min-height: 38px; height: 42px }
 }

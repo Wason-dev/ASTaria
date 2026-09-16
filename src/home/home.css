@@ -1,14 +1,23 @@
 .home-workspace { position: absolute; inset: 0; pointer-events: none; font-size: 12px; line-height: 1.6 }
 .home-workspace :is(button, textarea, .home-menu, dialog) { pointer-events: auto }
-.home-nav { position: absolute; top: 24px; left: var(--home-left); z-index: 4; pointer-events: auto; padding-bottom: 8px }
-.p0 .home-brand { font-size: 13px; font-weight: 500; letter-spacing: .025em; padding: 7px 0; min-height: 34px }
-.home-brand span { font-weight: 400 }
-.home-menu { position: relative; width: 142px; box-sizing: border-box; border-radius: 13px; box-shadow: 0 6px 18px rgba(0, 0, 0, .6); overflow: hidden }
-.home-menu[hidden] { display: none }
-.home-menu-list { position: relative; z-index: 1; list-style: none; margin: 0; padding: 7px }
-.p0 .home-menu button { display: flex; justify-content: space-between; width: 100%; text-align: left; padding: 8px 10px; font-size: 11px; border-radius: 8px }
+.home-nav { position: absolute; top: 24px; left: var(--home-left); z-index: 4; pointer-events: auto }
+.home-nav[data-menu-open=true]::after { content: ''; position: absolute; left: 100%; top: 0; width: 12px; height: 100% }
+.p0 .home-brand { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; letter-spacing: .025em; padding: 7px 0; min-height: 34px }
+.home-brand-wordmark > span { font-weight: 400 }
+.home-nav-hint { width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 1.1; stroke-linecap: round; stroke-linejoin: round; opacity: .65; transition: transform 280ms ease }
+.home-brand[aria-expanded=true] .home-nav-hint { transform: rotate(180deg) }
+.home-menu { position: absolute; left: calc(100% + 12px); top: 0; width: max-content; max-width: calc(100vw - 2 * var(--home-left)); box-sizing: border-box; border-radius: 13px; box-shadow: 0 6px 18px rgba(0, 0, 0, .6); visibility: hidden; opacity: 0; transform: translateX(-8px); transition: transform 280ms cubic-bezier(.2,.7,.2,1), opacity 220ms ease, visibility 0s 280ms }
+.home-menu[data-open=true] { visibility: visible; opacity: 1; transform: translateX(0); transition-delay: 0s }
+.home-workspace .home-menu[data-open=false] { pointer-events: none }
+.home-menu-list { position: relative; z-index: 1; display: flex; align-items: center; gap: 2px; list-style: none; margin: 0; padding: 5px }
+.p0 .home-menu button { display: block; white-space: nowrap; padding: 5px 10px; font-size: 11px; line-height: 1.6; border-radius: 8px }
+.p0 .home-menu button:focus-visible { outline-offset: -1px }
 .home-menu button[aria-current] { background: #ffffff09 }
-.home-menu button span { font-size: 10px }
+.home-clock { position: absolute; right: var(--home-left); top: 32px; font-size: 11px; line-height: 18px; font-variant-numeric: tabular-nums; letter-spacing: .08em; color: var(--p0-muted) }
+.home-notification { position: absolute; right: var(--home-left); bottom: 18px; max-width: min(240px, calc(100vw - 180px)); height: 32px; border-radius: 16px; box-shadow: 0 6px 18px rgba(0, 0, 0, .6); pointer-events: auto }
+.home-notification-content { position: relative; display: flex; align-items: center; gap: 7px; height: 100%; padding: 0 12px; color: var(--p0-muted); font-size: 11px }
+.home-notification-content svg { flex: none; width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1; stroke-linecap: round; stroke-linejoin: round }
+.home-notification-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
 .home-current { position: absolute; left: var(--home-left); top: 43%; width: min(270px, calc(100% - 44px)) }
 .home-current > span { display: block; font-size: 11px; line-height: 1.6; color: var(--p0-muted); letter-spacing: .12em; margin-bottom: 9px }
 .p0 .home-current-title { display: block; max-width: 100%; text-align: left; font-size: 14px; line-height: 1.6; padding: 0; letter-spacing: .035em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
@@ -49,14 +58,23 @@
 .home-task-status button[aria-pressed=true] { opacity: 1; background: #ffffff0c }
 @media (max-width: 600px) {
   .home-nav { top: 18px }
+  .home-nav[data-menu-open=true]::after { left: 0; top: 100%; width: 100%; height: 6px }
+  .home-menu { left: 0; top: calc(100% + 6px) }
+  .p0 .home-menu button { padding-inline: 9px }
+  .home-clock { top: 26px }
+  .home-notification { bottom: 15px }
   .p0 .home-brand { font-size: 12px }
   .p0 .home-current-title { font-size: 13px }
   .home-xixi textarea { font-size: 16px }
 }
 @media (pointer: coarse) {
   .p0 .home-brand, .p0 .home-menu button, .p0 .home-collapse, .p0 .home-capture, .home-task-dialog button { min-height: 44px }
+  .p0 .home-menu button { min-width: 44px }
+  .home-clock { top: 37px }
   .home-launch::before { content: ''; position: absolute; inset: -3px 0 }
 }
+@media (pointer: coarse) and (max-width: 600px) { .home-clock { top: 31px } }
+@media (prefers-reduced-motion: reduce) { .home-menu, .home-nav-hint { transition: none } }
 @media (max-height: 520px) {
   .home-xixi { padding: 10px 16px }
   .home-xixi > header { padding-bottom: 5px }

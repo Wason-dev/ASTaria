@@ -6,6 +6,7 @@ import { readableDate, STATUS_LABELS } from '../spatial/scene'
 import { useSceneCamera } from '../spatial/useSceneCamera'
 import { useSpatialTasks } from '../spatial/useSpatialTasks'
 import { GlassSurface, MeasuredGlassSurface } from './GlassSurface'
+import { HomeStatus } from './HomeStatus'
 import './home.css'
 
 type Props = {
@@ -37,6 +38,7 @@ export function HomeWorkspace({ readCamera, onViewChange, sceneUnavailable }: Pr
   const launch = useRef<HTMLButtonElement>(null)
   const compose = useRef<HTMLTextAreaElement>(null)
   const menuTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const menuOpenedByHover = useRef(false)
   const focusAfterTransition = useRef(false)
   const taskOpener = useRef<HTMLElement | null>(null)
 
@@ -59,6 +61,14 @@ export function HomeWorkspace({ readCamera, onViewChange, sceneUnavailable }: Pr
     return () => observer.disconnect()
   }, [])
   useEffect(() => () => clearTimeout(menuTimer.current), [])
+  useEffect(() => {
+    if (!menuOpen) { menuOpenedByHover.current = false; return }
+    const dismiss = (event: PointerEvent) => {
+      if (event.target instanceof Node && !nav.current?.contains(event.target)) setMenuOpen(false)
+    }
+    document.addEventListener('pointerdown', dismiss)
+    return () => document.removeEventListener('pointerdown', dismiss)
+  }, [menuOpen])
   useEffect(() => {
     try { sessionStorage.setItem(DRAFT_KEY, draft); setDraftWarning('') }
     catch { setDraftWarning(draft ? '草稿暂未保存，离开页面前请复制' : '') }
@@ -133,20 +143,30 @@ export function HomeWorkspace({ readCamera, onViewChange, sceneUnavailable }: Pr
   const chatVisible = progress > .35
 
   return <div ref={root} className="home-workspace" data-spatial-ui data-chat-open={chatOpen}>
-    <nav ref={nav} className="home-nav" aria-label="ASTaria 导航"
-      onPointerEnter={event => { if (event.pointerType !== 'touch') { clearTimeout(menuTimer.current); setMenuOpen(true) } }}
+    <nav ref={nav} className="home-nav" aria-label="ASTaria 导航" data-menu-open={menuOpen}
+      onPointerEnter={event => { if (event.pointerType !== 'touch') { clearTimeout(menuTimer.current); menuOpenedByHover.current = !menuOpen; setMenuOpen(true) } }}
       onPointerLeave={() => { menuTimer.current = setTimeout(() => { if (!nav.current?.contains(document.activeElement)) setMenuOpen(false) }, 180) }}
-      onFocus={() => { clearTimeout(menuTimer.current); setMenuOpen(true) }}
+      onFocus={() => clearTimeout(menuTimer.current)}
       onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setMenuOpen(false) }}>
-      <button ref={brand} className="home-brand" aria-expanded={menuOpen} aria-controls="home-menu" onClick={() => setMenuOpen(true)}>AST<span>aria</span></button>
-      <div id="home-menu" className="home-menu" hidden={!menuOpen}>
+      <button ref={brand} className="home-brand" aria-expanded={menuOpen} aria-controls="home-menu" title="ASTaria 导航" onClick={event => {
+        // The pointer opens a hover preview before its first click reaches us.
+        // Keep that first click open; subsequent clicks and keyboard activation toggle.
+        const keepOpen = event.detail > 0 && menuOpenedByHover.current
+        menuOpenedByHover.current = false
+        setMenuOpen(open => keepOpen || !open)
+      }}>
+        <span className="home-brand-wordmark">AST<span>aria</span></span>
+        <svg className="home-nav-hint" viewBox="0 0 10 10" aria-hidden="true"><path d="m3.5 2 3 3-3 3" /></svg>
+      </button>
+      <div id="home-menu" className="home-menu" data-open={menuOpen} inert={!menuOpen} aria-hidden={!menuOpen}>
         <MeasuredGlassSurface radius={13} />
         <ul className="home-menu-list">
           <li><button aria-current="page" onClick={() => { changeChat(false); brand.current?.focus(); setMenuOpen(false) }}>首页</button></li>
-          {['工作台', '时间表', '日历', 'DDL'].map(label => <li key={label}><button disabled>{label}<span>稍后</span></button></li>)}
+          {['工作台', '时间表', '日历', 'DDL'].map(label => <li key={label}><button disabled title="稍后开放">{label}<span className="p0-sr-only">，稍后开放</span></button></li>)}
         </ul>
       </div>
     </nav>
+    <HomeStatus showClock={!sceneUnavailable} />
 
     <div ref={current} className="home-current" style={{ opacity: Math.max(0, 1 - progress * 3), visibility: progress > .6 ? 'hidden' : 'visible' }} inert={chatOpen}>
       <span>当前任务</span>

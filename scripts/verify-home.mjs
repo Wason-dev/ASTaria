@@ -48,12 +48,12 @@ const click = async selector => {
 }
 const key = async (key, code = key, modifiers = 0) => {
   const windowsVirtualKeyCode = { Escape: 27, Enter: 13, Tab: 9 }[key] ?? 0
-  await send('Input.dispatchKeyEvent', { type: 'keyDown', key, code, modifiers, windowsVirtualKeyCode })
+  await send('Input.dispatchKeyEvent', { type: 'keyDown', key, code, modifiers, windowsVirtualKeyCode, ...(key === 'Enter' ? { text: '\r', unmodifiedText: '\r' } : {}) })
   await send('Input.dispatchKeyEvent', { type: 'keyUp', key, code, modifiers, windowsVirtualKeyCode })
   await delay(40)
 }
-const shot = async name => {
-  await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 2, y: 2 })
+const shot = async (name, keepPointer = false) => {
+  if (!keepPointer) await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 2, y: 2 })
   await delay(180)
   await fs.writeFile(new URL(`screenshots/${name}.png`, output), Buffer.from((await send('Page.captureScreenshot', { format: 'png' })).data, 'base64'))
 }
@@ -75,15 +75,28 @@ try {
   await check('minimal home removes observatory, sun and task-orbit UI', '!document.querySelector(".p0-observatory,.p0-actions,.p0-views,.spatial-ui") && document.querySelector(".p0-whisper").textContent === "把今天交给我"')
   await check('pill stays small and exactly 12px below two-line current task', '(()=>{const p=document.querySelector(".home-morph").getBoundingClientRect(),t=document.querySelector(".home-current").getBoundingClientRect();return p.width===128&&p.height===38&&Math.abs(p.top-t.bottom-12)<.1})()')
   await check('real empty state, no example tasks', 'document.querySelector(".home-current-title").textContent === "今天还没有事项"')
+  await check('small local clock and honest empty notification stay in the right corners', '(()=>{const c=document.querySelector(".home-clock"),n=document.querySelector(".home-notification"),r=n.getBoundingClientRect();return c.textContent===new Intl.DateTimeFormat("zh-CN",{hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).format(new Date())&&getComputedStyle(c).fontSize==="11px"&&r.height===32&&r.bottom<innerHeight&&r.right>innerWidth/2&&n.textContent==="暂无通知"})()')
   await shot('home-1440')
   await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 52, y: 43 })
   await wait('document.querySelector(".home-brand").getAttribute("aria-expanded")==="true"')
   await wait('(()=>{const m=document.querySelector(".home-menu").getBoundingClientRect(),i=document.querySelector(".home-menu feImage");return i?.getAttribute("width")===String(Math.round(m.width))&&i?.getAttribute("height")===String(Math.round(m.height))})()')
   await check('hover navigation contains planned pages without fake destinations', 'document.querySelectorAll(".home-menu button:disabled").length===4 && document.querySelector(".home-menu").textContent.includes("DDL")')
-  await check('navigation uses the same measured glass material', '(()=>{const m=document.querySelector(".home-menu").getBoundingClientRect(),g=document.querySelector(".home-menu .home-glass-surface"),s=getComputedStyle(g),i=document.querySelector(".home-menu feImage");return Math.round(m.width)===142&&i.getAttribute("width")===String(Math.round(m.width))&&i.getAttribute("height")===String(Math.round(m.height))&&Math.abs(Number(s.getPropertyValue("--glass-tint"))-.2)<1e-6&&Number(s.getPropertyValue("--glass-rim"))===.15&&Number(s.getPropertyValue("--glass-shadow"))===.6})()')
+  await check('navigation uses the same measured glass material', '(()=>{const m=document.querySelector(".home-menu").getBoundingClientRect(),g=document.querySelector(".home-menu .home-glass-surface"),s=getComputedStyle(g),i=document.querySelector(".home-menu feImage");return m.height<=40&&i.getAttribute("width")===String(Math.round(m.width))&&i.getAttribute("height")===String(Math.round(m.height))&&Math.abs(Number(s.getPropertyValue("--glass-tint"))-.2)<1e-6&&Number(s.getPropertyValue("--glass-rim"))===.15&&Number(s.getPropertyValue("--glass-shadow"))===.6})()')
+  await check('navigation opens horizontally beside the brand with an animated hint', '(()=>{const m=document.querySelector(".home-menu"),r=m.getBoundingClientRect(),b=document.querySelector(".home-brand").getBoundingClientRect(),c=document.querySelector(".home-clock").getBoundingClientRect(),items=[...m.querySelectorAll("li")];return items.every(i=>Math.abs(i.getBoundingClientRect().top-items[0].getBoundingClientRect().top)<1)&&r.left>b.right&&r.right<c.left&&getComputedStyle(m).transitionProperty.includes("transform")&&getComputedStyle(m).clipPath==="none"&&!!document.querySelector(".home-nav-hint")})()')
+  await shot('navigation-1440', true)
+  await click('.home-brand')
+  await check('first mouse click keeps the hover preview open', '!document.querySelector(".home-menu").inert')
+  await click('.home-brand')
+  await check('second mouse click closes navigation', 'document.querySelector(".home-menu").inert')
+  await key('Enter')
   await evaluate('document.querySelector(".home-menu button").focus()')
   await key('Escape')
-  await check('Escape closes nav and restores brand focus', 'document.querySelector(".home-menu").hidden && document.activeElement.matches(".home-brand")')
+  await check('Escape closes nav and restores brand focus', 'document.querySelector(".home-menu").inert && document.querySelector(".home-menu").getAttribute("aria-hidden")==="true" && document.activeElement.matches(".home-brand")')
+  await key('Enter')
+  await check('keyboard can reopen navigation', 'document.querySelector(".home-brand").getAttribute("aria-expanded")==="true"&&!document.querySelector(".home-menu").inert')
+  await key('Escape')
+  await key('Tab')
+  await check('closed navigation is skipped by Tab', '!document.activeElement.closest(".home-menu")')
   await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 2, y: 2 })
   await evaluate('window.__morph=document.querySelector(".home-morph");true')
   await click('.home-launch')
@@ -126,6 +139,7 @@ try {
   await click('.home-launch'); await wait('document.activeElement.id==="home-compose"')
   await check('draft survives closing and reloading', 'document.querySelector("#home-compose").value==="还没写完的事项"')
   await check('reduced motion reaches chat without animated camera', 'window.__ASTARIA_P0__.getSnapshot().cameraTransition===false && document.querySelector(".home-morph").dataset.progress==="1.000"')
+  await check('reduced motion also disables navigation animation', 'getComputedStyle(document.querySelector(".home-menu")).transitionProperty==="none"&&getComputedStyle(document.querySelector(".home-nav-hint")).transitionProperty==="none"')
   for (const [width, height] of [[390, 844], [320, 568], [844, 390]]) {
     await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false }); await delay(150)
     await check(`chat and composer fit ${width}x${height}`, '(()=>{const r=document.querySelector(".home-morph").getBoundingClientRect(),f=document.querySelector(".home-xixi form").getBoundingClientRect();return document.documentElement.scrollWidth<=innerWidth&&r.left>=0&&r.right<=innerWidth&&r.bottom<=innerHeight&&f.bottom<=r.bottom&&f.top>=r.top})()')
@@ -133,6 +147,15 @@ try {
   }
   await click('.home-collapse'); await wait('document.querySelector(".home-morph").dataset.progress==="0.000"')
   await check('hidden chat is inert and keyboard returns to pill', 'document.querySelector(".home-xixi").inert && document.activeElement.matches(".home-launch")')
+  for (const [width, height] of [[1440, 900], [600, 800], [320, 568]]) {
+    await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false })
+    await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] })
+    await evaluate('document.querySelector(".home-brand").focus()')
+    if (await evaluate('document.querySelector(".home-menu").inert')) await key('Enter')
+    await check(`horizontal navigation and corner text fit ${width}x${height}`, '(()=>{const m=document.querySelector(".home-menu").getBoundingClientRect(),c=document.querySelector(".home-clock").getBoundingClientRect(),n=document.querySelector(".home-notification").getBoundingClientRect(),w=document.querySelector(".p0-whisper").getBoundingClientRect(),items=[...document.querySelectorAll(".home-menu li")];return m.right<=innerWidth&&m.left>=0&&items.every(i=>Math.abs(i.getBoundingClientRect().top-items[0].getBoundingClientRect().top)<1)&&(m.right<=c.left||m.top>=c.bottom)&&w.right<n.left&&n.bottom<=innerHeight})()')
+    await shot(`navigation-${width}`, true)
+    await key('Escape')
+  }
   // Force context loss only in this isolated browser and confirm local input stays usable.
   await evaluate('document.querySelector(".p0-universe canvas").dispatchEvent(new Event("webglcontextlost",{cancelable:true}))')
   await click('.home-launch')

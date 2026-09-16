@@ -9,11 +9,11 @@ rendering chunks...
 computing gzip size...
 dist/registerSW.js                0.13 kB
 dist/manifest.webmanifest         0.40 kB
-dist/index.html                   0.80 kB │ gzip:   0.41 kB
-dist/assets/index-kvN5wuqV.css   36.09 kB │ gzip:   8.53 kB
-dist/assets/index-CU9Vocf8.js   923.43 kB │ gzip: 256.30 kB
+dist/index.html                   0.80 kB │ gzip:   0.42 kB
+dist/assets/index-DVCrmgV1.css   36.12 kB │ gzip:   8.54 kB
+dist/assets/index-RZGi8xY3.js   923.66 kB │ gzip: 256.49 kB
 
-✓ built in 183ms
+✓ built in 180ms
 [plugin builtin:vite-reporter] 
 (!) Some chunks are larger than 500 kB after minification. Consider:
 - Using dynamic import() to code-split the application
@@ -22,7 +22,7 @@ dist/assets/index-CU9Vocf8.js   923.43 kB │ gzip: 256.30 kB
 
 PWA v1.3.0
 mode      generateSW
-precache  20 entries (1108.61 KiB)
+precache  20 entries (1108.87 KiB)
 files generated
   dist/sw.js
   dist/workbox-9c191d2f.js

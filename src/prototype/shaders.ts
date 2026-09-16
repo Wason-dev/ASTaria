@@ -133,11 +133,16 @@ void main() {
   float scale = (aspect < .8 ? 13.8 : 10.2)/uZoom;
   vec2 screen = (vUv-center)*vec2(aspect,1.0)*scale;
   vec2 p = rotate(-uRoll)*screen;
-  vec3 origin = vec3(0.0,cos(uInclination),sin(uInclination))*30.0;
+  // The close preset is a camera move as well as a framing change. Reducing
+  // the eye distance widens the ray fan across the same image plane, giving
+  // the disk a stronger near-field perspective instead of a flat crop.
+  float closeView = smoothstep(.72,2.05,uZoom);
+  float cameraDistance = mix(30.0,16.0,closeView);
+  vec3 origin = vec3(0.0,cos(uInclination),sin(uInclination))*cameraDistance;
   vec3 forward = -normalize(origin);
   vec3 right = vec3(1,0,0);
   vec3 up = normalize(cross(right,forward));
-  vec3 ray = normalize(forward*30.0 + right*p.x + up*p.y);
+  vec3 ray = normalize(forward*cameraDistance + right*p.x + up*p.y);
   vec3 e1 = normalize(origin);
   vec3 tangentPart = ray - dot(ray,e1)*e1;
   vec3 e2 = length(tangentPart) > 1e-6 ? normalize(tangentPart) : up;
@@ -151,15 +156,12 @@ void main() {
   vec3 color = vec3(0.0);
   float transmission = 1.0;
   float hit = 0.0;
-  float edgeAngle = atan(p.y,p.x);
-  vec2 edgeDirection = vec2(cos(edgeAngle),sin(edgeAngle));
-  float paperFiber = (noise(edgeDirection*190.0)-.5)*.026
-                   + (noise(edgeDirection*431.0)-.5)*.012;
-  float paperCapture = 1.0-smoothstep(uCriticalImpact+paperFiber-scale/uResolution.y*.5,
-                                      uCriticalImpact+paperFiber+scale/uResolution.y*.5,b);
-  float horizonAA = max(fwidth(b)*.75, .0005);
+  // Keep the event-horizon silhouette geometric. Paper grain belongs in the
+  // material paths; moving this boundary with high-frequency noise produces
+  // a visibly serrated circle at retina resolution.
+  float horizonAA = max(length(vec2(dFdx(b),dFdy(b)))*.8, .00001);
   float shadowCoverage = 1.0-smoothstep(uCriticalImpact-horizonAA,uCriticalImpact+horizonAA,b);
-  float swallowed = mix(paperCapture,shadowCoverage,uNight);
+  float swallowed = shadowCoverage;
   if (uLens > .5) {
     for(int i=0;i<3;i++) {
       float phi = phi0+float(i)*PI;
@@ -191,7 +193,9 @@ void main() {
       transmission = 1.0-sampleDisk.a;
       hit = sampleDisk.a > 0.0 ? 1.0 : 0.0;
     }
-    swallowed = length(cross(origin,ray)) < 1.0 ? 1.0 : 0.0;
+    float directImpact = length(cross(origin,ray));
+    float directAA = max(length(vec2(dFdx(directImpact),dFdy(directImpact)))*.8, .00001);
+    swallowed = 1.0-smoothstep(1.0-directAA,1.0+directAA,directImpact);
   }
   vec3 background = sky(normalize(ray),p);
   vec3 horizon = mix(vec3(.014,.012,.01),vec3(.00002),uNight);
@@ -199,8 +203,7 @@ void main() {
   // A subpixel SDF ring has a sharp threshold and a separate decaying
   // scattering shoulder. The radius is the critical impact parameter.
   float theta = atan(p.y,p.x);
-  float fiber = (noise(vec2(cos(theta),sin(theta))*180.0)-.5)*.018*(1.0-uNight);
-  float edge = abs(b-2.598-fiber);
+  float edge = abs(b-uCriticalImpact);
   float pixel = scale/uResolution.y;
   float ringWidth = max(fwidth(b)*.64,pixel*.42);
   float ring = exp(-.5*pow(edge/ringWidth,2.0));

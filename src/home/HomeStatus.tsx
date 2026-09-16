@@ -1,32 +1,12 @@
-import { useEffect, useState } from 'react'
 import { MeasuredGlassSurface } from './GlassSurface'
 
 const clockFormat = new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
 const dateFormat = new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
 
 /** Receives display text once Xixi's notification policy is connected. */
-type Props = { showClock: boolean; notification?: string }
+type Props = { now: Date; showClock: boolean; notification?: string }
 
-export function HomeStatus({ showClock, notification }: Props) {
-  const [now, setNow] = useState(() => new Date())
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout>
-    const refresh = () => {
-      clearTimeout(timer)
-      const date = new Date()
-      setNow(date)
-      timer = setTimeout(refresh, 60_000 - date.getTime() % 60_000)
-    }
-    const resume = () => { if (document.visibilityState === 'visible') refresh() }
-    refresh()
-    document.addEventListener('visibilitychange', resume)
-    window.addEventListener('focus', refresh)
-    return () => {
-      clearTimeout(timer)
-      document.removeEventListener('visibilitychange', resume)
-      window.removeEventListener('focus', refresh)
-    }
-  }, [])
+export function HomeStatus({ now, showClock, notification }: Props) {
   const time = clockFormat.format(now)
   const date = dateFormat.format(now)
   const message = notification?.trim() || '暂无通知'

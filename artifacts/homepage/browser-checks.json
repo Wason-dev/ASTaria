@@ -14,7 +14,7 @@
       "pass": true
     },
     {
-      "name": "small local clock and honest empty notification stay in the right corners",
+      "name": "small local date and clock and honest empty notification stay in the right corners",
       "pass": true
     },
     {
@@ -62,6 +62,22 @@
       "pass": true
     },
     {
+      "name": "equal chat and agenda columns share one continuous glass surface",
+      "pass": true
+    },
+    {
+      "name": "calendar and empty agenda are real and all sections exist",
+      "pass": true
+    },
+    {
+      "name": "all empty agenda sections fit in the default compact window",
+      "pass": true
+    },
+    {
+      "name": "month navigation moves forward and back without losing the selected date",
+      "pass": true
+    },
+    {
       "name": "material matches chosen transparency and low rim with no reflection",
       "pass": true
     },
@@ -98,7 +114,15 @@
       "pass": true
     },
     {
+      "name": "agenda paging fits 390x844 without hidden focus or scroll drift",
+      "pass": true
+    },
+    {
       "name": "chat and composer fit 320x568",
+      "pass": true
+    },
+    {
+      "name": "agenda paging fits 320x568 without hidden focus or scroll drift",
       "pass": true
     },
     {
@@ -119,6 +143,26 @@
     },
     {
       "name": "horizontal navigation and corner text fit 320x568",
+      "pass": true
+    },
+    {
+      "name": "today and DDL show dated tasks without assigning undated inbox tasks",
+      "pass": true
+    },
+    {
+      "name": "selected day distinguishes scheduled work from its later deadline",
+      "pass": true
+    },
+    {
+      "name": "calendar arrow navigation restores the selected day and focus",
+      "pass": true
+    },
+    {
+      "name": "completing an agenda task updates lists and restores visible focus",
+      "pass": true
+    },
+    {
+      "name": "resizing an agenda detail to narrow layout restores a visible focus target",
       "pass": true
     },
     {

@@ -28,7 +28,11 @@
 .home-glass-surface::after { content: ''; position: absolute; inset: 0; border-radius: inherit; padding: 1px; background: linear-gradient(125deg, rgb(255 255 255 / calc(var(--glass-rim) * .9)), rgb(255 255 255 / calc(var(--glass-rim) * .07)) 34%, rgb(255 255 255 / calc(var(--glass-rim) * .24)) 70%, rgb(255 255 255 / calc(var(--glass-rim) * .9))); mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); mask-composite: exclude }
 .p0 .home-launch { position: absolute; inset: 0; display: grid; place-items: center; width: 100%; height: 100%; padding: 0; border-radius: inherit; font-size: 12px; letter-spacing: .1em }
 .home-launch:hover { color: #fff }
-.home-xixi { position: absolute; inset: 0; display: flex; flex-direction: column; padding: 16px 18px; border-radius: inherit; overflow: hidden; text-shadow: 0 1px 3px #000b }
+.home-deck { position: absolute; inset: 0; border-radius: inherit; overflow: hidden }
+.home-pane-track { display: flex; height: 100%; transition: transform 240ms ease }
+.home-xixi { position: relative; flex: 0 0 50%; width: 50%; display: flex; flex-direction: column; min-width: 0; padding: 16px 18px; overflow: hidden; text-shadow: 0 1px 3px #000b }
+.home-chat-actions { display: flex; align-items: center; gap: 12px }
+.p0 .home-information-toggle { font-size: 11px; padding: 6px 0; color: var(--p0-muted) }
 .home-xixi > header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-bottom: 13px; border-bottom: 1px solid var(--p0-line) }
 .home-xixi header strong { font-size: 12px; font-weight: 400; letter-spacing: .12em }
 .p0 .home-collapse { font-size: 11px; padding: 6px 0 6px 8px; color: var(--p0-muted) }
@@ -38,7 +42,7 @@
 .home-receipt > span { display: block; color: var(--p0-muted); font-size: 10px; margin-bottom: 3px }
 .p0 .home-receipt button { text-align: left; padding: 0; line-height: 1.6 }
 .home-xixi form { border-top: 1px solid var(--p0-line); padding-top: 10px }
-.home-xixi textarea { display: block; width: 100%; min-height: 54px; max-height: 130px; border: 0; padding: 4px 0; background: transparent; resize: none; font-size: 12px; line-height: 1.7; text-shadow: 0 1px 3px #0009 }
+.home-xixi textarea { display: block; width: 100%; min-height: 54px; max-height: 130px; border: 0; border-radius: 8px; padding: 4px 0; background: transparent; resize: none; font-size: 12px; line-height: 1.7; text-shadow: 0 1px 3px #0009 }
 .home-xixi textarea::placeholder { color: #d4d0c9; opacity: 1 }
 .home-compose-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px }
 .home-compose-actions small { color: var(--p0-muted); font-size: 10px }
@@ -68,13 +72,13 @@
   .home-xixi textarea { font-size: 16px }
 }
 @media (pointer: coarse) {
-  .p0 .home-brand, .p0 .home-menu button, .p0 .home-collapse, .p0 .home-capture, .home-task-dialog button { min-height: 44px }
+  .p0 .home-brand, .p0 .home-menu button, .p0 .home-collapse, .p0 .home-capture, .p0 .home-information-toggle, .home-task-dialog button { min-height: 44px }
   .p0 .home-menu button { min-width: 44px }
   .home-clock { top: 37px }
   .home-launch::before { content: ''; position: absolute; inset: -3px 0 }
 }
 @media (pointer: coarse) and (max-width: 600px) { .home-clock { top: 31px } }
-@media (prefers-reduced-motion: reduce) { .home-menu, .home-nav-hint { transition: none } }
+@media (prefers-reduced-motion: reduce) { .home-menu, .home-nav-hint, .home-pane-track { transition: none } }
 @media (max-height: 520px) {
   .home-xixi { padding: 10px 16px }
   .home-xixi > header { padding-bottom: 5px }

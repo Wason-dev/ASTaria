@@ -7,6 +7,8 @@ import { useSceneCamera } from '../spatial/useSceneCamera'
 import { useSpatialTasks } from '../spatial/useSpatialTasks'
 import { GlassSurface, MeasuredGlassSurface } from './GlassSurface'
 import { HomeStatus } from './HomeStatus'
+import { HomeAgenda } from './HomeAgenda'
+import { useLocalTime } from './useLocalTime'
 import './home.css'
 
 type Props = {
@@ -19,7 +21,9 @@ function readDraft() { try { return sessionStorage.getItem(DRAFT_KEY) ?? '' } ca
 
 export function HomeWorkspace({ readCamera, onViewChange, sceneUnavailable }: Props) {
   const data = useSpatialTasks()
+  const now = useLocalTime()
   const [chatOpen, setChatOpen] = useState(false)
+  const [informationActive, setInformationActive] = useState(false)
   const camera = useSceneCamera(readCamera, String(chatOpen))
   const [cameraMissing, setCameraMissing] = useState(false)
   const progress = sceneUnavailable || cameraMissing ? Number(chatOpen) : Math.max(0, Math.min(1, (camera.zoom - .7) / (2.05 - .7)))
@@ -37,10 +41,17 @@ export function HomeWorkspace({ readCamera, onViewChange, sceneUnavailable }: Pr
   const currentButton = useRef<HTMLButtonElement>(null)
   const launch = useRef<HTMLButtonElement>(null)
   const compose = useRef<HTMLTextAreaElement>(null)
+  const informationToggle = useRef<HTMLButtonElement>(null)
   const menuTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const menuOpenedByHover = useRef(false)
   const focusAfterTransition = useRef(false)
   const taskOpener = useRef<HTMLElement | null>(null)
+  const taskFromAgenda = useRef(false)
+  const compact = layout.width < 668
+
+  useEffect(() => {
+    if (compact && document.activeElement?.closest('.home-agenda')) setInformationActive(true)
+  }, [compact])
 
   const currentTask = useMemo(() => data.tasks.filter(task => task.status === 'doing' || task.status === 'todo')
     .sort((a, b) => Number(b.status === 'doing') - Number(a.status === 'doing')
@@ -93,6 +104,7 @@ export function HomeWorkspace({ readCamera, onViewChange, sceneUnavailable }: Pr
     clearTimeout(menuTimer.current)
     setMenuOpen(false)
     if (open === chatOpen) return
+    if (open) setInformationActive(false)
     focusAfterTransition.current = true
     setCameraMissing(!readCamera())
     // Use the frozen P0 preset. The UI reads its progress; it never steers uniforms.
@@ -124,13 +136,17 @@ export function HomeWorkspace({ readCamera, onViewChange, sceneUnavailable }: Pr
   }
   const openTask = (id: string) => {
     taskOpener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    taskFromAgenda.current = Boolean(taskOpener.current?.closest('.home-agenda'))
     setSelectedId(id)
   }
   const closeTask = () => {
     setSelectedId(null)
     requestAnimationFrame(() => {
       const previous = taskOpener.current
-      ;(previous?.isConnected && !previous.closest('[inert]') ? previous : chatOpen ? compose.current : currentButton.current)?.focus()
+      const fallback = chatOpen ? taskFromAgenda.current
+        ? compact && !informationActive ? informationToggle.current : root.current?.querySelector<HTMLElement>('.home-agenda-scroll')
+        : compose.current : currentButton.current
+      ;(previous?.isConnected && !previous.closest('[inert]') ? previous : fallback)?.focus()
     })
   }
   const startTop = layout.taskBottom + 12
@@ -138,6 +154,8 @@ export function HomeWorkspace({ readCamera, onViewChange, sceneUnavailable }: Pr
   const endWidth = Math.min(300, layout.width - (layout.width <= 600 ? 44 : 68))
   const endHeight = Math.max(180, Math.min(390, layout.height - endTop - 65))
   const width = 128 + (endWidth - 128) * progress
+  // Extend only the UI surface, reading the existing camera transition.
+  const extendedWidth = width + (compact ? 0 : endWidth * Math.max(0, (progress - .5) / .5))
   const height = 38 + (endHeight - 38) * progress
   const radius = 19 + (15 - 19) * progress
   const chatVisible = progress > .35
@@ -166,7 +184,7 @@ export function HomeWorkspace({ readCamera, onViewChange, sceneUnavailable }: Pr
         </ul>
       </div>
     </nav>
-    <HomeStatus showClock={!sceneUnavailable} />
+    <HomeStatus now={now} showClock={!sceneUnavailable} />
 
     <div ref={current} className="home-current" style={{ opacity: Math.max(0, 1 - progress * 3), visibility: progress > .6 ? 'hidden' : 'visible' }} inert={chatOpen}>
       <span>当前任务</span>
@@ -176,13 +194,14 @@ export function HomeWorkspace({ readCamera, onViewChange, sceneUnavailable }: Pr
       </button>
     </div>
 
-    <div className="home-morph" style={{ top: startTop + (endTop - startTop) * progress, width, height, borderRadius: radius }} data-progress={progress.toFixed(3)}>
-      <GlassSurface width={Math.round(width)} height={Math.round(height)} radius={radius} progress={progress} />
+    <div className="home-morph" style={{ top: startTop + (endTop - startTop) * progress, width: extendedWidth, height, borderRadius: radius }} data-progress={progress.toFixed(3)} data-compact={compact} data-information-active={informationActive}>
+      <GlassSurface width={Math.round(extendedWidth)} height={Math.round(height)} radius={radius} progress={progress} />
       <button ref={launch} className="home-launch" onClick={() => changeChat(true)} aria-expanded={chatOpen} aria-controls="home-xixi"
         style={{ opacity: Math.max(0, 1 - progress * 4), visibility: progress > .35 ? 'hidden' : 'visible' }} disabled={chatOpen}>交给析熙</button>
-      <section id="home-xixi" className="home-xixi" aria-label="析熙" inert={!chatOpen || progress < .96}
-        style={{ opacity: Math.max(0, Math.min(1, (progress - .45) / .55)), visibility: chatVisible ? 'visible' : 'hidden' }}>
-        <header><strong>析熙</strong><button className="home-collapse" onClick={() => changeChat(false)}>收起</button></header>
+      <div className="home-deck" style={{ opacity: Math.max(0, Math.min(1, (progress - .45) / .55)), visibility: chatVisible ? 'visible' : 'hidden' }}>
+      <div className="home-pane-track" style={{ width: endWidth * 2, transform: `translateX(${compact && informationActive ? -endWidth : 0}px)` }}>
+      <section id="home-xixi" className="home-xixi" aria-label="析熙" inert={!chatOpen || progress < .99 || (compact && informationActive)} aria-hidden={!chatOpen || (compact && informationActive)}>
+        <header><strong>析熙</strong><div className="home-chat-actions">{compact && <button ref={informationToggle} className="home-information-toggle" onClick={() => setInformationActive(true)} aria-controls="home-agenda">日程 →</button>}<button className="home-collapse" onClick={() => changeChat(false)}>收起</button></div></header>
         <div className="home-conversation" role="log" aria-label="事项录入记录" aria-live="polite">
           {receipts.length === 0 && <p className="home-greeting">有什么事，交给我</p>}
           {receipts.map(task => <div className="home-receipt" key={task.id}><span>已记为事项</span><button onClick={() => openTask(task.id)}>{task.title}</button></div>)}
@@ -197,6 +216,14 @@ export function HomeWorkspace({ readCamera, onViewChange, sceneUnavailable }: Pr
           {(saveError || draftWarning || data.loadError) && <p className="home-form-error" role="alert">{saveError || draftWarning || data.loadError}{data.loadError && <button type="button" onClick={data.retry}>重试读取</button>}</p>}
         </form>
       </section>
+      <HomeAgenda tasks={data.tasks} now={now} loading={data.loading} error={data.loadError}
+        active={chatOpen && progress >= .99 && (!compact || informationActive)} compact={compact}
+        onRetry={data.retry} onTask={openTask} onChat={() => {
+          setInformationActive(false)
+          requestAnimationFrame(() => informationToggle.current?.focus({ preventScroll: true }))
+        }} />
+      </div>
+      </div>
     </div>
     {selectedId && <TaskDialog task={selectedTask} saving={data.saving} onClose={closeTask} onStatus={data.setStatus} />}
   </div>

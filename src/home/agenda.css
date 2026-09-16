@@ -1,0 +1,52 @@
+.home-agenda { position: relative; flex: 0 0 50%; width: 50%; min-width: 0; display: flex; flex-direction: column; padding: 16px 18px; border-left: 1px solid var(--p0-line); text-shadow: 0 1px 3px #000b }
+.home-agenda-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 43px; padding-bottom: 13px; border-bottom: 1px solid var(--p0-line) }
+.home-agenda-header h2 { margin: 0; font-size: 12px; font-weight: 400; letter-spacing: .12em }
+.home-agenda-header > span { font-size: 10px; color: var(--p0-muted) }
+.p0 .home-agenda-back { padding: 6px 0; font-size: 11px; color: var(--p0-muted) }
+.home-agenda-scroll { min-height: 0; overflow: auto; scrollbar-width: thin; overscroll-behavior: contain; pointer-events: auto; padding-top: 8px; padding-right: 2px }
+.home-agenda-scroll:focus-visible { outline: 1px solid var(--p0-line); outline-offset: 2px }
+.home-month-controls { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 3px }
+.home-month-controls strong { font-size: 11px; font-weight: 400; font-variant-numeric: tabular-nums }
+.home-month-controls > div { display: flex; align-items: center; gap: 3px }
+.p0 .home-month-controls button { width: 24px; height: 24px; padding: 0; font-size: 16px; line-height: 1; border-radius: 6px }
+.p0 .home-month-controls .home-month-today { width: 30px; font-size: 10px; color: var(--p0-muted) }
+.home-month-grid { width: 100%; table-layout: fixed; border-collapse: collapse; text-align: center }
+.home-month-grid th { height: 18px; font-size: 9px; font-weight: 400; color: var(--p0-muted) }
+.home-month-grid td { padding: 0 }
+.p0 .home-month-grid button { position: relative; display: block; width: 100%; height: 22px; padding: 0; font-size: 10px; line-height: 20px; border-radius: 6px; font-variant-numeric: tabular-nums }
+.home-month-grid button[data-outside=true] { color: #aaa8a2 }
+.home-month-grid button[aria-current=date] { box-shadow: inset 0 0 0 1px var(--p0-line) }
+.home-month-grid button[aria-pressed=true] { background: #ffffff17; color: #fff }
+.home-month-grid button i { position: absolute; left: calc(50% - 1px); bottom: 1px; width: 2px; height: 2px; border-radius: 50%; background: currentColor }
+.p0 .home-month-grid button:focus-visible { outline-offset: -1px; outline-color: #eeeae3 }
+.home-agenda-section { padding-top: 8px; margin-top: 8px; border-top: 1px solid var(--p0-line) }
+.home-agenda-section h3 { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 4px; font-size: 11px; font-weight: 400 }
+.home-agenda-section h3 > span, .home-agenda-undated summary > span { font-size: 10px; font-variant-numeric: tabular-nums; color: var(--p0-muted) }
+.home-agenda-section[data-empty=true] { display: flex; align-items: baseline; justify-content: space-between; gap: 8px }
+.home-agenda-section[data-empty=true] h3 { flex-shrink: 0; margin-bottom: 0; gap: 6px }
+.home-agenda-section[data-empty=true] .home-agenda-empty { font-size: 9px; text-align: right }
+.home-agenda-empty { margin: 0; font-size: 10px; line-height: 1.8; color: var(--p0-muted) }
+.home-agenda-error { font-size: 11px; color: var(--p0-muted) }
+.home-agenda-error button { text-decoration: underline }
+.home-agenda-list { list-style: none; padding: 0; margin: 0 }
+.p0 .home-agenda-list button { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; width: 100%; min-height: 33px; padding: 3px 0; text-align: left; border-radius: 4px }
+.home-agenda-list button > span { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px }
+.home-agenda-list button > small { font-size: 9px; color: var(--p0-muted); line-height: 1.5 }
+.home-agenda-list button[data-overdue=true] > small { color: #dfc292 }
+.p0 .home-agenda-list button:focus-visible { outline-offset: 0 }
+.home-agenda-undated { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--p0-line); font-size: 10px; pointer-events: auto }
+.home-agenda-undated summary { cursor: pointer; color: var(--p0-muted); padding: 4px 0 }
+.home-agenda-undated summary > span { margin-left: 6px }
+.home-agenda-undated summary:focus-visible { outline: 1px solid var(--p0-accent) }
+@media (hover: hover) { .home-month-controls button:hover, .home-month-grid button:hover, .home-agenda-list button:hover { background: #ffffff0a } }
+.home-morph[data-compact=true] .home-agenda { border-left: 0 }
+@media (pointer: coarse) {
+  .p0 .home-month-grid button { height: 30px }
+  .p0 .home-month-controls button { min-width: 30px; height: 30px }
+  .p0 .home-agenda-back { min-height: 44px }
+  .p0 .home-agenda-list button { min-height: 44px }
+}
+@media (max-height: 520px) {
+  .home-agenda { padding: 10px 16px }
+  .home-agenda-header { min-height: 35px; padding-bottom: 5px }
+}

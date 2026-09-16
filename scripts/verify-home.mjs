@@ -41,6 +41,7 @@ const check = async (name, expression) => {
   assert.equal(pass, true, name)
 }
 const click = async selector => {
+  await evaluate(`document.querySelector(${JSON.stringify(selector)}).scrollIntoView({block:'nearest',inline:'nearest'});true`)
   const point = await evaluate(`(()=>{const r=document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()`)
   await send('Input.dispatchMouseEvent', { type: 'mousePressed', button: 'left', clickCount: 1, ...point })
   await send('Input.dispatchMouseEvent', { type: 'mouseReleased', button: 'left', clickCount: 1, ...point })
@@ -109,7 +110,16 @@ try {
   await check('same pill survives interrupted expansion', 'window.__morph===document.querySelector(".home-morph")')
   await click('.home-launch'); await cameraSettled(); await wait('document.activeElement.id==="home-compose"')
   await check('exact interstellar preset and black theme', '(()=>{const s=window.__ASTARIA_P0__.getSnapshot();return s.zoom===2.05&&s.roll===7&&s.inclination===84&&s.centerX===.98&&document.querySelector(".p0").dataset.night==="true"})()')
-  await check('SVG refraction map has a nonzero viewport and live backdrop', 'document.querySelector(".home-morph feImage").getAttribute("width")==="300" && document.querySelector(".home-morph feImage").getAttribute("href").startsWith("data:image/png") && getComputedStyle(document.querySelector(".home-morph .home-glass-surface")).backdropFilter.includes("url(")')
+  await check('SVG refraction map has a nonzero viewport and live backdrop', 'document.querySelector(".home-morph feImage").getAttribute("width")==="600" && document.querySelector(".home-morph feImage").getAttribute("href").startsWith("data:image/png") && getComputedStyle(document.querySelector(".home-morph .home-glass-surface")).backdropFilter.includes("url(")')
+  await check('equal chat and agenda columns share one continuous glass surface', '(()=>{const c=document.querySelector(".home-xixi").getBoundingClientRect(),a=document.querySelector(".home-agenda").getBoundingClientRect(),m=document.querySelector(".home-morph").getBoundingClientRect();return c.width===300&&a.width===c.width&&Math.abs(a.left-c.right)<1&&c.top===a.top&&c.height===a.height&&m.width===600&&document.querySelectorAll(".home-morph .home-glass-surface").length===1&&!document.querySelector(".home-agenda").inert})()')
+  await check('calendar and empty agenda are real and all sections exist', 'document.querySelectorAll(".home-month-grid tbody button").length===42&&document.querySelectorAll(".home-agenda-section").length===3&&document.querySelectorAll(".home-agenda-list li").length===0')
+  await check('all empty agenda sections fit in the default compact window', 'document.querySelector("[data-agenda-section=deadlines]").getBoundingClientRect().bottom<=document.querySelector(".home-agenda-scroll").getBoundingClientRect().bottom')
+  const originalMonth = await evaluate('document.querySelector(".home-month-controls strong").textContent')
+  await click('.home-month-controls button[aria-label="下个月"]')
+  assert.notEqual(await evaluate('document.querySelector(".home-month-controls strong").textContent'), originalMonth)
+  await click('.home-month-controls button[aria-label="上个月"]')
+  assert.equal(await evaluate('document.querySelector(".home-month-controls strong").textContent'), originalMonth)
+  checks.push({ name: 'month navigation moves forward and back without losing the selected date', pass: true })
   await check('material matches chosen transparency and low rim with no reflection', '(()=>{const s=getComputedStyle(document.querySelector(".home-morph .home-glass-surface"));return Math.abs(Number(s.getPropertyValue("--glass-tint"))-.2)<1e-6&&Number(s.getPropertyValue("--glass-rim"))===.15&&Number(s.getPropertyValue("--glass-reflection"))===0&&Number(s.getPropertyValue("--glass-shadow"))===.6})()')
   await shot('chat-1440')
   await send('Input.insertText', { text: '完成物理实验报告\n复核数据并整理结论' })
@@ -144,6 +154,16 @@ try {
     await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false }); await delay(150)
     await check(`chat and composer fit ${width}x${height}`, '(()=>{const r=document.querySelector(".home-morph").getBoundingClientRect(),f=document.querySelector(".home-xixi form").getBoundingClientRect();return document.documentElement.scrollWidth<=innerWidth&&r.left>=0&&r.right<=innerWidth&&r.bottom<=innerHeight&&f.bottom<=r.bottom&&f.top>=r.top})()')
     await shot(`chat-${width}`)
+    if (width < 668) {
+      await click('.home-information-toggle')
+      await wait('document.activeElement.matches(".home-agenda-back")')
+      await delay(280)
+      await check(`agenda paging fits ${width}x${height} without hidden focus or scroll drift`, '(()=>{const a=document.querySelector(".home-agenda").getBoundingClientRect(),m=document.querySelector(".home-morph").getBoundingClientRect();return Math.abs(a.left-m.left)<1&&Math.abs(a.width-m.width)<1&&document.querySelector(".home-xixi").inert&&!document.querySelector(".home-agenda").inert&&document.querySelector(".home-deck").scrollLeft===0})()')
+      await shot(`agenda-${width}`)
+      await click('.home-agenda-back')
+      await wait('document.activeElement.matches(".home-information-toggle")')
+      await delay(280)
+    }
   }
   await click('.home-collapse'); await wait('document.querySelector(".home-morph").dataset.progress==="0.000"')
   await check('hidden chat is inert and keyboard returns to pill', 'document.querySelector(".home-xixi").inert && document.activeElement.matches(".home-launch")')
@@ -156,6 +176,38 @@ try {
     await shot(`navigation-${width}`, true)
     await key('Escape')
   }
+  // Seed only the isolated test profile with local dated tasks, then reload the store.
+  await evaluate(`(async()=>{
+    const db=await new Promise((resolve,reject)=>{const r=indexedDB.open('astaria-local');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)});
+    const day=n=>{const d=new Date();d.setDate(d.getDate()+n);return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')};
+    window.__agendaDays={today:day(0),tomorrow:day(1)};
+    const base={area:null,source:'manual',inbox:false,leadDays:3,importance:2,energy:'light',context:['anywhere'],status:'todo',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),deletedAt:null};
+    try{await new Promise((resolve,reject)=>{const tx=db.transaction('tasks','readwrite');const store=tx.objectStore('tasks');
+      for(const extra of [{id:'qa-agenda-plan',title:'明日实验准备',startAt:day(1),due:day(2)},{id:'qa-agenda-today',title:'今日写作',startAt:day(0),due:day(0)},{id:'qa-agenda-overdue',title:'逾期复核',due:day(-1)},{id:'qa-agenda-undated',title:'未安排事项'},{id:'qa-agenda-done',title:'已完成事项',status:'done',due:day(0)}])store.put({...base,...extra});
+      tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);
+    })}finally{db.close()}
+  })()`)
+  await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false })
+  await send('Page.reload', { ignoreCache: true }); await ready()
+  await click('.home-launch'); await cameraSettled(); await wait('document.activeElement.id==="home-compose"')
+  await check('today and DDL show dated tasks without assigning undated inbox tasks', '(()=>{const t=document.querySelector("[data-agenda-section=today]").textContent,d=document.querySelector("[data-agenda-section=deadlines]").textContent,u=document.querySelector(".home-agenda-undated");return t.includes("今日写作")&&!t.includes("明日实验准备")&&!t.includes("未安排事项")&&!t.includes("已完成事项")&&d.includes("已逾期")&&d.includes("明日实验准备")&&!d.includes("已完成事项")&&u.textContent.includes("未安排事项")})()')
+  const tomorrow = await evaluate('(()=>{const d=new Date();d.setDate(d.getDate()+1);return [d.getFullYear(),String(d.getMonth()+1).padStart(2,"0"),String(d.getDate()).padStart(2,"0")].join("-")})()')
+  await click(`.home-month-grid button[data-date="${tomorrow}"]`)
+  await check('selected day distinguishes scheduled work from its later deadline', '(()=>{const s=document.querySelector("[data-agenda-section=selected]");return s.textContent.includes("明日实验准备")&&s.textContent.includes("安排")&&!s.textContent.includes("截止")})()')
+  await key('ArrowRight'); await key('ArrowLeft')
+  await check('calendar arrow navigation restores the selected day and focus', `document.activeElement.dataset.date===${JSON.stringify(tomorrow)}&&document.activeElement.getAttribute("aria-pressed")==="true"`)
+  await shot('agenda-tasks-1440')
+  await click('[data-agenda-section=selected] .home-agenda-list button')
+  await click('.home-task-status button:nth-child(3)')
+  await wait('document.querySelector(".home-task-status button:nth-child(3)").getAttribute("aria-pressed")==="true"')
+  await key('Escape'); await wait('!document.querySelector("dialog")')
+  await check('completing an agenda task updates lists and restores visible focus', '!document.querySelector("[data-agenda-section=selected]").textContent.includes("明日实验准备")&&!document.querySelector("[data-agenda-section=deadlines]").textContent.includes("明日实验准备")&&document.activeElement.matches(".home-agenda-scroll")')
+  await click('.home-month-today')
+  await click('[data-agenda-section=selected] .home-agenda-list button')
+  await send('Emulation.setDeviceMetricsOverride', { width: 320, height: 568, deviceScaleFactor: 1, mobile: false })
+  await key('Escape'); await wait('!document.querySelector("dialog")')
+  await check('resizing an agenda detail to narrow layout restores a visible focus target', 'document.activeElement.matches(".home-information-toggle")&&!document.activeElement.closest("[inert]")')
+  await key('Escape'); await wait('document.querySelector(".home-morph").dataset.progress==="0.000"')
   // Force context loss only in this isolated browser and confirm local input stays usable.
   await evaluate('document.querySelector(".p0-universe canvas").dispatchEvent(new Event("webglcontextlost",{cancelable:true}))')
   await click('.home-launch')

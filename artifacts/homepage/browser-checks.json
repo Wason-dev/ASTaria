@@ -58,6 +58,10 @@
       "pass": true
     },
     {
+      "name": "interstellar navigation keeps backdrop ancestors opaque and stationary throughout opening",
+      "pass": true
+    },
+    {
       "name": "SVG refraction map has a nonzero viewport and live backdrop",
       "pass": true
     },
@@ -86,7 +90,11 @@
       "pass": true
     },
     {
-      "name": "reversing a month animation changes its direction immediately",
+      "name": "whole month pages push edge to edge across the full calendar width",
+      "pass": true
+    },
+    {
+      "name": "reversing a month request preserves the in-flight page and position",
       "pass": true
     },
     {
@@ -94,7 +102,19 @@
       "pass": true
     },
     {
+      "name": "day selection moves its highlight and animates the selected agenda",
+      "pass": true
+    },
+    {
+      "name": "selected day highlight lands on the selected date",
+      "pass": true
+    },
+    {
       "name": "keyboard month transitions retain the selected day focus",
+      "pass": true
+    },
+    {
+      "name": "rapid keyboard month requests retain every step and restore final date focus",
       "pass": true
     },
     {
@@ -106,11 +126,19 @@
       "pass": true
     },
     {
-      "name": "typing wakes the warm-gold edge light",
+      "name": "focused input stays dim without a persistent golden light",
       "pass": true
     },
     {
-      "name": "edge movement pauses after typing and the glow fades",
+      "name": "one inserted character triggers one broad gold flash with no rotation",
+      "pass": true
+    },
+    {
+      "name": "another character retriggers the flash while the previous pulse is active",
+      "pass": true
+    },
+    {
+      "name": "each pulse ends and removes all luminous layers",
       "pass": true
     },
     {
@@ -142,7 +170,7 @@
       "pass": true
     },
     {
-      "name": "reduced motion disables the input light orbit",
+      "name": "reduced motion clears input feedback without moving or persistent light",
       "pass": true
     },
     {

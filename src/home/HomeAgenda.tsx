@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { KeyboardEvent } from 'react'
+import type { CSSProperties, KeyboardEvent } from 'react'
 import type { Task } from '../domain/task'
 import { agendaDate, agendaItems, dayTaskLabel, deadlineItems, deadlineLabel, isOpenTask, isOverdue, localDay, monthDays, shiftDay, shiftMonth, taskOnDay } from './agenda'
 import './agenda.css'
@@ -17,14 +17,20 @@ export function HomeAgenda({ tasks, now, loading, error, active, compact, onRetr
   const today = localDay(now)
   const [selection, setSelection] = useState<string | null>(null)
   const selected = selection ?? today
+  const [dayMotion, setDayMotion] = useState({ day: selected, revision: 0 })
+  if (dayMotion.day !== selected) setDayMotion({ day: selected, revision: dayMotion.revision + 1 })
   const selectedDate = agendaDate(selected)!
   const [browsingMonth, setBrowsingMonth] = useState<string | null>(null)
-  const month = browsingMonth ?? today.slice(0, 7)
+  const requestedMonth = browsingMonth ?? today.slice(0, 7)
+  const [motion, setMotion] = useState<MonthMotion>({ month: requestedMonth, previous: null, direction: 'next', revision: 0 })
+  // Keep the requested month separate from the page currently in motion. Rapid
+  // clicks update the request; each animation still travels one complete page.
+  const month = motion.month
+  if (motion.previous === null && motion.month !== requestedMonth) {
+    setMotion({ month: requestedMonth, previous: motion.month, direction: requestedMonth > motion.month ? 'next' : 'previous', revision: motion.revision + 1 })
+  }
   const monthDate = agendaDate(`${month}-01`)!
   const dates = useMemo(() => monthDays(monthDate), [month])
-  const [motion, setMotion] = useState<MonthMotion>({ month, previous: null, direction: 'next', revision: 0 })
-  // Keep just one outgoing month. A newer destination replaces an interrupted transition.
-  if (motion.month !== month) setMotion({ month, previous: motion.month, direction: month > motion.month ? 'next' : 'previous', revision: motion.revision + 1 })
   const previousDates = useMemo(() => motion.previous ? monthDays(agendaDate(`${motion.previous}-01`)!) : null, [motion.previous])
   const calendar = useRef<HTMLTableElement>(null)
   const back = useRef<HTMLButtonElement>(null)
@@ -35,13 +41,17 @@ export function HomeAgenda({ tasks, now, loading, error, active, compact, onRetr
   const undated = useMemo(() => tasks.filter(task => isOpenTask(task) && !agendaDate(task.startAt) && !task.due && task.fuzzyWindow !== 'today' && task.status !== 'doing'), [tasks])
   const readable = !loading && !error
   const tabDay = dates.some(date => localDay(date) === selected) ? selected : `${month}-01`
+  const selectedIndex = dates.findIndex(date => localDay(date) === selected)
 
   useEffect(() => { if (active && compact) back.current?.focus({ preventScroll: true }) }, [active, compact])
   useEffect(() => {
+    if (!active) { focusDay.current = null; return }
     if (!focusDay.current) return
-    calendar.current?.querySelector<HTMLButtonElement>(`button[data-date="${focusDay.current}"]`)?.focus({ preventScroll: true })
-    focusDay.current = null
-  }, [selected, month])
+    const target = calendar.current?.querySelector<HTMLButtonElement>(`button[data-date="${focusDay.current}"]`)
+    if (!target) return
+    target.focus({ preventScroll: true })
+    if (month === requestedMonth) focusDay.current = null
+  }, [selected, month, requestedMonth, active])
 
   const choose = (date: Date, focus = false) => {
     const day = localDay(date)
@@ -49,13 +59,17 @@ export function HomeAgenda({ tasks, now, loading, error, active, compact, onRetr
     setSelection(day === today ? null : day)
     setBrowsingMonth(day.slice(0, 7))
   }
-  const moveMonth = (direction: number) => setBrowsingMonth(current => localDay(shiftMonth(agendaDate(`${current ?? today.slice(0, 7)}-01`)!, direction)).slice(0, 7))
+  const moveMonth = (direction: number) => {
+    focusDay.current = null
+    setBrowsingMonth(current => localDay(shiftMonth(agendaDate(`${current ?? today.slice(0, 7)}-01`)!, direction)).slice(0, 7))
+  }
   const keyboard = (event: KeyboardEvent<HTMLButtonElement>, date: Date) => {
-    const offset = (date.getDay() + 6) % 7
+    const origin = focusDay.current ? agendaDate(focusDay.current)! : date
+    const offset = (origin.getDay() + 6) % 7
     const deltas: Record<string, number> = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7, Home: -offset, End: 6 - offset }
-    if (event.key in deltas) { event.preventDefault(); choose(shiftDay(date, deltas[event.key]), true) }
+    if (event.key in deltas) { event.preventDefault(); choose(shiftDay(origin, deltas[event.key]), true) }
     else if (event.key === 'PageUp' || event.key === 'PageDown') {
-      event.preventDefault(); choose(shiftMonth(date, event.key === 'PageUp' ? -1 : 1), true)
+      event.preventDefault(); choose(shiftMonth(origin, event.key === 'PageUp' ? -1 : 1), true)
     }
   }
 
@@ -68,10 +82,16 @@ export function HomeAgenda({ tasks, now, loading, error, active, compact, onRetr
         <div className="home-month-controls">
           <strong aria-live="polite"><span key={motion.revision} className={motion.previous ? 'home-month-label-enter' : undefined}>{monthFormat.format(monthDate)}</span></strong>
           <div><button aria-label="上个月" onClick={() => moveMonth(-1)}>‹</button>
-            <button className="home-month-today" onClick={() => { setSelection(null); setBrowsingMonth(null) }}>今天</button>
+            <button className="home-month-today" onClick={() => { focusDay.current = null; setSelection(null); setBrowsingMonth(null) }}>今天</button>
             <button aria-label="下个月" onClick={() => moveMonth(1)}>›</button></div>
         </div>
         <div className="home-month-window" data-direction={motion.direction} data-transitioning={Boolean(motion.previous)}>
+        <div key={`selection-${motion.revision}`} className="home-day-highlight-page" data-entering={Boolean(motion.previous)} aria-hidden="true">
+          <span className="home-day-highlight" data-visible={selectedIndex >= 0} style={{
+            '--selected-column': Math.max(0, selectedIndex) % 7,
+            '--selected-row': Math.floor(Math.max(0, selectedIndex) / 7),
+          } as CSSProperties} />
+        </div>
         {previousDates && <table key={`out-${motion.revision}`} className="home-month-grid home-month-grid-exit" aria-hidden="true" inert>
           <thead><tr>{['一', '二', '三', '四', '五', '六', '日'].map(day => <th key={day}>{day}</th>)}</tr></thead>
           <tbody>{Array.from({ length: 6 }, (_, week) => <tr key={week}>{previousDates.slice(week * 7, week * 7 + 7).map(date => {
@@ -83,6 +103,9 @@ export function HomeAgenda({ tasks, now, loading, error, active, compact, onRetr
           })}</tr>)}</tbody>
         </table>}
         <table key={`in-${motion.revision}`} ref={calendar} className={`home-month-grid${motion.previous ? ' home-month-grid-enter' : ''}`} aria-label={`${monthFormat.format(monthDate)}月历`}
+          onBlur={event => {
+            if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) focusDay.current = null
+          }}
           onAnimationEnd={event => {
             if (event.target !== event.currentTarget) return
             setMotion(current => current.revision === motion.revision ? { ...current, previous: null } : current)
@@ -94,7 +117,7 @@ export function HomeAgenda({ tasks, now, loading, error, active, compact, onRetr
             return <td key={day}><button data-date={day} data-outside={day.slice(0, 7) !== month} tabIndex={day === tabDay ? 0 : -1}
               aria-label={`${fullDate.format(date)}${day === today ? '，今天' : ''}${readable ? `，${count} 项事项` : ''}`}
               aria-pressed={selected === day} aria-current={today === day ? 'date' : undefined}
-              onClick={() => choose(date)} onKeyDown={event => keyboard(event, date)}>
+              onClick={() => choose(date, true)} onKeyDown={event => keyboard(event, date)}>
               {date.getDate()}{count > 0 && <i aria-hidden="true" />}
             </button></td>
           })}</tr>)}</tbody>
@@ -102,7 +125,7 @@ export function HomeAgenda({ tasks, now, loading, error, active, compact, onRetr
         </div>
       </section>
       {loading ? <p className="home-agenda-empty" role="status">正在读取事项</p> : error ? <p className="home-agenda-error" role="alert">读取失败 <button onClick={onRetry}>重试</button></p> : <>
-        <AgendaSection title={`${shortDate.format(selectedDate)} · 事项`} name="selected" tasks={selectedItems} empty="这天暂无已安排事项" onTask={onTask} label={task => dayTaskLabel(task, selected)} />
+        <AgendaSection key={selected} animate={dayMotion.revision > 0} title={`${shortDate.format(selectedDate)} · 事项`} name="selected" tasks={selectedItems} empty="这天暂无已安排事项" onTask={onTask} label={task => dayTaskLabel(task, selected)} />
         <AgendaSection title="今日待办" name="today" tasks={todayItems} empty="今天暂无已安排待办" onTask={onTask} label={task => dayTaskLabel(task, today)} />
         <AgendaSection title="DDL" name="deadlines" tasks={deadlines} empty="暂无截止事项" onTask={onTask} label={task => deadlineLabel(task, now)} overdue={task => isOverdue(task, now)} />
         {undated.length > 0 && <details className="home-agenda-undated"><summary>未定日期 <span>{undated.length}</span></summary>
@@ -113,10 +136,10 @@ export function HomeAgenda({ tasks, now, loading, error, active, compact, onRetr
   </aside>
 }
 
-function AgendaSection({ title, name, tasks, empty, onTask, label, overdue }: {
-  title: string; name: string; tasks: Task[]; empty: string; onTask: (id: string) => void; label: (task: Task) => string; overdue?: (task: Task) => boolean
+function AgendaSection({ title, name, tasks, empty, onTask, label, overdue, animate = false }: {
+  title: string; name: string; tasks: Task[]; empty: string; onTask: (id: string) => void; label: (task: Task) => string; overdue?: (task: Task) => boolean; animate?: boolean
 }) {
-  return <section className="home-agenda-section" data-agenda-section={name} data-empty={tasks.length === 0} aria-label={title}>
+  return <section className={`home-agenda-section${animate ? ' home-day-content-enter' : ''}`} data-agenda-section={name} data-empty={tasks.length === 0} aria-label={title}>
     <h3>{title}<span>{tasks.length}</span></h3>
     {tasks.length ? <AgendaList tasks={tasks} onTask={onTask} label={label} overdue={overdue} /> : <p className="home-agenda-empty">{empty}</p>}
   </section>

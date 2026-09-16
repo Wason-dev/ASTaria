@@ -29,7 +29,8 @@ export function HomeWorkspace({ readCamera, onViewChange, sceneUnavailable }: Pr
   const progress = sceneUnavailable || cameraMissing ? Number(chatOpen) : Math.max(0, Math.min(1, (camera.zoom - .7) / (2.05 - .7)))
   const [menuOpen, setMenuOpen] = useState(false)
   const [draft, setDraft] = useState(readDraft)
-  const [typing, setTyping] = useState(false)
+  const [inputPulse, setInputPulse] = useState<number | null>(null)
+  const inputPulseSequence = useRef(0)
   const [draftWarning, setDraftWarning] = useState('')
   const [saveError, setSaveError] = useState('')
   const [savedIds, setSavedIds] = useState<string[]>([])
@@ -44,7 +45,6 @@ export function HomeWorkspace({ readCamera, onViewChange, sceneUnavailable }: Pr
   const compose = useRef<HTMLTextAreaElement>(null)
   const informationToggle = useRef<HTMLButtonElement>(null)
   const menuTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-  const typingTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const menuOpenedByHover = useRef(false)
   const focusAfterTransition = useRef(false)
   const taskOpener = useRef<HTMLElement | null>(null)
@@ -74,14 +74,9 @@ export function HomeWorkspace({ readCamera, onViewChange, sceneUnavailable }: Pr
     return () => observer.disconnect()
   }, [])
   useEffect(() => () => clearTimeout(menuTimer.current), [])
-  useEffect(() => () => clearTimeout(typingTimer.current), [])
-  const stopTyping = () => { clearTimeout(typingTimer.current); setTyping(false) }
-  const lightInput = () => {
-    clearTimeout(typingTimer.current)
-    setTyping(true)
-    typingTimer.current = setTimeout(() => setTyping(false), 950)
-  }
-  useEffect(() => { if (!chatOpen || (compact && informationActive)) stopTyping() }, [chatOpen, compact, informationActive])
+  const stopInputPulse = () => setInputPulse(null)
+  const flashInput = () => setInputPulse(++inputPulseSequence.current)
+  useEffect(() => { if (!chatOpen || (compact && informationActive)) stopInputPulse() }, [chatOpen, compact, informationActive])
   useEffect(() => {
     if (!menuOpen) { menuOpenedByHover.current = false; return }
     const dismiss = (event: PointerEvent) => {
@@ -141,7 +136,7 @@ export function HomeWorkspace({ readCamera, onViewChange, sceneUnavailable }: Pr
       const task = await data.create({ title, notes: lines.slice(1).join('\n') })
       setSavedIds(ids => [...ids, task.id])
       setDraft('')
-      stopTyping()
+      stopInputPulse()
       compose.current?.focus()
     } catch (reason) { setSaveError(reason instanceof Error ? reason.message : '保存失败，请保留原文后重试') }
   }
@@ -219,11 +214,20 @@ export function HomeWorkspace({ readCamera, onViewChange, sceneUnavailable }: Pr
         </div>
         <form onSubmit={event => void submit(event)}>
           <label className="p0-sr-only" htmlFor="home-compose">写下你的事情，第一行是标题，其余是备注</label>
-          <div className="home-input-shell" data-typing={typing}>
-          <span className="home-input-glow" aria-hidden="true" />
-          <span className="home-input-rim" aria-hidden="true" />
+          <div className="home-input-shell" data-pulsing={inputPulse !== null}>
+          {inputPulse !== null && <span key={inputPulse} className="home-input-flash" aria-hidden="true" onAnimationEnd={event => {
+            if (event.target === event.currentTarget) setInputPulse(current => current === inputPulse ? null : current)
+          }}>
+            <span className="home-input-glow" />
+            <span className="home-input-rim" />
+          </span>}
           <textarea ref={compose} id="home-compose" placeholder="写下你的事情" rows={2} maxLength={2161} value={draft} disabled={data.saving}
-            onChange={event => { setDraft(event.target.value); lightInput() }} onCompositionUpdate={lightInput} onBlur={stopTyping} onKeyDown={event => {
+            onChange={event => {
+              const value = event.target.value
+              const inputType = (event.nativeEvent as InputEvent).inputType
+              if (value !== draft && (inputType ? inputType.startsWith('insert') : value.length > draft.length)) flashInput()
+              setDraft(value)
+            }} onBlur={stopInputPulse} onKeyDown={event => {
               if (event.key === 'Enter' && (event.metaKey || event.ctrlKey) && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit() }
             }} />
           </div>

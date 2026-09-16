@@ -1,0 +1,94 @@
+{
+  "url": "http://127.0.0.1:5188/",
+  "checks": [
+    {
+      "name": "minimal home removes observatory, sun and task-orbit UI",
+      "pass": true
+    },
+    {
+      "name": "pill stays small and exactly 12px below two-line current task",
+      "pass": true
+    },
+    {
+      "name": "real empty state, no example tasks",
+      "pass": true
+    },
+    {
+      "name": "hover navigation contains planned pages without fake destinations",
+      "pass": true
+    },
+    {
+      "name": "Escape closes nav and restores brand focus",
+      "pass": true
+    },
+    {
+      "name": "same pill survives interrupted expansion",
+      "pass": true
+    },
+    {
+      "name": "exact interstellar preset and black theme",
+      "pass": true
+    },
+    {
+      "name": "SVG refraction map has a nonzero viewport and live backdrop",
+      "pass": true
+    },
+    {
+      "name": "material matches chosen transparency and low rim with no reflection",
+      "pass": true
+    },
+    {
+      "name": "capture persists one task and notes to existing local store, no AI reply",
+      "pass": true
+    },
+    {
+      "name": "receipt detail restores its actual opener",
+      "pass": true
+    },
+    {
+      "name": "home reflects saved task and exact panorama preset",
+      "pass": true
+    },
+    {
+      "name": "task status persists and returns focus",
+      "pass": true
+    },
+    {
+      "name": "draft survives closing and reloading",
+      "pass": true
+    },
+    {
+      "name": "reduced motion reaches chat without animated camera",
+      "pass": true
+    },
+    {
+      "name": "chat and composer fit 390x844",
+      "pass": true
+    },
+    {
+      "name": "chat and composer fit 320x568",
+      "pass": true
+    },
+    {
+      "name": "chat and composer fit 844x390",
+      "pass": true
+    },
+    {
+      "name": "hidden chat is inert and keyboard returns to pill",
+      "pass": true
+    },
+    {
+      "name": "WebGL interruption cannot lock local capture",
+      "pass": true
+    },
+    {
+      "name": "original app remains accessible",
+      "pass": true
+    },
+    {
+      "name": "no runtime exceptions",
+      "pass": true
+    }
+  ],
+  "errors": []
+}

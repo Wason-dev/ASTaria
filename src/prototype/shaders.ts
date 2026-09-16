@@ -133,11 +133,9 @@ void main() {
   float scale = (aspect < .8 ? 13.8 : 10.2)/uZoom;
   vec2 screen = (vUv-center)*vec2(aspect,1.0)*scale;
   vec2 p = rotate(-uRoll)*screen;
-  // The close preset is a camera move as well as a framing change. Reducing
-  // the eye distance widens the ray fan across the same image plane, giving
-  // the disk a stronger near-field perspective instead of a flat crop.
-  float closeView = smoothstep(.72,2.05,uZoom);
-  float cameraDistance = mix(30.0,16.0,closeView);
+  // Keep the observer distance fixed; zoom is a stable image-plane framing
+  // control, so preset transitions cannot introduce a second hidden motion.
+  const float cameraDistance = 30.0;
   vec3 origin = vec3(0.0,cos(uInclination),sin(uInclination))*cameraDistance;
   vec3 forward = -normalize(origin);
   vec3 right = vec3(1,0,0);

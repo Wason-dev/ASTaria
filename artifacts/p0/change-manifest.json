@@ -44,10 +44,10 @@
     },
     {
       "file": "src/prototype/shaders.ts",
-      "lines": 224,
+      "lines": 222,
       "added": 221,
       "removed": 0,
-      "sha256": "a9c700be5c5bade8fff7572041eaee889e93dd5dcc3b28edb56b3739c978b37b"
+      "sha256": "077d850e3ea41e06b7f263b0ea9411e84380df2838e101e34a2d3ff7c5ccb35a"
     },
     {
       "file": "src/prototype/StarInfall.ts",

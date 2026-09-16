@@ -207,7 +207,12 @@ export function HomeWorkspace({ readCamera, onViewChange, sceneUnavailable }: Pr
       <div className="home-deck" style={{ opacity: Math.max(0, Math.min(1, (progress - .45) / .55)), visibility: chatVisible ? 'visible' : 'hidden' }}>
       <div className="home-pane-track" style={{ width: endWidth * 2, transform: `translateX(${compact && informationActive ? -endWidth : 0}px)` }}>
       <section id="home-xixi" className="home-xixi" aria-label="析熙" inert={!chatOpen || progress < .99 || (compact && informationActive)} aria-hidden={!chatOpen || (compact && informationActive)}>
-        <header><strong>析熙</strong><div className="home-chat-actions">{compact && <button ref={informationToggle} className="home-information-toggle" onClick={() => setInformationActive(true)} aria-controls="home-agenda">日程 →</button>}<button className="home-collapse" onClick={() => changeChat(false)}>收起</button></div></header>
+        <header><div className="home-chat-title">
+          <button className="home-collapse" onClick={() => changeChat(false)} aria-label="收起析熙" title="收起析熙">
+            <svg viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="6" /><path d="m5 5 4 4m0-4-4 4" /></svg>
+          </button>
+          <strong>析熙</strong>
+        </div>{compact && <button ref={informationToggle} className="home-information-toggle" onClick={() => setInformationActive(true)} aria-controls="home-agenda">日程 →</button>}</header>
         <div className="home-conversation" role="log" aria-label="事项录入记录" aria-live="polite">
           {receipts.length === 0 && <p className="home-greeting">有什么事，交给我</p>}
           {receipts.map(task => <div className="home-receipt" key={task.id}><span>已记为事项</span><button onClick={() => openTask(task.id)}>{task.title}</button></div>)}

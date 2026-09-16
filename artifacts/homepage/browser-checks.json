@@ -18,6 +18,10 @@
       "pass": true
     },
     {
+      "name": "navigation uses the same measured glass material",
+      "pass": true
+    },
+    {
       "name": "Escape closes nav and restores brand focus",
       "pass": true
     },

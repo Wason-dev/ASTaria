@@ -4,6 +4,27 @@ import { glassDisplacement, HOME_GLASS } from './glass'
 
 type Props = { width: number; height: number; radius: number; progress?: number }
 
+export function MeasuredGlassSurface({ radius, progress = 0 }: Pick<Props, 'radius' | 'progress'>) {
+  const host = useRef<HTMLSpanElement>(null)
+  const [size, setSize] = useState({ width: 1, height: 1 })
+  useEffect(() => {
+    const element = host.current
+    if (!element) return
+    const measure = () => {
+      const box = element.getBoundingClientRect()
+      const next = { width: Math.max(1, Math.round(box.width)), height: Math.max(1, Math.round(box.height)) }
+      setSize(current => current.width === next.width && current.height === next.height ? current : next)
+    }
+    const observer = new ResizeObserver(measure)
+    observer.observe(element)
+    measure()
+    return () => observer.disconnect()
+  }, [])
+  return <span ref={host} className="home-glass-measure" aria-hidden="true">
+    <GlassSurface width={size.width} height={size.height} radius={radius} progress={progress} />
+  </span>
+}
+
 /** Optics belong to the UI layer; P0's render targets and shaders stay independent. */
 export function GlassSurface({ width, height, radius, progress = 0 }: Props) {
   const id = `home-glass-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`

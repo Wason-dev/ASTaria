@@ -5,7 +5,7 @@ import type { SceneCamera } from '../spatial/scene'
 import { readableDate, STATUS_LABELS } from '../spatial/scene'
 import { useSceneCamera } from '../spatial/useSceneCamera'
 import { useSpatialTasks } from '../spatial/useSpatialTasks'
-import { GlassSurface } from './GlassSurface'
+import { GlassSurface, MeasuredGlassSurface } from './GlassSurface'
 import './home.css'
 
 type Props = {
@@ -139,10 +139,13 @@ export function HomeWorkspace({ readCamera, onViewChange, sceneUnavailable }: Pr
       onFocus={() => { clearTimeout(menuTimer.current); setMenuOpen(true) }}
       onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setMenuOpen(false) }}>
       <button ref={brand} className="home-brand" aria-expanded={menuOpen} aria-controls="home-menu" onClick={() => setMenuOpen(true)}>AST<span>aria</span></button>
-      <ul id="home-menu" className="home-menu" hidden={!menuOpen}>
-        <li><button aria-current="page" onClick={() => { changeChat(false); brand.current?.focus(); setMenuOpen(false) }}>首页</button></li>
-        {['工作台', '时间表', '日历', 'DDL'].map(label => <li key={label}><button disabled>{label}<span>稍后</span></button></li>)}
-      </ul>
+      <div id="home-menu" className="home-menu" hidden={!menuOpen}>
+        <MeasuredGlassSurface radius={13} />
+        <ul className="home-menu-list">
+          <li><button aria-current="page" onClick={() => { changeChat(false); brand.current?.focus(); setMenuOpen(false) }}>首页</button></li>
+          {['工作台', '时间表', '日历', 'DDL'].map(label => <li key={label}><button disabled>{label}<span>稍后</span></button></li>)}
+        </ul>
+      </div>
     </nav>
 
     <div ref={current} className="home-current" style={{ opacity: Math.max(0, 1 - progress * 3), visibility: progress > .6 ? 'hidden' : 'visible' }} inert={chatOpen}>

@@ -136,11 +136,8 @@ void main() {
   // The close preset is a camera move as well as a framing change. Reducing
   // the eye distance widens the ray fan across the same image plane, giving
   // the disk a stronger near-field perspective instead of a flat crop.
-  float closeView = smoothstep(.72,2.35,uZoom);
-  // At the interstellar endpoint the eye sits inside the disk's near field.
-  // The wider ray fan makes the disk pass around the observer instead of
-  // behaving like a flat image enlarged toward the right edge.
-  float cameraDistance = mix(30.0,6.5,closeView);
+  float closeView = smoothstep(.72,2.05,uZoom);
+  float cameraDistance = mix(30.0,16.0,closeView);
   vec3 origin = vec3(0.0,cos(uInclination),sin(uInclination))*cameraDistance;
   vec3 forward = -normalize(origin);
   vec3 right = vec3(1,0,0);

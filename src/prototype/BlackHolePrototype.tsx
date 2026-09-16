@@ -73,7 +73,7 @@ export default function BlackHolePrototype() {
   const changeNight = (value: number) => { setNight(value); renderer.current?.setNight(value) }
   const changeView = (value:'panorama'|'interstellar') => {
     setView(value)
-    setZoom(value === 'panorama' ? .7 : 2.35)
+    setZoom(value === 'panorama' ? .7 : 2.05)
     setRoll(value === 'panorama' ? 18 : 7)
     setInclination(value === 'panorama' ? 83 : 84)
     renderer.current?.setView(value)
@@ -128,7 +128,7 @@ export default function BlackHolePrototype() {
       <dl className="p0-metrics"><div><dt>帧间隔 P95</dt><dd>{stats?.p95.toFixed(2) ?? '—'} ms</dd></div><div><dt>渲染分辨率</dt><dd>{stats ? `${stats.width} × ${stats.height}` : '—'}</dd></div><div><dt>当前档位</dt><dd>{stats ? qualityNames[stats.quality].split(' · ')[0] : '—'}</dd></div></dl>
       <label className="p0-slider"><span>纸与星 <output>{Math.round(night*100)}% 夜</output></span><input aria-label="昼夜" type="range" min="0" max="1" step="0.01" value={night} onChange={e => changeNight(Number(e.target.value))}/><small><span>纸白</span><span>星夜</span></small></label>
       <label className="p0-slider"><span>观测倾角 <output>{inclination}°</output></span><input aria-label="观测倾角" type="range" min="58" max="86" step="1" value={inclination} onChange={e=>{const v=Number(e.target.value);setView(null);setInclination(v);renderer.current?.setInclination(v)}}/></label>
-      <label className="p0-slider"><span>黑洞远近 <output>{zoom.toFixed(2)}×</output></span><input aria-label="黑洞远近" type="range" min="0.55" max="3" step="0.01" value={zoom} onChange={e=>{const v=Number(e.target.value);setView(null);setZoom(v);renderer.current?.setZoom(v)}}/><small><span>远观</span><span>靠近</span></small></label>
+      <label className="p0-slider"><span>黑洞远近 <output>{zoom.toFixed(2)}×</output></span><input aria-label="黑洞远近" type="range" min="0.55" max="2.2" step="0.01" value={zoom} onChange={e=>{const v=Number(e.target.value);setView(null);setZoom(v);renderer.current?.setZoom(v)}}/><small><span>远观</span><span>靠近</span></small></label>
       <label className="p0-slider"><span>画面旋转 <output>{roll}°</output></span><input aria-label="画面旋转" type="range" min="-35" max="35" step="1" value={roll} onChange={e=>{const v=Number(e.target.value);setView(null);setRoll(v);renderer.current?.setRoll(v)}}/></label>
       <label className="p0-quality"><span>画质</span><select aria-label="画质" value={quality} onChange={e=>{const v=e.target.value as QualityMode;setQuality(v);renderer.current?.setQuality(v)}}>{Object.entries(qualityNames).map(([key,label])=><option value={key} key={key}>{label}</option>)}</select></label>
       <div className="p0-switches"><label><input type="checkbox" checked={lens} onChange={e=>{setLens(e.target.checked);renderer.current?.setLens(e.target.checked)}}/>引力透镜</label><label><input type="checkbox" checked={doppler} onChange={e=>{setDoppler(e.target.checked);renderer.current?.setDoppler(e.target.checked)}}/>多普勒增亮</label></div>

@@ -12,7 +12,7 @@
       "lines": 141,
       "added": 137,
       "removed": 5,
-      "sha256": "7da976d2abdf3d1febc2a77b8113f36bee2e3fc4ca279eb75cac0bb6df2bd661"
+      "sha256": "cbdfacd9bd24044f0aa83526623821c05c145789725d6747ae90eac2cc385fb2"
     },
     {
       "file": "src/prototype/prototype.css",
@@ -30,10 +30,10 @@
     },
     {
       "file": "src/prototype/BlackHoleRenderer.ts",
-      "lines": 759,
+      "lines": 757,
       "added": 757,
       "removed": 0,
-      "sha256": "617c4ef0ebe80a3629fd55c9e6a414f8616cddb36dc0ea15b96aaa7f84cab209"
+      "sha256": "3bb8225e5e3edc0d85b8db5ec63e0a99b22d0a9d1f88df3890552771085bcbb3"
     },
     {
       "file": "src/prototype/geodesics.ts",
@@ -44,10 +44,10 @@
     },
     {
       "file": "src/prototype/shaders.ts",
-      "lines": 227,
+      "lines": 224,
       "added": 221,
       "removed": 0,
-      "sha256": "412846c54691b23aff5956bee24d80eadccbc6dc03fc058d07199fa29ea6ed0e"
+      "sha256": "a9c700be5c5bade8fff7572041eaee889e93dd5dcc3b28edb56b3739c978b37b"
     },
     {
       "file": "src/prototype/StarInfall.ts",

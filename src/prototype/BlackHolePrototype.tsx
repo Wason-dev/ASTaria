@@ -73,7 +73,7 @@ export default function BlackHolePrototype() {
   const changeNight = (value: number) => { setNight(value); renderer.current?.setNight(value) }
   const changeView = (value:'panorama'|'interstellar') => {
     setView(value)
-    setZoom(value === 'panorama' ? .7 : 2.65)
+    setZoom(value === 'panorama' ? .7 : 2.35)
     setRoll(value === 'panorama' ? 18 : 7)
     setInclination(value === 'panorama' ? 83 : 84)
     renderer.current?.setView(value)

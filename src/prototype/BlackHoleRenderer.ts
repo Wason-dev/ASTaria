@@ -49,7 +49,7 @@ function cameraSpring(value: number, tolerance: number): CameraSpring {
 
 const CAMERA_VIEWS = {
   panorama: { zoom: 0.7, roll: 18, inclination: 83, centerX: 0.65, centerY: 0.51 },
-  interstellar: { zoom: 2.65, roll: 7, inclination: 84, centerX: 0.98, centerY: 0.51 },
+  interstellar: { zoom: 2.35, roll: 7, inclination: 84, centerX: 0.98, centerY: 0.51 },
 } as const
 
 const TIERS: Record<Quality, { level: number; stars: number; maxDpr: number; pixels: number }> = {
@@ -476,11 +476,10 @@ export class BlackHoleRenderer {
 
   private advanceCamera(delta: number) {
     if (delta <= 0 || !this.cameraIsRunning()) return
-    for (const [index, spring] of this.cameraSprings.entries()) {
-      // Lead the lateral framing slightly into the flight, then let the
-      // camera push in. This keeps the right-hand composition while avoiding
-      // the old zoom-first-then-pan impression.
-      const omega = index === 3 ? 5.2 : index === 0 ? 2.9 : 3.5
+    for (const spring of this.cameraSprings) {
+      // One shared critically damped path keeps framing, roll and push-in
+      // phase-locked, so the move reads as one continuous camera flight.
+      const omega = 3.5
       const decay = Math.exp(-omega * delta)
       const displacement = spring.value - spring.target
       const velocityTerm = spring.velocity + omega * displacement

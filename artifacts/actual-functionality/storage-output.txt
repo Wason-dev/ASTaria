@@ -1,0 +1,7 @@
+PASS same-origin second tab receives creation through liveQuery without reload
+PASS second-tab status change reaches first-tab orbital node without reload
+PASS failed create retains input, writes no row, and succeeds after retry
+PASS failed status save preserves data and orbital state; retry completes task
+PASS initial read failure is visible and retry reads existing persisted tasks
+PASS two synchronous submit events invoke one create and persist one task
+PASS no uncaught browser runtime exceptions

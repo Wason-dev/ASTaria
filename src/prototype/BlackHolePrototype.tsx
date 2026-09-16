@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { BlackHoleRenderer } from './BlackHoleRenderer'
 import type { QualityMode, RenderStats } from './BlackHoleRenderer'
+import { TaskWorkspace } from '../spatial/TaskWorkspace'
 import './prototype.css'
 
 declare global {
@@ -30,6 +31,8 @@ export default function BlackHolePrototype() {
   const [capturing, setCapturing] = useState(false)
   const toggleRef = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLElement>(null)
+  const readCamera = useCallback(() => renderer.current?.getSnapshot(), [])
+  const openWorkspacePanel = useCallback(() => setPanel(false), [])
 
   useEffect(() => {
     if (!host.current) return
@@ -53,6 +56,7 @@ export default function BlackHolePrototype() {
   useEffect(() => {
     const keyboard = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement
+      if (event.defaultPrevented || target.closest('[data-spatial-ui]')) return
       if (event.key === 'Escape') { setPanel(false); toggleRef.current?.focus(); return }
       if (['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName)) return
       if (event.key.toLowerCase() === 'd' && !event.metaKey && !event.ctrlKey) setPanel(v => !v)
@@ -115,6 +119,7 @@ export default function BlackHolePrototype() {
     <div className="p0-signature" aria-hidden="true">AST<span>aria</span><i /></div>
     <nav className="p0-views" aria-label="观测镜头"><button aria-pressed={view === 'panorama'} onClick={()=>changeView('panorama')}>全景</button><span/><button aria-pressed={view === 'interstellar'} onClick={()=>changeView('interstellar')}>星际</button></nav>
     <p className="p0-whisper">把今天交给我。</p>
+    <TaskWorkspace readCamera={readCamera} cameraRevision={`${view}/${zoom}/${roll}/${inclination}/${paused}`} onOpenPanel={openWorkspacePanel} />
     <div className="p0-actions">
       <button className="p0-day-toggle" onClick={() => changeNight(night > .5 ? 0 : 1)} aria-label={night > .5 ? '进入白昼' : '进入夜晚'} title={night > .5 ? '进入白昼' : '进入夜晚'}>
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></svg>

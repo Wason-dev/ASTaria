@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { MeasuredGlassSurface } from './GlassSurface'
 
 const clockFormat = new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+const dateFormat = new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
 
 /** Receives display text once Xixi's notification policy is connected. */
 type Props = { showClock: boolean; notification?: string }
@@ -27,9 +28,10 @@ export function HomeStatus({ showClock, notification }: Props) {
     }
   }, [])
   const time = clockFormat.format(now)
+  const date = dateFormat.format(now)
   const message = notification?.trim() || '暂无通知'
   return <>
-    {showClock && <time className="home-clock" dateTime={now.toISOString()} aria-label={`当前时间 ${time}`}>{time}</time>}
+    {showClock && <time className="home-clock" dateTime={now.toISOString()} aria-label={`当前日期时间 ${date} ${time}`}>{date}　{time}</time>}
     <div className="home-notification" role="status" aria-live="polite" aria-atomic="true" title={message}>
       <MeasuredGlassSurface radius={16} />
       <span className="home-notification-content">

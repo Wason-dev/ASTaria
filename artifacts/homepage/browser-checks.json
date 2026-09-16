@@ -1,0 +1,262 @@
+{
+  "url": "http://127.0.0.1:5188/",
+  "checks": [
+    {
+      "name": "minimal home removes observatory, sun and task-orbit UI",
+      "pass": true
+    },
+    {
+      "name": "pill stays small and exactly 12px below two-line current task",
+      "pass": true
+    },
+    {
+      "name": "real empty state, no example tasks",
+      "pass": true
+    },
+    {
+      "name": "small local date and clock and honest empty notification stay in the right corners",
+      "pass": true
+    },
+    {
+      "name": "hover navigation contains planned pages without fake destinations",
+      "pass": true
+    },
+    {
+      "name": "navigation uses the same measured glass material",
+      "pass": true
+    },
+    {
+      "name": "navigation opens horizontally beside the brand with an animated hint",
+      "pass": true
+    },
+    {
+      "name": "first mouse click keeps the hover preview open",
+      "pass": true
+    },
+    {
+      "name": "second mouse click closes navigation",
+      "pass": true
+    },
+    {
+      "name": "Escape closes nav and restores brand focus",
+      "pass": true
+    },
+    {
+      "name": "keyboard can reopen navigation",
+      "pass": true
+    },
+    {
+      "name": "closed navigation is skipped by Tab",
+      "pass": true
+    },
+    {
+      "name": "same pill survives interrupted expansion",
+      "pass": true
+    },
+    {
+      "name": "exact interstellar preset and black theme",
+      "pass": true
+    },
+    {
+      "name": "interstellar navigation keeps backdrop ancestors opaque and stationary throughout opening",
+      "pass": true
+    },
+    {
+      "name": "SVG refraction map has a nonzero viewport and live backdrop",
+      "pass": true
+    },
+    {
+      "name": "equal chat and agenda columns share one continuous glass surface",
+      "pass": true
+    },
+    {
+      "name": "expanded chat and agenda sit on the horizontal centerline",
+      "pass": true
+    },
+    {
+      "name": "rounded composer border has clear space above the capture button",
+      "pass": true
+    },
+    {
+      "name": "calendar and empty agenda are real and all sections exist",
+      "pass": true
+    },
+    {
+      "name": "all empty agenda sections fit in the default compact window",
+      "pass": true
+    },
+    {
+      "name": "month navigation animates an inert outgoing grid without moving agenda rows",
+      "pass": true
+    },
+    {
+      "name": "whole month pages push edge to edge across the full calendar width",
+      "pass": true
+    },
+    {
+      "name": "reversing a month request preserves the in-flight page and position",
+      "pass": true
+    },
+    {
+      "name": "rapid month navigation reaches the final month and removes stale grids",
+      "pass": true
+    },
+    {
+      "name": "day selection moves its highlight and animates the selected agenda",
+      "pass": true
+    },
+    {
+      "name": "selected day highlight lands on the selected date",
+      "pass": true
+    },
+    {
+      "name": "keyboard month transitions retain the selected day focus",
+      "pass": true
+    },
+    {
+      "name": "rapid keyboard month requests retain every step and restore final date focus",
+      "pass": true
+    },
+    {
+      "name": "month navigation moves forward and back without losing the selected date",
+      "pass": true
+    },
+    {
+      "name": "material matches chosen transparency and low rim with no reflection",
+      "pass": true
+    },
+    {
+      "name": "focused input stays dim without a persistent golden light",
+      "pass": true
+    },
+    {
+      "name": "one inserted character triggers one broad gold flash with no rotation",
+      "pass": true
+    },
+    {
+      "name": "another character retriggers the flash while the previous pulse is active",
+      "pass": true
+    },
+    {
+      "name": "each pulse ends and removes all luminous layers",
+      "pass": true
+    },
+    {
+      "name": "capture persists one task and notes to existing local store, no AI reply",
+      "pass": true
+    },
+    {
+      "name": "receipt detail restores its actual opener",
+      "pass": true
+    },
+    {
+      "name": "home reflects saved task and exact panorama preset",
+      "pass": true
+    },
+    {
+      "name": "task status persists and returns focus",
+      "pass": true
+    },
+    {
+      "name": "draft survives closing and reloading",
+      "pass": true
+    },
+    {
+      "name": "reduced motion reaches chat without animated camera",
+      "pass": true
+    },
+    {
+      "name": "reduced motion also disables navigation animation",
+      "pass": true
+    },
+    {
+      "name": "reduced motion clears input feedback without moving or persistent light",
+      "pass": true
+    },
+    {
+      "name": "chat and composer fit 390x844",
+      "pass": true
+    },
+    {
+      "name": "composer and capture button stay separated at 390x844",
+      "pass": true
+    },
+    {
+      "name": "agenda paging fits 390x844 without hidden focus or scroll drift",
+      "pass": true
+    },
+    {
+      "name": "chat and composer fit 320x568",
+      "pass": true
+    },
+    {
+      "name": "composer and capture button stay separated at 320x568",
+      "pass": true
+    },
+    {
+      "name": "agenda paging fits 320x568 without hidden focus or scroll drift",
+      "pass": true
+    },
+    {
+      "name": "chat and composer fit 844x390",
+      "pass": true
+    },
+    {
+      "name": "composer and capture button stay separated at 844x390",
+      "pass": true
+    },
+    {
+      "name": "short touch screens can scroll to validation feedback without clipping the form",
+      "pass": true
+    },
+    {
+      "name": "hidden chat is inert and keyboard returns to pill",
+      "pass": true
+    },
+    {
+      "name": "horizontal navigation and corner text fit 1440x900",
+      "pass": true
+    },
+    {
+      "name": "horizontal navigation and corner text fit 600x800",
+      "pass": true
+    },
+    {
+      "name": "horizontal navigation and corner text fit 320x568",
+      "pass": true
+    },
+    {
+      "name": "today and DDL show dated tasks without assigning undated inbox tasks",
+      "pass": true
+    },
+    {
+      "name": "selected day distinguishes scheduled work from its later deadline",
+      "pass": true
+    },
+    {
+      "name": "calendar arrow navigation restores the selected day and focus",
+      "pass": true
+    },
+    {
+      "name": "completing an agenda task updates lists and restores visible focus",
+      "pass": true
+    },
+    {
+      "name": "resizing an agenda detail to narrow layout restores a visible focus target",
+      "pass": true
+    },
+    {
+      "name": "WebGL interruption cannot lock local capture",
+      "pass": true
+    },
+    {
+      "name": "original app remains accessible",
+      "pass": true
+    },
+    {
+      "name": "no runtime exceptions",
+      "pass": true
+    }
+  ],
+  "errors": []
+}

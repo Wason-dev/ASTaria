@@ -1,0 +1,77 @@
+{
+  "origin": "http://127.0.0.1:5177",
+  "debugPort": 9228,
+  "profile": "/tmp/astaria-storage-qa-0916",
+  "temporaryBrowserClosed": true,
+  "checks": [
+    {
+      "name": "same-origin second tab receives creation through liveQuery without reload",
+      "pass": true,
+      "evidence": {
+        "id": "a43a9b0b-43f3-4737-abd5-c5ddb9d41a58",
+        "title": "跨标签同步任务"
+      }
+    },
+    {
+      "name": "second-tab status change reaches first-tab orbital node without reload",
+      "pass": true,
+      "evidence": {
+        "status": "doing"
+      }
+    },
+    {
+      "name": "failed create retains input, writes no row, and succeeds after retry",
+      "pass": true,
+      "evidence": {
+        "title": "失败后保留的任务",
+        "notes": "失败后必须保留这条备注",
+        "error": "任务未保存：QA create failure"
+      }
+    },
+    {
+      "name": "failed status save preserves data and orbital state; retry completes task",
+      "pass": true,
+      "evidence": {
+        "before": {
+          "status": "doing",
+          "left": "747.434px",
+          "top": "323.171px",
+          "count": 2
+        },
+        "after": {
+          "status": "doing",
+          "left": "747.434px",
+          "top": "323.171px",
+          "count": 2
+        }
+      }
+    },
+    {
+      "name": "initial read failure is visible and retry reads existing persisted tasks",
+      "pass": true,
+      "evidence": {
+        "error": "无法读取本地任务：QA initial list failure重新读取",
+        "rowsAfterRetry": 2
+      }
+    },
+    {
+      "name": "two synchronous submit events invoke one create and persist one task",
+      "pass": true,
+      "evidence": {
+        "createCalls": 1,
+        "totalRows": 3
+      }
+    },
+    {
+      "name": "no uncaught browser runtime exceptions",
+      "pass": true,
+      "evidence": {
+        "pages": 3
+      }
+    }
+  ],
+  "exceptions": [],
+  "limitations": [
+    "Dev-server fault injection in an isolated headless Chrome profile; this does not simulate physical disk loss or quota exhaustion."
+  ]
+}

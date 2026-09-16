@@ -32,7 +32,7 @@ src/main.tsx          React 挂载入口
 src/App.tsx           占位组件（无业务逻辑）
 src/index.css         Tailwind 入口
 src/vite-env.d.ts     Vite 客户端类型
-public/               favicon 与 PWA 图标（192 / 512 / maskable 512）
+public/               静态资源（图标暂留空位，未来接入新设计）
 ```
 
 构建后 `dist/` 中会生成 `manifest.webmanifest` 与 `sw.js`（generateSW 产物）。

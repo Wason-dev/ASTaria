@@ -102,7 +102,7 @@ try {
   await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 52, y: 43 })
   await wait('document.querySelector(".home-brand").getAttribute("aria-expanded")==="true"')
   await wait('(()=>{const m=document.querySelector(".home-menu").getBoundingClientRect(),i=document.querySelector(".home-menu feImage");return i?.getAttribute("width")===String(Math.round(m.width))&&i?.getAttribute("height")===String(Math.round(m.height))})()')
-  await check('hover navigation enables workbench and DDL while other planned pages stay disabled', 'document.querySelectorAll(".home-menu button:disabled").length===3 && [...document.querySelectorAll(".home-menu button:not(:disabled)")].map(b=>b.textContent).join(",")==="首页,工作台,DDL" && document.querySelector(".home-menu").textContent.includes("设置")')
+  await check('hover navigation keeps workbench and removes the integrated DDL destination', 'document.querySelectorAll(".home-menu button:disabled").length===3 && [...document.querySelectorAll(".home-menu button:not(:disabled)")].map(b=>b.textContent).join(",")==="首页,工作台" && !document.querySelector(".home-menu").textContent.includes("DDL") && document.querySelector(".home-menu").textContent.includes("设置")')
   await check('navigation uses the same measured glass material', '(()=>{const m=document.querySelector(".home-menu").getBoundingClientRect(),g=document.querySelector(".home-menu .home-glass-surface"),s=getComputedStyle(g),i=document.querySelector(".home-menu feImage");return m.height<=40&&i.getAttribute("width")===String(Math.round(m.width))&&i.getAttribute("height")===String(Math.round(m.height))&&Math.abs(Number(s.getPropertyValue("--glass-tint"))-.2)<1e-6&&Number(s.getPropertyValue("--glass-rim"))===.15&&Number(s.getPropertyValue("--glass-shadow"))===.6})()')
   await check('navigation opens horizontally beside the brand with an animated hint', '(()=>{const m=document.querySelector(".home-menu"),r=m.getBoundingClientRect(),b=document.querySelector(".home-brand").getBoundingClientRect(),c=document.querySelector(".home-clock").getBoundingClientRect(),items=[...m.querySelectorAll("li")],list=getComputedStyle(document.querySelector(".home-menu-list"));return items.every(i=>Math.abs(i.getBoundingClientRect().top-items[0].getBoundingClientRect().top)<1)&&r.left>b.right&&r.right<c.left&&list.transitionProperty.includes("transform")&&getComputedStyle(m).clipPath==="none"&&!!document.querySelector(".home-nav-hint")})()')
   await shot('navigation-1440', true)
@@ -255,6 +255,9 @@ try {
   await shot('chat-short-touch-error')
   await send('Emulation.setTouchEmulationEnabled', { enabled: false })
   await click('.home-collapse'); await wait('document.querySelector(".home-morph").dataset.progress==="0.000"')
+  // The rounded progress attribute can reach zero before camera completion and
+  // the following animation frame that restores focus to the launch pill.
+  await cameraSettled(); await wait('document.activeElement.matches(".home-launch")')
   await check('hidden chat is inert and keyboard returns to pill', 'document.querySelector(".home-xixi").inert && document.activeElement.matches(".home-launch")')
   for (const [width, height] of [[1440, 900], [600, 800], [320, 568]]) {
     await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false })

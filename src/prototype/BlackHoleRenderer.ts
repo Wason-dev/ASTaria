@@ -3,8 +3,10 @@ import { vertexShader, fragmentShader } from './shaders'
 import { createGeodesicLut } from './geodesics'
 import { SelectiveBloom } from './postprocessing'
 import { StarInfall } from './StarInfall'
+import { AdaptiveQualityController } from './adaptiveQuality'
+import type { AdaptiveQuality } from './adaptiveQuality'
 
-export type Quality = 'ultra' | 'high' | 'low' | 'safe'
+export type Quality = AdaptiveQuality
 export type QualityMode = Quality | 'auto'
 export type CameraView = 'panorama' | 'interstellar'
 
@@ -65,7 +67,7 @@ const SESSION_SAMPLE_COUNT = 18_000
 let cachedGeodesics: ReturnType<typeof createGeodesicLut> | undefined
 
 function getGeodesics() {
-  cachedGeodesics ??= createGeodesicLut({ cameraRadius: 30, maxImpact: 24, width: 1536, height: 1024 })
+  cachedGeodesics ??= createGeodesicLut({ cameraRadius: 30, maxImpact: 24, width: 2048, height: 1536 })
   return cachedGeodesics
 }
 
@@ -205,8 +207,7 @@ export class BlackHoleRenderer {
   private night = 0
   private nightTarget = 0
   private nightVelocity = 0
-  private warmupRemaining = 2000
-  private slowDuration = 0
+  private readonly adaptiveQuality = new AdaptiveQualityController()
   private cssWidth = 0
   private cssHeight = 0
   private activeDpr = 0
@@ -303,6 +304,7 @@ export class BlackHoleRenderer {
 
   setQuality(mode: QualityMode) {
     this.requestedQuality = mode
+    this.adaptiveQuality.reset()
     this.applyQuality(mode === 'auto' ? 'ultra' : mode)
     this.publishStats()
   }
@@ -587,20 +589,9 @@ export class BlackHoleRenderer {
   }
 
   private adaptQuality(elapsed: number) {
-    if (this.requestedQuality !== 'auto' || this.quality === 'safe') return
-    if (this.warmupRemaining > 0) {
-      this.warmupRemaining -= elapsed
-      return
-    }
-    // A short rolling window filters individual long frames; reduction requires
-    // a full consecutive second below 50 FPS, measured from real RAF intervals.
-    const count = Math.min(30, this.samples.length)
-    if (count < 12) return
-    let sum = 0
-    for (let i = this.samples.length - count; i < this.samples.length; i++) sum += this.samples[i]
-    this.slowDuration = sum / count > 20 ? this.slowDuration + elapsed : 0
-    if (this.slowDuration >= 1000) {
-      const next: Quality = this.quality === 'ultra' ? 'high' : this.quality === 'high' ? 'low' : 'safe'
+    if (this.requestedQuality !== 'auto') return
+    const next = this.adaptiveQuality.sample(elapsed, this.quality, this.cameraIsRunning() || this.springIsRunning())
+    if (next) {
       this.applyQuality(next)
       this.publishStats()
     }
@@ -610,8 +601,7 @@ export class BlackHoleRenderer {
     const changed = this.quality !== quality
     this.quality = quality
     this.material.uniforms.uQuality.value = TIERS[quality].level
-    this.warmupRemaining = 2000
-    this.slowDuration = 0
+    this.adaptiveQuality.resetWindow()
     if (changed) {
       this.samples.length = 0
       this.starTextureDirty = true
@@ -636,8 +626,7 @@ export class BlackHoleRenderer {
     this.renderer.getDrawingBufferSize(this.resolution)
     this.sceneTarget.setSize(this.resolution.x, this.resolution.y)
     this.bloom.resize(this.resolution.x, this.resolution.y, this.quality === 'safe')
-    this.warmupRemaining = 2000
-    this.slowDuration = 0
+    this.adaptiveQuality.resetWindow()
     this.samples.length = 0
     this.requestFrame()
   }
@@ -668,8 +657,7 @@ export class BlackHoleRenderer {
     this.previousFrame = null
     this.previousWasAmbient = false
     this.samples.length = 0
-    this.warmupRemaining = 2000
-    this.slowDuration = 0
+    this.adaptiveQuality.resetWindow()
   }
 
   private publishStats = () => {

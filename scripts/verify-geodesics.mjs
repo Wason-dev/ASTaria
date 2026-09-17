@@ -9,10 +9,10 @@ import {
   geodesicImpactForAngle,
 } from '../src/prototype/geodesics.ts'
 
-const settings = { cameraRadius: 30, maxImpact: 24, width: 1536, height: 1024 }
+const settings = { cameraRadius: 30, maxImpact: 24, width: 2048, height: 1536 }
 const started = performance.now()
 const lut = createGeodesicLut(settings)
-const reference = createGeodesicLut({ ...settings, width: 3072, height: 2048 })
+const reference = createGeodesicLut({ ...settings, width: settings.width * 2, height: settings.height * 2 })
 const mix = (a, b, t) => a + (b - a) * t
 const dot = (a, b) => a.reduce((sum, value, i) => sum + value * b[i], 0)
 const normalize = (vector) => vector.map((value) => value / Math.hypot(...vector))

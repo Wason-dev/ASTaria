@@ -3,14 +3,17 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
     tailwindcss(),
     VitePWA({
       strategies: 'generateSW',
       registerType: 'autoUpdate',
-      injectRegister: 'auto',
+      // Design previews must not reopen an older cached build. Publish the
+      // retirement worker for existing registrations without registering anew.
+      injectRegister: mode === 'design-preview' ? false : 'auto',
+      selfDestroying: mode === 'design-preview',
       includeAssets: ['favicon.png', 'apple-touch-icon.png', 'astaria-icon-1024.png'],
       manifest: {
         name: 'ASTaria',
@@ -34,4 +37,4 @@ export default defineConfig({
       },
     }),
   ],
-})
+}))

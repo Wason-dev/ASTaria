@@ -50,11 +50,11 @@ mat2 rotate(float a) { return mat2(cos(a),sin(a),-sin(a),cos(a)); }
 
 // Periodic angular coordinates remove the atan seam. Each radius advects
 // its own phase at Keplerian angular velocity, omega = k / r^1.5.
-vec4 disk(vec3 p, vec3 ray, float order) {
+vec4 diskAtTime(vec3 p, vec3 ray, float order, float flowTime) {
   float r = length(p.xz);
   float inner = smoothstep(2.95,3.24,r);
   float outer = 1.0-smoothstep(8.0,14.5,r);
-  float phase = atan(p.z,p.x) - uTime * 1.9 / pow(max(r,3.0),1.5);
+  float phase = atan(p.z,p.x) - flowTime * 1.9 / pow(max(r,3.0),1.5);
   vec2 orbit = vec2(cos(phase),sin(phase));
   float turbulence = fbm(orbit*3.7 + vec2(r*.45,r*.7));
   float fine = noise(orbit*13.0 + vec2(r*9.0,-r*5.0));
@@ -89,6 +89,22 @@ vec4 disk(vec3 p, vec3 ray, float order) {
   vec3 material = mix(vec3(.12,.115,.105)*ink,light,uNight);
   material += (fine-.5)*.009*uNight*outer*inner;
   return vec4(material,opacity * mix(1.0,.60,order));
+}
+
+vec4 disk(vec3 p, vec3 ray, float order) {
+  // Unbounded differential advection winds every stream into subpixel noise
+  // after a few minutes. Overlap two finite-age copies of the original field:
+  // each copy resets only while fully hidden, with zero blend slope at either
+  // end. This retains the original material and angular velocity indefinitely.
+  float ageA = mod(uTime + 24.0,48.0) - 24.0;
+  float ageB = mod(uTime,48.0) - 24.0;
+  float blend = smoothstep(12.0,24.0,abs(ageA));
+  vec4 a = diskAtTime(p,ray,order,ageA);
+  if (blend <= 0.0) return a;
+  vec4 b = diskAtTime(p,ray,order,ageB);
+  float opacity = mix(a.a,b.a,blend);
+  vec3 emission = mix(a.rgb*a.a,b.rgb*b.a,blend);
+  return vec4(emission/max(opacity,.00001),opacity);
 }
 
 vec3 sky(vec3 direction, vec2 p) {

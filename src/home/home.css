@@ -12,7 +12,7 @@
 .home-menu .home-glass-surface { opacity: 0; transition: opacity 220ms ease }
 .home-menu[data-open=true] .home-glass-surface { opacity: 1 }
 .home-workspace .home-menu[data-open=false] { pointer-events: none }
-.home-menu-list { position: relative; z-index: 1; display: flex; align-items: center; gap: 2px; list-style: none; margin: 0; padding: 5px; opacity: 0; transform: translateX(-8px); transition: transform 280ms cubic-bezier(.2,.7,.2,1), opacity 220ms ease }
+.home-menu-list { position: relative; z-index: 1; display: flex; align-items: center; gap: 2px; list-style: none; margin: 0; padding: 5px; max-width: 100%; box-sizing: border-box; overflow-x: auto; scrollbar-width: thin; opacity: 0; transform: translateX(-8px); transition: transform 280ms cubic-bezier(.2,.7,.2,1), opacity 220ms ease }
 .home-menu[data-open=true] .home-menu-list { opacity: 1; transform: translateX(0) }
 .p0 .home-menu button { display: block; white-space: nowrap; padding: 5px 10px; font-size: 11px; line-height: 1.6; border-radius: 8px }
 .p0 .home-menu button:focus-visible { outline-offset: -1px }
@@ -83,7 +83,7 @@
   .home-nav { top: 18px }
   .home-nav[data-menu-open=true]::after { left: 0; top: 100%; width: 100%; height: 6px }
   .home-menu { left: 0; top: calc(100% + 6px) }
-  .p0 .home-menu button { padding-inline: 9px }
+  .p0 .home-menu button { padding-inline: 6px }
   .home-clock { top: 26px }
   .home-notification { bottom: 15px }
   .p0 .home-brand { font-size: 12px }

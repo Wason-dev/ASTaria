@@ -186,7 +186,7 @@ export function HomeWorkspace({ readCamera, onViewChange, sceneUnavailable }: Pr
         <MeasuredGlassSurface radius={13} />
         <ul className="home-menu-list">
           <li><button aria-current="page" onClick={() => { changeChat(false); brand.current?.focus(); setMenuOpen(false) }}>首页</button></li>
-          {['工作台', '时间表', '日历', 'DDL'].map(label => <li key={label}><button disabled title="稍后开放">{label}<span className="p0-sr-only">，稍后开放</span></button></li>)}
+          {['工作台', '时间表', '日历', 'DDL', '设置'].map(label => <li key={label}><button disabled title="稍后开放">{label}<span className="p0-sr-only">，稍后开放</span></button></li>)}
         </ul>
       </div>
     </nav>

@@ -10,6 +10,14 @@
       "pass": true
     },
     {
+      "name": "workbench applies four-pixel blur only on its separate backdrop layer",
+      "pass": true
+    },
+    {
+      "name": "empty briefing stays factual and labels local advice",
+      "pass": true
+    },
+    {
       "name": "production removes visual customization and sample entry points",
       "pass": true
     },

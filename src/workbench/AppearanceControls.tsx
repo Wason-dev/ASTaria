@@ -27,7 +27,7 @@ export function AppearanceControls({ value, onChange, warning, onClose }: {
     <p className="wb-muted">开发调试 · 正式版不显示这些工具</p>
     <div className="wb-control-row"><span>排列</span><div className="wb-segment">{[1, 2].map(columns => <button key={columns} aria-pressed={value.columns === columns} onClick={() => update('columns', columns)}>{columns === 2 ? '双列' : '单列'}</button>)}</div></div>
     {ADJUSTMENTS.map(([key, label, min, max, step, unit]) => <label className="wb-adjustment" key={key}>
-      <span>{label}</span><input type="range" min={min} max={max} step={step} value={value[key]} onChange={event => update(key, Number(event.target.value))} /><output>{value[key]}{unit}</output>
+      <span>{label}</span><input aria-label={label} type="range" min={min} max={max} step={step} value={value[key]} onChange={event => update(key, Number(event.target.value))} /><output>{value[key]}{unit}</output>
     </label>)}
     {([['progress', '进度'], ['metadata', '时间与分类'], ['completed', '已完成']] as const).map(([key, label]) => <div className="wb-control-row" key={key}><span>{label}</span><button role="switch" aria-checked={value[key]} aria-label={label} className="wb-toggle" onClick={() => update(key, !value[key])}>{value[key] ? key === 'completed' ? '保留' : '显示' : '隐藏'}</button></div>)}
     <textarea className="wb-parameters" aria-label="当前参数" rows={4} readOnly value={appearanceSummary(value)} />

@@ -10,6 +10,14 @@
       "pass": true
     },
     {
+      "name": "workbench applies four-pixel blur only on its separate backdrop layer",
+      "pass": true
+    },
+    {
+      "name": "empty briefing stays factual and labels local advice",
+      "pass": true
+    },
+    {
       "name": "sample preview uses chosen geometry and glass without touching the database",
       "pass": true
     },
@@ -26,7 +34,43 @@
       "pass": true
     },
     {
+      "name": "briefing recommendation matches the task ordering and exposes actual totals",
+      "pass": true
+    },
+    {
+      "name": "briefing evidence expands accessibly with an animated layout",
+      "pass": true
+    },
+    {
+      "name": "closing evidence makes hidden content inert while it animates out",
+      "pass": true
+    },
+    {
+      "name": "briefing action enters the chosen task without changing its timer setting",
+      "pass": true
+    },
+    {
+      "name": "returning from a briefing recommendation restores its visible source",
+      "pass": true
+    },
+    {
+      "name": "deadline evidence separates estimates and actual effort without nested buttons",
+      "pass": true
+    },
+    {
+      "name": "Xixi notices reveal the actual related tasks",
+      "pass": true
+    },
+    {
+      "name": "return from a notice lands on a visible task when its list has folded",
+      "pass": true
+    },
+    {
       "name": "customization opens a labelled dialog with live parameter controls",
+      "pass": true
+    },
+    {
+      "name": "backdrop blur can be tuned independently from the glass material",
       "pass": true
     },
     {
@@ -75,6 +119,10 @@
     },
     {
       "name": "home capture retains black theme and expanded 680 by 460 glass",
+      "pass": true
+    },
+    {
+      "name": "returning home fully hides the workbench backdrop",
       "pass": true
     },
     {

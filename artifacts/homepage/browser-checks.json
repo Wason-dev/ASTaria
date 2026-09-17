@@ -66,96 +66,96 @@
       "pass": true,
       "frames": [
         {
-          "surface": 0.811427,
-          "shadow": 0.811427,
+          "surface": 0.810619,
+          "shadow": 0.810619,
           "shadowPainted": true,
           "parentShadow": "none",
           "visibility": "visible",
           "stable": true
         },
         {
-          "surface": 0.64213,
-          "shadow": 0.64213,
+          "surface": 0.643307,
+          "shadow": 0.643307,
           "shadowPainted": true,
           "parentShadow": "none",
           "visibility": "visible",
           "stable": true
         },
         {
-          "surface": 0.480154,
-          "shadow": 0.480154,
+          "surface": 0.480278,
+          "shadow": 0.480278,
           "shadowPainted": true,
           "parentShadow": "none",
           "visibility": "visible",
           "stable": true
         },
         {
-          "surface": 0.348833,
-          "shadow": 0.348833,
+          "surface": 0.348931,
+          "shadow": 0.348931,
           "shadowPainted": true,
           "parentShadow": "none",
           "visibility": "visible",
           "stable": true
         },
         {
-          "surface": 0.246592,
-          "shadow": 0.246592,
+          "surface": 0.246666,
+          "shadow": 0.246666,
           "shadowPainted": true,
           "parentShadow": "none",
           "visibility": "visible",
           "stable": true
         },
         {
-          "surface": 0.168837,
-          "shadow": 0.168837,
+          "surface": 0.169297,
+          "shadow": 0.169297,
           "shadowPainted": true,
           "parentShadow": "none",
           "visibility": "visible",
           "stable": true
         },
         {
-          "surface": 0.110709,
-          "shadow": 0.110709,
+          "surface": 0.110751,
+          "shadow": 0.110751,
           "shadowPainted": true,
           "parentShadow": "none",
           "visibility": "visible",
           "stable": true
         },
         {
-          "surface": 0.0675626,
-          "shadow": 0.0675626,
+          "surface": 0.0675932,
+          "shadow": 0.0675932,
           "shadowPainted": true,
           "parentShadow": "none",
           "visibility": "visible",
           "stable": true
         },
         {
-          "surface": 0.0370166,
-          "shadow": 0.0370166,
+          "surface": 0.0368864,
+          "shadow": 0.0368864,
           "shadowPainted": true,
           "parentShadow": "none",
           "visibility": "visible",
           "stable": true
         },
         {
-          "surface": 0.0165262,
-          "shadow": 0.0165262,
+          "surface": 0.0165395,
+          "shadow": 0.0165395,
           "shadowPainted": true,
           "parentShadow": "none",
           "visibility": "visible",
           "stable": true
         },
         {
-          "surface": 0.00470123,
-          "shadow": 0.00470123,
+          "surface": 0.00465982,
+          "shadow": 0.00465982,
           "shadowPainted": true,
           "parentShadow": "none",
           "visibility": "visible",
           "stable": true
         },
         {
-          "surface": 0.0001261,
-          "shadow": 0.0001261,
+          "surface": 0.000119711,
+          "shadow": 0.000119711,
           "shadowPainted": true,
           "parentShadow": "none",
           "visibility": "visible",
@@ -412,96 +412,88 @@
       "pass": true,
       "frames": [
         {
-          "surface": 0.811812,
-          "shadow": 0.811812,
+          "surface": 0.642233,
+          "shadow": 0.642233,
           "shadowPainted": true,
           "parentShadow": "none",
           "visibility": "visible",
           "stable": true
         },
         {
-          "surface": 0.641521,
-          "shadow": 0.641521,
+          "surface": 0.48113,
+          "shadow": 0.48113,
           "shadowPainted": true,
           "parentShadow": "none",
           "visibility": "visible",
           "stable": true
         },
         {
-          "surface": 0.481405,
-          "shadow": 0.481405,
+          "surface": 0.348903,
+          "shadow": 0.348903,
           "shadowPainted": true,
           "parentShadow": "none",
           "visibility": "visible",
           "stable": true
         },
         {
-          "surface": 0.349119,
-          "shadow": 0.349119,
+          "surface": 0.246645,
+          "shadow": 0.246645,
           "shadowPainted": true,
           "parentShadow": "none",
           "visibility": "visible",
           "stable": true
         },
         {
-          "surface": 0.24681,
-          "shadow": 0.24681,
+          "surface": 0.168877,
+          "shadow": 0.168877,
           "shadowPainted": true,
           "parentShadow": "none",
           "visibility": "visible",
           "stable": true
         },
         {
-          "surface": 0.169002,
-          "shadow": 0.169002,
+          "surface": 0.110739,
+          "shadow": 0.110739,
           "shadowPainted": true,
           "parentShadow": "none",
           "visibility": "visible",
           "stable": true
         },
         {
-          "surface": 0.110832,
-          "shadow": 0.110832,
+          "surface": 0.0678033,
+          "shadow": 0.0678033,
           "shadowPainted": true,
           "parentShadow": "none",
           "visibility": "visible",
           "stable": true
         },
         {
-          "surface": 0.0676523,
-          "shadow": 0.0676523,
+          "surface": 0.0368803,
+          "shadow": 0.0368803,
           "shadowPainted": true,
           "parentShadow": "none",
           "visibility": "visible",
           "stable": true
         },
         {
-          "surface": 0.0369272,
-          "shadow": 0.0369272,
+          "surface": 0.0165357,
+          "shadow": 0.0165357,
           "shadowPainted": true,
           "parentShadow": "none",
           "visibility": "visible",
           "stable": true
         },
         {
-          "surface": 0.0165653,
-          "shadow": 0.0165653,
+          "surface": 0.0046579,
+          "shadow": 0.0046579,
           "shadowPainted": true,
           "parentShadow": "none",
           "visibility": "visible",
           "stable": true
         },
         {
-          "surface": 0.0046728,
-          "shadow": 0.0046728,
-          "shadowPainted": true,
-          "parentShadow": "none",
-          "visibility": "visible",
-          "stable": true
-        },
-        {
-          "surface": 0.000129204,
-          "shadow": 0.000129204,
+          "surface": 0.000126853,
+          "shadow": 0.000126853,
           "shadowPainted": true,
           "parentShadow": "none",
           "visibility": "visible",
@@ -529,6 +521,14 @@
           "shadowPainted": true,
           "parentShadow": "none",
           "visibility": "visible",
+          "stable": true
+        },
+        {
+          "surface": 0,
+          "shadow": 0,
+          "shadowPainted": true,
+          "parentShadow": "none",
+          "visibility": "hidden",
           "stable": true
         },
         {

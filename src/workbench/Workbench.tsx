@@ -10,6 +10,8 @@ import type { Appearance } from './appearance'
 import { previewTasks, recommendationReason, taskArea, taskGroups } from './tasks'
 import { useFocusTimer } from './useFocusTimer'
 import { DeadlineSummary, UpcomingDeadlines } from './UpcomingDeadlines'
+import { buildWorkbenchBriefing } from './briefing'
+import { XixiBriefing, XixiWatch } from './XixiBriefing'
 import { DESIGN_PREVIEW } from './designPreview'
 import './workbench.css'
 
@@ -33,6 +35,7 @@ export function Workbench(props: Props) {
     '--wb-top': `${appearance.value.top}px`, '--wb-radius': `${appearance.value.radius}px`,
     '--wb-shadow': appearance.value.shadow / 100, '--wb-background': 1 - appearance.value.background / 100,
     '--wb-columns': appearance.value.columns,
+    '--wb-backdrop-blur': `${appearance.value.backgroundBlur}px`,
   } as CSSProperties
   useEffect(() => { if (!props.active) setCustomize(false) }, [props.active])
   return <section className="workbench" data-active={props.active} aria-label="工作台" inert={!props.active} aria-hidden={!props.active} style={style}>
@@ -49,6 +52,7 @@ function WorkbenchContent({ active, deadlineRequest, data, now, onCapture, onNot
   const [examples, setExamples] = useState(() => DESIGN_PREVIEW ? previewTasks(now) : [])
   const tasks = preview ? examples : data.tasks
   const groups = useMemo(() => taskGroups(tasks, now), [tasks, now])
+  const briefing = useMemo(() => buildWorkbenchBriefing(tasks, now, timer.durations.focusMin, timer.getSpentMs), [tasks, now, timer.durations.focusMin, timer.getSpentMs, timer.session])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [transitioning, setTransitioning] = useState(false)
   const [timingOpen, setTimingOpen] = useState(false)
@@ -111,8 +115,11 @@ function WorkbenchContent({ active, deadlineRequest, data, now, onCapture, onNot
     const request = selectionFocus.current
     selectionFocus.current = null
     if (!active) return
+    const origin = taskOpener.current?.getAttribute('data-focus-origin')
     const fromDeadline = taskOpener.current?.hasAttribute('data-deadline-id')
-    const previous = request.returning && request.previousId ? scroll.current?.querySelector<HTMLElement>(`[${fromDeadline ? 'data-deadline-id' : 'data-task-id'}="${CSS.escape(request.previousId)}"]`) : null
+    const originSelector = origin ? `[data-focus-origin="${CSS.escape(origin)}"]` : `[${fromDeadline ? 'data-deadline-id' : 'data-task-id'}="${CSS.escape(request.previousId ?? '')}"]`
+    const candidate = request.returning && request.previousId ? scroll.current?.querySelector<HTMLElement>(originSelector) : null
+    const previous = candidate && !candidate.closest('[inert]') ? candidate : request.returning && request.previousId ? scroll.current?.querySelector<HTMLElement>(`.wb-task[data-task-id="${CSS.escape(request.previousId)}"]`) : null
     scroll.current?.scrollTo({ top: previous ? chooserScroll.current : 0 })
     ;(previous ?? heading.current)?.focus({ preventScroll: true })
     previous?.scrollIntoView({ block: 'nearest' })
@@ -186,8 +193,11 @@ function WorkbenchContent({ active, deadlineRequest, data, now, onCapture, onNot
       </div>}</div>
       <div className="wb-stage" data-leaving={transitioning} inert={transitioning}>
       {selectedId === null ? <div className="wb-chooser wb-enter" key="chooser">
-        <header className="wb-heading"><h2 ref={heading} tabIndex={-1}>想从哪开始？</h2><p>{preview ? '先选一件事，也看看接下来有哪些截止时间' : '把手头的事做好，也给接下来留一点余地'}</p></header>
+        <header className="wb-heading wb-overview-heading"><div><h2 ref={heading} tabIndex={-1}>想从哪开始？</h2><p>今天的重点，接下来的截止，都在这里</p></div>
+          <dl className="wb-today-metrics"><div><dt>可开始</dt><dd>{!preview && (data.loading || data.loadError) ? '—' : briefing.availableCount}</dd></div><div><dt>24h 内截止</dt><dd>{!preview && (data.loading || data.loadError) ? '—' : briefing.dueSoonCount}</dd></div><div><dt>今日完成</dt><dd>{!preview && (data.loading || data.loadError) ? '—' : briefing.completedTodayCount}</dd></div></dl>
+        </header>
         {!busy && <DeadlineSummary tasks={tasks} now={now} onReveal={() => setDeadlinePending(true)} />}
+        {(preview || (!data.loading && !data.loadError)) && <XixiBriefing briefing={briefing} appearance={appearance} preview={preview} disabled={busy || transitioning} focusMin={timer.durations.focusMin} restMin={timer.durations.restMin} onSelect={switchTo} onCapture={onCapture} />}
         <div className="wb-overview-layout"><div className="wb-task-sections">
         {!preview && data.loading ? <p role="status" className="wb-empty">正在读取你的事项</p> : !preview && data.loadError ? <div className="wb-empty" role="alert"><p>{data.loadError}</p><button className="wb-action" onClick={data.retry}>重新读取</button></div> : <>
           <section className="wb-available" aria-labelledby="wb-available-heading"><header className="wb-section-heading"><h3 id="wb-available-heading">现在可以开始 <span>{groups.available.length}</span></h3></header>
@@ -198,7 +208,9 @@ function WorkbenchContent({ active, deadlineRequest, data, now, onCapture, onNot
           <section className="wb-later" aria-labelledby="wb-later-heading"><header className="wb-section-heading"><h3 id="wb-later-heading">稍后安排 <span>{groups.later.length}</span></h3><span>提前开始也可以</span></header><div className="wb-task-grid">{groups.later.map(task => renderTask(task))}</div>{groups.later.length === 0 && <p className="wb-section-empty">后面的时间，暂时留白</p>}</section>
           {appearance.completed && <section className="wb-completed" aria-labelledby="wb-completed-heading"><header className="wb-section-heading"><h3 id="wb-completed-heading">已完成 <span>{groups.completed.length}</span></h3><span>每一步都留在这里</span></header><div>{groups.completed.map(task => <div className="wb-completed-row" data-recent={task.id === recentCompletion} key={task.id}><span className="wb-completed-mark" aria-hidden="true">✓</span><span>{task.title}</span><small>{task.doneAt && <time dateTime={task.doneAt}>{shortTimestamp(task.doneAt, now)}</time>}{timer.getSpentMs(task.id) > 0 && <span>专注 {spentLabel(timer.getSpentMs(task.id))}</span>}{!task.doneAt && timer.getSpentMs(task.id) === 0 && '已完成'}</small></div>)}</div>{groups.completed.length === 0 && <p className="wb-section-empty">完成的事项会留在这里</p>}</section>}
         </>}
-        </div><UpcomingDeadlines ref={deadlineHeading} tasks={tasks} now={now} disabled={busy || transitioning} loading={!preview && data.loading} error={preview ? '' : data.loadError} highlighted={deadlineHighlighted} onSelect={id => switchTo(id)} onRetry={data.retry} /></div>
+        </div><div className="wb-side-column"><UpcomingDeadlines ref={deadlineHeading} tasks={tasks} now={now} disabled={busy || transitioning} loading={!preview && data.loading} error={preview ? '' : data.loadError} highlighted={deadlineHighlighted} onSelect={id => switchTo(id)} onRetry={data.retry} focusMin={timer.durations.focusMin} getSpentMs={timer.getSpentMs} />
+          {(preview || (!data.loading && !data.loadError)) && <XixiWatch notices={briefing.notices} tasks={tasks} disabled={busy || transitioning} onSelect={switchTo} />}
+        </div></div>
         <p className="wb-bottom-note">一次只专注一件事 <span>·</span> 默认 {timer.durations.focusMin} 分钟专注 / {timer.durations.restMin} 分钟休息 <button className="wb-inline-button" aria-expanded={timingOpen} onClick={() => setTimingOpen(value => !value)}>调整时长</button></p>
         <DurationControls timer={timer} open={timingOpen} />
       </div> : selected && session ? <div className="wb-focus wb-enter" key={selectedId}>

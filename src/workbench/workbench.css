@@ -8,7 +8,8 @@
 .home-clock,.home-notification { z-index: 4 }
 .workbench { position: absolute; inset: 0; z-index: 1; font-size: var(--wb-font); color: #30343a; pointer-events: none; visibility: hidden; transition: visibility 0s 320ms; --wb-muted: #626b75; --wb-line: #4146501c; --wb-gold: #a58752 }
 .workbench[data-active=true] { visibility: visible; transition-delay: 0s }
-.wb-background { position: absolute; inset: 0; background: rgb(248 246 242 / var(--wb-background)); opacity: 0; transition: opacity 520ms cubic-bezier(.2,.7,.2,1), background 200ms }
+.wb-background { position: absolute; inset: 0; background: rgb(248 246 242 / var(--wb-background)); -webkit-backdrop-filter: blur(var(--wb-backdrop-blur)); backdrop-filter: blur(var(--wb-backdrop-blur)); opacity: 0; transition: opacity 520ms cubic-bezier(.2,.7,.2,1), background 200ms, backdrop-filter 240ms }
+.workbench[data-active=false] .wb-background { transition-duration: 300ms, 200ms, 240ms }
 .p0[data-night=false] .workbench .home-glass-surface { background: rgb(222 232 242 / var(--glass-tint)) }
 .workbench[data-active=true] .wb-background { opacity: 1 }
 .wb-scroll { position: absolute; inset: 76px 0 60px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; opacity: 0; transition: opacity 260ms; pointer-events: none }
@@ -25,6 +26,66 @@
 .wb-heading h2 { font-size: calc(var(--wb-font) + 12px); font-weight: 450; letter-spacing: -.025em; line-height: 1.4; margin: 0 0 8px }
 .wb-heading h2:focus,.wb-focus-main h2:focus { outline: none }
 .wb-heading p { margin: 0; color: var(--wb-muted); font-size: var(--wb-font) }
+.wb-overview-heading { display: flex; align-items: end; justify-content: space-between; gap: 24px; margin-bottom: 22px }
+.wb-today-metrics { display: flex; align-items: center; gap: 24px; margin: 0 0 3px; flex: none }
+.wb-today-metrics > div { display: flex; flex-direction: column-reverse; gap: 3px; padding-left: 18px; border-left: 1px solid var(--wb-line) }
+.wb-today-metrics dt { font-size: 10px; color: var(--wb-muted); white-space: nowrap }
+.wb-today-metrics dd { margin: 0; color: #48515a; font-size: calc(var(--wb-font) + 7px); font-weight: 350; line-height: 1.2; font-variant-numeric: tabular-nums }
+.wb-brief.wb-glass { padding: 16px 22px 18px; margin-bottom: 28px; box-shadow: 0 6px 25px rgb(37 45 57 / calc(var(--wb-shadow) * .65)) }
+.wb-brief::after { content: ''; position: absolute; inset: 0 24px auto; height: 1px; background: linear-gradient(90deg, transparent, #b5a17845, #ffffff60, transparent); pointer-events: none }
+.wb-brief-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px }
+.wb-xixi-identity { display: inline-flex; align-items: center; gap: 8px; min-width: 0 }
+.wb-xixi-mark { width: 24px; height: 24px; fill: none; stroke: #9c835b; stroke-width: .8; flex: none }
+.wb-xixi-mark circle:not(.wb-xixi-satellite) { fill: #5d5b58; stroke: #c8b78e; stroke-width: .7 }
+.wb-xixi-satellite { fill: #b7a078; stroke: #f5f1e7 }
+.wb-xixi-identity strong { font-size: var(--wb-font); font-weight: 500; color: #4d4c46 }
+.wb-xixi-identity > span { font-size: 10px; color: #756d5c; padding-left: 8px; border-left: 1px solid #98876d30 }
+.wb-brief-source { font-size: 9px; letter-spacing: .03em; color: #716c62 }
+.wb-brief-main { display: grid; grid-template-columns: minmax(0, 1fr) 176px; gap: 28px; align-items: center }
+.wb-brief-message { min-width: 0 }
+.wb-brief-message h3 { margin: 0 0 5px; font-size: calc(var(--wb-font) + 2px); line-height: 1.6; font-weight: 500; color: #414641; overflow-wrap: anywhere }
+.wb-brief-message p { color: #606870; margin: 0; font-size: var(--wb-font); line-height: 1.8; overflow-wrap: anywhere }
+.wb-brief-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 17px; margin-top: 14px }
+.p0 .wb-brief-start { display: inline-flex; align-items: center; gap: 16px; padding: 6px 12px; border-radius: 999px; background: #4b4c46; color: #faf7ef; font-size: calc(var(--wb-font) - 1px); line-height: 1.7; transition: background 180ms, box-shadow 180ms }
+.p0 .wb-brief-start:hover { background: #636153; box-shadow: 0 3px 10px #89724518 }
+.wb-brief-start > span { color: #d7c9a6 }
+.p0 .wb-reason-toggle { display: inline-flex; align-items: center; gap: 12px; color: #6c675b; font-size: calc(var(--wb-font) - 2px); background: transparent; border-radius: 5px; padding: 4px 1px; transition: color 180ms }
+.p0 .wb-reason-toggle:hover { color: #5b4524 }
+.wb-reason-toggle > span { width: 9px; text-align: center; color: #8d8066 }
+.wb-brief-rhythm { padding-left: 23px; border-left: 1px solid #99886825 }
+.wb-brief-rhythm > span:first-child { font-size: 10px; color: #6c706d }
+.wb-brief-rhythm p { margin: 5px 0 1px; line-height: 1.2; font-variant-numeric: tabular-nums; color: #978665 }
+.wb-brief-rhythm p strong { font-size: calc(var(--wb-font) + 16px); font-weight: 300; color: #6a6558 }
+.wb-brief-rhythm p > span { font-size: calc(var(--wb-font) + 3px); font-weight: 300 }
+.wb-brief-rhythm > small { display: block; color: #777b7b; font-size: 9px }
+.wb-brief-estimate { display: block; margin-top: 12px; color: #646c72; font-size: 10px; line-height: 1.7 }
+.wb-brief-estimate > small { display: block; color: #777b7b; font-size: 9px }
+.wb-insight-reveal { display: grid; grid-template-rows: 0fr; opacity: 0; visibility: hidden; transition: grid-template-rows 280ms cubic-bezier(.2,.8,.2,1), opacity 200ms, visibility 0s 280ms }
+.wb-insight-reveal[data-open=true] { grid-template-rows: 1fr; opacity: 1; visibility: visible; transition-delay: 0s }
+.wb-insight-reveal > div { min-height: 0; overflow: hidden }
+.wb-brief-evidence { padding-top: 14px; margin-top: 16px; border-top: 1px solid var(--wb-line); font-size: calc(var(--wb-font) - 1px); line-height: 1.8; color: #626b75 }
+.wb-brief-evidence > span { color: #6f634d; font-size: 10px }
+.wb-brief-evidence ul { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 4px 22px; list-style: none; padding: 0; margin: 8px 0 }
+.wb-brief-evidence li { position: relative; padding-left: 11px; overflow-wrap: anywhere }
+.wb-brief-evidence li::before { content: ''; position: absolute; left: 0; top: .8em; width: 3px; height: 3px; border-radius: 50%; background: #b2a184 }
+.wb-brief-evidence small { font-size: 10px; color: #747a7e }
+.wb-side-column { min-width: 0 }
+.wb-watch { margin-top: 27px; padding: 19px 0 0 25px; border-top: 1px solid #9f917829; color: #606972 }
+.wb-watch > header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px }
+.wb-watch .wb-xixi-mark { width: 19px; height: 19px }
+.wb-watch .wb-xixi-identity { gap: 5px }
+.wb-watch .wb-xixi-identity strong { font-size: calc(var(--wb-font) - 1px) }
+.wb-watch > header > span:last-child { color: #797368; font-size: 9px; white-space: nowrap }
+.wb-watch-item { padding: 12px 0 15px; border-bottom: 1px solid #4146500d }
+.wb-watch-item:last-child { border-bottom: 0 }
+.wb-watch-item h4 { font-size: calc(var(--wb-font) - 1px); font-weight: 500; color: #4b535b; margin: 0 0 5px }
+.wb-watch-item p,.wb-watch-empty { font-size: calc(var(--wb-font) - 1px); line-height: 1.8; margin: 0 0 4px }
+.wb-watch-empty { padding: 10px 0 }
+.wb-watch-empty > span { font-size: 10px; color: #737b82 }
+.wb-watch-related { padding-top: 7px }
+.p0 .wb-watch-related button { display: flex; gap: 10px; justify-content: space-between; width: 100%; text-align: left; padding: 7px 9px; background: #ffffff30; margin-top: 4px; border-radius: 8px; font-size: calc(var(--wb-font) - 1px); color: #515c65; transition: background 180ms }
+.p0 .wb-watch-related button:hover { background: #ffffff75 }
+.wb-watch-related button > span:first-child { overflow-wrap: anywhere }
 .wb-task-grid { display: grid; grid-template-columns: repeat(var(--wb-columns), minmax(0, 1fr)); gap: var(--wb-gap) }
 .wb-overview-layout { display: grid; grid-template-columns: minmax(0, 2.15fr) minmax(230px, 1fr); gap: 32px; align-items: start }
 .wb-task-sections { min-width: 0 }
@@ -137,8 +198,14 @@
 :is(.wb-ddl-item,.wb-ddl-compact)[data-urgency=urgent] { --ddl-color: #79541e; --ddl-dot: #b28d4d; --ddl-wash: #b28d4d0a; --ddl-size: calc(var(--wb-font) + 1px); --ddl-weight: 550 }
 :is(.wb-ddl-item,.wb-ddl-compact)[data-urgency=soon] { --ddl-color: #6a5a3e; --ddl-dot: #b0a184; --ddl-weight: 500 }
 :is(.wb-ddl-item,.wb-ddl-compact)[data-urgency=later] { --ddl-color: #565e65; --ddl-dot: #a3adb5; --ddl-size: calc(var(--wb-font) - 1px) }
-.p0 .wb-ddl-item button { position: relative; display: flex; align-items: start; gap: 11px; width: 100%; padding: 11px 7px 13px 0; text-align: left; border-radius: 10px; background: linear-gradient(90deg, transparent, var(--ddl-wash)); transition: background-color 180ms, box-shadow 180ms; font-size: var(--wb-font) }
-.p0 .wb-ddl-item button:hover { background-color: #ffffff42; box-shadow: 0 3px 12px #3c425306 }
+.p0 .wb-ddl-select { position: relative; display: flex; align-items: start; gap: 11px; width: 100%; padding: 11px 7px 5px 0; text-align: left; border-radius: 10px; background: linear-gradient(90deg, transparent, var(--ddl-wash)); transition: background-color 180ms, box-shadow 180ms; font-size: var(--wb-font) }
+.p0 .wb-ddl-select:hover { background-color: #ffffff42; box-shadow: 0 3px 12px #3c425306 }
+.wb-ddl-effort { font-size: calc(var(--wb-font) - 2px); line-height: 1.6; color: #687079 }
+.wb-ddl-advice { display: block; font-size: calc(var(--wb-font) - 1px); line-height: 1.7; color: #666b6e; margin-top: 3px }
+.wb-ddl-advice[data-tone=urgent] { color: #745732 }
+.p0 .wb-ddl-reason-toggle { margin-left: 20px; margin-bottom: 8px; font-size: 9px }
+.wb-ddl-evidence ul { margin: 1px 0 12px 20px; padding: 9px 10px 9px 20px; border-radius: 8px; background: #ffffff38; font-size: calc(var(--wb-font) - 2px); line-height: 1.9; color: #626b75 }
+.wb-ddl-evidence li + li { margin-top: 3px }
 .wb-ddl-marker { width: 9px; height: 9px; margin-top: 5px; border: 1px solid var(--ddl-dot); background: #f7f6f2; border-radius: 50%; flex: none; z-index: 1; transition: background 220ms }
 .wb-ddl-item:is([data-urgency=overdue],[data-urgency=urgent]) .wb-ddl-marker { background: var(--ddl-dot); box-shadow: 0 0 0 3px var(--ddl-wash) }
 .wb-ddl-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; align-items: start; gap: 5px; transition: transform 220ms }
@@ -150,9 +217,9 @@
 .wb-ddl-item button:is(:hover,:focus-visible) .wb-ddl-arrow { opacity: 1 }
 .wb-ddl-unconfirmed { font-size: 10px; color: #8b765e; border-top: 1px solid var(--wb-line); margin: 16px 0 0; padding-top: 12px }
 /* Move the content, leaving each glass sampling surface on a stable plane. */
-.wb-enter .wb-glass-content,.wb-enter .wb-task-body,.wb-enter > .wb-heading,.wb-enter > .wb-back,.wb-enter .wb-ddl-copy,.wb-enter .wb-section-heading,.wb-enter .wb-ddl-compact { animation: wb-content-in 360ms cubic-bezier(.16,.8,.25,1) both }
+.wb-enter .wb-glass-content,.wb-enter .wb-task-body,.wb-enter > .wb-heading,.wb-enter > .wb-back,.wb-enter .wb-ddl-copy,.wb-enter .wb-section-heading,.wb-enter .wb-ddl-compact,.wb-enter .wb-watch { animation: wb-content-in 360ms cubic-bezier(.16,.8,.25,1) both }
 .wb-enter .home-glass-surface { animation: wb-state-in 350ms both }
-.wb-stage[data-leaving=true] :is(.wb-glass-content,.wb-task-body,.wb-heading,.wb-back,.wb-deadlines,.wb-section-heading,.wb-completed-row,.wb-ddl-compact) { animation: wb-content-out 150ms both }
+.wb-stage[data-leaving=true] :is(.wb-glass-content,.wb-task-body,.wb-heading,.wb-back,.wb-deadlines,.wb-section-heading,.wb-completed-row,.wb-ddl-compact,.wb-watch) { animation: wb-content-out 150ms both }
 .wb-stage[data-leaving=true] .home-glass-surface { animation: wb-surface-out 150ms both }
 @keyframes wb-content-in { from { opacity: 0; transform: translateY(9px) } to { opacity: 1; transform: translateY(0) } }
 @keyframes wb-content-out { to { opacity: 0; transform: translateY(-5px) } }
@@ -175,6 +242,12 @@
 .wb-customize footer { display: flex; align-items: center; justify-content: space-between; margin-top: 12px }
 .p0 .wb-customize footer button { padding: 6px 10px; font-size: 11px; border-radius: 999px; background: #fff6 }
 @media (max-width: 760px) {
+  .wb-overview-heading { align-items: start; gap: 16px }
+  .wb-today-metrics { gap: 12px }
+  .wb-today-metrics > div { padding-left: 10px }
+  .wb-brief-main { grid-template-columns: minmax(0,1fr) 155px; gap: 18px }
+  .wb-brief-rhythm { padding-left: 16px }
+  .wb-watch { padding-left: 0 }
   .wb-overview-layout { grid-template-columns: minmax(0, 1fr) }
   .p0 .wb-ddl-compact { display: grid; grid-template-columns: minmax(0, 1fr) 16px; gap: 3px 12px; width: 100%; margin: -4px 0 24px; padding: 10px 12px; border: 1px solid #9f917825; border-radius: 14px; background: #ffffff30; text-align: left; transition: background 180ms }
   .p0 .wb-ddl-compact:hover { background: #ffffff60 }
@@ -193,6 +266,22 @@
   .wb-xixi-body { min-height: 65px; padding: 18px 0 }
 }
 @media (max-width: 600px) {
+  .wb-overview-heading { flex-direction: column; gap: 16px }
+  .wb-today-metrics { gap: 20px; width: 100% }
+  .wb-today-metrics > div { flex-direction: row; align-items: baseline; gap: 8px; padding-left: 14px }
+  .wb-today-metrics > div:first-child { border-left: 0; padding-left: 0 }
+  .wb-today-metrics dt { font-size: 9px }
+  .wb-today-metrics dd { font-size: 16px }
+  .wb-brief.wb-glass { padding: 15px 17px 17px }
+  .wb-brief-main { grid-template-columns: minmax(0,1fr); gap: 16px }
+  .wb-brief-rhythm { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; border-left: 0; border-top: 1px solid #99886825; padding: 10px 0 0 }
+  .wb-brief-rhythm > span:first-child { display: none }
+  .wb-brief-rhythm p { margin: 0 }
+  .wb-brief-rhythm p strong { font-size: 20px }
+  .wb-brief-rhythm p > span { font-size: 12px }
+  .wb-brief-estimate { width: 100%; margin-top: 3px }
+  .wb-brief-estimate > small { display: inline; margin-left: 6px }
+  .wb-brief-evidence ul { grid-template-columns: minmax(0,1fr) }
   .wb-ddl-group ol { grid-template-columns: minmax(0, 1fr) }
   .wb-scroll { top: 72px; bottom: 62px }
   .wb-container { margin-top: max(16px, calc(var(--wb-top) - 72px)) }

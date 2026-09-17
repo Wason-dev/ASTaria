@@ -18,7 +18,7 @@
       "pass": true
     },
     {
-      "name": "hover navigation contains planned pages without fake destinations",
+      "name": "hover navigation contains planned pages and settings without fake destinations",
       "pass": true
     },
     {

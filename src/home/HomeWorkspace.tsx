@@ -9,19 +9,23 @@ import { GlassSurface, MeasuredGlassSurface } from './GlassSurface'
 import { HomeStatus } from './HomeStatus'
 import { HomeAgenda } from './HomeAgenda'
 import { useLocalTime } from './useLocalTime'
+import { Workbench } from '../workbench/Workbench'
 import './home.css'
 
 type Props = {
   readCamera: () => SceneCamera | undefined
   onViewChange: (view: 'panorama' | 'interstellar') => void
+  onThemeChange: (night: boolean) => void
   sceneUnavailable: boolean
 }
 const DRAFT_KEY = 'astaria-home-draft'
 function readDraft() { try { return sessionStorage.getItem(DRAFT_KEY) ?? '' } catch { return '' } }
 
-export function HomeWorkspace({ readCamera, onViewChange, sceneUnavailable }: Props) {
+export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, sceneUnavailable }: Props) {
   const data = useSpatialTasks()
   const now = useLocalTime()
+  const [page, setPage] = useState<'home' | 'workbench'>('home')
+  const [notification, setNotification] = useState('')
   const [chatOpen, setChatOpen] = useState(false)
   const [informationActive, setInformationActive] = useState(false)
   const camera = useSceneCamera(readCamera, String(chatOpen))
@@ -49,7 +53,7 @@ export function HomeWorkspace({ readCamera, onViewChange, sceneUnavailable }: Pr
   const focusAfterTransition = useRef(false)
   const taskOpener = useRef<HTMLElement | null>(null)
   const taskFromAgenda = useRef(false)
-  const compact = layout.width < 668
+  const compact = layout.width < 748
 
   useEffect(() => {
     if (compact && document.activeElement?.closest('.home-agenda')) setInformationActive(true)
@@ -90,7 +94,7 @@ export function HomeWorkspace({ readCamera, onViewChange, sceneUnavailable }: Pr
     catch { setDraftWarning(draft ? '草稿暂未保存，离开页面前请复制' : '') }
   }, [draft])
   useEffect(() => {
-    if (!focusAfterTransition.current || (!(sceneUnavailable || cameraMissing) && camera.cameraTransition) || (chatOpen ? progress < .99 : progress > .01)) return
+    if (page !== 'home' || !focusAfterTransition.current || (!(sceneUnavailable || cameraMissing) && camera.cameraTransition) || (chatOpen ? progress < .99 : progress > .01)) return
     let frame = 0
     let attempts = 0
     const focus = () => {
@@ -103,7 +107,7 @@ export function HomeWorkspace({ readCamera, onViewChange, sceneUnavailable }: Pr
     }
     frame = requestAnimationFrame(focus)
     return () => cancelAnimationFrame(frame)
-  }, [chatOpen, camera.cameraTransition, progress, sceneUnavailable, cameraMissing])
+  }, [page, chatOpen, camera.cameraTransition, progress, sceneUnavailable, cameraMissing])
 
   const changeChat = (open: boolean) => {
     clearTimeout(menuTimer.current)
@@ -116,11 +120,30 @@ export function HomeWorkspace({ readCamera, onViewChange, sceneUnavailable }: Pr
     onViewChange(open ? 'interstellar' : 'panorama')
     setChatOpen(open)
   }
+  const changePage = (next: 'home' | 'workbench', openChat = false) => {
+    clearTimeout(menuTimer.current)
+    if (next === page) brand.current?.focus({ preventScroll: true })
+    setMenuOpen(false)
+    setSelectedId(null)
+    setPage(next)
+    onThemeChange(next === 'home')
+    if (next === 'workbench') {
+      focusAfterTransition.current = false
+      setChatOpen(false)
+      onViewChange('panorama')
+    } else {
+      focusAfterTransition.current = true
+      setCameraMissing(!readCamera())
+      setChatOpen(openChat)
+      setInformationActive(false)
+      onViewChange(openChat ? 'interstellar' : 'panorama')
+    }
+  }
   useEffect(() => {
     const escape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing || selectedId) return
       if (menuOpen) { event.preventDefault(); brand.current?.focus(); setMenuOpen(false) }
-      else if (chatOpen) { event.preventDefault(); changeChat(false) }
+      else if (page === 'home' && chatOpen) { event.preventDefault(); changeChat(false) }
     }
     window.addEventListener('keydown', escape)
     return () => window.removeEventListener('keydown', escape)
@@ -156,8 +179,8 @@ export function HomeWorkspace({ readCamera, onViewChange, sceneUnavailable }: Pr
     })
   }
   const startTop = layout.taskBottom + 12
-  const endWidth = Math.min(300, layout.width - (layout.width <= 600 ? 44 : 68))
-  const endHeight = Math.max(180, Math.min(390, layout.height - 149))
+  const endWidth = Math.min(340, layout.width - (layout.width <= 600 ? 44 : 68))
+  const endHeight = Math.max(180, Math.min(460, layout.height - 149))
   const endTop = Math.max(84, (layout.height - endHeight) / 2)
   const width = 128 + (endWidth - 128) * progress
   // Extend only the UI surface, reading the existing camera transition.
@@ -166,7 +189,7 @@ export function HomeWorkspace({ readCamera, onViewChange, sceneUnavailable }: Pr
   const radius = 19 + (15 - 19) * progress
   const chatVisible = progress > .35
 
-  return <div ref={root} className="home-workspace" data-spatial-ui data-chat-open={chatOpen}>
+  return <div ref={root} className="home-workspace" data-spatial-ui data-chat-open={chatOpen} data-page={page}>
     <nav ref={nav} className="home-nav" aria-label="ASTaria 导航" data-menu-open={menuOpen}
       onPointerEnter={event => { if (event.pointerType !== 'touch') { clearTimeout(menuTimer.current); menuOpenedByHover.current = !menuOpen; setMenuOpen(true) } }}
       onPointerLeave={() => { menuTimer.current = setTimeout(() => { if (!nav.current?.contains(document.activeElement)) setMenuOpen(false) }, 180) }}
@@ -185,13 +208,15 @@ export function HomeWorkspace({ readCamera, onViewChange, sceneUnavailable }: Pr
       <div id="home-menu" className="home-menu" data-open={menuOpen} inert={!menuOpen} aria-hidden={!menuOpen}>
         <MeasuredGlassSurface radius={13} />
         <ul className="home-menu-list">
-          <li><button aria-current="page" onClick={() => { changeChat(false); brand.current?.focus(); setMenuOpen(false) }}>首页</button></li>
-          {['工作台', '时间表', '日历', 'DDL', '设置'].map(label => <li key={label}><button disabled title="稍后开放">{label}<span className="p0-sr-only">，稍后开放</span></button></li>)}
+          <li><button aria-current={page === 'home' ? 'page' : undefined} onClick={() => changePage('home')}>首页</button></li>
+          <li><button aria-current={page === 'workbench' ? 'page' : undefined} onClick={() => changePage('workbench')}>工作台</button></li>
+          {['时间表', '日历', 'DDL', '设置'].map(label => <li key={label}><button disabled title="稍后开放">{label}<span className="p0-sr-only">，稍后开放</span></button></li>)}
         </ul>
       </div>
     </nav>
-    <HomeStatus now={now} showClock={!sceneUnavailable} />
+    <HomeStatus now={now} showClock={!sceneUnavailable} notification={notification} />
 
+    <div className="home-scene-ui" inert={page !== 'home'} aria-hidden={page !== 'home'}>
     <div ref={current} className="home-current" style={{ opacity: Math.max(0, 1 - progress * 3), visibility: progress > .6 ? 'hidden' : 'visible' }} inert={chatOpen}>
       <span>当前任务</span>
       <button ref={currentButton} className="home-current-title" onClick={() => data.loadError ? data.retry() : currentTask ? openTask(currentTask.id) : changeChat(true)}
@@ -241,7 +266,7 @@ export function HomeWorkspace({ readCamera, onViewChange, sceneUnavailable }: Pr
         </form>
       </section>
       <HomeAgenda tasks={data.tasks} now={now} loading={data.loading} error={data.loadError}
-        active={chatOpen && progress >= .99 && (!compact || informationActive)} compact={compact}
+        active={page === 'home' && chatOpen && progress >= .99 && (!compact || informationActive)} compact={compact}
         onRetry={data.retry} onTask={openTask} onChat={() => {
           setInformationActive(false)
           requestAnimationFrame(() => informationToggle.current?.focus({ preventScroll: true }))
@@ -249,6 +274,8 @@ export function HomeWorkspace({ readCamera, onViewChange, sceneUnavailable }: Pr
       </div>
       </div>
     </div>
+    </div>
+    <Workbench active={page === 'workbench'} data={data} now={now} onCapture={() => changePage('home', true)} onNotice={setNotification} />
     {selectedId && <TaskDialog task={selectedTask} saving={data.saving} onClose={closeTask} onStatus={data.setStatus} />}
   </div>
 }

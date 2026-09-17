@@ -11,6 +11,11 @@ export default function BlackHolePrototype() {
   const host = useRef<HTMLDivElement>(null)
   const renderer = useRef<BlackHoleRenderer | null>(null)
   const [error, setError] = useState('')
+  const [night, setNight] = useState(true)
+  const changeTheme = useCallback((value: boolean) => {
+    setNight(value)
+    renderer.current?.setNight(Number(value))
+  }, [])
   const readCamera = useCallback(() => renderer.current?.getSnapshot(), [])
   const changeView = useCallback((view: 'panorama' | 'interstellar') => {
     renderer.current?.setView(view)
@@ -35,10 +40,10 @@ export default function BlackHolePrototype() {
     }
   }, [])
 
-  return <main className="p0" data-night="true">
+  return <main className="p0" data-night={night}>
     <div ref={host} className="p0-universe" role="img" aria-label="实时黑洞与吸积盘" />
     <h1 className="p0-sr-only">ASTaria</h1>
-    <HomeWorkspace readCamera={readCamera} onViewChange={changeView} sceneUnavailable={Boolean(error)} />
+    <HomeWorkspace readCamera={readCamera} onViewChange={changeView} onThemeChange={changeTheme} sceneUnavailable={Boolean(error)} />
     <p className="p0-whisper">把今天交给我</p>
     {error && <div className="p0-error" role="alert">
       <h2>视界暂时不可见</h2><p>{error}</p>

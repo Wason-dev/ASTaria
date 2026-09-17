@@ -1,0 +1,130 @@
+{
+  "url": "http://127.0.0.1:5188/",
+  "checks": [
+    {
+      "name": "workbench changes theme, hides home focus targets, and focuses its heading",
+      "pass": true
+    },
+    {
+      "name": "real empty state has no preview tasks or checkboxes",
+      "pass": true
+    },
+    {
+      "name": "sample preview uses chosen geometry and glass without touching the database",
+      "pass": true
+    },
+    {
+      "name": "customization opens a labelled dialog with live parameter controls",
+      "pass": true
+    },
+    {
+      "name": "changing appearance updates the live workspace and persists parameters",
+      "pass": true
+    },
+    {
+      "name": "closing controls restores keyboard focus to their trigger",
+      "pass": true
+    },
+    {
+      "name": "one task click enters focus with an idle 35 minute clock and a permanent Xixi area",
+      "pass": true
+    },
+    {
+      "name": "duration settings expand with an animated layout and accessible controls",
+      "pass": true
+    },
+    {
+      "name": "duration controls update an unstarted round",
+      "pass": true
+    },
+    {
+      "name": "changing duration while running leaves this round intact",
+      "pass": true
+    },
+    {
+      "name": "back pauses progress and restores the selected task focus",
+      "pass": true
+    },
+    {
+      "name": "preview settings and task state never mutate real records",
+      "pass": true
+    },
+    {
+      "name": "home capture retains black theme and expanded 680 by 460 glass",
+      "pass": true
+    },
+    {
+      "name": "leaving workbench pauses the real task and restores the home action",
+      "pass": true
+    },
+    {
+      "name": "returning to focus preserves elapsed time without restarting",
+      "pass": true
+    },
+    {
+      "name": "round completion notifies and waits for a manual choice",
+      "pass": true
+    },
+    {
+      "name": "rest begins only when requested",
+      "pass": true
+    },
+    {
+      "name": "manual completion stays in the completed focus state with task context",
+      "pass": true
+    },
+    {
+      "name": "completed items are retained in a collapsed section",
+      "pass": true
+    },
+    {
+      "name": "task selection fits 900x700",
+      "pass": true
+    },
+    {
+      "name": "focus and Xixi fit 900x700",
+      "pass": true
+    },
+    {
+      "name": "task selection fits 748x700",
+      "pass": true
+    },
+    {
+      "name": "focus and Xixi fit 748x700",
+      "pass": true
+    },
+    {
+      "name": "task selection fits 390x844",
+      "pass": true
+    },
+    {
+      "name": "focus and Xixi fit 390x844",
+      "pass": true
+    },
+    {
+      "name": "task selection fits 320x568",
+      "pass": true
+    },
+    {
+      "name": "focus and Xixi fit 320x568",
+      "pass": true
+    },
+    {
+      "name": "task selection fits 844x390",
+      "pass": true
+    },
+    {
+      "name": "focus and Xixi fit 844x390",
+      "pass": true
+    },
+    {
+      "name": "keyboard selection honors reduced motion and lands on focus heading",
+      "pass": true
+    },
+    {
+      "name": "no runtime exceptions",
+      "pass": true
+    }
+  ],
+  "errors": []
+}

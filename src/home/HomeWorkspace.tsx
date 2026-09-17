@@ -26,7 +26,6 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, sceneUn
   const now = useLocalTime()
   const [page, setPage] = useState<'home' | 'workbench'>('home')
   const [notification, setNotification] = useState('')
-  const [deadlineRequest, setDeadlineRequest] = useState(0)
   const [chatOpen, setChatOpen] = useState(false)
   const [informationActive, setInformationActive] = useState(false)
   const camera = useSceneCamera(readCamera, String(chatOpen))
@@ -212,7 +211,6 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, sceneUn
           <li><button aria-current={page === 'home' ? 'page' : undefined} onClick={() => changePage('home')}>首页</button></li>
           <li><button aria-current={page === 'workbench' ? 'page' : undefined} onClick={() => changePage('workbench')}>工作台</button></li>
           {['时间表', '日历'].map(label => <li key={label}><button disabled title="稍后开放">{label}<span className="p0-sr-only">，稍后开放</span></button></li>)}
-          <li><button onClick={() => { changePage('workbench'); setDeadlineRequest(value => value + 1) }} title="查看工作台的截止事项">DDL</button></li>
           <li><button disabled title="稍后开放">设置<span className="p0-sr-only">，稍后开放</span></button></li>
         </ul>
       </div>
@@ -278,7 +276,7 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, sceneUn
       </div>
     </div>
     </div>
-    <Workbench active={page === 'workbench'} deadlineRequest={deadlineRequest} data={data} now={now} onCapture={() => changePage('home', true)} onNotice={setNotification} />
+    <Workbench active={page === 'workbench'} data={data} now={now} onCapture={() => changePage('home', true)} onNotice={setNotification} />
     {selectedId && <TaskDialog task={selectedTask} saving={data.saving} onClose={closeTask} onStatus={data.setStatus} />}
   </div>
 }

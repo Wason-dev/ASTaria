@@ -41,12 +41,8 @@ export function XixiWatch({ notices, tasks, disabled, onSelect }: { notices: Bri
 }
 
 function Notice({ notice, tasks, disabled, onSelect }: { notice: BriefingNotice; tasks: Task[]; disabled: boolean; onSelect: (id: string) => void }) {
-  const [expanded, setExpanded] = useState(false)
-  const regionId = useId()
-  const toggle = useRef<HTMLButtonElement>(null)
   const related = tasks.filter(task => notice.taskIds.includes(task.id))
-  return <div className="wb-watch-item" onKeyDown={event => { if (event.key === 'Escape' && expanded) { event.stopPropagation(); setExpanded(false); toggle.current?.focus() } }}><h4>{notice.title}</h4><p>{notice.body}</p>
-    {related.length > 0 && <button ref={toggle} className="wb-reason-toggle" disabled={disabled} aria-expanded={expanded} aria-controls={regionId} onClick={() => setExpanded(value => !value)}>查看相关事项 <span aria-hidden="true">{expanded ? '−' : '+'}</span></button>}
-    <div className="wb-insight-reveal" data-open={expanded} inert={!expanded} aria-hidden={!expanded} id={regionId} onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); setExpanded(false); toggle.current?.focus() } }}><div><div className="wb-watch-related">{related.map(task => <button key={task.id} disabled={disabled} data-focus-origin={`notice-${notice.id}-${task.id}`} onClick={() => onSelect(task.id)}><span>{task.title}</span><span aria-hidden="true">↗</span></button>)}</div></div></div>
+  return <div className="wb-watch-item"><h4>{notice.title}</h4><p>{notice.body}</p>
+    {related.length > 0 && <ul className="wb-watch-related" aria-label="相关事项">{related.map(task => <li key={task.id}><button disabled={disabled} data-focus-origin={`notice-${notice.id}-${task.id}`} onClick={() => onSelect(task.id)}><span>{task.title}</span><span aria-hidden="true">↗</span></button></li>)}</ul>}
   </div>
 }

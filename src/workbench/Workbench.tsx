@@ -15,7 +15,7 @@ import { XixiBriefing, XixiWatch } from './XixiBriefing'
 import { DESIGN_PREVIEW } from './designPreview'
 import './workbench.css'
 
-type Props = { active: boolean; deadlineRequest: number; data: ReturnType<typeof useSpatialTasks>; now: Date; onCapture: () => void; onNotice: (message: string) => void }
+type Props = { active: boolean; data: ReturnType<typeof useSpatialTasks>; now: Date; onCapture: () => void; onNotice: (message: string) => void }
 type Timer = ReturnType<typeof useFocusTimer>
 
 function Glass({ appearance, children, className = '' }: { appearance: Appearance; children: ReactNode; className?: string }) {
@@ -45,7 +45,7 @@ export function Workbench(props: Props) {
   </section>
 }
 
-function WorkbenchContent({ active, deadlineRequest, data, now, onCapture, onNotice, appearance, preview, onPreview, onCustomize }: Props & {
+function WorkbenchContent({ active, data, now, onCapture, onNotice, appearance, preview, onPreview, onCustomize }: Props & {
   appearance: Appearance; preview: boolean; onPreview: () => void; onCustomize: () => void
 }) {
   const timer = useFocusTimer(preview ? 'astaria-focus-preview-v1' : 'astaria-focus-v1')
@@ -59,7 +59,6 @@ function WorkbenchContent({ active, deadlineRequest, data, now, onCapture, onNot
   const [error, setError] = useState('')
   const heading = useRef<HTMLHeadingElement>(null)
   const deadlineHeading = useRef<HTMLHeadingElement>(null)
-  const lastDeadlineRequest = useRef(deadlineRequest)
   const [deadlinePending, setDeadlinePending] = useState(false)
   const [deadlineHighlighted, setDeadlineHighlighted] = useState(false)
   const deadlineHighlightTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
@@ -88,12 +87,6 @@ function WorkbenchContent({ active, deadlineRequest, data, now, onCapture, onNot
     startContext.current.mounted = true
     return () => { startContext.current.mounted = false; clearTimeout(transitionTimer.current); clearTimeout(deadlineHighlightTimer.current) }
   }, [])
-  useEffect(() => {
-    if (deadlineRequest === lastDeadlineRequest.current) return
-    lastDeadlineRequest.current = deadlineRequest
-    setDeadlinePending(true)
-    if (selectedId !== null || transitioning) switchTo(null)
-  }, [deadlineRequest])
   useEffect(() => {
     if (!active || !deadlinePending || selectedId !== null || transitioning) return
     const frame = requestAnimationFrame(() => {
@@ -197,8 +190,11 @@ function WorkbenchContent({ active, deadlineRequest, data, now, onCapture, onNot
           <dl className="wb-today-metrics"><div><dt>可开始</dt><dd>{!preview && (data.loading || data.loadError) ? '—' : briefing.availableCount}</dd></div><div><dt>24h 内截止</dt><dd>{!preview && (data.loading || data.loadError) ? '—' : briefing.dueSoonCount}</dd></div><div><dt>今日完成</dt><dd>{!preview && (data.loading || data.loadError) ? '—' : briefing.completedTodayCount}</dd></div></dl>
         </header>
         {!busy && <DeadlineSummary tasks={tasks} now={now} onReveal={() => setDeadlinePending(true)} />}
-        {(preview || (!data.loading && !data.loadError)) && <XixiBriefing briefing={briefing} appearance={appearance} preview={preview} disabled={busy || transitioning} focusMin={timer.durations.focusMin} restMin={timer.durations.restMin} onSelect={switchTo} onCapture={onCapture} />}
-        <div className="wb-overview-layout"><div className="wb-task-sections">
+        <div className="wb-overview-layout">
+        {(preview || (!data.loading && !data.loadError)) && <div className="wb-assistant-column"><XixiBriefing briefing={briefing} appearance={appearance} preview={preview} disabled={busy || transitioning} focusMin={timer.durations.focusMin} restMin={timer.durations.restMin} onSelect={switchTo} onCapture={onCapture} />
+          <XixiWatch notices={briefing.notices} tasks={tasks} disabled={busy || transitioning} onSelect={switchTo} />
+        </div>}
+        <div className="wb-task-sections">
         {!preview && data.loading ? <p role="status" className="wb-empty">正在读取你的事项</p> : !preview && data.loadError ? <div className="wb-empty" role="alert"><p>{data.loadError}</p><button className="wb-action" onClick={data.retry}>重新读取</button></div> : <>
           <section className="wb-available" aria-labelledby="wb-available-heading"><header className="wb-section-heading"><h3 id="wb-available-heading">现在可以开始 <span>{groups.available.length}</span></h3></header>
           <div className="wb-task-grid">{groups.available.map((task, index) => renderTask(task, index === 0))}</div>
@@ -209,7 +205,6 @@ function WorkbenchContent({ active, deadlineRequest, data, now, onCapture, onNot
           {appearance.completed && <section className="wb-completed" aria-labelledby="wb-completed-heading"><header className="wb-section-heading"><h3 id="wb-completed-heading">已完成 <span>{groups.completed.length}</span></h3><span>每一步都留在这里</span></header><div>{groups.completed.map(task => <div className="wb-completed-row" data-recent={task.id === recentCompletion} key={task.id}><span className="wb-completed-mark" aria-hidden="true">✓</span><span>{task.title}</span><small>{task.doneAt && <time dateTime={task.doneAt}>{shortTimestamp(task.doneAt, now)}</time>}{timer.getSpentMs(task.id) > 0 && <span>专注 {spentLabel(timer.getSpentMs(task.id))}</span>}{!task.doneAt && timer.getSpentMs(task.id) === 0 && '已完成'}</small></div>)}</div>{groups.completed.length === 0 && <p className="wb-section-empty">完成的事项会留在这里</p>}</section>}
         </>}
         </div><div className="wb-side-column"><UpcomingDeadlines ref={deadlineHeading} tasks={tasks} now={now} disabled={busy || transitioning} loading={!preview && data.loading} error={preview ? '' : data.loadError} highlighted={deadlineHighlighted} onSelect={id => switchTo(id)} onRetry={data.retry} focusMin={timer.durations.focusMin} getSpentMs={timer.getSpentMs} />
-          {(preview || (!data.loading && !data.loadError)) && <XixiWatch notices={briefing.notices} tasks={tasks} disabled={busy || transitioning} onSelect={switchTo} />}
         </div></div>
         <p className="wb-bottom-note">一次只专注一件事 <span>·</span> 默认 {timer.durations.focusMin} 分钟专注 / {timer.durations.restMin} 分钟休息 <button className="wb-inline-button" aria-expanded={timingOpen} onClick={() => setTimingOpen(value => !value)}>调整时长</button></p>
         <DurationControls timer={timer} open={timingOpen} />

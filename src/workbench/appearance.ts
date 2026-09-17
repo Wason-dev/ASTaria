@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react'
 import { DESIGN_PREVIEW } from './designPreview'
 
 export const DEFAULT_APPEARANCE = {
-  columns: 2, width: 900, font: 12, row: 96, gap: 8, top: 108,
-  transmission: 80, blur: 0, radius: 24, rim: 0, shadow: 11, background: 15, backgroundBlur: 4,
+  columns: 2, width: 1100, font: 12, row: 96, gap: 8, top: 108,
+  transmission: 100, blur: 0, radius: 24, rim: 50, shadow: 25, background: 15, backgroundBlur: 0,
   progress: true, metadata: true, completed: true,
 }
 export type Appearance = typeof DEFAULT_APPEARANCE
@@ -16,7 +16,8 @@ export const ADJUSTMENTS = [
   ['background', '背景', 0, 50, 1, '%'],
   ['backgroundBlur', '背景磨砂', 0, 12, 1, 'px'],
 ] as const
-const STORAGE_KEY = 'astaria-workbench-appearance-v1'
+// Start from the approved wide, clear-glass preset; subsequent tuning stays local.
+const STORAGE_KEY = 'astaria-workbench-appearance-v2'
 
 export function useAppearance() {
   const [value, setValue] = useState<Appearance>(() => {

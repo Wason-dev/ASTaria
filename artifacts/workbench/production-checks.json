@@ -10,7 +10,7 @@
       "pass": true
     },
     {
-      "name": "workbench applies four-pixel blur only on its separate backdrop layer",
+      "name": "workbench keeps the background clear with the approved zero-blur setting",
       "pass": true
     },
     {
@@ -30,7 +30,7 @@
       "pass": true
     },
     {
-      "name": "production DDL navigation opens its workbench section",
+      "name": "production retains Upcoming inside workbench without a separate navigation item",
       "pass": true
     },
     {

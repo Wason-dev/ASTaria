@@ -63,12 +63,28 @@ const rows = () => evaluate(`(async()=>{const db=await new Promise((resolve,reje
 const cameraSettled = () => wait('!window.__ASTARIA_P0__.getSnapshot().cameraTransition')
 const ready = () => wait('!!window.__ASTARIA_P0__ && !!document.querySelector(".home-current-title:not(:disabled)")')
 const menu = async index => {
-  await evaluate('document.querySelector(".home-brand").focus()')
+  const selector = `.home-menu li:nth-child(${index}) button`
+  const page = index === 1 ? 'home' : 'workbench'
+  // Let the previous page finish restoring focus, and leave the hover surface
+  // before opening it with the keyboard. Otherwise its pending blur can close it.
+  await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 2, y: 2 })
+  await cameraSettled()
+  await evaluate('document.querySelector(".home-brand").focus({preventScroll:true})')
   if (await evaluate('document.querySelector(".home-menu").inert')) await key('Enter')
-  await delay(290)
-  await click(`.home-menu li:nth-child(${index}) button`)
+  await wait(`(async()=>{
+    const menu=document.querySelector('.home-menu'),list=menu.querySelector('.home-menu-list'),button=document.querySelector(${JSON.stringify(selector)});
+    if(menu.inert||menu.dataset.open!=='true'||getComputedStyle(menu).visibility!=='visible'||getComputedStyle(list).opacity!=='1'||menu.getAnimations({subtree:true}).some(a=>a.playState==='running')) return false;
+    const first=button.getBoundingClientRect();
+    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+    const last=button.getBoundingClientRect(),hit=document.elementFromPoint(last.x+last.width/2,last.y+last.height/2);
+    return !menu.inert&&last.width>0&&last.height>0&&Math.abs(first.x-last.x)<.1&&Math.abs(first.y-last.y)<.1&&button.contains(hit);
+  })()`)
+  await click(selector)
+  await wait(`document.querySelector('.home-workspace').dataset.page===${JSON.stringify(page)}&&${page === 'workbench'
+    ? '!document.querySelector(".workbench").inert&&document.querySelector(".workbench").dataset.active==="true"&&getComputedStyle(document.querySelector(".wb-scroll")).opacity==="1"'
+    : '!document.querySelector(".home-scene-ui").inert&&getComputedStyle(document.querySelector(".home-scene-ui")).opacity==="1"&&getComputedStyle(document.querySelector(".workbench")).visibility==="hidden"'}`)
 }
-const focus = () => wait('!!document.querySelector(".wb-clock")&&!document.querySelector(".wb-stage").inert&&document.activeElement.matches(".wb-focus-main h2")')
+const focus = () => wait('document.querySelector(".workbench").dataset.active==="true"&&!document.querySelector(".workbench").inert&&!!document.querySelector(".wb-clock")&&!document.querySelector(".wb-stage").inert&&document.activeElement.matches(".wb-focus-main h2")')
 const timer = () => evaluate('JSON.parse(localStorage.getItem("astaria-focus-v1"))')
 const setRange = async (selector, value) => evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(e,${JSON.stringify(value)});e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));return true})()`)
 let failure
@@ -85,24 +101,24 @@ try {
   await menu(2)
   await check('workbench changes theme, hides home focus targets, and focuses its heading', 'document.querySelector(".p0").dataset.night==="false"&&document.querySelector(".home-scene-ui").inert&&document.activeElement.matches(".wb-heading h2")')
   await check('real empty state has no preview tasks or checkboxes', '!document.querySelector(".wb-task")&&!document.querySelector(".workbench input[type=checkbox]")&&document.querySelector(".wb-empty").textContent.includes("暂时没有")')
-  await check('workbench applies four-pixel blur only on its separate backdrop layer', 'getComputedStyle(document.querySelector(".wb-background")).backdropFilter==="blur(4px)"&&[".workbench",".wb-scroll",".home-workspace",".p0-universe"].every(s=>getComputedStyle(document.querySelector(s)).filter==="none"&&getComputedStyle(document.querySelector(s)).backdropFilter==="none")')
+  await check('workbench keeps the background clear with the approved zero-blur setting', 'getComputedStyle(document.querySelector(".wb-background")).backdropFilter==="blur(0px)"&&[".workbench",".wb-scroll",".home-workspace",".p0-universe"].every(s=>getComputedStyle(document.querySelector(s)).filter==="none"&&getComputedStyle(document.querySelector(s)).backdropFilter==="none")')
   await check('empty briefing stays factual and labels local advice', 'document.querySelector(".wb-brief-source").textContent==="本地建议"&&[...document.querySelectorAll(".wb-today-metrics dd")].every(e=>e.textContent==="0")&&!document.querySelector(".wb-brief [data-focus-origin]")')
   if (production) {
-    await evaluate('localStorage.setItem("astaria-workbench-appearance-v1",JSON.stringify({width:1100,font:16,completed:false}));true')
+    await evaluate('localStorage.setItem("astaria-workbench-appearance-v2",JSON.stringify({width:1100,font:16,completed:false}));true')
     await send('Page.reload', { ignoreCache: true }); await ready(); await menu(2)
     await check('production removes visual customization and sample entry points', '!document.querySelector(".wb-toolbar button")&&!document.querySelector(".wb-customize")&&!document.querySelector(".wb-preview-label")')
-    await check('production ignores previously saved development appearance', 'document.querySelector(".wb-container").getBoundingClientRect().width===900&&getComputedStyle(document.querySelector(".workbench")).fontSize==="12px"&&!!document.querySelector(".wb-completed")')
+    await check('production ignores previously saved development appearance', 'document.querySelector(".wb-container").getBoundingClientRect().width===1100&&getComputedStyle(document.querySelector(".workbench")).fontSize==="12px"&&!!document.querySelector(".wb-completed")')
     await click('.wb-bottom-note button')
     await setRange('input[aria-label="专注分钟"]', 40)
     await check('timer duration adjustment remains a production function', 'document.querySelector(".wb-bottom-note").textContent.includes("40 分钟专注")&&document.querySelector(".wb-duration-reveal").dataset.open==="true"')
-    await menu(5)
-    await wait('document.activeElement.id==="wb-ddl-heading"')
-    await check('production DDL navigation opens its workbench section', 'document.querySelector(".workbench").dataset.active==="true"&&document.querySelector(".wb-deadlines").textContent.includes("暂时没有明确的截止日期")')
+    await check('production retains Upcoming inside workbench without a separate navigation item', 'document.querySelector(".workbench").dataset.active==="true"&&document.querySelector(".wb-deadlines").textContent.includes("暂时没有明确的截止日期")')
   } else {
   await click('.wb-toolbar .wb-tool')
   await wait('document.querySelectorAll(".wb-available .wb-task").length===5')
   await delay(550)
-  await check('sample preview uses chosen geometry and glass without touching the database', '(()=>{const c=document.querySelector(".wb-container").getBoundingClientRect(),b=document.querySelector(".wb-task").getBoundingClientRect(),s=getComputedStyle(document.querySelector(".wb-task .home-glass-surface"));return c.width===900&&b.height===96&&Math.abs(Number(s.getPropertyValue("--glass-tint"))-.2)<1e-6&&Number(s.getPropertyValue("--glass-rim"))===0&&Number(s.getPropertyValue("--glass-shadow"))===.11&&getComputedStyle(document.querySelector(".workbench")).fontSize==="12px"})()')
+  await check('sample preview uses chosen geometry and glass without touching the database', '(()=>{const c=document.querySelector(".wb-container").getBoundingClientRect(),b=document.querySelector(".wb-task").getBoundingClientRect(),s=getComputedStyle(document.querySelector(".wb-task .home-glass-surface"));return c.width===1100&&b.height===96&&Number(s.getPropertyValue("--glass-tint"))===0&&Number(s.getPropertyValue("--glass-rim"))===.5&&Number(s.getPropertyValue("--glass-shadow"))===.25&&getComputedStyle(document.querySelector(".workbench")).fontSize==="12px"})()')
+  await check('desktop briefing glass aligns with the first task glass', '(()=>{const a=document.querySelector(".wb-brief").getBoundingClientRect(),b=document.querySelector(".wb-task").getBoundingClientRect();return a.right<b.left&&Math.abs(a.top-b.top)<1})()')
+  await check('desktop Upcoming uses two readable columns across the full workspace', '(()=>{const grid=document.querySelector(".wb-ddl-grid"),rows=grid.querySelectorAll(".wb-ddl-item"),a=rows[0].getBoundingClientRect(),b=rows[1].getBoundingClientRect(),t=document.querySelector(".wb-overview-layout").getBoundingClientRect();return getComputedStyle(grid).gridTemplateColumns.split(" ").length===2&&Math.abs(a.top-b.top)<1&&a.right<b.left&&a.width>300&&Math.abs(grid.getBoundingClientRect().left-t.left)<1})()')
   assert.equal((await rows()).length, 0)
   await check('later and completed sections stay expanded', 'document.querySelectorAll(".wb-later .wb-task").length===2&&document.querySelectorAll(".wb-completed-row").length===1&&!document.querySelector(".workbench details")')
   await check('Upcoming includes overdue, imminent and future dates with explicit timing', 'document.querySelectorAll(".wb-ddl-item").length>=5&&!!document.querySelector(".wb-ddl-item[data-urgency=overdue]")&&!!document.querySelector(".wb-ddl-item[data-urgency=upcoming]")&&document.querySelector("[data-deadline-id=preview-reading] time").textContent.includes("全天")&&/\\d{2}:\\d{2}/.test(document.querySelector("[data-deadline-id=preview-physics] time").textContent)')
@@ -121,17 +137,17 @@ try {
   await click('.wb-ddl-item[data-urgency=overdue] .wb-reason-toggle')
   await check('deadline evidence separates estimates and actual effort without nested buttons', '(()=>{const r=document.querySelector(".wb-ddl-item[data-urgency=overdue]");return !r.querySelector("button button")&&r.querySelector(".wb-ddl-effort").textContent.includes("原预计 15 分钟")&&!r.querySelector(".wb-insight-reveal").inert&&r.querySelector(".wb-insight-reveal").textContent.includes("尚未记录专注")})()')
   await key('Escape')
-  await click('.wb-watch-item .wb-reason-toggle')
-  await check('Xixi notices reveal the actual related tasks', 'document.querySelectorAll(".wb-watch-related button").length>0&&!document.querySelector(".wb-watch .wb-insight-reveal").inert')
+  await check('Xixi related tasks stay visible without disclosure controls', 'document.querySelectorAll(".wb-watch-related button").length>0&&!document.querySelector(".wb-watch .wb-insight-reveal")&&!document.querySelector(".wb-watch .wb-reason-toggle")&&[...document.querySelectorAll(".wb-watch-related button")].every(b=>!b.closest("[inert]")&&getComputedStyle(b).visibility==="visible")')
+  const noticeOrigin = await evaluate('document.querySelector(".wb-watch-related button").dataset.focusOrigin')
   await click('.wb-watch-related button'); await focus()
-  await click('.wb-back'); await wait('document.activeElement.matches(".wb-task")')
-  await check('return from a notice lands on a visible task when its list has folded', '!document.activeElement.closest("[inert]")&&document.activeElement.getBoundingClientRect().bottom<=document.querySelector(".wb-scroll").getBoundingClientRect().bottom+1')
+  await click('.wb-back'); await wait(`document.activeElement.dataset.focusOrigin===${JSON.stringify(noticeOrigin)}`)
+  await check('return from a notice restores its original visible task button', `(()=>{const e=document.activeElement,r=e.getBoundingClientRect(),s=document.querySelector('.wb-scroll').getBoundingClientRect();return e.dataset.focusOrigin===${JSON.stringify(noticeOrigin)}&&e.matches('.wb-watch-related button')&&!e.closest('[inert]')&&r.top>=s.top-1&&r.bottom<=s.bottom+1})()`)
   await click('.wb-customize-trigger')
   await check('customization opens a labelled dialog with live parameter controls', 'document.querySelector(".wb-customize").open&&document.querySelectorAll(".wb-adjustment input").length===12')
   await setRange('input[aria-label="背景磨砂"]', 7)
-  await check('backdrop blur can be tuned independently from the glass material', 'getComputedStyle(document.querySelector(".wb-background")).backdropFilter.includes("blur(")&&getComputedStyle(document.querySelector(".workbench")).getPropertyValue("--wb-backdrop-blur")==="7px"&&JSON.parse(localStorage.getItem("astaria-workbench-appearance-v1")).blur===0')
+  await check('backdrop blur can be tuned independently from the glass material', 'getComputedStyle(document.querySelector(".wb-background")).backdropFilter.includes("blur(")&&getComputedStyle(document.querySelector(".workbench")).getPropertyValue("--wb-backdrop-blur")==="7px"&&JSON.parse(localStorage.getItem("astaria-workbench-appearance-v2")).blur===0')
   await setRange('.wb-adjustment input', 940)
-  await check('changing appearance updates the live workspace and persists parameters', 'document.querySelector(".wb-container").getBoundingClientRect().width===940&&JSON.parse(localStorage.getItem("astaria-workbench-appearance-v1")).width===940')
+  await check('changing appearance updates the live workspace and persists parameters', 'document.querySelector(".wb-container").getBoundingClientRect().width===940&&JSON.parse(localStorage.getItem("astaria-workbench-appearance-v2")).width===940')
   await shot('customize-1440')
   await click('.wb-customize footer button')
   await key('Escape')
@@ -155,9 +171,8 @@ try {
   await check('back pauses progress and restores the selected task focus', 'JSON.parse(localStorage.getItem("astaria-focus-preview-v1")).tasks["preview-physics"].phase==="paused"&&document.activeElement.dataset.taskId==="preview-physics"')
   await click('[data-deadline-id="preview-overdue"]'); await focus()
   await check('a deadline opens the same focus flow without starting its timer', 'document.querySelector(".wb-focus-main h2").textContent==="补交社团活动记录"&&document.querySelector(".wb-clock-actions .wb-action").textContent==="开始专注"')
-  await menu(5)
-  await wait('document.activeElement.id==="wb-ddl-heading"')
-  await check('DDL navigation exits focus and highlights Upcoming', '!!document.querySelector(".wb-chooser")&&document.querySelector(".wb-deadlines").dataset.highlighted==="true"')
+  await click('.wb-back'); await wait('document.activeElement.dataset.deadlineId==="preview-overdue"')
+  await check('deadline focus returns to Upcoming inside workbench', '!!document.querySelector(".wb-chooser")&&document.activeElement.dataset.deadlineId==="preview-overdue"')
   await click('[data-deadline-id="preview-overdue"]'); await focus()
   await click('.wb-clock-actions .wb-secondary'); await wait('!!document.querySelector(".wb-finished")')
   await click('.wb-finished .wb-action'); await wait('!!document.querySelector(".wb-chooser")')
@@ -176,8 +191,8 @@ try {
   await click('.wb-clock-actions .wb-action')
   await wait('document.querySelector(".wb-clock-actions .wb-action").textContent==="暂停"')
   assert.equal((await rows())[0].status, 'doing')
-  await menu(5); await wait('document.activeElement.id==="wb-ddl-heading"')
-  await check('DDL navigation pauses the active timer before showing the chooser', '(()=>{const t=JSON.parse(localStorage.getItem("astaria-focus-v1"));return t.tasks[t.selectedTaskId].phase==="paused"&&!!document.querySelector(".wb-chooser")})()')
+  await click('.wb-back'); await wait('!!document.querySelector(".wb-chooser")')
+  await check('returning to task selection pauses the active timer', '(()=>{const t=JSON.parse(localStorage.getItem("astaria-focus-v1"));return t.tasks[t.selectedTaskId].phase==="paused"&&!!document.querySelector(".wb-chooser")})()')
   await click('.wb-task'); await focus(); await click('.wb-clock-actions .wb-action')
   await delay(1150)
   await menu(1)
@@ -185,8 +200,10 @@ try {
   const paused = await timer()
   await delay(500)
   await menu(2)
-  await check('returning to focus preserves elapsed time without restarting', `(()=>{const t=JSON.parse(localStorage.getItem('astaria-focus-v1'));return t.tasks[t.selectedTaskId].elapsedMs===${paused.tasks[paused.selectedTaskId].elapsedMs}&&document.querySelector('.wb-clock-actions .wb-action').textContent==='继续专注'})()`)
+  await check('returning to focus preserves elapsed time without restarting', `(()=>{const t=JSON.parse(localStorage.getItem('astaria-focus-v1'));return document.querySelector('.workbench').dataset.active==='true'&&!document.querySelector('.workbench').inert&&t.tasks[t.selectedTaskId].elapsedMs===${paused.tasks[paused.selectedTaskId].elapsedMs}&&document.querySelector('.wb-clock-actions .wb-action').textContent==='继续专注'})()`)
+  await wait('document.querySelector(".workbench").dataset.active==="true"&&!document.querySelector(".wb-stage").inert&&getComputedStyle(document.querySelector(".wb-scroll")).opacity==="1"')
   await click('.wb-clock-actions .wb-action')
+  await wait('(()=>{const t=JSON.parse(localStorage.getItem("astaria-focus-v1"));return document.querySelector(".wb-clock-actions .wb-action").textContent==="暂停"&&t.tasks[t.selectedTaskId].phase==="running"})()')
   // Advance wall time only in the isolated browser, then restore it before rest.
   await evaluate('window.__focusRealNow=Date.now;Date.now=()=>window.__focusRealNow()+2100000;document.dispatchEvent(new Event("visibilitychange"));true')
   await wait('document.querySelector(".wb-clock").textContent==="00:00"')
@@ -207,6 +224,13 @@ try {
     await send('Emulation.setDeviceMetricsOverride', { width,height,deviceScaleFactor:1,mobile:false }); await delay(200)
     await check(`task selection fits ${width}x${height}`, '(()=>{const c=document.querySelector(".wb-container").getBoundingClientRect();return c.left>=0&&c.right<=innerWidth&&document.querySelector(".wb-scroll").scrollWidth<=innerWidth})()')
     await check(`Upcoming fits ${width}x${height}`, '(()=>{const c=document.querySelector(".wb-deadlines").getBoundingClientRect();return c.left>=0&&c.right<=innerWidth})()')
+    await check(`related tasks remain unfolded at ${width}x${height}`, '[...document.querySelectorAll(".wb-watch-related button")].every(b=>!b.closest("[inert]")&&getComputedStyle(b).visibility==="visible")&&!document.querySelector(".wb-watch .wb-reason-toggle")')
+    if (width === 900) {
+      await check('900px layout preserves aligned glass and two deadline columns', '(()=>{const a=document.querySelector(".wb-brief").getBoundingClientRect(),b=document.querySelector(".wb-task").getBoundingClientRect(),g=document.querySelector(".wb-ddl-grid"),r=g.querySelector(".wb-ddl-item").getBoundingClientRect();return a.right<b.left&&Math.abs(a.top-b.top)<1&&getComputedStyle(g).gridTemplateColumns.split(" ").length===2&&r.width>=250})()')
+    }
+    if (width === 390) {
+      await check('390px layout stacks deadlines without compressing their text', 'getComputedStyle(document.querySelector(".wb-ddl-grid")).gridTemplateColumns.split(" ").length===1&&document.querySelector(".wb-ddl-item").getBoundingClientRect().width>=300')
+    }
     await evaluate('document.querySelector(".wb-scroll").scrollTo({top:0});true'); await delay(380)
     await shot(`chooser-${width}`)
     if (width <= 760) {

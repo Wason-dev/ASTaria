@@ -10,7 +10,7 @@
       "pass": true
     },
     {
-      "name": "workbench applies four-pixel blur only on its separate backdrop layer",
+      "name": "workbench keeps the background clear with the approved zero-blur setting",
       "pass": true
     },
     {
@@ -19,6 +19,14 @@
     },
     {
       "name": "sample preview uses chosen geometry and glass without touching the database",
+      "pass": true
+    },
+    {
+      "name": "desktop briefing glass aligns with the first task glass",
+      "pass": true
+    },
+    {
+      "name": "desktop Upcoming uses two readable columns across the full workspace",
       "pass": true
     },
     {
@@ -58,11 +66,11 @@
       "pass": true
     },
     {
-      "name": "Xixi notices reveal the actual related tasks",
+      "name": "Xixi related tasks stay visible without disclosure controls",
       "pass": true
     },
     {
-      "name": "return from a notice lands on a visible task when its list has folded",
+      "name": "return from a notice restores its original visible task button",
       "pass": true
     },
     {
@@ -106,7 +114,7 @@
       "pass": true
     },
     {
-      "name": "DDL navigation exits focus and highlights Upcoming",
+      "name": "deadline focus returns to Upcoming inside workbench",
       "pass": true
     },
     {
@@ -126,7 +134,7 @@
       "pass": true
     },
     {
-      "name": "DDL navigation pauses the active timer before showing the chooser",
+      "name": "returning to task selection pauses the active timer",
       "pass": true
     },
     {
@@ -162,6 +170,14 @@
       "pass": true
     },
     {
+      "name": "related tasks remain unfolded at 900x700",
+      "pass": true
+    },
+    {
+      "name": "900px layout preserves aligned glass and two deadline columns",
+      "pass": true
+    },
+    {
       "name": "focus and Xixi fit 900x700",
       "pass": true
     },
@@ -175,6 +191,10 @@
     },
     {
       "name": "Upcoming fits 748x700",
+      "pass": true
+    },
+    {
+      "name": "related tasks remain unfolded at 748x700",
       "pass": true
     },
     {
@@ -202,6 +222,14 @@
       "pass": true
     },
     {
+      "name": "related tasks remain unfolded at 390x844",
+      "pass": true
+    },
+    {
+      "name": "390px layout stacks deadlines without compressing their text",
+      "pass": true
+    },
+    {
       "name": "compact deadline summary is immediately visible at 390x844",
       "pass": true
     },
@@ -226,6 +254,10 @@
       "pass": true
     },
     {
+      "name": "related tasks remain unfolded at 320x568",
+      "pass": true
+    },
+    {
       "name": "compact deadline summary is immediately visible at 320x568",
       "pass": true
     },
@@ -247,6 +279,10 @@
     },
     {
       "name": "Upcoming fits 844x390",
+      "pass": true
+    },
+    {
+      "name": "related tasks remain unfolded at 844x390",
       "pass": true
     },
     {

@@ -14,6 +14,18 @@
       "pass": true
     },
     {
+      "name": "later and completed sections stay expanded",
+      "pass": true
+    },
+    {
+      "name": "Upcoming includes overdue, imminent and future dates with explicit timing",
+      "pass": true
+    },
+    {
+      "name": "urgency has progressively stronger type weight and color",
+      "pass": true
+    },
+    {
       "name": "customization opens a labelled dialog with live parameter controls",
       "pass": true
     },
@@ -46,11 +58,27 @@
       "pass": true
     },
     {
+      "name": "a deadline opens the same focus flow without starting its timer",
+      "pass": true
+    },
+    {
+      "name": "DDL navigation exits focus and highlights Upcoming",
+      "pass": true
+    },
+    {
+      "name": "completed deadlines leave Upcoming and remain in the expanded history",
+      "pass": true
+    },
+    {
       "name": "preview settings and task state never mutate real records",
       "pass": true
     },
     {
       "name": "home capture retains black theme and expanded 680 by 460 glass",
+      "pass": true
+    },
+    {
+      "name": "DDL navigation pauses the active timer before showing the chooser",
       "pass": true
     },
     {
@@ -74,7 +102,7 @@
       "pass": true
     },
     {
-      "name": "completed items are retained in a collapsed section",
+      "name": "completed items remain visible with completion timing",
       "pass": true
     },
     {
@@ -82,7 +110,15 @@
       "pass": true
     },
     {
+      "name": "Upcoming fits 900x700",
+      "pass": true
+    },
+    {
       "name": "focus and Xixi fit 900x700",
+      "pass": true
+    },
+    {
+      "name": "returning to a deadline keeps keyboard focus visible at 900x700",
       "pass": true
     },
     {
@@ -90,7 +126,23 @@
       "pass": true
     },
     {
+      "name": "Upcoming fits 748x700",
+      "pass": true
+    },
+    {
+      "name": "compact deadline summary is immediately visible at 748x700",
+      "pass": true
+    },
+    {
+      "name": "compact summary reveals the first deadline below its heading at 748x700",
+      "pass": true
+    },
+    {
       "name": "focus and Xixi fit 748x700",
+      "pass": true
+    },
+    {
+      "name": "returning to a deadline keeps keyboard focus visible at 748x700",
       "pass": true
     },
     {
@@ -98,7 +150,23 @@
       "pass": true
     },
     {
+      "name": "Upcoming fits 390x844",
+      "pass": true
+    },
+    {
+      "name": "compact deadline summary is immediately visible at 390x844",
+      "pass": true
+    },
+    {
+      "name": "compact summary reveals the first deadline below its heading at 390x844",
+      "pass": true
+    },
+    {
       "name": "focus and Xixi fit 390x844",
+      "pass": true
+    },
+    {
+      "name": "returning to a deadline keeps keyboard focus visible at 390x844",
       "pass": true
     },
     {
@@ -106,7 +174,23 @@
       "pass": true
     },
     {
+      "name": "Upcoming fits 320x568",
+      "pass": true
+    },
+    {
+      "name": "compact deadline summary is immediately visible at 320x568",
+      "pass": true
+    },
+    {
+      "name": "compact summary reveals the first deadline below its heading at 320x568",
+      "pass": true
+    },
+    {
       "name": "focus and Xixi fit 320x568",
+      "pass": true
+    },
+    {
+      "name": "returning to a deadline keeps keyboard focus visible at 320x568",
       "pass": true
     },
     {
@@ -114,7 +198,15 @@
       "pass": true
     },
     {
+      "name": "Upcoming fits 844x390",
+      "pass": true
+    },
+    {
       "name": "focus and Xixi fit 844x390",
+      "pass": true
+    },
+    {
+      "name": "returning to a deadline keeps keyboard focus visible at 844x390",
       "pass": true
     },
     {

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { DESIGN_PREVIEW } from './designPreview'
 
 export const DEFAULT_APPEARANCE = {
   columns: 2, width: 900, font: 12, row: 96, gap: 8, top: 108,
@@ -18,6 +19,7 @@ const STORAGE_KEY = 'astaria-workbench-appearance-v1'
 
 export function useAppearance() {
   const [value, setValue] = useState<Appearance>(() => {
+    if (!DESIGN_PREVIEW) return { ...DEFAULT_APPEARANCE }
     try {
       const saved: unknown = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null')
       const next = { ...DEFAULT_APPEARANCE }
@@ -34,6 +36,7 @@ export function useAppearance() {
   })
   const [warning, setWarning] = useState('')
   useEffect(() => {
+    if (!DESIGN_PREVIEW) return
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(value)); setWarning('') }
     catch { setWarning('参数暂未保存，可以复制后保留') }
   }, [value])

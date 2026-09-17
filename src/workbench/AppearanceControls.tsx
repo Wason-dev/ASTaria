@@ -24,7 +24,7 @@ export function AppearanceControls({ value, onChange, warning, onClose }: {
   const update = (key: keyof Appearance, next: number | boolean) => onChange(current => ({ ...current, [key]: next }))
   return <dialog ref={dialog} className="wb-customize" data-closing={closing} aria-labelledby="wb-customize-title" onCancel={event => { event.preventDefault(); close() }} onKeyDown={event => event.stopPropagation()}>
     <header><h2 id="wb-customize-title">调整工作台</h2><button onClick={close} aria-label="关闭自定义">×</button></header>
-    <p className="wb-muted">参数实时生效，找到喜欢的再定下来</p>
+    <p className="wb-muted">开发调试 · 正式版不显示这些工具</p>
     <div className="wb-control-row"><span>排列</span><div className="wb-segment">{[1, 2].map(columns => <button key={columns} aria-pressed={value.columns === columns} onClick={() => update('columns', columns)}>{columns === 2 ? '双列' : '单列'}</button>)}</div></div>
     {ADJUSTMENTS.map(([key, label, min, max, step, unit]) => <label className="wb-adjustment" key={key}>
       <span>{label}</span><input type="range" min={min} max={max} step={step} value={value[key]} onChange={event => update(key, Number(event.target.value))} /><output>{value[key]}{unit}</output>

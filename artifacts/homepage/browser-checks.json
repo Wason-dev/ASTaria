@@ -18,7 +18,7 @@
       "pass": true
     },
     {
-      "name": "hover navigation contains planned pages and settings without fake destinations",
+      "name": "hover navigation enables workbench and DDL while other planned pages stay disabled",
       "pass": true
     },
     {
@@ -60,6 +60,188 @@
     {
       "name": "interstellar navigation keeps backdrop ancestors opaque and stationary throughout opening",
       "pass": true
+    },
+    {
+      "name": "black interstellar navigation shadow fades with glass without moving its backdrop ancestors",
+      "pass": true,
+      "frames": [
+        {
+          "surface": 0.811427,
+          "shadow": 0.811427,
+          "shadowPainted": true,
+          "parentShadow": "none",
+          "visibility": "visible",
+          "stable": true
+        },
+        {
+          "surface": 0.64213,
+          "shadow": 0.64213,
+          "shadowPainted": true,
+          "parentShadow": "none",
+          "visibility": "visible",
+          "stable": true
+        },
+        {
+          "surface": 0.480154,
+          "shadow": 0.480154,
+          "shadowPainted": true,
+          "parentShadow": "none",
+          "visibility": "visible",
+          "stable": true
+        },
+        {
+          "surface": 0.348833,
+          "shadow": 0.348833,
+          "shadowPainted": true,
+          "parentShadow": "none",
+          "visibility": "visible",
+          "stable": true
+        },
+        {
+          "surface": 0.246592,
+          "shadow": 0.246592,
+          "shadowPainted": true,
+          "parentShadow": "none",
+          "visibility": "visible",
+          "stable": true
+        },
+        {
+          "surface": 0.168837,
+          "shadow": 0.168837,
+          "shadowPainted": true,
+          "parentShadow": "none",
+          "visibility": "visible",
+          "stable": true
+        },
+        {
+          "surface": 0.110709,
+          "shadow": 0.110709,
+          "shadowPainted": true,
+          "parentShadow": "none",
+          "visibility": "visible",
+          "stable": true
+        },
+        {
+          "surface": 0.0675626,
+          "shadow": 0.0675626,
+          "shadowPainted": true,
+          "parentShadow": "none",
+          "visibility": "visible",
+          "stable": true
+        },
+        {
+          "surface": 0.0370166,
+          "shadow": 0.0370166,
+          "shadowPainted": true,
+          "parentShadow": "none",
+          "visibility": "visible",
+          "stable": true
+        },
+        {
+          "surface": 0.0165262,
+          "shadow": 0.0165262,
+          "shadowPainted": true,
+          "parentShadow": "none",
+          "visibility": "visible",
+          "stable": true
+        },
+        {
+          "surface": 0.00470123,
+          "shadow": 0.00470123,
+          "shadowPainted": true,
+          "parentShadow": "none",
+          "visibility": "visible",
+          "stable": true
+        },
+        {
+          "surface": 0.0001261,
+          "shadow": 0.0001261,
+          "shadowPainted": true,
+          "parentShadow": "none",
+          "visibility": "visible",
+          "stable": true
+        },
+        {
+          "surface": 0,
+          "shadow": 0,
+          "shadowPainted": true,
+          "parentShadow": "none",
+          "visibility": "visible",
+          "stable": true
+        },
+        {
+          "surface": 0,
+          "shadow": 0,
+          "shadowPainted": true,
+          "parentShadow": "none",
+          "visibility": "visible",
+          "stable": true
+        },
+        {
+          "surface": 0,
+          "shadow": 0,
+          "shadowPainted": true,
+          "parentShadow": "none",
+          "visibility": "visible",
+          "stable": true
+        },
+        {
+          "surface": 0,
+          "shadow": 0,
+          "shadowPainted": true,
+          "parentShadow": "none",
+          "visibility": "hidden",
+          "stable": true
+        },
+        {
+          "surface": 0,
+          "shadow": 0,
+          "shadowPainted": true,
+          "parentShadow": "none",
+          "visibility": "hidden",
+          "stable": true
+        },
+        {
+          "surface": 0,
+          "shadow": 0,
+          "shadowPainted": true,
+          "parentShadow": "none",
+          "visibility": "hidden",
+          "stable": true
+        },
+        {
+          "surface": 0,
+          "shadow": 0,
+          "shadowPainted": true,
+          "parentShadow": "none",
+          "visibility": "hidden",
+          "stable": true
+        },
+        {
+          "surface": 0,
+          "shadow": 0,
+          "shadowPainted": true,
+          "parentShadow": "none",
+          "visibility": "hidden",
+          "stable": true
+        },
+        {
+          "surface": 0,
+          "shadow": 0,
+          "shadowPainted": true,
+          "parentShadow": "none",
+          "visibility": "hidden",
+          "stable": true
+        },
+        {
+          "surface": 0,
+          "shadow": 0,
+          "shadowPainted": true,
+          "parentShadow": "none",
+          "visibility": "hidden",
+          "stable": true
+        }
+      ]
     },
     {
       "name": "SVG refraction map has a nonzero viewport and live backdrop",
@@ -224,6 +406,188 @@
     {
       "name": "horizontal navigation and corner text fit 320x568",
       "pass": true
+    },
+    {
+      "name": "white workbench navigation shadow fades with glass without moving its backdrop ancestors",
+      "pass": true,
+      "frames": [
+        {
+          "surface": 0.811812,
+          "shadow": 0.811812,
+          "shadowPainted": true,
+          "parentShadow": "none",
+          "visibility": "visible",
+          "stable": true
+        },
+        {
+          "surface": 0.641521,
+          "shadow": 0.641521,
+          "shadowPainted": true,
+          "parentShadow": "none",
+          "visibility": "visible",
+          "stable": true
+        },
+        {
+          "surface": 0.481405,
+          "shadow": 0.481405,
+          "shadowPainted": true,
+          "parentShadow": "none",
+          "visibility": "visible",
+          "stable": true
+        },
+        {
+          "surface": 0.349119,
+          "shadow": 0.349119,
+          "shadowPainted": true,
+          "parentShadow": "none",
+          "visibility": "visible",
+          "stable": true
+        },
+        {
+          "surface": 0.24681,
+          "shadow": 0.24681,
+          "shadowPainted": true,
+          "parentShadow": "none",
+          "visibility": "visible",
+          "stable": true
+        },
+        {
+          "surface": 0.169002,
+          "shadow": 0.169002,
+          "shadowPainted": true,
+          "parentShadow": "none",
+          "visibility": "visible",
+          "stable": true
+        },
+        {
+          "surface": 0.110832,
+          "shadow": 0.110832,
+          "shadowPainted": true,
+          "parentShadow": "none",
+          "visibility": "visible",
+          "stable": true
+        },
+        {
+          "surface": 0.0676523,
+          "shadow": 0.0676523,
+          "shadowPainted": true,
+          "parentShadow": "none",
+          "visibility": "visible",
+          "stable": true
+        },
+        {
+          "surface": 0.0369272,
+          "shadow": 0.0369272,
+          "shadowPainted": true,
+          "parentShadow": "none",
+          "visibility": "visible",
+          "stable": true
+        },
+        {
+          "surface": 0.0165653,
+          "shadow": 0.0165653,
+          "shadowPainted": true,
+          "parentShadow": "none",
+          "visibility": "visible",
+          "stable": true
+        },
+        {
+          "surface": 0.0046728,
+          "shadow": 0.0046728,
+          "shadowPainted": true,
+          "parentShadow": "none",
+          "visibility": "visible",
+          "stable": true
+        },
+        {
+          "surface": 0.000129204,
+          "shadow": 0.000129204,
+          "shadowPainted": true,
+          "parentShadow": "none",
+          "visibility": "visible",
+          "stable": true
+        },
+        {
+          "surface": 0,
+          "shadow": 0,
+          "shadowPainted": true,
+          "parentShadow": "none",
+          "visibility": "visible",
+          "stable": true
+        },
+        {
+          "surface": 0,
+          "shadow": 0,
+          "shadowPainted": true,
+          "parentShadow": "none",
+          "visibility": "visible",
+          "stable": true
+        },
+        {
+          "surface": 0,
+          "shadow": 0,
+          "shadowPainted": true,
+          "parentShadow": "none",
+          "visibility": "visible",
+          "stable": true
+        },
+        {
+          "surface": 0,
+          "shadow": 0,
+          "shadowPainted": true,
+          "parentShadow": "none",
+          "visibility": "hidden",
+          "stable": true
+        },
+        {
+          "surface": 0,
+          "shadow": 0,
+          "shadowPainted": true,
+          "parentShadow": "none",
+          "visibility": "hidden",
+          "stable": true
+        },
+        {
+          "surface": 0,
+          "shadow": 0,
+          "shadowPainted": true,
+          "parentShadow": "none",
+          "visibility": "hidden",
+          "stable": true
+        },
+        {
+          "surface": 0,
+          "shadow": 0,
+          "shadowPainted": true,
+          "parentShadow": "none",
+          "visibility": "hidden",
+          "stable": true
+        },
+        {
+          "surface": 0,
+          "shadow": 0,
+          "shadowPainted": true,
+          "parentShadow": "none",
+          "visibility": "hidden",
+          "stable": true
+        },
+        {
+          "surface": 0,
+          "shadow": 0,
+          "shadowPainted": true,
+          "parentShadow": "none",
+          "visibility": "hidden",
+          "stable": true
+        },
+        {
+          "surface": 0,
+          "shadow": 0,
+          "shadowPainted": true,
+          "parentShadow": "none",
+          "visibility": "hidden",
+          "stable": true
+        }
+      ]
     },
     {
       "name": "today and DDL show dated tasks without assigning undated inbox tasks",

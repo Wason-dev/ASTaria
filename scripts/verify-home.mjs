@@ -61,6 +61,26 @@ const shot = async (name, keepPointer = false) => {
 const rows = () => evaluate(`(async()=>{const db=await new Promise((resolve,reject)=>{const r=indexedDB.open('astaria-local');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)});try{return await new Promise((resolve,reject)=>{const r=db.transaction('tasks').objectStore('tasks').getAll();r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}finally{db.close()}})()`)
 const cameraSettled = () => wait('!window.__ASTARIA_P0__.getSnapshot().cameraTransition')
 const ready = () => wait('!!window.__ASTARIA_P0__ && !!document.querySelector(".home-current-title:not(:disabled)")')
+const checkMenuShadowClose = async theme => {
+  await wait('getComputedStyle(document.querySelector(".home-menu .home-glass-surface")).opacity==="1"')
+  await key('Escape')
+  const frames = await evaluate(`(async()=>{
+    const menu=document.querySelector('.home-menu'),surface=menu.querySelector('.home-glass-surface');
+    const frames=[];
+    for(let i=0;i<22;i++){
+      await new Promise(requestAnimationFrame);
+      const parent=getComputedStyle(menu),shadow=getComputedStyle(menu,'::before');
+      frames.push({surface:Number(getComputedStyle(surface).opacity),shadow:Number(shadow.opacity),shadowPainted:shadow.boxShadow!=='none',parentShadow:parent.boxShadow,visibility:parent.visibility,stable:[menu,menu.querySelector('.home-glass-measure'),document.querySelector('.home-nav')].every(el=>{const s=getComputedStyle(el);return s.opacity==='1'&&s.transform==='none'})});
+    }
+    return frames;
+  })()`)
+  const name = `${theme} navigation shadow fades with glass without moving its backdrop ancestors`
+  const pass = frames.every((frame, index) => frame.stable && frame.shadowPainted && frame.parentShadow === 'none' && Math.abs(frame.shadow - frame.surface) < .001 && (!index || frame.surface <= frames[index - 1].surface + .001))
+    && frames.some(frame => frame.surface > 0 && frame.surface < 1)
+    && frames.at(-1).surface === 0 && frames.at(-1).shadow === 0 && frames.at(-1).visibility === 'hidden'
+  checks.push({ name, pass, frames })
+  assert.equal(pass, true, name)
+}
 let failure
 try {
   await fs.mkdir(new URL('screenshots/', output), { recursive: true })
@@ -82,7 +102,7 @@ try {
   await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 52, y: 43 })
   await wait('document.querySelector(".home-brand").getAttribute("aria-expanded")==="true"')
   await wait('(()=>{const m=document.querySelector(".home-menu").getBoundingClientRect(),i=document.querySelector(".home-menu feImage");return i?.getAttribute("width")===String(Math.round(m.width))&&i?.getAttribute("height")===String(Math.round(m.height))})()')
-  await check('hover navigation contains planned pages and settings without fake destinations', 'document.querySelectorAll(".home-menu button:disabled").length===4 && document.querySelector(".home-menu").textContent.includes("DDL") && document.querySelector(".home-menu").textContent.includes("设置")')
+  await check('hover navigation enables workbench and DDL while other planned pages stay disabled', 'document.querySelectorAll(".home-menu button:disabled").length===3 && [...document.querySelectorAll(".home-menu button:not(:disabled)")].map(b=>b.textContent).join(",")==="首页,工作台,DDL" && document.querySelector(".home-menu").textContent.includes("设置")')
   await check('navigation uses the same measured glass material', '(()=>{const m=document.querySelector(".home-menu").getBoundingClientRect(),g=document.querySelector(".home-menu .home-glass-surface"),s=getComputedStyle(g),i=document.querySelector(".home-menu feImage");return m.height<=40&&i.getAttribute("width")===String(Math.round(m.width))&&i.getAttribute("height")===String(Math.round(m.height))&&Math.abs(Number(s.getPropertyValue("--glass-tint"))-.2)<1e-6&&Number(s.getPropertyValue("--glass-rim"))===.15&&Number(s.getPropertyValue("--glass-shadow"))===.6})()')
   await check('navigation opens horizontally beside the brand with an animated hint', '(()=>{const m=document.querySelector(".home-menu"),r=m.getBoundingClientRect(),b=document.querySelector(".home-brand").getBoundingClientRect(),c=document.querySelector(".home-clock").getBoundingClientRect(),items=[...m.querySelectorAll("li")],list=getComputedStyle(document.querySelector(".home-menu-list"));return items.every(i=>Math.abs(i.getBoundingClientRect().top-items[0].getBoundingClientRect().top)<1)&&r.left>b.right&&r.right<c.left&&list.transitionProperty.includes("transform")&&getComputedStyle(m).clipPath==="none"&&!!document.querySelector(".home-nav-hint")})()')
   await shot('navigation-1440', true)
@@ -123,7 +143,7 @@ try {
     return frames.every(f=>f.stable&&f.x===frames[0].x&&f.y===frames[0].y&&f.width===frames[0].width&&f.height===frames[0].height)&&frames[0].alpha<1&&frames.at(-1).alpha===1;
   })()`)
   await shot('navigation-interstellar-1440', true)
-  await key('Escape')
+  await checkMenuShadowClose('black interstellar')
   await check('SVG refraction map has a nonzero viewport and live backdrop', 'document.querySelector(".home-morph feImage").getAttribute("width")==="680" && document.querySelector(".home-morph feImage").getAttribute("href").startsWith("data:image/png") && getComputedStyle(document.querySelector(".home-morph .home-glass-surface")).backdropFilter.includes("url(")')
   await check('equal chat and agenda columns share one continuous glass surface', '(()=>{const c=document.querySelector(".home-xixi").getBoundingClientRect(),a=document.querySelector(".home-agenda").getBoundingClientRect(),m=document.querySelector(".home-morph").getBoundingClientRect();return c.width===340&&a.width===c.width&&Math.abs(a.left-c.right)<1&&c.top===a.top&&c.height===a.height&&m.width===680&&document.querySelectorAll(".home-morph .home-glass-surface").length===1&&!document.querySelector(".home-agenda").inert})()')
   await check('expanded chat and agenda sit on the horizontal centerline', '(()=>{const r=document.querySelector(".home-morph").getBoundingClientRect();return Math.abs(r.top+r.height/2-innerHeight/2)<1})()')
@@ -245,6 +265,20 @@ try {
     await shot(`navigation-${width}`, true)
     await key('Escape')
   }
+  // The same menu must shed its white-theme shadow at the same rate as its glass.
+  await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false })
+  await send('Emulation.setEmulatedMedia', { features: [] })
+  await evaluate('document.querySelector(".home-brand").focus()')
+  await key('Enter')
+  await click('.home-menu li:nth-child(2) button')
+  await wait('document.querySelector(".home-workspace").dataset.page==="workbench"&&document.querySelector(".p0").dataset.night==="false"')
+  await evaluate('document.querySelector(".home-brand").focus()')
+  await key('Enter')
+  await checkMenuShadowClose('white workbench')
+  await key('Enter')
+  await click('.home-menu li:first-child button')
+  await wait('document.querySelector(".home-workspace").dataset.page==="home"&&document.querySelector(".p0").dataset.night==="true"')
+  await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] })
   // Seed only the isolated test profile with local dated tasks, then reload the store.
   await evaluate(`(async()=>{
     const db=await new Promise((resolve,reject)=>{const r=indexedDB.open('astaria-local');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)});

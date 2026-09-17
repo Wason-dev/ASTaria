@@ -6,11 +6,13 @@
 .home-brand-wordmark > span { font-weight: 400 }
 .home-nav-hint { width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 1.1; stroke-linecap: round; stroke-linejoin: round; opacity: .65; transition: transform 280ms ease }
 .home-brand[aria-expanded=true] .home-nav-hint { transform: rotate(180deg) }
-.home-menu { position: absolute; left: calc(100% + 12px); top: 0; width: max-content; max-width: calc(100vw - 2 * var(--home-left)); box-sizing: border-box; border-radius: 13px; box-shadow: 0 6px 18px rgba(0, 0, 0, .6); visibility: hidden; transition: visibility 0s 280ms }
+.home-menu { position: absolute; left: calc(100% + 12px); top: 0; width: max-content; max-width: calc(100vw - 2 * var(--home-left)); box-sizing: border-box; border-radius: 13px; visibility: hidden; transition: visibility 0s 280ms }
 .home-menu[data-open=true] { visibility: visible; transition-delay: 0s }
+/* Keep the outer shadow outside the glass clipping layer and fade it with the surface. */
+.home-menu::before { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; box-shadow: var(--home-menu-shadow, 0 6px 18px rgba(0, 0, 0, .6)) }
 /* Keep the backdrop-filter parent opaque during its transition so Chromium does not change the sampling root. */
-.home-menu .home-glass-surface { opacity: 0; transition: opacity 220ms ease }
-.home-menu[data-open=true] .home-glass-surface { opacity: 1 }
+.home-menu::before, .home-menu .home-glass-surface { opacity: 0; transition: opacity 220ms ease }
+.home-menu[data-open=true]::before, .home-menu[data-open=true] .home-glass-surface { opacity: 1 }
 .home-workspace .home-menu[data-open=false] { pointer-events: none }
 .home-menu-list { position: relative; z-index: 1; display: flex; align-items: center; gap: 2px; list-style: none; margin: 0; padding: 5px; max-width: 100%; box-sizing: border-box; overflow-x: auto; scrollbar-width: thin; opacity: 0; transform: translateX(-8px); transition: transform 280ms cubic-bezier(.2,.7,.2,1), opacity 220ms ease }
 .home-menu[data-open=true] .home-menu-list { opacity: 1; transform: translateX(0) }
@@ -99,7 +101,7 @@
 }
 @media (pointer: coarse) and (max-width: 600px) { .home-clock { top: 31px } }
 @media (prefers-reduced-motion: reduce) {
-  .home-menu, .home-menu-list, .home-menu .home-glass-surface, .home-nav-hint, .home-pane-track { transition: none }
+  .home-menu, .home-menu::before, .home-menu-list, .home-menu .home-glass-surface, .home-nav-hint, .home-pane-track { transition: none }
   .home-input-flash { animation-name: home-input-soft-flash; animation-duration: .01ms }
   .home-input-shell { transition-duration: 120ms }
 }

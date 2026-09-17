@@ -1,0 +1,34 @@
+{
+  "url": "http://127.0.0.1:5188/",
+  "checks": [
+    {
+      "name": "workbench changes theme, hides home focus targets, and focuses its heading",
+      "pass": true
+    },
+    {
+      "name": "real empty state has no preview tasks or checkboxes",
+      "pass": true
+    },
+    {
+      "name": "production removes visual customization and sample entry points",
+      "pass": true
+    },
+    {
+      "name": "production ignores previously saved development appearance",
+      "pass": true
+    },
+    {
+      "name": "timer duration adjustment remains a production function",
+      "pass": true
+    },
+    {
+      "name": "production DDL navigation opens its workbench section",
+      "pass": true
+    },
+    {
+      "name": "no runtime exceptions",
+      "pass": true
+    }
+  ],
+  "errors": []
+}

@@ -18,15 +18,31 @@
       "pass": true
     },
     {
+      "name": "the former default width migrates while saved glass and typography stay intact",
+      "pass": true
+    },
+    {
+      "name": "an intentionally customized former width survives migration",
+      "pass": true
+    },
+    {
       "name": "sample preview uses chosen geometry and glass without touching the database",
       "pass": true
     },
     {
-      "name": "desktop briefing glass aligns with the first task glass",
+      "name": "desktop briefing, task and Upcoming glass tops align in three columns",
       "pass": true
     },
     {
-      "name": "desktop Upcoming uses two readable columns across the full workspace",
+      "name": "desktop Upcoming is a single readable list inside one matching glass panel",
+      "pass": true
+    },
+    {
+      "name": "Upcoming uses the shared 14px edge refraction sized to its glass surface",
+      "pass": true
+    },
+    {
+      "name": "only the foremost deadline shows advice before opening evidence",
       "pass": true
     },
     {
@@ -58,11 +74,23 @@
       "pass": true
     },
     {
+      "name": "focus keeps compact panels while the workbench toolbar stays anchored",
+      "pass": true
+    },
+    {
       "name": "returning from a briefing recommendation restores its visible source",
       "pass": true
     },
     {
       "name": "deadline evidence separates estimates and actual effort without nested buttons",
+      "pass": true
+    },
+    {
+      "name": "secondary deadline advice remains available in its accessible evidence panel",
+      "pass": true
+    },
+    {
+      "name": "closing secondary deadline evidence restores its toggle focus",
       "pass": true
     },
     {
@@ -78,6 +106,10 @@
       "pass": true
     },
     {
+      "name": "content width remains adjustable across compact and wide layouts",
+      "pass": true
+    },
+    {
       "name": "backdrop blur can be tuned independently from the glass material",
       "pass": true
     },
@@ -87,6 +119,14 @@
     },
     {
       "name": "closing controls restores keyboard focus to their trigger",
+      "pass": true
+    },
+    {
+      "name": "16px typography keeps three glass tops aligned and all task text within its card",
+      "pass": true
+    },
+    {
+      "name": "a tuned 660px container reflows by its own width without overflowing at 16px type",
       "pass": true
     },
     {
@@ -162,6 +202,86 @@
       "pass": true
     },
     {
+      "name": "task selection fits 1461x859",
+      "pass": true
+    },
+    {
+      "name": "Upcoming fits 1461x859",
+      "pass": true
+    },
+    {
+      "name": "related tasks remain unfolded at 1461x859",
+      "pass": true
+    },
+    {
+      "name": "1461px CSS viewport uses aligned three-column layout at DPR 2",
+      "pass": true
+    },
+    {
+      "name": "Upcoming refraction follows the resized glass at 1461px and DPR 2",
+      "pass": true
+    },
+    {
+      "name": "focus and Xixi fit 1461x859",
+      "pass": true
+    },
+    {
+      "name": "returning to a deadline keeps keyboard focus visible at 1461x859",
+      "pass": true
+    },
+    {
+      "name": "task selection fits 1280x800",
+      "pass": true
+    },
+    {
+      "name": "Upcoming fits 1280x800",
+      "pass": true
+    },
+    {
+      "name": "related tasks remain unfolded at 1280x800",
+      "pass": true
+    },
+    {
+      "name": "1280px CSS viewport uses aligned three-column layout at DPR 1",
+      "pass": true
+    },
+    {
+      "name": "Upcoming refraction follows the resized glass at 1280px and DPR 1",
+      "pass": true
+    },
+    {
+      "name": "focus and Xixi fit 1280x800",
+      "pass": true
+    },
+    {
+      "name": "returning to a deadline keeps keyboard focus visible at 1280x800",
+      "pass": true
+    },
+    {
+      "name": "task selection fits 1160x800",
+      "pass": true
+    },
+    {
+      "name": "Upcoming fits 1160x800",
+      "pass": true
+    },
+    {
+      "name": "related tasks remain unfolded at 1160x800",
+      "pass": true
+    },
+    {
+      "name": "1160px viewport moves Upcoming below when its actual container is under 1120px",
+      "pass": true
+    },
+    {
+      "name": "focus and Xixi fit 1160x800",
+      "pass": true
+    },
+    {
+      "name": "returning to a deadline keeps keyboard focus visible at 1160x800",
+      "pass": true
+    },
+    {
       "name": "task selection fits 900x700",
       "pass": true
     },
@@ -226,7 +346,11 @@
       "pass": true
     },
     {
-      "name": "390px layout stacks deadlines without compressing their text",
+      "name": "390px layout stacks deadlines with readable text inside the glass",
+      "pass": true
+    },
+    {
+      "name": "Upcoming refraction follows the resized glass at 390px and DPR 1",
       "pass": true
     },
     {

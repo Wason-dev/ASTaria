@@ -15,7 +15,11 @@ export type AssignmentStatus = 'suggested' | 'accepted' | 'moved' | 'skipped' | 
 export type AssignmentFeedback = 'too-hard-now' | 'no-time' | 'not-in-mood' | 'wrong-context'
 export type Assignment = { id: string; taskId: string; blockId: string; plannedMin: number; reason: string; status: AssignmentStatus; feedback?: AssignmentFeedback; updatedAt: string }
 
-export function recommendTask(tasks: Task[], day: Weekday): Recommendation | null {
+export function recommendTask(tasks: Task[], day: Weekday | null): Recommendation | null {
+  // The timetable is intentionally weekday-only. Runtime callers can still
+  // receive a weekend value from Date#getDay, so fail closed instead of
+  // indexing the weekday-only SUBJECTS table with undefined.
+  if (!day || !WEEKDAYS.includes(day)) return null
   const free = weekSchedule(day).filter((slot) => slot.kind === 'free' && (day !== '周四' || tasks.some((task) => task.energy === 'light')))
   const candidates = tasks.filter((task) => task.status === 'todo' && !task.inbox && task.estimateMin && (!task.context.some((tag) => tag === 'desk-4090' || tag === 'desk-mac' || tag === 'physical'))).sort((a, b) => (b.importance - a.importance) || ((a.due ?? '9999').localeCompare(b.due ?? '9999')))
   const task = candidates.find((item) => day !== '周四' || item.energy === 'light')

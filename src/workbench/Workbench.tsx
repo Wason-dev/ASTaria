@@ -9,11 +9,15 @@ import { useAppearance } from './appearance'
 import type { Appearance } from './appearance'
 import { previewTasks, recommendationReason, taskArea, taskGroups } from './tasks'
 import { useFocusTimer } from './useFocusTimer'
-import { DeadlineSummary, UpcomingDeadlines } from './UpcomingDeadlines'
+import { UpcomingDeadlines } from './UpcomingDeadlines'
 import { buildWorkbenchBriefing } from './briefing'
-import { XixiBriefing, XixiWatch } from './XixiBriefing'
+import { XixiBriefing } from './XixiBriefing'
 import { DESIGN_PREVIEW } from './designPreview'
+import { WorkbenchIcon as Icon } from './WorkbenchIcon'
+import { XixiInput } from './XixiInput'
+import { useGlassHover } from './useGlassHover'
 import './workbench.css'
+import './readability.css'
 
 type Props = { active: boolean; data: ReturnType<typeof useSpatialTasks>; now: Date; onCapture: () => void; onNotice: (message: string) => void }
 type Timer = ReturnType<typeof useFocusTimer>
@@ -27,6 +31,7 @@ function Glass({ appearance, children, className = '' }: { appearance: Appearanc
 
 export function Workbench(props: Props) {
   const appearance = useAppearance()
+  const hover = useGlassHover(props.active)
   const [customize, setCustomize] = useState(false)
   const [preview, setPreview] = useState(false)
   const style = {
@@ -38,7 +43,7 @@ export function Workbench(props: Props) {
     '--wb-backdrop-blur': `${appearance.value.backgroundBlur}px`,
   } as CSSProperties
   useEffect(() => { if (!props.active) setCustomize(false) }, [props.active])
-  return <section className="workbench" data-active={props.active} aria-label="工作台" inert={!props.active} aria-hidden={!props.active} style={style}>
+  return <section className="workbench" {...hover} data-active={props.active} aria-label="工作台" inert={!props.active} aria-hidden={!props.active} style={style}>
     <div className="wb-background" aria-hidden="true" />
     <WorkbenchContent key={preview ? 'preview' : 'real'} {...props} appearance={appearance.value} preview={preview} onPreview={() => setPreview(value => !value)} onCustomize={() => setCustomize(true)} />
     {DESIGN_PREVIEW && customize && <AppearanceControls value={appearance.value} onChange={appearance.setValue} warning={appearance.warning} onClose={() => setCustomize(false)} />}
@@ -59,9 +64,7 @@ function WorkbenchContent({ active, data, now, onCapture, onNotice, appearance, 
   const [error, setError] = useState('')
   const heading = useRef<HTMLHeadingElement>(null)
   const deadlineHeading = useRef<HTMLHeadingElement>(null)
-  const [deadlinePending, setDeadlinePending] = useState(false)
-  const [deadlineHighlighted, setDeadlineHighlighted] = useState(false)
-  const deadlineHighlightTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const [deadlineReturnId, setDeadlineReturnId] = useState<string | null>(null)
   const taskOpener = useRef<HTMLElement | null>(null)
   const chooserScroll = useRef(0)
   const selectionFocus = useRef<{ returning: boolean; previousId: string | null } | null>(null)
@@ -85,20 +88,8 @@ function WorkbenchContent({ active, data, now, onCapture, onNotice, appearance, 
   }, [active, timer.pause])
   useEffect(() => {
     startContext.current.mounted = true
-    return () => { startContext.current.mounted = false; clearTimeout(transitionTimer.current); clearTimeout(deadlineHighlightTimer.current) }
+    return () => { startContext.current.mounted = false; clearTimeout(transitionTimer.current) }
   }, [])
-  useEffect(() => {
-    if (!active || !deadlinePending || selectedId !== null || transitioning) return
-    const frame = requestAnimationFrame(() => {
-      deadlineHeading.current?.focus({ preventScroll: true })
-      deadlineHeading.current?.closest('.wb-deadlines')?.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' })
-      setDeadlinePending(false)
-      setDeadlineHighlighted(true)
-      clearTimeout(deadlineHighlightTimer.current)
-      deadlineHighlightTimer.current = setTimeout(() => setDeadlineHighlighted(false), 950)
-    })
-    return () => cancelAnimationFrame(frame)
-  }, [active, deadlinePending, selectedId, transitioning])
   useEffect(() => {
     if (selectedId && (!selected || selected.status === 'done')) timer.pause()
     if (active && selected?.status === 'done') heading.current?.focus({ preventScroll: true })
@@ -113,6 +104,47 @@ function WorkbenchContent({ active, data, now, onCapture, onNotice, appearance, 
     const originSelector = origin ? `[data-focus-origin="${CSS.escape(origin)}"]` : `[${fromDeadline ? 'data-deadline-id' : 'data-task-id'}="${CSS.escape(request.previousId ?? '')}"]`
     const candidate = request.returning && request.previousId ? scroll.current?.querySelector<HTMLElement>(originSelector) : null
     const previous = candidate && !candidate.closest('[inert]') ? candidate : request.returning && request.previousId ? scroll.current?.querySelector<HTMLElement>(`.wb-task[data-task-id="${CSS.escape(request.previousId)}"]`) : null
+    if (fromDeadline && request.returning && request.previousId) {
+      // The timeline resolves its page and width in a child layout effect, then
+      // animates the track. Restore focus only after that page is measurable and
+      // the track has stopped moving; otherwise the parent can focus an inert
+      // off-page node during the first frame at narrow widths.
+      let frame = 0
+      let lastGeometry = ''
+      let stableFrames = 0
+      const restoreDeadline = () => {
+        const scroller = scroll.current
+        if (!scroller) return
+        const timeline = scroller.querySelector<HTMLElement>('.wb-deadline-timeline')
+        const target = scroller.querySelector<HTMLElement>(originSelector)
+        if (!target) {
+          // Completion or an external deletion can remove the original node.
+          const fallback = scroller.querySelector<HTMLElement>(`.wb-task[data-task-id="${CSS.escape(request.previousId!)}"]`) ?? heading.current
+          scroller.scrollTo({ top: 0, behavior: 'instant' })
+          fallback?.focus({ preventScroll: true })
+          return
+        }
+        const chooser = scroller.querySelector<HTMLElement>('.wb-chooser')
+        const moving = chooser?.getAnimations({ subtree: true }).some(animation => animation.playState === 'running' && Number.isFinite(animation.effect?.getComputedTiming().endTime))
+        const box = target.getBoundingClientRect()
+        const geometry = [box.left, box.top + scroller.scrollTop, box.width, box.height, scroller.scrollHeight].map(value => value.toFixed(2)).join(',')
+        stableFrames = geometry === lastGeometry ? stableFrames + 1 : 0
+        lastGeometry = geometry
+        if (target.closest('[inert]') || timeline?.dataset.measured !== 'true' || moving || box.width === 0 || stableFrames < 2) {
+          frame = requestAnimationFrame(restoreDeadline)
+          return
+        }
+        scroller.scrollTo({ top: chooserScroll.current, behavior: 'instant' })
+        const viewportBox = scroller.getBoundingClientRect()
+        const targetBox = target.getBoundingClientRect()
+        const offset = targetBox.top < viewportBox.top ? targetBox.top - viewportBox.top
+          : targetBox.bottom > viewportBox.bottom ? targetBox.bottom - viewportBox.bottom : 0
+        if (offset) scroller.scrollTo({ top: scroller.scrollTop + offset, behavior: 'instant' })
+        target.focus({ preventScroll: true })
+      }
+      frame = requestAnimationFrame(restoreDeadline)
+      return () => cancelAnimationFrame(frame)
+    }
     scroll.current?.scrollTo({ top: previous ? chooserScroll.current : 0 })
     ;(previous ?? heading.current)?.focus({ preventScroll: true })
     previous?.scrollIntoView({ block: 'nearest' })
@@ -127,6 +159,7 @@ function WorkbenchContent({ active, data, now, onCapture, onNotice, appearance, 
     clearTimeout(transitionTimer.current)
     if (id !== null) {
       taskOpener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+      setDeadlineReturnId(taskOpener.current?.hasAttribute('data-deadline-id') ? id : null)
       chooserScroll.current = scroll.current?.scrollTop ?? 0
     }
     timer.pause()
@@ -171,10 +204,14 @@ function WorkbenchContent({ active, data, now, onCapture, onNotice, appearance, 
   const renderTask = (task: Task, recommended = false) => <button key={task.id} className="wb-task wb-glass" data-task-id={task.id} data-recommended={recommended} onClick={() => switchTo(task.id)} disabled={busy || transitioning}>
     <MeasuredGlassSurface radius={appearance.radius} material={appearance} />
     <span className="wb-task-body">
-      <span className="wb-task-top"><strong>{task.title}</strong><span className="wb-task-arrow" aria-hidden="true">↗</span></span>
-      <span className="wb-task-detail">{recommended ? <><span className="wb-recommendation">析熙推荐</span><span title="预览使用截止时间、进行状态和优先级排序，尚未接入 AI 推荐">{recommendationReason(task, now)}</span></> : <span>{task.notes || '从这一项开始'}</span>}</span>
-      {appearance.metadata && <span className="wb-task-meta">{taskArea(task)}<span>·</span>{task.startAt && agendaDate(task.startAt) ? `${shortTimestamp(task.startAt, now)}安排` : task.due ? `${deadlineLabel(task, now)}截止` : '时间待安排'}{task.estimateMin ? <><span>·</span>{task.estimateMin} 分钟</> : null}</span>}
-      {appearance.progress && timer.getSpentMs(task.id) > 0 && <span className="wb-task-spent">已专注 {spentLabel(timer.getSpentMs(task.id))}</span>}
+      <span className="wb-task-top"><strong>{task.title}</strong>{recommended ? <span className="wb-recommendation" role="img" aria-label="析熙推荐 · 本地建议" title="析熙推荐 · 本地建议"><Icon name="xixi" /></span> : <Icon name="arrow" className="wb-task-arrow" />}</span>
+      <span className="wb-task-detail"><span>{task.notes || (recommended ? recommendationReason(task, now) : '从这一项开始')}</span></span>
+      {appearance.metadata && <span className="wb-task-meta">
+        <span className="wb-meta-value" title={`课程或分类：${taskArea(task)}`}><Icon name="book" /><span>{taskArea(task)}</span></span>
+        <span className="wb-meta-value" title={task.startAt && agendaDate(task.startAt) ? '安排时间' : '截止时间'}><Icon name="calendar" /><span>{task.startAt && agendaDate(task.startAt) ? `${shortTimestamp(task.startAt, now)}安排` : task.due ? `${deadlineLabel(task, now)}截止` : '待安排'}</span></span>
+        {task.estimateMin ? <span className="wb-meta-value" title="原预计用时"><Icon name="hourglass" /><span className="p0-sr-only">原预计</span>{task.estimateMin} 分钟</span> : null}
+      </span>}
+      {appearance.progress && timer.getSpentMs(task.id) > 0 && <span className="wb-task-spent wb-meta-value" title="累计专注"><Icon name="timer" /><span className="p0-sr-only">累计专注</span>{spentLabel(timer.getSpentMs(task.id))}</span>}
     </span>
   </button>
 
@@ -189,11 +226,11 @@ function WorkbenchContent({ active, data, now, onCapture, onNotice, appearance, 
         <header className="wb-heading wb-overview-heading"><div><h2 ref={heading} tabIndex={-1}>想从哪开始？</h2><p>今天的重点，接下来的截止，都在这里</p></div>
           <dl className="wb-today-metrics"><div><dt>可开始</dt><dd>{!preview && (data.loading || data.loadError) ? '—' : briefing.availableCount}</dd></div><div><dt>24h 内截止</dt><dd>{!preview && (data.loading || data.loadError) ? '—' : briefing.dueSoonCount}</dd></div><div><dt>今日完成</dt><dd>{!preview && (data.loading || data.loadError) ? '—' : briefing.completedTodayCount}</dd></div></dl>
         </header>
-        {!busy && <DeadlineSummary tasks={tasks} now={now} onReveal={() => setDeadlinePending(true)} />}
         <div className="wb-overview-layout">
-        {(preview || (!data.loading && !data.loadError)) && <div className="wb-assistant-column"><XixiBriefing briefing={briefing} appearance={appearance} preview={preview} disabled={busy || transitioning} focusMin={timer.durations.focusMin} restMin={timer.durations.restMin} onSelect={switchTo} onCapture={onCapture} />
-          <XixiWatch notices={briefing.notices} tasks={tasks} disabled={busy || transitioning} onSelect={switchTo} />
-        </div>}
+        <Glass appearance={appearance} className="wb-briefing-panel"><div className="wb-briefing-content">
+          {(preview || (!data.loading && !data.loadError)) && <XixiBriefing embedded tasks={tasks} briefing={briefing} appearance={appearance} preview={preview} disabled={busy || transitioning} focusMin={timer.durations.focusMin} restMin={timer.durations.restMin} onSelect={switchTo} onCapture={onCapture} />}
+          <UpcomingDeadlines embedded ref={deadlineHeading} revealTaskId={deadlineReturnId ?? undefined} appearance={appearance} tasks={tasks} now={now} disabled={busy || transitioning} loading={!preview && data.loading} error={preview ? '' : data.loadError} highlighted={false} onSelect={id => switchTo(id)} onRetry={data.retry} focusMin={timer.durations.focusMin} getSpentMs={timer.getSpentMs} />
+        </div></Glass>
         <div className="wb-task-sections">
         {!preview && data.loading ? <p role="status" className="wb-empty">正在读取你的事项</p> : !preview && data.loadError ? <div className="wb-empty" role="alert"><p>{data.loadError}</p><button className="wb-action" onClick={data.retry}>重新读取</button></div> : <>
           <section className="wb-available" aria-labelledby="wb-available-heading"><header className="wb-section-heading"><h3 id="wb-available-heading">现在可以开始 <span>{groups.available.length}</span></h3></header>
@@ -204,12 +241,11 @@ function WorkbenchContent({ active, data, now, onCapture, onNotice, appearance, 
           <section className="wb-later" aria-labelledby="wb-later-heading"><header className="wb-section-heading"><h3 id="wb-later-heading">稍后安排 <span>{groups.later.length}</span></h3><span>提前开始也可以</span></header><div className="wb-task-grid">{groups.later.map(task => renderTask(task))}</div>{groups.later.length === 0 && <p className="wb-section-empty">后面的时间，暂时留白</p>}</section>
           {appearance.completed && <section className="wb-completed" aria-labelledby="wb-completed-heading"><header className="wb-section-heading"><h3 id="wb-completed-heading">已完成 <span>{groups.completed.length}</span></h3><span>每一步都留在这里</span></header><div>{groups.completed.map(task => <div className="wb-completed-row" data-recent={task.id === recentCompletion} key={task.id}><span className="wb-completed-mark" aria-hidden="true">✓</span><span>{task.title}</span><small>{task.doneAt && <time dateTime={task.doneAt}>{shortTimestamp(task.doneAt, now)}</time>}{timer.getSpentMs(task.id) > 0 && <span>专注 {spentLabel(timer.getSpentMs(task.id))}</span>}{!task.doneAt && timer.getSpentMs(task.id) === 0 && '已完成'}</small></div>)}</div>{groups.completed.length === 0 && <p className="wb-section-empty">完成的事项会留在这里</p>}</section>}
         </>}
-        </div><div className="wb-side-column"><UpcomingDeadlines ref={deadlineHeading} appearance={appearance} tasks={tasks} now={now} disabled={busy || transitioning} loading={!preview && data.loading} error={preview ? '' : data.loadError} highlighted={deadlineHighlighted} onSelect={id => switchTo(id)} onRetry={data.retry} focusMin={timer.durations.focusMin} getSpentMs={timer.getSpentMs} />
         </div></div>
         <p className="wb-bottom-note">一次只专注一件事 <span>·</span> 默认 {timer.durations.focusMin} 分钟专注 / {timer.durations.restMin} 分钟休息 <button className="wb-inline-button" aria-expanded={timingOpen} onClick={() => setTimingOpen(value => !value)}>调整时长</button></p>
         <DurationControls timer={timer} open={timingOpen} />
       </div> : selected && session ? <div className="wb-focus wb-enter" key={selectedId}>
-        <button className="wb-back" onClick={() => switchTo(null)} disabled={busy}>← {selected.status === 'done' ? '选择下一项' : '重新选择'}<span>{session.phase === 'running' ? '离开会暂停计时' : '进度会保留'}</span></button>
+        <button className="wb-back wb-icon-button" aria-label={selected.status === 'done' ? '选择下一项' : '重新选择'} data-tooltip={selected.status === 'done' ? '选择下一项' : '重新选择'} onClick={() => switchTo(null)} disabled={busy}><Icon name="back" /><span className="wb-tooltip" role="tooltip">{selected.status === 'done' ? '选择下一项' : '重新选择'}{session.phase === 'running' ? ' · 离开会暂停计时' : ''}</span></button>
         <div className="wb-focus-layout">
           <Glass appearance={appearance} className="wb-focus-main">
             <span className="wb-eyebrow">{selected.status === 'done' ? '这一项，完成了' : '当前专注'}</span>
@@ -226,7 +262,7 @@ function WorkbenchContent({ active, data, now, onCapture, onNotice, appearance, 
                   <button className="wb-secondary" disabled={busy} onClick={() => void complete()}>{data.saving && !preview ? '保存中' : '完成事项'}</button>
                 </div>
               </div>
-              <div className="wb-focus-bottom"><span>累计专注 {spentLabel(session.spentMs)}</span><button className="wb-inline-button" aria-expanded={timingOpen} onClick={() => setTimingOpen(value => !value)}>专注设置</button></div>
+              <div className="wb-focus-bottom"><span className="wb-meta-value" title="累计专注"><Icon name="timer" /><span className="p0-sr-only">累计专注</span>{spentLabel(session.spentMs)}</span><button className="wb-inline-button wb-icon-button" aria-label="专注设置" data-tooltip="专注设置" aria-expanded={timingOpen} onClick={() => setTimingOpen(value => !value)}><Icon name="settings" /><span className="wb-tooltip" role="tooltip">专注设置</span></button></div>
               <DurationControls timer={timer} open={timingOpen} />
             </>}
             {(error || timer.storageError) && <p className="wb-error" role="alert">{error || timer.storageError}</p>}
@@ -262,7 +298,7 @@ function XixiContext({ task, now, preview, appearance }: { task: Task; now: Date
     <div className="wb-xixi-context"><span>这次只看这一项</span><p>{task.title}</p>{task.due && <small>{deadlineLabel(task, now)}截止</small>}</div>
     <div className="wb-xixi-body"><p>{task.status === 'done' ? '这一步已经完成，下一步由你来选' : '卡住的地方，可以先写在这里'}</p><span>对话接入后，我会结合当前事项帮助你</span></div>
     <label className="p0-sr-only" htmlFor="wb-xixi-input">给析熙的草稿，暂不发送</label>
-    <textarea id="wb-xixi-input" placeholder="哪里需要一起想想" value={draft} rows={3} maxLength={4000} onChange={event => setDraft(event.target.value)} />
+    <XixiInput value={draft} onChange={setDraft} />
     <footer><small>{warning || '草稿仅保存在本次浏览器会话'}</small><span>对话待接入</span></footer>
   </Glass>
 }

@@ -1,0 +1,40 @@
+.workbench .wb-deadline-timeline { box-sizing: border-box; min-width: 0 }
+.workbench .wb-deadline-timeline.wb-ddl-embedded { padding: 0; border: 0; box-shadow: none; background: none }
+.workbench .wb-ddl-content { min-width: 0 }
+.workbench .wb-deadline-timeline .wb-ddl-heading { margin-bottom: 18px }
+.workbench .wb-ddl-timeline-window { position: relative; min-width: 0; overflow: clip; transition: height 320ms cubic-bezier(.2,.8,.2,1) }
+.workbench .wb-ddl-timeline-track { display: flex; align-items: flex-start; gap: var(--wb-ddl-node-gap); list-style: none; padding: 0; margin: 0; transition: transform 380ms cubic-bezier(.2,.8,.2,1); will-change: transform }
+.workbench .wb-ddl-timeline-track .wb-ddl-item { position: relative; flex: 0 0 var(--wb-ddl-node-width); width: var(--wb-ddl-node-width); min-width: 0; padding: 0; border-top: 0; opacity: 1; visibility: visible; transition: visibility 0s }
+.workbench .wb-ddl-timeline-track .wb-ddl-item[data-offpage=true] { visibility: hidden; pointer-events: none; transition: visibility 0s 380ms }
+.workbench .wb-ddl-node-date { display: block; margin: 0 0 22px; color: #616e75; font-size: calc(var(--wb-font) - 2px); line-height: 18px; font-variant-numeric: tabular-nums; white-space: nowrap }
+.workbench .wb-ddl-timeline-track .wb-ddl-item::before { content: ''; position: absolute; top: 28px; left: 0; width: calc(100% + var(--wb-ddl-node-gap)); height: 1px; background: linear-gradient(90deg, #a38c6142, #9ca8ae38); pointer-events: none }
+.workbench .wb-ddl-timeline-track .wb-ddl-item:last-child::before { width: 100% }
+.workbench .wb-ddl-node-dot { position: absolute; left: 0; top: 25px; width: 7px; height: 7px; border: 1px solid var(--ddl-dot); border-radius: 50%; background: #fafbfb; box-shadow: 0 0 0 3px #fafbfb70; z-index: 1 }
+.workbench .wb-ddl-item:is([data-urgency=overdue],[data-urgency=urgent]) .wb-ddl-node-dot { background: var(--ddl-dot) }
+.p0 .workbench .wb-ddl-timeline-track .wb-ddl-select { padding: 5px 7px 7px 0; gap: 7px }
+.workbench .wb-ddl-timeline-track .wb-ddl-copy { gap: 5px }
+.workbench .wb-ddl-timeline-track .wb-ddl-copy strong { color: #303a42; font-weight: 550 }
+.workbench .wb-ddl-meta { align-items: center; gap: 3px 10px }
+.workbench .wb-ddl-meta .wb-ddl-effort { display: inline-flex; align-items: center; gap: 4px; line-height: 1.6 }
+.workbench .wb-ddl-meta .wb-icon { width: 12px; height: 12px; flex: none; color: #7e8589 }
+.p0 .workbench .wb-ddl-reason-toggle { margin: 1px 0 5px; padding: 4px; border-radius: 8px }
+.workbench .wb-ddl-reason-toggle[aria-expanded=true] { color: #987747; background: #b3a0770b }
+.workbench .wb-ddl-reason-toggle .wb-tooltip { left: 0; transform: translateY(3px) }
+.workbench .wb-ddl-reason-toggle:is(:hover,:focus-visible) .wb-tooltip { transform: translateY(0) }
+.workbench .wb-ddl-timeline-track .wb-ddl-evidence ul { margin-left: 0 }
+.workbench .wb-ddl-timeline-track .wb-ddl-expanded-advice { margin-left: 0 }
+.workbench .wb-ddl-pager { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; margin-top: 12px; padding-top: 10px; border-top: 1px solid #71889c16 }
+.workbench .wb-ddl-page-controls { display: flex; align-items: center; gap: 8px; margin-left: auto }
+.workbench .wb-ddl-page-status { color: #58666e; font-size: 10px; font-variant-numeric: tabular-nums; white-space: nowrap }
+.workbench .wb-ddl-page-status > span { color: #879096 }
+.workbench .wb-ddl-page-alert { color: #827049; font-size: 10px; line-height: 1.5 }
+.workbench .wb-ddl-page-alert[data-urgency=overdue] { color: #974f3d }
+.p0 .workbench :is(.wb-ddl-page-prev,.wb-ddl-page-next) { display: inline-flex; justify-content: center; align-items: center; min-width: 28px; min-height: 28px; border-radius: 999px; background: #ffffff45; color: #64717a; border: 1px solid #71889c14 }
+.workbench .wb-ddl-page-prev > .wb-icon { transform: rotate(90deg) }
+.workbench .wb-ddl-page-next > .wb-icon { transform: rotate(-90deg) }
+.workbench :is(.wb-ddl-page-prev,.wb-ddl-page-next):disabled { opacity: .35; cursor: default }
+.workbench .wb-ddl-page-next .wb-tooltip { left: auto; right: 0; transform: translateY(3px) }
+.workbench .wb-ddl-page-next:is(:hover,:focus-visible) .wb-tooltip { transform: translateY(0) }
+@media (prefers-reduced-motion: reduce) {
+  .workbench :is(.wb-ddl-timeline-window,.wb-ddl-timeline-track,.wb-ddl-item) { transition-duration: .01ms !important }
+}

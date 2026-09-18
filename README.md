@@ -21,7 +21,10 @@ npm run build   # 类型检查 + 生产构建（输出到 dist/）
 npm run build:preview # 带视觉自定义与示例数据入口的设计预览构建
 npm run preview # 预览生产构建产物
 npm run typecheck
+npm test       # 全部纯逻辑测试，需要 Node.js 24.7+（建议 Node 24 LTS）
 ```
+
+测试直接使用 Node 的 TypeScript 类型剥离与模块解析钩子，无需额外测试框架。浏览器验收与纯逻辑测试分开运行：在独立临时 Chrome 测试配置上开放 CDP 9233，再运行 `node scripts/verify-workbench.mjs`。该脚本会清理测试浏览器的本地数据，不能连接日常使用的浏览器配置。正式构建验收用 `WORKBENCH_PRODUCTION=1 node scripts/verify-workbench.mjs`，设计预览验收先运行 `npm run build:preview`。
 
 视觉调参和示例入口仅在开发服务器或 `build:preview` 中启用，正式构建不读取已保存的调试外观参数。专注与休息时长属于正式功能，两种构建均可调整。
 

@@ -10,7 +10,11 @@
       "pass": true
     },
     {
-      "name": "workbench keeps the background clear with the approved zero-blur setting",
+      "name": "workbench uses the approved 2px background blur without filtering the scene itself",
+      "pass": true
+    },
+    {
+      "name": "the workbench background adds a light non-interactive CSS grid",
       "pass": true
     },
     {
@@ -18,11 +22,15 @@
       "pass": true
     },
     {
-      "name": "the former default width migrates while saved glass and typography stay intact",
+      "name": "v2 default width migrates and adopts the approved blur while retaining other custom choices",
       "pass": true
     },
     {
-      "name": "an intentionally customized former width survives migration",
+      "name": "v3 preserves custom geometry while upgrading the former material defaults",
+      "pass": true
+    },
+    {
+      "name": "new v4 user tuning survives reload without remigration",
       "pass": true
     },
     {
@@ -30,15 +38,31 @@
       "pass": true
     },
     {
-      "name": "desktop briefing, task and Upcoming glass tops align in three columns",
+      "name": "desktop briefing and deadline timeline share one wide glass above full-width tasks",
       "pass": true
     },
     {
-      "name": "desktop Upcoming is a single readable list inside one matching glass panel",
+      "name": "hover tracks the pointer on a task without moving its geometry",
       "pass": true
     },
     {
-      "name": "Upcoming uses the shared 14px edge refraction sized to its glass surface",
+      "name": "hover applies a readable local wash and keyboard icons expose a tooltip",
+      "pass": true
+    },
+    {
+      "name": "task metadata uses compact icons with accessible labels instead of repeated prefixes",
+      "pass": true
+    },
+    {
+      "name": "hover state clears when the pointer leaves the workbench surface",
+      "pass": true
+    },
+    {
+      "name": "the wide shared panel preserves one material without nested glass layers",
+      "pass": true
+    },
+    {
+      "name": "the shared briefing panel uses 6px blur and 14px edge refraction sized to its glass surface",
       "pass": true
     },
     {
@@ -58,7 +82,31 @@
       "pass": true
     },
     {
+      "name": "desktop timeline fits three connected date nodes with later pages out of the tab order",
+      "pass": true
+    },
+    {
+      "name": "timeline paging animates the entire horizontal track",
+      "pass": true
+    },
+    {
+      "name": "the next timeline page advances one complete viewport and keeps all visible nodes readable",
+      "pass": true
+    },
+    {
+      "name": "timeline paging keeps urgent items on other pages explicitly visible in the summary",
+      "pass": true
+    },
+    {
+      "name": "keyboard paging restores the first dates and initial track position",
+      "pass": true
+    },
+    {
       "name": "briefing recommendation matches the task ordering and exposes actual totals",
+      "pass": true
+    },
+    {
+      "name": "keyboard focus exposes compact icon meaning and a visible focus outline",
       "pass": true
     },
     {
@@ -122,15 +170,35 @@
       "pass": true
     },
     {
-      "name": "16px typography keeps three glass tops aligned and all task text within its card",
+      "name": "16px typography keeps the shared briefing above tasks and text within its bounds",
       "pass": true
     },
     {
-      "name": "a tuned 660px container reflows by its own width without overflowing at 16px type",
+      "name": "a tuned 660px container keeps the shared panel above tasks without overflowing at 16px type",
       "pass": true
     },
     {
       "name": "one task click enters focus with an idle 35 minute clock and a permanent Xixi area",
+      "pass": true
+    },
+    {
+      "name": "Xixi input stays dark until text is inserted and has a single rounded border",
+      "pass": true
+    },
+    {
+      "name": "each text insertion flashes the input glow without a rotating animation",
+      "pass": true
+    },
+    {
+      "name": "deleting text leaves the input glow quiet",
+      "pass": true
+    },
+    {
+      "name": "a later insertion restarts the flash",
+      "pass": true
+    },
+    {
+      "name": "leaving the input clears its transient glow",
       "pass": true
     },
     {
@@ -214,11 +282,23 @@
       "pass": true
     },
     {
-      "name": "1461px CSS viewport uses aligned three-column layout at DPR 2",
+      "name": "shared briefing and task area use the available width at 1461px and DPR 2",
       "pass": true
     },
     {
-      "name": "Upcoming refraction follows the resized glass at 1461px and DPR 2",
+      "name": "task cards remain in two full-width columns at 1461px",
+      "pass": true
+    },
+    {
+      "name": "deadline copy stays readable without horizontal overflow at 1461px",
+      "pass": true
+    },
+    {
+      "name": "timeline page size follows its actual available width at 1461px",
+      "pass": true
+    },
+    {
+      "name": "shared panel refraction follows the resized glass at 1461px and DPR 2",
       "pass": true
     },
     {
@@ -242,11 +322,23 @@
       "pass": true
     },
     {
-      "name": "1280px CSS viewport uses aligned three-column layout at DPR 1",
+      "name": "shared briefing and task area use the available width at 1280px and DPR 1",
       "pass": true
     },
     {
-      "name": "Upcoming refraction follows the resized glass at 1280px and DPR 1",
+      "name": "task cards remain in two full-width columns at 1280px",
+      "pass": true
+    },
+    {
+      "name": "deadline copy stays readable without horizontal overflow at 1280px",
+      "pass": true
+    },
+    {
+      "name": "timeline page size follows its actual available width at 1280px",
+      "pass": true
+    },
+    {
+      "name": "shared panel refraction follows the resized glass at 1280px and DPR 1",
       "pass": true
     },
     {
@@ -270,7 +362,19 @@
       "pass": true
     },
     {
-      "name": "1160px viewport moves Upcoming below when its actual container is under 1120px",
+      "name": "shared briefing and task area use the available width at 1160px and DPR 1",
+      "pass": true
+    },
+    {
+      "name": "task cards remain in two full-width columns at 1160px",
+      "pass": true
+    },
+    {
+      "name": "deadline copy stays readable without horizontal overflow at 1160px",
+      "pass": true
+    },
+    {
+      "name": "timeline page size follows its actual available width at 1160px",
       "pass": true
     },
     {
@@ -294,7 +398,19 @@
       "pass": true
     },
     {
-      "name": "900px layout preserves aligned glass and two deadline columns",
+      "name": "shared briefing and task area use the available width at 900px and DPR 1",
+      "pass": true
+    },
+    {
+      "name": "task cards remain in two full-width columns at 900px",
+      "pass": true
+    },
+    {
+      "name": "deadline copy stays readable without horizontal overflow at 900px",
+      "pass": true
+    },
+    {
+      "name": "timeline page size follows its actual available width at 900px",
       "pass": true
     },
     {
@@ -318,11 +434,15 @@
       "pass": true
     },
     {
-      "name": "compact deadline summary is immediately visible at 748x700",
+      "name": "shared briefing and task area use the available width at 748px and DPR 1",
       "pass": true
     },
     {
-      "name": "compact summary reveals the first deadline below its heading at 748x700",
+      "name": "deadline copy stays readable without horizontal overflow at 748px",
+      "pass": true
+    },
+    {
+      "name": "timeline page size follows its actual available width at 748px",
       "pass": true
     },
     {
@@ -346,19 +466,19 @@
       "pass": true
     },
     {
-      "name": "390px layout stacks deadlines with readable text inside the glass",
+      "name": "shared briefing and task area use the available width at 390px and DPR 1",
       "pass": true
     },
     {
-      "name": "Upcoming refraction follows the resized glass at 390px and DPR 1",
+      "name": "deadline copy stays readable without horizontal overflow at 390px",
       "pass": true
     },
     {
-      "name": "compact deadline summary is immediately visible at 390x844",
+      "name": "timeline page size follows its actual available width at 390px",
       "pass": true
     },
     {
-      "name": "compact summary reveals the first deadline below its heading at 390x844",
+      "name": "shared panel refraction follows the resized glass at 390px and DPR 1",
       "pass": true
     },
     {
@@ -382,11 +502,15 @@
       "pass": true
     },
     {
-      "name": "compact deadline summary is immediately visible at 320x568",
+      "name": "shared briefing and task area use the available width at 320px and DPR 1",
       "pass": true
     },
     {
-      "name": "compact summary reveals the first deadline below its heading at 320x568",
+      "name": "deadline copy stays readable without horizontal overflow at 320px",
+      "pass": true
+    },
+    {
+      "name": "timeline page size follows its actual available width at 320px",
       "pass": true
     },
     {
@@ -407,6 +531,18 @@
     },
     {
       "name": "related tasks remain unfolded at 844x390",
+      "pass": true
+    },
+    {
+      "name": "shared briefing and task area use the available width at 844px and DPR 1",
+      "pass": true
+    },
+    {
+      "name": "deadline copy stays readable without horizontal overflow at 844px",
+      "pass": true
+    },
+    {
+      "name": "timeline page size follows its actual available width at 844px",
       "pass": true
     },
     {

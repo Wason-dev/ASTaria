@@ -120,8 +120,7 @@
 .p0 .wb-task { text-align: left; padding: 14px 20px; min-height: var(--wb-row); display: flex; align-items: center; border-radius: var(--wb-radius); background: transparent; font-size: var(--wb-font); transition: box-shadow 220ms }
 .p0 .wb-task:hover { box-shadow: 0 9px 32px rgb(37 45 57 / calc(var(--wb-shadow) + .045)), 0 0 0 1px #b29a6b36, 0 0 14px #ccb78813 }
 .wb-task[data-recommended=true] { box-shadow: 0 8px 28px rgb(37 45 57 / var(--wb-shadow)), inset 0 1px 0 #b59b6828 }
-.wb-task-body { position: relative; display: flex; flex-direction: column; gap: 5px; width: 100%; min-width: 0; z-index: 1; transition: transform 220ms, opacity 150ms }
-.wb-task:hover .wb-task-body { transform: translateX(3px) }
+.wb-task-body { position: relative; display: flex; flex-direction: column; gap: 5px; width: 100%; min-width: 0; z-index: 1; transition: opacity 150ms }
 .wb-task-top { display: flex; align-items: start; justify-content: space-between; gap: 12px }
 .wb-task-top strong { font-weight: 500; overflow-wrap: anywhere; line-height: 1.5 }
 .wb-task-arrow { color: #8b9199; opacity: 0; transition: opacity 180ms; flex: none }
@@ -227,7 +226,6 @@
 .wb-ddl-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; align-items: start; gap: 3px; transition: transform 220ms }
 .wb-ddl-status { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px }
 .wb-ddl-phase { font-size: 9px; color: #788088 }
-.wb-ddl-item button:hover .wb-ddl-copy { transform: translateX(2px) }
 .wb-ddl-countdown { color: var(--ddl-color); font-size: var(--ddl-size); font-weight: var(--ddl-weight); line-height: 1.45; font-variant-numeric: tabular-nums; transition: color 300ms, font-size 300ms }
 .wb-ddl-copy strong { color: #414a53; font-size: var(--wb-font); font-weight: 450; line-height: 1.6; overflow-wrap: anywhere }
 .wb-ddl-copy time { color: #707983; font-size: calc(var(--wb-font) - 2px); line-height: 1.5 }

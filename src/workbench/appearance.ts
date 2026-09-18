@@ -3,7 +3,7 @@ import { DESIGN_PREVIEW } from './designPreview'
 
 export const DEFAULT_APPEARANCE = {
   columns: 2, width: 1320, font: 12, row: 96, gap: 8, top: 108,
-  transmission: 100, blur: 0, radius: 24, rim: 50, shadow: 25, background: 15, backgroundBlur: 0,
+  transmission: 92, blur: 6, radius: 24, rim: 50, shadow: 14, background: 10, backgroundBlur: 2,
   progress: true, metadata: true, completed: true,
 }
 export type Appearance = typeof DEFAULT_APPEARANCE
@@ -16,15 +16,16 @@ export const ADJUSTMENTS = [
   ['background', '背景', 0, 50, 1, '%'],
   ['backgroundBlur', '背景磨砂', 0, 12, 1, 'px'],
 ] as const
-// Start from the approved wide, clear-glass preset; subsequent tuning stays local.
-const STORAGE_KEY = 'astaria-workbench-appearance-v3'
+// Apply the approved readable-glass preset once; later tuning stays local.
+const STORAGE_KEY = 'astaria-workbench-appearance-v4'
 
 export function useAppearance() {
   const [value, setValue] = useState<Appearance>(() => {
     if (!DESIGN_PREVIEW) return { ...DEFAULT_APPEARANCE }
     try {
       const current = localStorage.getItem(STORAGE_KEY)
-      const saved: unknown = JSON.parse(current ?? localStorage.getItem('astaria-workbench-appearance-v2') ?? 'null')
+      const previous = localStorage.getItem('astaria-workbench-appearance-v3')
+      const saved: unknown = JSON.parse(current ?? previous ?? localStorage.getItem('astaria-workbench-appearance-v2') ?? 'null')
       const next = { ...DEFAULT_APPEARANCE }
       if (!saved || typeof saved !== 'object') return next
       const record = saved as Record<string, unknown>
@@ -36,7 +37,14 @@ export function useAppearance() {
       for (const key of ['progress', 'metadata', 'completed'] as const) if (typeof record[key] === 'boolean') next[key] = record[key]
       // Widen the previous default for the new sidebar, preserving material and
       // any deliberately narrower custom layout from the last preview.
-      if (!current && record.width === 1100) next.width = DEFAULT_APPEARANCE.width
+      if (!current && !previous && record.width === 1100) next.width = DEFAULT_APPEARANCE.width
+      if (!current) {
+        next.blur = 6
+        next.backgroundBlur = 2
+        if (record.transmission === 100) next.transmission = DEFAULT_APPEARANCE.transmission
+        if (record.shadow === 25) next.shadow = DEFAULT_APPEARANCE.shadow
+        if (record.background === 15) next.background = DEFAULT_APPEARANCE.background
+      }
       return next
     } catch { return { ...DEFAULT_APPEARANCE } }
   })

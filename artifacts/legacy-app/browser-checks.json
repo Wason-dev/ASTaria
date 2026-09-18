@@ -1,0 +1,61 @@
+{
+  "checkedAt": "2026-09-18T02:59:31.560Z",
+  "url": "http://127.0.0.1:5188/#/app",
+  "timezone": "Asia/Shanghai",
+  "checks": [
+    {
+      "name": "Shanghai 00:30 renders the current local date and weekday",
+      "pass": true
+    },
+    {
+      "name": "availability persists only under the local current day before 08:00",
+      "pass": true
+    },
+    {
+      "name": "周六 renders the legacy app without weekday-table crashes",
+      "pass": true
+    },
+    {
+      "name": "周日 renders the legacy app without weekday-table crashes",
+      "pass": true
+    },
+    {
+      "name": "September 2026 excludes a task with the same month/day in 2025",
+      "pass": true
+    },
+    {
+      "name": "today is highlighted in the actual current year",
+      "pass": true
+    },
+    {
+      "name": "cross-month events include September first and ending day",
+      "pass": true
+    },
+    {
+      "name": "single-day events appear exactly on their day",
+      "pass": true
+    },
+    {
+      "name": "cross-month events include their August starting day",
+      "pass": true
+    },
+    {
+      "name": "a different year does not highlight today or include current-year tasks",
+      "pass": true
+    },
+    {
+      "name": "cross-year events include December start",
+      "pass": true
+    },
+    {
+      "name": "cross-year events include both January days and the ending day",
+      "pass": true
+    },
+    {
+      "name": "all legacy pages render without uncaught runtime exceptions",
+      "pass": true
+    }
+  ],
+  "runtimeErrors": [],
+  "failure": null
+}

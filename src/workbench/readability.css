@@ -25,7 +25,7 @@
 }
 .workbench :is(.wb-task,.wb-brief,.wb-focus-main,.wb-xixi,.wb-watch-related button,.wb-ddl-select,.wb-icon-button,.wb-tool,.wb-action,.wb-secondary,.wb-brief-start,.wb-ddl-fold-toggle)[data-hovered=true]::after { opacity: 1 }
 .workbench :is(.wb-task,.wb-brief,.wb-focus-main,.wb-xixi,.wb-watch-related button,.wb-ddl-select,.wb-icon-button,.wb-tool,.wb-action,.wb-secondary,.wb-brief-start,.wb-ddl-fold-toggle) { position: relative }
-.workbench :is(.wb-task,.wb-brief,.wb-focus-main,.wb-xixi,.wb-watch-related button,.wb-ddl-select,.wb-icon-button,.wb-tool,.wb-action,.wb-secondary,.wb-brief-start,.wb-ddl-fold-toggle) > :is(.wb-glass-content,.wb-task-body,.wb-tooltip) { position: relative; z-index: 4 }
+.workbench :is(.wb-task,.wb-brief,.wb-focus-main,.wb-xixi,.wb-watch-related button,.wb-ddl-select,.wb-icon-button,.wb-tool,.wb-action,.wb-secondary,.wb-brief-start,.wb-ddl-fold-toggle) > :is(.wb-glass-content,.wb-task-body) { position: relative; z-index: 4 }
 .workbench .wb-ddl-select > * { position: relative; z-index: 4 }
 .workbench :is(.wb-task,.wb-brief,.wb-focus-main,.wb-xixi,.wb-watch-related button,.wb-ddl-select,.wb-icon-button,.wb-tool,.wb-action,.wb-secondary,.wb-brief-start,.wb-ddl-fold-toggle):focus-visible { outline: 1px solid #93784c9c; outline-offset: 2px }
 
@@ -79,6 +79,36 @@
 .workbench .wb-icon-button .wb-tooltip { width: max-content; color: #515b64 }
 .workbench .wb-ddl-reason-toggle .wb-tooltip { left: 0; transform: translateY(3px) }
 .workbench .wb-ddl-reason-toggle:is(:hover,:focus-visible) .wb-tooltip { transform: translateY(0) }
+
+/* Small information frames and one muted status accent keep the task readable. */
+.workbench .wb-task { --wb-task-tone: 112 128 143; --wb-task-ink: #566675 }
+.workbench .wb-task[data-tone=overdue] { --wb-task-tone: 165 104 83; --wb-task-ink: #8c4e3a }
+.workbench .wb-task[data-tone=soon] { --wb-task-tone: 168 137 77; --wb-task-ink: #806332 }
+.workbench .wb-task[data-tone=active] { --wb-task-tone: 95 129 147; --wb-task-ink: #41697c }
+.workbench .wb-task-accent { position: absolute; left: 9px; top: 22px; bottom: 22px; width: 3px; border-radius: 4px; background: linear-gradient(180deg, rgb(var(--wb-task-tone) / .4), rgb(var(--wb-task-tone) / .85), rgb(var(--wb-task-tone) / .4)); z-index: 4; transition: box-shadow 220ms, background 220ms }
+.workbench .wb-task-meta { gap: 5px; margin-top: 3px }
+.workbench .wb-meta-chip { padding: 3px 7px; min-height: 23px; border: 1px solid #8a9ba92b; border-radius: 7px; background: #eff3f661; line-height: 1.45; box-shadow: inset 0 1px 0 #ffffff9c; transition: border-color 220ms, background 220ms, color 220ms }
+.workbench .wb-meta-chip .wb-icon { color: inherit; opacity: .8 }
+.workbench .wb-meta-date { background: rgb(var(--wb-task-tone) / .09); border-color: rgb(var(--wb-task-tone) / .2); color: var(--wb-task-ink) }
+
+/* A broad light pool and illuminated rim make card hover visible on white glass. */
+.workbench :is(.wb-task,.wb-focus-main,.wb-xixi,.wb-ddl-select)::before {
+  background: radial-gradient(ellipse 260px 180px at var(--wb-pointer-x, 50%) var(--wb-pointer-y, 50%), #fffffff5 0%, #ffffffac 25%, #dac89f45 58%, transparent 100%), linear-gradient(115deg, #ede3cc30, #e0ecf632);
+  transition: opacity 220ms ease;
+}
+.workbench :is(.wb-task,.wb-focus-main,.wb-xixi,.wb-ddl-select)::after {
+  padding: 1.5px; background: radial-gradient(ellipse 240px 180px at var(--wb-pointer-x, 50%) var(--wb-pointer-y, 50%), #fff 0%, #d4b77ef0 42%, #aebed182 75%, transparent 100%);
+  transition: opacity 220ms ease;
+}
+.workbench :is(.wb-task,.wb-ddl-select):focus-visible::before,.workbench :is(.wb-task,.wb-ddl-select):focus-visible::after { opacity: 1 }
+.p0 .workbench .wb-task:is([data-hovered=true],:focus-visible) { box-shadow: 0 14px 36px rgb(37 45 57 / calc(var(--wb-shadow) + .07)), 0 0 0 1px rgb(var(--wb-task-tone) / .3), 0 0 24px #c4b18526 }
+.workbench .wb-task:is([data-hovered=true],:focus-visible) .wb-task-accent { box-shadow: 0 0 10px rgb(var(--wb-task-tone) / .48) }
+.workbench .wb-task:is([data-hovered=true],:focus-visible) .wb-meta-chip { background: #ffffffc2; border-color: rgb(var(--wb-task-tone) / .33) }
+.workbench .wb-task-top strong,.workbench .wb-task-detail { transition: color 220ms }
+.workbench .wb-task:is([data-hovered=true],:focus-visible) .wb-task-top strong { color: #172b35 }
+.workbench .wb-task:is([data-hovered=true],:focus-visible) .wb-task-detail { color: #3f505e }
+.p0 .workbench .wb-ddl-select { transition: background 220ms, box-shadow 220ms }
+.p0 .workbench .wb-ddl-select:is([data-hovered=true],:focus-visible) { background: #fffcf461; box-shadow: inset 0 0 0 1px #b49a6559 }
 .wb-background::after { content: ''; position: absolute; inset: 0; pointer-events: none; background-image: linear-gradient(to right, #7891a414 1px, transparent 1px), linear-gradient(to bottom, #7891a414 1px, transparent 1px); background-size: 36px 36px; opacity: .65 }
 @container workbench-content (max-width: 1000px) {
   .workbench .wb-briefing-content { grid-template-columns: 240px minmax(0,1fr); gap: 20px }
@@ -93,6 +123,7 @@
   .workbench .wb-briefing-panel { padding: 18px }
 }
 @media (prefers-reduced-motion: reduce) {
+  .workbench :is(.wb-task,.wb-task-accent,.wb-meta-chip,.wb-task-top strong,.wb-task-detail,.wb-ddl-select) { transition: none }
   .workbench :is(.wb-task,.wb-brief,.wb-focus-main,.wb-xixi,.wb-watch-related button,.wb-ddl-select,.wb-icon-button,.wb-tool,.wb-action,.wb-secondary,.wb-brief-start,.wb-ddl-fold-toggle)::before,
   .workbench :is(.wb-task,.wb-brief,.wb-focus-main,.wb-xixi,.wb-watch-related button,.wb-ddl-select,.wb-icon-button,.wb-tool,.wb-action,.wb-secondary,.wb-brief-start,.wb-ddl-fold-toggle)::after { transition: none }
 }

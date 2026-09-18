@@ -10,6 +10,7 @@ import type { Appearance } from './appearance'
 import { previewTasks, recommendationReason, taskArea, taskGroups } from './tasks'
 import { useFocusTimer } from './useFocusTimer'
 import { UpcomingDeadlines } from './UpcomingDeadlines'
+import { upcomingDeadlines } from './deadlines'
 import { buildWorkbenchBriefing } from './briefing'
 import { XixiBriefing } from './XixiBriefing'
 import { DESIGN_PREVIEW } from './designPreview'
@@ -57,6 +58,9 @@ function WorkbenchContent({ active, data, now, onCapture, onNotice, appearance, 
   const [examples, setExamples] = useState(() => DESIGN_PREVIEW ? previewTasks(now) : [])
   const tasks = preview ? examples : data.tasks
   const groups = useMemo(() => taskGroups(tasks, now), [tasks, now])
+  const deadlineTones = useMemo(() => new Map(upcomingDeadlines(tasks, now).map(item => [item.task.id,
+    item.urgency === 'overdue' ? 'overdue' : item.urgency === 'urgent' || item.urgency === 'soon' ? 'soon' : 'neutral',
+  ])), [tasks, now])
   const briefing = useMemo(() => buildWorkbenchBriefing(tasks, now, timer.durations.focusMin, timer.getSpentMs), [tasks, now, timer.durations.focusMin, timer.getSpentMs, timer.session])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [transitioning, setTransitioning] = useState(false)
@@ -201,15 +205,16 @@ function WorkbenchContent({ active, data, now, onCapture, onNotice, appearance, 
       onNotice(`${preview ? '示例 · ' : ''}已完成「${selected.title}」`)
     } catch (reason) { setError(reason instanceof Error ? reason.message : '暂时未能保存，请重试') }
   }
-  const renderTask = (task: Task, recommended = false) => <button key={task.id} className="wb-task wb-glass" data-task-id={task.id} data-recommended={recommended} onClick={() => switchTo(task.id)} disabled={busy || transitioning}>
+  const renderTask = (task: Task, recommended = false) => <button key={task.id} className="wb-task wb-glass" data-task-id={task.id} data-recommended={recommended} data-tone={deadlineTones.get(task.id) !== 'neutral' && deadlineTones.has(task.id) ? deadlineTones.get(task.id) : task.status === 'doing' ? 'active' : 'neutral'} onClick={() => switchTo(task.id)} disabled={busy || transitioning}>
     <MeasuredGlassSurface radius={appearance.radius} material={appearance} />
+    <span className="wb-task-accent" aria-hidden="true" />
     <span className="wb-task-body">
       <span className="wb-task-top"><strong>{task.title}</strong>{recommended ? <span className="wb-recommendation" role="img" aria-label="析熙推荐 · 本地建议" title="析熙推荐 · 本地建议"><Icon name="xixi" /></span> : <Icon name="arrow" className="wb-task-arrow" />}</span>
       <span className="wb-task-detail"><span>{task.notes || (recommended ? recommendationReason(task, now) : '从这一项开始')}</span></span>
       {appearance.metadata && <span className="wb-task-meta">
-        <span className="wb-meta-value" title={`课程或分类：${taskArea(task)}`}><Icon name="book" /><span>{taskArea(task)}</span></span>
-        <span className="wb-meta-value" title={task.startAt && agendaDate(task.startAt) ? '安排时间' : '截止时间'}><Icon name="calendar" /><span>{task.startAt && agendaDate(task.startAt) ? `${shortTimestamp(task.startAt, now)}安排` : task.due ? `${deadlineLabel(task, now)}截止` : '待安排'}</span></span>
-        {task.estimateMin ? <span className="wb-meta-value" title="原预计用时"><Icon name="hourglass" /><span className="p0-sr-only">原预计</span>{task.estimateMin} 分钟</span> : null}
+        <span className="wb-meta-value wb-meta-chip" title={`课程或分类：${taskArea(task)}`}><Icon name="book" /><span>{taskArea(task)}</span></span>
+        <span className="wb-meta-value wb-meta-chip wb-meta-date" title={task.startAt && agendaDate(task.startAt) ? '安排时间' : '截止时间'}><Icon name="calendar" /><span>{task.startAt && agendaDate(task.startAt) ? `${shortTimestamp(task.startAt, now)}安排` : task.due ? `${deadlineLabel(task, now)}截止` : '待安排'}</span></span>
+        {task.estimateMin ? <span className="wb-meta-value wb-meta-chip" title="原预计用时"><Icon name="hourglass" /><span className="p0-sr-only">原预计</span>{task.estimateMin} 分钟</span> : null}
       </span>}
       {appearance.progress && timer.getSpentMs(task.id) > 0 && <span className="wb-task-spent wb-meta-value" title="累计专注"><Icon name="timer" /><span className="p0-sr-only">累计专注</span>{spentLabel(timer.getSpentMs(task.id))}</span>}
     </span>

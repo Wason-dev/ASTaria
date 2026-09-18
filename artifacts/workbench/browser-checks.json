@@ -82,6 +82,14 @@
       "pass": true
     },
     {
+      "name": "pager arrows have centered hit areas without invisible tooltip layout space",
+      "pass": true
+    },
+    {
+      "name": "deadline text has clearance inside every hover border",
+      "pass": true
+    },
+    {
       "name": "desktop timeline fits three connected date nodes with later pages out of the tab order",
       "pass": true
     },

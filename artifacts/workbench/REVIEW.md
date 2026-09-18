@@ -19,6 +19,9 @@ npm run preview -- --host 127.0.0.1 --port 5188
 - 外观参数存储键升级为 `astaria-workbench-appearance-v4`，旧 v2/v3 参数会迁移；自定义面板只用于开发调试
 - 页面背景加入低对比网格；网格位于工作台背景层，不进入首页黑色宇宙画面，未来可接入设置开关
 - 任务元数据压缩为图标加短值，保留可读文本和 tooltip；鼠标悬停显示局部游光和阅读提亮，不改变卡片几何位置
+- 任务卡片底部元数据改为小型圆角标签，卡片侧边用低饱和陶土红、香槟金、雾蓝表达逾期、临近截止和进行中；卡片仍保持 96px 最小高度
+- 鼠标悬停的光池与边缘折射扩大，文字和标签同步提亮；光效不改变卡片布局位置
+- DDL 分页按钮改为明确的 40px 圆形点击区，隐藏提示文字不再撑开按钮；DDL 内容四边增加内边距，金色边缘不会贴住文字
 - 析熙输入框在插入字符、粘贴或 IME 输入时闪一次香槟金边缘光，平时保持暗态，没有旋转动画
 - 进入任务使用统一专注流程，默认 35 分钟专注／5 分钟休息，可在工作台中调整；离开、返回或切换都会暂停并保留进度
 - 从 DDL 进入专注后返回，会恢复来源页、外层滚动位置和键盘焦点；窄屏等待时间线测量和有限入场动画稳定后再恢复，页外节点继续使用 `inert`
@@ -41,7 +44,7 @@ npm run preview -- --host 127.0.0.1 --port 5188
 - `npm test`：87 项纯逻辑测试通过（包括新增旧入口日期、周末、跨年和跨月测试）
 - `npm run build`：正式构建通过，仍有单个 JS chunk 大于 500KB 的 Vite 提示
 - `WORKBENCH_PRODUCTION=1 node scripts/verify-workbench.mjs`：10 项通过，确认正式构建移除调试入口
-- `npm run build:preview` 后 `node scripts/verify-workbench.mjs`：140 项通过，覆盖整合面板、DDL 时间线、折射材质、网格、悬停、输入闪光、35／5 计时、窄屏布局和返回焦点
+- `npm run build:preview` 后 `node scripts/verify-workbench.mjs`：142 项通过，覆盖整合面板、DDL 时间线、分页点击区、卡片标签、折射材质、网格、悬停、输入闪光、35／5 计时、窄屏布局和返回焦点
 - `node scripts/verify-legacy-app.mjs`：13 项通过，覆盖旧入口凌晨日期、周末渲染、跨年任务和跨月／跨年活动（使用独立 CDP 9233 临时浏览器）
 
 浏览器验收使用独立 CDP 9233 临时 Chrome 配置，不读取日常浏览器数据。截图和 JSON 结果在 `artifacts/workbench/`、`artifacts/legacy-app/`。

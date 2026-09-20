@@ -1,0 +1,425 @@
+import { createHash } from 'node:crypto'
+import { ValidationError, knownKeys, text, identifier, choice, day, dateTime, clockTime } from './validation.mjs'
+
+const STATE_KEY = 'planner-v1'
+const WEEKEND_DEFAULTS_MARKER = 'planner-v1-weekend-defaults-v1'
+const WEEKEND_DEFAULT_ROUTINE_ID = 'default-weekend-availability'
+const fail = (message, status = 400) => { throw new ValidationError(message, status) }
+const activeTask = task => task && !task.deletedAt && ['todo', 'doing'].includes(task.status)
+// Completion records time already used; only a dropped/deleted task releases it.
+const occupiesTime = task => task && !task.deletedAt && task.status !== 'dropped'
+const overlaps = (a, b) => a.start < b.end && b.start < a.end
+const limits = { routines: 300, blocks: 3000, details: 5000, checked: 3660, dayOverrides: 3660 }
+
+export function defaultPlanner() {
+  return {
+    revision: 0, timetableConfirmed: false,
+    routines: [
+      { id: 'default-evening-study', title: '晚自习', kind: 'available', weekdays: [1, 2, 3, 4, 5], start: '18:00', end: '20:00', location: '学校', items: [], enabled: true },
+      { id: WEEKEND_DEFAULT_ROUTINE_ID, title: '周末可安排时间', kind: 'available', weekdays: [0, 6], start: '09:00', end: '22:00', location: '', items: [], enabled: true },
+    ],
+    blocks: [], details: {}, checked: {}, dayOverrides: {},
+  }
+}
+
+function boolean(value, label) {
+  if (typeof value !== 'boolean') fail(`${label}必须是布尔值`)
+  return value
+}
+function strings(value, label, count = 100, length = 160) {
+  if (!Array.isArray(value) || value.length > count) fail(`${label}最多 ${count} 项`)
+  const result = value.map(item => text(item, label, length))
+  if (new Set(result).size !== result.length) fail(`${label}不可重复`)
+  return result
+}
+function timeRange(start, end) {
+  clockTime(start, '开始时刻'); clockTime(end, '结束时刻')
+  if (start >= end) fail('结束时刻应晚于开始时刻，请将跨天安排拆成两天')
+}
+function routineValue(input) {
+  knownKeys(input, ['id', 'title', 'kind', 'weekdays', 'start', 'end', 'location', 'items', 'enabled'], '固定安排')
+  timeRange(input.start, input.end)
+  if (!Array.isArray(input.weekdays) || !input.weekdays.length || input.weekdays.length > 7 || input.weekdays.some(value => !Number.isInteger(value) || value < 0 || value > 6) || new Set(input.weekdays).size !== input.weekdays.length) fail('星期需要互不重复的 0–6，0 表示周日')
+  return {
+    id: identifier(input.id), title: text(input.title, '安排名称', 160), kind: choice(input.kind, ['class', 'available', 'break'], '安排类型'),
+    weekdays: [...input.weekdays].sort((a, b) => a - b), start: input.start, end: input.end,
+    location: text(input.location, '地点', 160, { empty: true }), items: strings(input.items, '携带物品'), enabled: boolean(input.enabled, '启用状态'),
+  }
+}
+function sourceWeekdayValue(value) {
+  if (!Number.isInteger(value) || value < 0 || value > 6) fail('来源星期需要是 0–6，0 表示周日')
+  return value
+}
+function weekdayReplacementValue(input) {
+  knownKeys(input, ['routineId', 'title', 'kind', 'location', 'items'], '每周课程修改')
+  return {
+    routineId: identifier(input.routineId, '原安排标识'),
+    title: text(input.title, '安排名称', 160),
+    kind: choice(input.kind, ['class', 'available', 'break'], '安排类型'),
+    ...(Object.hasOwn(input, 'location') ? { location: text(input.location, '地点', 160, { empty: true }) } : {}),
+    ...(Object.hasOwn(input, 'items') ? { items: strings(input.items, '携带物品') } : {}),
+  }
+}
+function weekdayRoutineId(originalId, weekday, usedIds) {
+  // The bounded digest supports even a maximum-length original identifier.
+  const base = `weekday-${weekday}-${createHash('sha256').update(originalId).digest('hex').slice(0, 24)}`
+  let id = base, suffix = 0
+  while (usedIds.has(id)) id = `${base}-${++suffix}`
+  usedIds.add(id)
+  return id
+}
+function validateDayOverrides(overrides) {
+  // Older planner records and undo receipts predate this optional field.
+  if (overrides === undefined) return
+  if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides) || Object.keys(overrides).length > limits.dayOverrides) fail('单日调课记录无效或数量过多')
+  for (const [date, override] of Object.entries(overrides)) {
+    day(date)
+    knownKeys(override, ['date', 'sourceWeekday', 'routines'], '单日调课')
+    if (day(override.date) !== date) fail('单日调课日期与记录日期不一致')
+    const sourceWeekday = sourceWeekdayValue(override.sourceWeekday)
+    if (!Array.isArray(override.routines) || !override.routines.length || override.routines.length > limits.routines) fail('单日调课安排数量无效')
+    if (new Set(override.routines.map(item => item?.id)).size !== override.routines.length) fail('单日调课安排标识重复')
+    const routines = override.routines.map(routineValue)
+    if (routines.some(routine => !routine.enabled || !routine.weekdays.includes(sourceWeekday)) || !routines.some(routine => routine.kind === 'class')) fail('单日调课需要有效的来源课程快照')
+  }
+}
+function routinesOn(state, date) {
+  return state.dayOverrides?.[date]?.routines ?? state.routines.filter(routine => routine.weekdays.includes(new Date(`${date}T12:00:00`).getDay()))
+}
+function blockValue(input) {
+  knownKeys(input, ['id', 'taskId', 'date', 'start', 'end', 'locked'], '任务安排')
+  timeRange(input.start, input.end)
+  return { id: identifier(input.id), taskId: identifier(input.taskId, '任务标识'), date: day(input.date), start: input.start, end: input.end, locked: boolean(input.locked, '锁定状态') }
+}
+function detailsValue(input) {
+  knownKeys(input, ['items', 'preparation', 'needsSubmission', 'submittedAt'], '任务准备')
+  const needsSubmission = boolean(input.needsSubmission, '需要提交')
+  let submittedAt = input.submittedAt
+  if (submittedAt !== null) {
+    dateTime(submittedAt, '提交时间')
+    if (!submittedAt.includes('T')) fail('提交时间需要包含时刻和时区')
+    submittedAt = new Date(submittedAt).toISOString()
+    if (!needsSubmission) fail('不需要提交的任务应清空提交时间')
+  }
+  return { items: strings(input.items, '携带物品'), preparation: text(input.preparation, '准备说明', 4000, { empty: true }), needsSubmission, submittedAt }
+}
+
+// Planner clocks describe the machine's local day, never a UTC midnight key.
+function localInstant(date, clock) {
+  const value = new Date(`${date}T${clock}:00`)
+  if (!Number.isFinite(value.getTime()) || value.getFullYear() !== Number(date.slice(0, 4)) || value.getMonth() + 1 !== Number(date.slice(5, 7)) || value.getDate() !== Number(date.slice(8, 10)) || value.getHours() !== Number(clock.slice(0, 2)) || value.getMinutes() !== Number(clock.slice(3))) fail('当地时区不存在这个时刻，请选择其他时间')
+  return value.getTime()
+}
+const blockRange = block => ({ start: localInstant(block.date, block.start), end: localInstant(block.date, block.end) })
+function taskRange(task) {
+  if (!occupiesTime(task) || !task.startAt?.includes('T') || !Number.isFinite(task.estimateMin) || task.estimateMin <= 0) return null
+  const start = Date.parse(task.startAt)
+  return Number.isFinite(start) ? { start, end: start + task.estimateMin * 60_000 } : null
+}
+function dueLimit(due) {
+  if (!due) return null
+  if (due.length !== 10) return Date.parse(due)
+  const value = new Date(`${due}T00:00:00`)
+  value.setDate(value.getDate() + 1)
+  return value.getTime()
+}
+
+export function createPlannerStore({ db, transaction, getTask, listTasks, now = () => new Date() }) {
+  const read = db.prepare('SELECT value FROM state WHERE key = ?')
+  const write = db.prepare('INSERT INTO state (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+  // This is a durable, one-time migration rather than a fallback applied on
+  // every read. That distinction lets a user remove the default weekend slot
+  // without it coming back on the next browser start.
+  const ensureWeekendDefaults = () => transaction(() => {
+    const marker = read.get(WEEKEND_DEFAULTS_MARKER)
+    const row = read.get(STATE_KEY)
+    if (!row) {
+      const state = defaultPlanner()
+      write.run(STATE_KEY, JSON.stringify(state))
+      write.run(WEEKEND_DEFAULTS_MARKER, JSON.stringify({ version: 1, migratedAt: new Date().toISOString() }))
+      return state
+    }
+    const state = JSON.parse(row.value)
+    if (marker) return state
+
+    // Read the latest state in this transaction. Existing weekend availability
+    // (including disabled/custom entries) is user intent and must be preserved.
+    const hasWeekendAvailability = state.routines.some(routine =>
+      routine.kind === 'available' && routine.weekdays.some(weekday => weekday === 0 || weekday === 6))
+    if (!hasWeekendAvailability) {
+      state.routines = [...state.routines, {
+        id: WEEKEND_DEFAULT_ROUTINE_ID, title: '周末可安排时间', kind: 'available', weekdays: [0, 6],
+        start: '09:00', end: '22:00', location: '', items: [], enabled: true,
+      }]
+      if (!Number.isSafeInteger(state.revision + 1)) fail('安排版本超出范围', 409)
+      state.revision += 1
+      write.run(STATE_KEY, JSON.stringify(state))
+    }
+    write.run(WEEKEND_DEFAULTS_MARKER, JSON.stringify({ version: 1, migratedAt: new Date().toISOString() }))
+    return state
+  })
+  const getPlanner = () => {
+    // After migration, ordinary reads do not need SQLite's write lock.
+    // Read the marker first: another process may finish migration between reads.
+    // Seeing its marker must never pair with a planner value read before it.
+    if (!read.get(WEEKEND_DEFAULTS_MARKER)) return ensureWeekendDefaults()
+    const row = read.get(STATE_KEY)
+    return row ? JSON.parse(row.value) : ensureWeekendDefaults()
+  }
+  const save = state => {
+    for (const key of Object.keys(limits)) if ((Array.isArray(state[key]) ? state[key].length : Object.keys(state[key] ?? {}).length) > limits[key]) fail('安排数量较多，请先整理历史记录')
+    const serialized = JSON.stringify(state)
+    if (serialized.length > 2_000_000) fail('安排内容过多，请先整理历史记录', 413)
+    write.run(STATE_KEY, serialized)
+    return state
+  }
+  const requireTask = (id, unfinished = false) => {
+    const task = getTask(id)
+    if (!task || task.deletedAt) fail('安排关联的任务不存在或已删除', 409)
+    if (unfinished && !activeTask(task)) fail('已完成或已放下的任务不能继续安排', 409)
+    return task
+  }
+  function fixedConflicts(routine, block) {
+    return routine.enabled && routine.kind !== 'available' && overlaps(routine, block)
+  }
+  function validateRoutineOccupancy(routine, state) {
+    if (!routine.enabled || routine.kind === 'available') return
+    if (state.blocks.some(block => !state.dayOverrides?.[block.date] && routine.weekdays.includes(new Date(`${block.date}T12:00:00`).getDay()) && occupiesTime(getTask(block.taskId)) && fixedConflicts(routine, block))) fail('固定安排与已有任务时间重叠，请先调整任务安排', 409)
+  }
+  function validateBlock(block, state, { restoring = false } = {}) {
+    const task = requireTask(block.taskId, !restoring)
+    // A done block is still a record of occupied time. Dropped history remains
+    // non-occupying, so restoring it does not introduce an active conflict.
+    if (restoring && !occupiesTime(task)) return
+    const range = blockRange(block), deadline = dueLimit(task.due)
+    if (deadline !== null && Number.isFinite(deadline) && range.end > deadline) fail('安排结束时间超过了任务截止时间', 409)
+    if (routinesOn(state, block.date).some(routine => fixedConflicts(routine, block))) fail('这个时间已有课程或休息安排', 409)
+    if (state.blocks.some(other => other.id !== block.id && occupiesTime(getTask(other.taskId)) && overlaps(blockRange(other), range))) fail('这个时间已有其他任务安排', 409)
+    const plannedTasks = new Set(state.blocks.filter(other => other.id !== block.id).map(other => other.taskId))
+    plannedTasks.add(block.taskId)
+    for (const other of listTasks()) {
+      if (plannedTasks.has(other.id)) continue
+      const existing = taskRange(other)
+      if (existing && overlaps(range, existing)) fail('这个时间与已有任务的开始时间和预计用时冲突', 409)
+    }
+  }
+  const localToday = () => {
+    const value = now()
+    const pad = number => String(number).padStart(2, '0')
+    return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`
+  }
+  function refreshFutureOverrides(state, weekdays) {
+    if (!weekdays.size || !state.dayOverrides) return
+    const today = localToday()
+    const affected = Object.entries(state.dayOverrides).filter(([date, override]) => date >= today && weekdays.has(override.sourceWeekday))
+    if (!affected.length) return
+    const snapshots = new Map()
+    for (const [, override] of affected) {
+      if (!snapshots.has(override.sourceWeekday)) {
+        const routines = state.routines.filter(routine => routine.enabled && routine.weekdays.includes(override.sourceWeekday)).map(routineValue)
+        if (!routines.some(routine => routine.kind === 'class')) fail('请先移除未来的单日调课记录，再删除这个星期的最后一节课程', 409)
+        snapshots.set(override.sourceWeekday, routines)
+      }
+    }
+    for (const [date, override] of affected) {
+      state.dayOverrides[date] = { ...override, routines: structuredClone(snapshots.get(override.sourceWeekday)) }
+    }
+  }
+  function updatePlanner(action, expectedRevision) {
+    if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0) fail('安排版本不正确')
+    choice(action?.type, ['save-routine', 'delete-routine', 'import-routines', 'edit-weekday', 'set-day-template', 'remove-day-template', 'save-block', 'delete-block', 'save-details', 'check-item'], '安排操作')
+    knownKeys(action, ['type', ...({
+      'save-routine': ['routine'], 'delete-routine': ['id'], 'import-routines': ['routines'],
+      'edit-weekday': ['weekday', 'replacements', 'syncDates'],
+      'set-day-template': ['date', 'sourceWeekday'], 'remove-day-template': ['date'],
+      'save-block': ['block'], 'delete-block': ['id'], 'save-details': ['taskId', 'details'], 'check-item': ['date', 'key', 'checked'],
+    }[action?.type] ?? [])], '安排操作')
+    return transaction(() => {
+      const state = getPlanner()
+      if (state.revision !== expectedRevision) fail('安排已在其他窗口更新，请刷新后重试', 409)
+      switch (action.type) {
+        case 'save-routine': {
+          const routine = routineValue(action.routine)
+          validateRoutineOccupancy(routine, state)
+          const index = state.routines.findIndex(item => item.id === routine.id)
+          const previous = index < 0 ? null : state.routines[index]
+          if (index < 0) state.routines.push(routine); else state.routines[index] = routine
+          refreshFutureOverrides(state, new Set([...(previous?.weekdays ?? []), ...routine.weekdays]))
+          break
+        }
+        case 'import-routines': {
+          if (!Array.isArray(action.routines) || action.routines.length > limits.routines) fail('导入的固定安排最多 300 项')
+          const routines = action.routines.map(routineValue)
+          if (new Set(routines.map(item => item.id)).size !== routines.length) fail('导入的安排标识不可重复')
+          for (const routine of routines) validateRoutineOccupancy(routine, state)
+          const imported = new Map(routines.map(item => [item.id, item]))
+          const affectedWeekdays = new Set([...routines, ...state.routines.filter(item => imported.has(item.id))].flatMap(item => item.weekdays))
+          state.routines = [...state.routines.filter(item => !imported.has(item.id)), ...routines]
+          state.timetableConfirmed = true
+          refreshFutureOverrides(state, affectedWeekdays)
+          break
+        }
+        case 'delete-routine': {
+          const id = identifier(action.id)
+          if (!state.routines.some(item => item.id === id)) fail('找不到这条固定安排', 404)
+          const previous = state.routines.find(item => item.id === id)
+          state.routines = state.routines.filter(item => item.id !== id)
+          refreshFutureOverrides(state, new Set(previous.weekdays))
+          break
+        }
+        case 'edit-weekday': {
+          const weekday = sourceWeekdayValue(action.weekday)
+          if (!Array.isArray(action.replacements) || !action.replacements.length || action.replacements.length > 32) fail('每周课表修改需要 1–32 项原安排')
+          const replacements = action.replacements.map(weekdayReplacementValue)
+          if (new Set(replacements.map(item => item.routineId)).size !== replacements.length) fail('每周课表不可重复修改同一条安排')
+          const syncDates = strings(action.syncDates, '同步调课日期', 31, 10).map(date => day(date))
+          for (const date of syncDates) {
+            if (!state.dayOverrides?.[date] || state.dayOverrides[date].sourceWeekday !== weekday) fail('只能同步已使用这个星期课表的单日调课，请刷新后重试', 409)
+          }
+          for (const replacement of replacements) {
+            const routine = state.routines.find(item => item.id === replacement.routineId)
+            if (!routine || !routine.enabled || !routine.weekdays.includes(weekday)) fail('原安排不属于这个星期的已启用课表，请刷新后重试', 409)
+          }
+          const byId = new Map(replacements.map(item => [item.routineId, item]))
+          const usedIds = new Set(state.routines.map(item => item.id))
+          state.routines = state.routines.flatMap(routine => {
+            const replacement = byId.get(routine.id)
+            if (!replacement) return [routine]
+            const subjectChanged = routine.title !== replacement.title || routine.kind !== replacement.kind
+            const updated = {
+              ...routine, title: replacement.title, kind: replacement.kind,
+              location: replacement.location ?? (subjectChanged ? '' : routine.location),
+              items: replacement.items ?? (subjectChanged ? [] : routine.items),
+            }
+            if (updated.title === routine.title && updated.kind === routine.kind && updated.location === routine.location && JSON.stringify(updated.items) === JSON.stringify(routine.items)) return [routine]
+            if (routine.weekdays.length === 1) return [updated]
+            return [
+              { ...routine, weekdays: routine.weekdays.filter(value => value !== weekday) },
+              { ...updated, id: weekdayRoutineId(routine.id, weekday, usedIds), weekdays: [weekday] },
+            ]
+          })
+          if (syncDates.length) {
+            const routines = state.routines.filter(routine => routine.enabled && routine.weekdays.includes(weekday)).map(routineValue)
+            if (!routines.some(routine => routine.kind === 'class')) fail('同步单日调课需要这个星期至少保留一节已启用的课程', 409)
+            state.dayOverrides = { ...state.dayOverrides }
+            for (const date of syncDates) state.dayOverrides[date] = { date, sourceWeekday: weekday, routines: structuredClone(routines) }
+          }
+          // Real timetable corrections keep existing tasks intact. Capacity
+          // reports any conflicts, and subsequent task placements obey the
+          // fully updated week and explicitly synchronized day snapshots.
+          break
+        }
+        case 'set-day-template': {
+          const date = day(action.date), sourceWeekday = sourceWeekdayValue(action.sourceWeekday)
+          const routines = state.routines.filter(routine => routine.enabled && routine.weekdays.includes(sourceWeekday)).map(routineValue)
+          if (!routines.some(routine => routine.kind === 'class')) fail('来源星期还没有已启用的课程，请先录入或导入该星期的真实课表，再设置单日调课', 409)
+          // Record the actual school day even when an existing task conflicts.
+          // The capacity model exposes those conflicts; tasks are never moved.
+          state.dayOverrides = { ...state.dayOverrides, [date]: { date, sourceWeekday, routines } }
+          break
+        }
+        case 'remove-day-template': {
+          const date = day(action.date)
+          if (!state.dayOverrides?.[date]) fail('这一天没有单日调课记录', 404)
+          delete state.dayOverrides[date]
+          break
+        }
+        case 'save-block': {
+          const block = blockValue(action.block)
+          const index = state.blocks.findIndex(item => item.id === block.id), previous = state.blocks[index]
+          const samePlacement = previous && ['taskId', 'date', 'start', 'end'].every(key => previous[key] === block[key])
+          if (previous?.locked && !(samePlacement && !block.locked)) fail('先解锁这段安排，再修改时间或任务', 409)
+          // Unlock must remain possible after external task edits introduce a conflict.
+          if (!(previous?.locked && samePlacement && !block.locked)) validateBlock(block, state)
+          if (index < 0) state.blocks.push(block); else state.blocks[index] = block
+          break
+        }
+        case 'delete-block': {
+          const id = identifier(action.id), block = state.blocks.find(item => item.id === id)
+          if (!block) fail('找不到这段安排', 404)
+          if (block.locked) fail('先解锁这段安排，再移除', 409)
+          state.blocks = state.blocks.filter(item => item.id !== id)
+          break
+        }
+        case 'save-details': {
+          const id = identifier(action.taskId)
+          requireTask(id)
+          state.details = { ...state.details, [id]: detailsValue(action.details) }
+          break
+        }
+        case 'check-item': {
+          const date = day(action.date), key = identifier(action.key, '物品标识'), checked = boolean(action.checked, '勾选状态')
+          const values = state.checked[date] ?? []
+          state.checked[date] = checked ? [...new Set([...values, key])] : values.filter(item => item !== key)
+          if (state.checked[date].length > 500) fail('每天最多勾选 500 项物品')
+          if (!state.checked[date].length) delete state.checked[date]
+          break
+        }
+        default: fail('不支持的安排操作')
+      }
+      if (!Number.isSafeInteger(state.revision + 1)) fail('安排版本超出范围', 409)
+      state.revision += 1
+      return save(state)
+    })
+  }
+  function removeTask(taskId) {
+    return transaction(() => {
+      const state = getPlanner()
+      const blocks = state.blocks.filter(block => block.taskId !== taskId)
+      if (blocks.length === state.blocks.length && !Object.hasOwn(state.details, taskId)) return
+      state.blocks = blocks
+      delete state.details[taskId]
+      state.revision += 1
+      save(state)
+    })
+  }
+  // Only durable operation snapshots call this, never arbitrary browser input.
+  function restorePlanner(snapshot, expectedRevision) {
+    return transaction(() => {
+      const current = getPlanner()
+      if (current.revision !== expectedRevision) fail('安排后来有新的修改，无法直接撤销', 409)
+      validateDayOverrides(snapshot.dayOverrides)
+      for (const taskId of new Set([...snapshot.blocks.map(block => block.taskId), ...Object.keys(snapshot.details)])) requireTask(taskId)
+      const currentBlocks = new Map(current.blocks.map(block => [block.id, block]))
+      for (const block of snapshot.blocks) {
+        const previous = currentBlocks.get(block.id)
+        // Check time that undo reintroduces, using current task facts and the
+        // final restored placement. Unchanged history must not prevent undoing
+        // an unrelated preparation edit just because a task later changed.
+        if (!previous || ['taskId', 'date', 'start', 'end'].some(key => previous[key] !== block[key])) {
+          validateBlock(block, snapshot, { restoring: true })
+        }
+      }
+      if (!Number.isSafeInteger(current.revision + 1)) fail('安排版本超出范围', 409)
+      const restored = JSON.parse(JSON.stringify(snapshot))
+      // A receipt created before the one-time weekend migration can carry a
+      // legacy snapshot without the seeded slot. Once the migration is durable,
+      // undoing that old receipt must not erase the user's default availability.
+      const migratedWeekend = current.routines.find(routine => routine.id === WEEKEND_DEFAULT_ROUTINE_ID)
+      if (migratedWeekend && !restored.routines.some(routine => routine.id === WEEKEND_DEFAULT_ROUTINE_ID)) {
+        restored.routines.push(migratedWeekend)
+      }
+      return save({ ...restored, revision: current.revision + 1 })
+    })
+  }
+  function validateState(state) {
+    knownKeys(state, ['revision', 'timetableConfirmed', 'routines', 'blocks', 'details', 'checked', 'dayOverrides'], '备份日程')
+    if (!Number.isSafeInteger(state.revision) || state.revision < 0) fail('备份日程版本无效')
+    boolean(state.timetableConfirmed, '课表确认')
+    if (!Array.isArray(state.routines) || state.routines.length > limits.routines || !Array.isArray(state.blocks) || state.blocks.length > limits.blocks) fail('备份日程数量无效')
+    if (new Set(state.routines.map(item => item?.id)).size !== state.routines.length || new Set(state.blocks.map(item => item?.id)).size !== state.blocks.length) fail('备份日程标识重复')
+    for (const routine of state.routines) routineValue(routine)
+    for (const block of state.blocks) { blockValue(block); if (!getTask(block.taskId)) fail('备份日程关联事项缺失') }
+    if (!state.details || typeof state.details !== 'object' || Array.isArray(state.details) || Object.keys(state.details).length > limits.details) fail('备份准备信息无效')
+    for (const [taskId, details] of Object.entries(state.details)) { identifier(taskId); detailsValue(details); if (!getTask(taskId)) fail('备份准备信息关联事项缺失') }
+    if (!state.checked || typeof state.checked !== 'object' || Array.isArray(state.checked) || Object.keys(state.checked).length > limits.checked) fail('备份携带记录无效')
+    for (const [date, items] of Object.entries(state.checked)) { day(date); strings(items, '携带记录') }
+    validateDayOverrides(state.dayOverrides)
+    if (JSON.stringify(state).length > 2_000_000) fail('安排内容过多，请先整理历史记录', 413)
+  }
+  function validateStoredState() {
+    const stored = read.get(STATE_KEY)
+    if (stored) validateState(JSON.parse(stored.value))
+  }
+  return { getPlanner, updatePlanner, removeTask, restorePlanner, validateStoredState }
+}

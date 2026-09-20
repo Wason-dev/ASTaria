@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, KeyboardEvent } from 'react'
 import type { Task } from '../domain/task'
+import { TaskCardStack } from '../ui/TaskCardStack'
+import { STATUS_LABELS } from '../spatial/scene'
 import { agendaDate, agendaItems, dayTaskLabel, deadlineItems, deadlineLabel, isOpenTask, isOverdue, localDay, monthDays, shiftDay, shiftMonth, taskOnDay } from './agenda'
 import './agenda.css'
 
@@ -128,9 +130,9 @@ export function HomeAgenda({ tasks, now, loading, error, active, compact, onRetr
         <AgendaSection key={selected} animate={dayMotion.revision > 0} title={`${shortDate.format(selectedDate)} · 事项`} name="selected" tasks={selectedItems} empty="这天暂无已安排事项" onTask={onTask} label={task => dayTaskLabel(task, selected)} />
         <AgendaSection title="今日待办" name="today" tasks={todayItems} empty="今天暂无已安排待办" onTask={onTask} label={task => dayTaskLabel(task, today)} />
         <AgendaSection title="DDL" name="deadlines" tasks={deadlines} empty="暂无截止事项" onTask={onTask} label={task => deadlineLabel(task, now)} overdue={task => isOverdue(task, now)} />
-        {undated.length > 0 && <details className="home-agenda-undated"><summary>未定日期 <span>{undated.length}</span></summary>
-          <AgendaList tasks={undated} onTask={onTask} label={() => '待安排'} />
-        </details>}
+        {undated.length > 0 && <section className="home-agenda-undated" aria-label="未定日期"><h3>未定日期 <span>{undated.length}</span></h3>
+          <TaskCardStack compact label="未定日期" items={undated.map(task => ({ id: task.id, title: task.title, meta: task.estimateMin ? `${task.estimateMin} 分钟 · 待安排` : '用时待估 · 待安排' }))} onOpen={onTask} empty="暂无待安排事项" />
+        </section>}
       </>}
     </div>
   </aside>
@@ -149,7 +151,7 @@ function AgendaList({ tasks, onTask, label, overdue }: {
   tasks: Task[]; onTask: (id: string) => void; label: (task: Task) => string; overdue?: (task: Task) => boolean
 }) {
   return <ul className="home-agenda-list">{tasks.map(task => <li key={task.id}>
-    <button onClick={() => onTask(task.id)} title={task.title} data-overdue={overdue?.(task)}>
+    <button onClick={() => onTask(task.id)} title={`${task.title} · ${STATUS_LABELS[task.status]}`} aria-label={`${task.title}，${STATUS_LABELS[task.status]}，${label(task)}`} data-task-status={task.status} data-overdue={overdue?.(task)}>
       <span>{task.title}</span><small>{label(task)}</small>
     </button>
   </li>)}</ul>

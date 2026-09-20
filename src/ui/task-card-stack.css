@@ -1,0 +1,41 @@
+.task-stack { --stack-ink:var(--pl-ink,var(--p0-fg,#eeeae3)); --stack-muted:var(--pl-muted,var(--p0-muted,#b9b7b1)); --stack-line:var(--pl-line,var(--p0-line,#ddd6c328)); --stack-accent:var(--pl-gold,var(--p0-accent,#d5bb8b)); --stack-surface:linear-gradient(130deg,#ffffff0a,transparent 68%); position:relative; display:flex; flex-direction:column; flex:1; min-height:0; min-width:0; color:var(--stack-ink) }
+:is(.planner,.home-workspace)[data-theme=light] .task-stack { --stack-surface:linear-gradient(125deg,#ffffff24,transparent 68%) }
+.task-stack-stage { position:relative; isolation:isolate; flex:1; min-height:102px; padding-bottom:0; margin:2px 3px 0; perspective:700px; touch-action:pan-x }
+.p0 .task-stack-card { position:absolute; inset:0; display:flex; flex-direction:column; justify-content:center; align-items:stretch; gap:6px; width:100%; min-width:0; margin:0; padding:12px 14px; text-align:left; box-sizing:border-box; border:1px solid var(--stack-line); border-left:2px solid color-mix(in srgb,var(--stack-accent) 65%,transparent); border-radius:13px; background:var(--stack-surface); box-shadow:inset 0 1px #ffffff12,0 3px 10px #00000012; color:var(--stack-ink); transform:translateY(0); transform-origin:50% 100%; opacity:1; z-index:3; transition:transform 320ms cubic-bezier(.18,.75,.24,1),opacity 260ms,border-color 180ms,background 180ms }
+.p0 .task-stack-card[data-active=false] { pointer-events:none }
+.task-stack-card strong { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; overflow-wrap:anywhere; font-size:12px; line-height:1.5; font-weight:450 }
+.task-stack-card small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--stack-muted); font-size:10px; line-height:1.5 }
+.task-stack-card[data-done=true] { border-left-color:#9db7a6 }
+.task-stack-card[data-done=true] strong { color:var(--stack-muted) }
+.task-stack-card[data-overdue=true] small { color:var(--stack-accent) }
+.p0 .task-stack-card[data-active=true]:is(:hover,:focus-visible) { border-color:color-mix(in srgb,var(--stack-accent) 78%,transparent); box-shadow:inset 0 1px #ffffff24,0 4px 14px #00000016 }
+.p0 .task-stack-card:focus-visible { outline:2px solid var(--stack-accent); outline-offset:2px }
+.p0 .task-stack .task-stack-exit { z-index:4; pointer-events:none; animation:task-stack-forward 340ms cubic-bezier(.2,.75,.25,1) both }
+.p0 .task-stack[data-direction=previous] .task-stack-exit { animation-name:task-stack-backward }
+.p0 .task-stack[data-moving=true] .task-stack-card[data-active=true] { animation:task-stack-reveal 340ms cubic-bezier(.2,.75,.25,1) both }
+.task-stack-footer { display:flex; align-items:center; flex:none; gap:8px; min-height:28px; margin:2px 3px 0; color:var(--stack-muted); font-size:10px }
+.task-stack-count { font-variant-numeric:tabular-nums; white-space:nowrap }
+.task-stack-controls { display:flex; gap:3px; margin-left:auto }
+.p0 .task-stack-controls button { display:grid; place-items:center; width:26px; height:26px; padding:4px; border:1px solid var(--stack-line); border-radius:50%; color:var(--stack-accent); background:#ffffff05; transition:background 180ms,opacity 180ms }
+.task-stack-controls button svg { width:16px; height:16px; fill:none; stroke:currentColor; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round }
+.p0 .task-stack-controls button:is(:hover,:focus-visible):not(:disabled) { background:color-mix(in srgb,var(--stack-accent) 14%,transparent); border-color:var(--stack-accent) }
+.p0 .task-stack-controls button:disabled { opacity:.28; cursor:default }
+.task-stack-empty { margin:6px 0; color:var(--stack-muted); font-size:11px; line-height:1.8 }
+.task-stack[data-compact=true] { flex:none }
+.task-stack[data-compact=true] .task-stack-stage { flex:none; height:72px; min-height:72px }
+.task-stack[data-compact=true] .task-stack-card { padding:8px 10px; gap:3px }
+.task-stack[data-compact=true] .task-stack-card strong { font-size:11px; line-height:1.5 }
+.task-stack[data-compact=true] .task-stack-card small { font-size:9px }
+.planner .pl-overview .pl-overview-unscheduled { flex:none; margin-top:7px; min-width:0 }
+.pl-stack-heading { display:flex; align-items:baseline; justify-content:space-between; gap:6px; margin-bottom:5px }
+.pl-stack-heading h5 { margin:0; font-size:11px; font-weight:450 }
+.pl-stack-heading h5 span { margin-left:5px; font-size:10px; color:var(--pl-muted) }
+.pl-stack-heading>small { color:var(--pl-muted); font-size:9px }
+.home-agenda .home-agenda-undated>h3 { display:flex; justify-content:space-between; gap:8px; margin:0 0 6px; font-size:11px; font-weight:400 }
+.home-agenda .home-agenda-undated>h3>span { color:var(--p0-muted); font-size:10px }
+@keyframes task-stack-forward { 0% { opacity:1; transform:translateY(0) rotateX(0) scale(1) } 45%,100% { opacity:0; transform:translateY(-18px) rotateX(9deg) scale(.96) } }
+@keyframes task-stack-backward { 0% { opacity:1; transform:translateY(0) rotateX(0) scale(1) } 45%,100% { opacity:0; transform:translateY(18px) rotateX(-7deg) scale(.96) } }
+@keyframes task-stack-reveal { 0%,45% { opacity:0; transform:translateY(9px) scale(.98) } 100% { opacity:1; transform:translateY(0) scale(1) } }
+@media(max-width:767px) { .task-stack-stage { min-height:108px }.p0 .task-stack-card { padding:10px; border-radius:11px }.task-stack-card strong { font-size:11px } }
+@media(pointer:coarse) { .p0 .task-stack-controls button { width:32px; height:32px }.task-stack-footer { min-height:34px } }
+@media(prefers-reduced-motion:reduce) { .p0 .task-stack-card { transition:none; animation:none!important }.p0 .task-stack .task-stack-exit { animation:none; display:none } }

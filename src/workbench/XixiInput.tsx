@@ -1,17 +1,21 @@
 import { useEffect, useRef, useState } from 'react'
+import { useChatSubmitKey } from '../xixi/useChatSubmitKey'
 import './xixi-input.css'
 
 type Props = {
   value: string
   onChange: (value: string) => void
   id?: string
+  disabled?: boolean
+  onSubmit?: () => void
 }
 
-/** The parent supplies the label and owns the draft; typing never submits it. */
-export function XixiInput({ value, onChange, id = 'wb-xixi-input' }: Props) {
+/** The parent supplies the label and draft; Enter sends and Shift+Enter wraps. */
+export function XixiInput({ value, onChange, id = 'wb-xixi-input', disabled = false, onSubmit }: Props) {
   const [pulse, setPulse] = useState<number | null>(null)
   const pulseSequence = useRef(0)
   const pulseTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const submitKeys = useChatSubmitKey(() => { if (!disabled) onSubmit?.() })
 
   useEffect(() => () => clearTimeout(pulseTimer.current), [])
 
@@ -36,7 +40,7 @@ export function XixiInput({ value, onChange, id = 'wb-xixi-input' }: Props) {
       <span className="home-input-glow" />
       <span className="home-input-rim" />
     </span>}
-    <textarea className="wb-input-textarea" id={id} rows={3} maxLength={4000} placeholder="哪里需要一起想想" value={value}
+    <textarea className="wb-input-textarea" id={id} rows={3} maxLength={4000} placeholder="哪里需要一起想想" value={value} disabled={disabled}
       onChange={event => {
         const next = event.currentTarget.value
         const input = event.nativeEvent as InputEvent
@@ -48,6 +52,7 @@ export function XixiInput({ value, onChange, id = 'wb-xixi-input' }: Props) {
         if (next !== value && inserted) flash()
         onChange(next)
       }}
-      onBlur={stopPulse} />
+      onBlur={stopPulse}
+      {...submitKeys} />
   </div>
 }

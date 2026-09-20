@@ -1,25 +1,35 @@
 .home-workspace { position: absolute; inset: 0; pointer-events: none; font-size: 12px; line-height: 1.6 }
 .home-workspace :is(button, textarea, .home-menu, dialog) { pointer-events: auto }
-.home-nav { position: absolute; top: 24px; left: var(--home-left); z-index: 4; pointer-events: auto }
-.home-nav[data-menu-open=true]::after { content: ''; position: absolute; left: 100%; top: 0; width: 12px; height: 100% }
-.p0 .home-brand { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; letter-spacing: .025em; padding: 7px 0; min-height: 34px }
+.home-nav { --home-brand-width: 76px; --home-menu-gap: 12px; --home-clock-space: 164px; position: absolute; top: 24px; left: var(--home-left); width: var(--home-brand-width); z-index: 4; pointer-events: auto; transition: width 280ms cubic-bezier(.2,.7,.2,1) }
+.home-nav[data-menu-open=true]::after { content: ''; position: absolute; left: 100%; top: 0; width: var(--home-menu-gap); height: 100% }
+.p0 .home-brand { position: relative; display: flex; align-items: center; justify-content: flex-end; gap: 8px; width: 100%; font-size: 13px; font-weight: 500; letter-spacing: .025em; padding: 7px 0; min-height: 34px }
+.home-brand-wordmark,.home-brand-mark { position: absolute; left: 0; top: 50%; white-space: nowrap; transform: translateY(-50%); transition: opacity 220ms ease, transform 280ms cubic-bezier(.2,.7,.2,1) }
 .home-brand-wordmark > span { font-weight: 400 }
+.home-brand-mark { opacity: 0; transform: translateY(-50%) scale(.8); font-size: 15px; font-weight: 500 }
 .home-nav-hint { width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 1.1; stroke-linecap: round; stroke-linejoin: round; opacity: .65; transition: transform 280ms ease }
 .home-brand[aria-expanded=true] .home-nav-hint { transform: rotate(180deg) }
-.home-menu { position: absolute; left: calc(100% + 12px); top: 0; width: max-content; max-width: calc(100vw - 2 * var(--home-left)); box-sizing: border-box; border-radius: 13px; visibility: hidden; transition: visibility 0s 280ms }
-.home-menu[data-open=true] { visibility: visible; transition-delay: 0s }
+.home-menu { position: absolute; left: calc(100% + var(--home-menu-gap)); top: 0; width: max-content; max-width: calc(100vw - 2 * var(--home-left) - var(--home-brand-width) - var(--home-menu-gap) - var(--home-clock-space) - 12px); box-sizing: border-box; border-radius: 13px; visibility: hidden; opacity: 0; transition: visibility 0s 220ms, opacity 180ms ease, max-width 280ms cubic-bezier(.2,.7,.2,1) }
+.home-menu[data-open=true] { visibility: visible; opacity: 1; transition: visibility 0s, max-width 280ms cubic-bezier(.2,.7,.2,1) }
 /* Keep the outer shadow outside the glass clipping layer and fade it with the surface. */
 .home-menu::before { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; box-shadow: var(--home-menu-shadow, 0 6px 18px rgba(0, 0, 0, .6)) }
-/* Keep the backdrop-filter parent opaque during its transition so Chromium does not change the sampling root. */
-.home-menu::before, .home-menu .home-glass-surface { opacity: 0; transition: opacity 220ms ease }
-.home-menu[data-open=true]::before, .home-menu[data-open=true] .home-glass-surface { opacity: 1 }
+/* Opening keeps the sampling ancestors opaque. Closing detaches sampling in
+   React before the whole menu, including its shadow, fades together. */
+.home-menu[data-open=true] .home-glass-surface { animation: home-task-tint-in 220ms ease both }
+.home-menu[data-open=true] .home-glass-surface::after { animation: home-menu-rim-in 220ms ease both }
 .home-workspace .home-menu[data-open=false] { pointer-events: none }
-.home-menu-list { position: relative; z-index: 1; display: flex; align-items: center; gap: 2px; list-style: none; margin: 0; padding: 5px; max-width: 100%; box-sizing: border-box; overflow-x: auto; scrollbar-width: thin; opacity: 0; transform: translateX(-8px); transition: transform 280ms cubic-bezier(.2,.7,.2,1), opacity 220ms ease }
+.home-menu-list { --home-menu-fade-start: 0px; --home-menu-fade-end: 0px; position: relative; z-index: 1; display: flex; align-items: center; gap: 2px; list-style: none; margin: 0; padding: 5px; max-width: 100%; box-sizing: border-box; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; mask-image: linear-gradient(to right, transparent, #000 var(--home-menu-fade-start), #000 calc(100% - var(--home-menu-fade-end)), transparent); opacity: 0; transform: translateX(-8px); transition: transform 280ms cubic-bezier(.2,.7,.2,1), opacity 220ms ease }
+.p0 .home-workspace .home-menu-list { scrollbar-width: none }
+.home-menu-list::-webkit-scrollbar { display: none }
+.home-menu-list[data-overflow-start=true] { --home-menu-fade-start: 15px }
+.home-menu-list[data-overflow-end=true] { --home-menu-fade-end: 15px }
+.home-menu-list > li { flex: none }
 .home-menu[data-open=true] .home-menu-list { opacity: 1; transform: translateX(0) }
 .p0 .home-menu button { display: block; white-space: nowrap; padding: 5px 10px; font-size: 11px; line-height: 1.6; border-radius: 8px }
 .p0 .home-menu button:focus-visible { outline-offset: -1px }
 .home-menu button[aria-current] { background: #ffffff09 }
-.home-clock { position: absolute; right: var(--home-left); top: 32px; font-size: 11px; line-height: 18px; font-variant-numeric: tabular-nums; letter-spacing: .08em; color: var(--p0-muted) }
+.home-clock { position: absolute; right: var(--home-left); top: 32px; display: flex; gap: 12px; font-size: 11px; line-height: 18px; font-variant-numeric: tabular-nums; letter-spacing: .08em; color: var(--p0-muted); white-space: nowrap; pointer-events: auto }
+.home-clock-short-date { display: none }
+@keyframes home-menu-rim-in { from { opacity: 0 } to { opacity: 1 } }
 .home-notification { position: absolute; right: var(--home-left); bottom: 18px; max-width: min(240px, calc(100vw - 180px)); height: 32px; border-radius: 16px; box-shadow: 0 6px 18px rgba(0, 0, 0, .6); pointer-events: auto }
 .home-notification-content { position: relative; display: flex; align-items: center; gap: 7px; height: 100%; padding: 0 12px; color: var(--p0-muted); font-size: 11px }
 .home-notification-content svg { flex: none; width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1; stroke-linecap: round; stroke-linejoin: round }
@@ -70,23 +80,48 @@
 .p0 .home-capture { font-size: 11px; min-height: 30px; padding: 5px 12px; border: 1px solid var(--p0-line); border-radius: 999px; background: #ffffff05 }
 .home-form-error { font-size: 11px; line-height: 1.7; margin: 8px 0 0; overflow-wrap: anywhere }
 .p0 .home-form-error button { text-decoration: underline; margin-left: 8px }
-.home-task-dialog { margin: auto; width: 320px; max-width: calc(100vw - 44px); max-height: calc(100dvh - 80px); overflow: auto; border: 1px solid var(--p0-line); border-radius: 16px; padding: 20px; background: rgba(13, 14, 17, .8); color: var(--p0-fg); backdrop-filter: blur(2px); box-shadow: 0 6px 18px #0009 }
-.home-task-dialog::backdrop { background: rgba(0, 0, 0, .15) }
-.home-task-dialog header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-bottom: 14px; border-bottom: 1px solid var(--p0-line) }
-.home-task-dialog h2 { font-size: 12px; font-weight: 400; margin: 0 }
-.home-task-dialog header button { font-size: 11px; color: var(--p0-muted) }
-.home-task-title { font-size: 15px; margin: 18px 0 10px; overflow-wrap: anywhere }
-.home-task-notes { font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere }
-.home-task-meta { color: var(--p0-muted); font-size: 11px; margin: 16px 0 }
-.home-task-status { display: grid; grid-template-columns: 1fr 1fr; gap: 8px }
-.p0 .home-task-status button { font-size: 11px; padding: 9px; border: 1px solid var(--p0-line); border-radius: 8px }
-.home-task-status button[aria-pressed=true] { opacity: 1; background: #ffffff0c }
+/* One status palette for task details and agenda rows. */
+.home-workspace [data-task-status=todo] { --task-state-color: #aeb7c0 }
+.home-workspace [data-task-status=doing] { --task-state-color: #d6b46f }
+.home-workspace [data-task-status=done] { --task-state-color: #82b79a }
+.home-workspace [data-task-status=dropped] { --task-state-color: #be8c82 }
+.p0 .home-task-dialog { margin: auto; width: 320px; max-width: calc(100vw - 32px); max-height: calc(100dvh - 64px); overflow: hidden; padding: 0; border: 1px solid #ffffff20; border-radius: 19px; background: transparent; color: var(--p0-fg); box-shadow: 0 8px 28px #0007; text-shadow: 0 1px 3px #0008 }
+.home-task-content { position: relative; max-height: calc(100dvh - 66px); overflow-y: auto; scrollbar-width: thin; padding: 16px; animation: home-task-dialog-in 220ms cubic-bezier(.16,.8,.25,1) both }
+.home-task-dialog[data-closing=true] { pointer-events: none; animation: home-task-dialog-out 180ms ease both }
+.home-task-dialog[data-closing=true] .home-task-content { animation: none }
+.home-task-dialog .home-glass-surface { animation: home-task-tint-in 220ms both }
+.home-task-dialog[data-closing=true] .home-glass-surface { animation: none; -webkit-backdrop-filter: none !important; backdrop-filter: none !important }
+.home-task-dialog::backdrop { background: rgb(0 0 0 / .22); animation: home-task-backdrop-in 220ms ease both }
+.home-task-dialog[data-closing=true]::backdrop { animation: home-task-backdrop-out 180ms ease both }
+.home-task-dialog header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--p0-line) }
+.home-task-dialog h2 { font-size: 11px; font-weight: 400; margin: 0; letter-spacing: .04em; color: var(--p0-muted) }
+.p0 .home-task-dialog .home-task-close { display: grid; place-items: center; flex: none; width: 24px; height: 24px; min-height: 24px; padding: 0; border: 1px solid #ffffff26; border-radius: 50%; color: var(--p0-muted); background: #ffffff08; transition: color 160ms, background-color 160ms }
+.home-task-close svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.2; stroke-linecap: round }
+.p0 .home-task-dialog .home-task-close:is(:hover,:focus-visible) { color: var(--p0-fg); background: #ffffff14 }
+.home-task-dialog .home-task-title { margin: 15px 0 8px; font-size: 15px; line-height: 1.55; overflow-wrap: anywhere }
+.home-task-dialog .home-task-notes { margin: 0 0 10px; color: var(--p0-muted); font-size: 11px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere }
+.home-task-dialog .home-task-meta { margin: 0 0 15px; color: var(--p0-muted); font-size: 11px; font-variant-numeric: tabular-nums }
+.home-task-status { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px }
+.p0 .home-task-status button { position: relative; min-height: 34px; padding: 8px 8px 8px 26px; border: 1px solid #ffffff18; border-radius: 10px; color: var(--p0-muted); background: #ffffff05; text-align: left; font-size: 11px; transition: color 180ms, border-color 180ms, background-color 180ms, box-shadow 180ms }
+.home-task-status button::before { content: ''; position: absolute; left: 11px; top: 50%; width: 6px; height: 6px; border: 1px solid var(--task-state-color); border-radius: 50%; transform: translateY(-50%); transition: background-color 180ms, box-shadow 180ms }
+.p0 .home-task-status button:enabled:is(:hover,:focus-visible) { color: var(--task-state-color); background: color-mix(in srgb, var(--task-state-color) 8%, transparent) }
+.p0 .home-task-status button[aria-pressed=true] { opacity: 1; color: var(--task-state-color); border-color: color-mix(in srgb, var(--task-state-color) 65%, transparent); background: color-mix(in srgb, var(--task-state-color) 16%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--task-state-color) 12%, transparent) }
+.home-task-status button[aria-pressed=true]::before { background: var(--task-state-color); box-shadow: 0 0 0 3px color-mix(in srgb, var(--task-state-color) 16%, transparent) }
+.home-task-dialog .home-form-error { margin: 12px 0 0; font-size: 11px }
+@keyframes home-task-dialog-in { from { opacity: 0; transform: translateY(6px) scale(.98) } to { opacity: 1; transform: none } }
+@keyframes home-task-dialog-out { from { opacity: 1; transform: none } to { opacity: 0; transform: translateY(4px) scale(.985) } }
+@keyframes home-task-tint-in { from { background-color: transparent; box-shadow: none } }
+@keyframes home-task-backdrop-in { from { opacity: 0 } to { opacity: 1 } }
+@keyframes home-task-backdrop-out { to { opacity: 0 } }
 @media (max-width: 600px) {
-  .home-nav { top: 18px }
-  .home-nav[data-menu-open=true]::after { left: 0; top: 100%; width: 100%; height: 6px }
-  .home-menu { left: 0; top: calc(100% + 6px) }
+  .home-nav { --home-brand-width: 72px; --home-menu-gap: 8px; --home-clock-space: 42px; top: 18px }
+  .home-nav[data-menu-open=true] { --home-brand-width: 28px }
+  .home-nav[data-menu-open=true] .home-brand-wordmark { opacity: 0; transform: translateY(-50%) translateX(-4px) scale(.88) }
+  .home-nav[data-menu-open=true] .home-brand-mark { opacity: 1; transform: translateY(-50%) scale(1) }
   .p0 .home-menu button { padding-inline: 6px }
-  .home-clock { top: 26px }
+  .home-clock { top: 20px; flex-direction: column; align-items: flex-end; gap: 0; width: 42px; font-size: 10px; line-height: 14px; letter-spacing: .035em }
+  .home-clock-date { display: none }
+  .home-clock-short-date { display: block }
   .home-notification { bottom: 15px }
   .p0 .home-brand { font-size: 12px }
   .p0 .home-current-title { font-size: 13px }
@@ -99,9 +134,9 @@
   .home-clock { top: 37px }
   .home-launch::before { content: ''; position: absolute; inset: -3px 0 }
 }
-@media (pointer: coarse) and (max-width: 600px) { .home-clock { top: 31px } }
+@media (pointer: coarse) and (max-width: 600px) { .home-clock { top: 26px } }
 @media (prefers-reduced-motion: reduce) {
-  .home-menu, .home-menu::before, .home-menu-list, .home-menu .home-glass-surface, .home-nav-hint, .home-pane-track { transition: none }
+  .home-nav, .home-brand-wordmark, .home-brand-mark, .home-menu, .home-menu::before, .home-menu-list, .home-menu .home-glass-surface, .home-menu .home-glass-surface::after, .home-nav-hint, .home-pane-track, .home-task-dialog::backdrop, .home-task-content, .home-task-dialog .home-glass-surface { animation: none !important; transition: none }
   .home-input-flash { animation-name: home-input-soft-flash; animation-duration: .01ms }
   .home-input-shell { transition-duration: 120ms }
 }
@@ -117,3 +152,8 @@
   .home-xixi form { flex-shrink: 1; min-height: 0; overflow: auto; scrollbar-width: thin; overscroll-behavior: contain; margin-inline: -6px; padding-inline: 6px; padding-bottom: 5px }
   .home-xixi textarea { min-height: 38px; height: 42px }
 }
+.home-workspace[data-grid=false] :is(.wb-background,.pl-background)::after{display:none}
+.home-workspace[data-motion=reduced] :is(.wb-enter,.pl-period-page,.home-input-flash){animation-duration:1ms!important;transition-duration:1ms!important}
+.p0 .home-notification-content{border:0;background:transparent;color:inherit;font:inherit;cursor:pointer;width:100%;text-align:left}
+.home-workspace[data-effect-preview=true]>:is(.home-scene-ui,.workbench,.planner,.home-nav,.home-clock,.home-notification){visibility:hidden!important;opacity:0!important;pointer-events:none!important}
+.home-workspace[data-effect-preview=true]>:is(.home-scene-ui,.workbench,.planner) .home-glass-surface{backdrop-filter:none!important;-webkit-backdrop-filter:none!important;box-shadow:none!important}

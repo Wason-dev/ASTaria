@@ -10,9 +10,14 @@ export const HOME_GLASS = Object.freeze({
   shadow: 60,
 })
 
+const displacementCache = new Map<string, string>()
+
 /** A static displacement texture for the rounded edge, never reads the scene canvas. */
 export function glassDisplacement(width: number, height: number, radius: number) {
   const w = Math.max(1, Math.round(width)), h = Math.max(1, Math.round(height))
+  const key = `${w}:${h}:${radius}`
+  const cached = displacementCache.get(key)
+  if (cached) return cached
   const canvas = document.createElement('canvas')
   canvas.width = w; canvas.height = h
   const context = canvas.getContext('2d')
@@ -37,5 +42,8 @@ export function glassDisplacement(width: number, height: number, radius: number)
     pixels.data[i + 3] = 255
   }
   context.putImageData(pixels, 0, 0)
-  return canvas.toDataURL('image/png')
+  const map = canvas.toDataURL('image/png')
+  displacementCache.set(key, map)
+  if (displacementCache.size > 48) displacementCache.delete(displacementCache.keys().next().value!)
+  return map
 }

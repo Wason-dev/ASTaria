@@ -2,9 +2,12 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
+// @ts-expect-error Local Node middleware intentionally stays outside the browser TS project
+import { localServicePlugin } from './server/index.mjs'
 
 export default defineConfig(({ mode }) => ({
   plugins: [
+    localServicePlugin(),
     react(),
     tailwindcss(),
     VitePWA({

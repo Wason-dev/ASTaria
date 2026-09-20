@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react'
 import { DESIGN_PREVIEW } from './designPreview'
 
 export const DEFAULT_APPEARANCE = {
-  columns: 2, width: 1320, font: 12, row: 96, gap: 8, top: 108,
-  transmission: 92, blur: 6, radius: 24, rim: 50, shadow: 14, background: 10, backgroundBlur: 2,
+  theme: 'dark' as 'light' | 'dark',
+  columns: 2, width: 1320, font: 13, row: 96, gap: 8, top: 88,
+  transmission: 70, blur: 0, radius: 24, rim: 40, shadow: 30, background: 40, backgroundBlur: 0,
   progress: true, metadata: true, completed: true,
 }
 export type Appearance = typeof DEFAULT_APPEARANCE
@@ -16,35 +17,25 @@ export const ADJUSTMENTS = [
   ['background', '背景', 0, 50, 1, '%'],
   ['backgroundBlur', '背景磨砂', 0, 12, 1, 'px'],
 ] as const
-// Apply the approved readable-glass preset once; later tuning stays local.
-const STORAGE_KEY = 'astaria-workbench-appearance-v4'
+// Start every browser on the approved clear-glass preset once. Earlier preview
+// settings must not bring back the old blur defaults; later v5 tuning stays local.
+const STORAGE_KEY = 'astaria-workbench-appearance-v5'
 
 export function useAppearance() {
   const [value, setValue] = useState<Appearance>(() => {
     if (!DESIGN_PREVIEW) return { ...DEFAULT_APPEARANCE }
     try {
-      const current = localStorage.getItem(STORAGE_KEY)
-      const previous = localStorage.getItem('astaria-workbench-appearance-v3')
-      const saved: unknown = JSON.parse(current ?? previous ?? localStorage.getItem('astaria-workbench-appearance-v2') ?? 'null')
+      const saved: unknown = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null')
       const next = { ...DEFAULT_APPEARANCE }
       if (!saved || typeof saved !== 'object') return next
       const record = saved as Record<string, unknown>
+      if (record.theme === 'light' || record.theme === 'dark') next.theme = record.theme
       for (const [key, , min, max] of ADJUSTMENTS) {
         const n = record[key]
         if (typeof n === 'number' && Number.isFinite(n)) next[key] = Math.max(min, Math.min(max, n))
       }
       if (record.columns === 1 || record.columns === 2) next.columns = record.columns
       for (const key of ['progress', 'metadata', 'completed'] as const) if (typeof record[key] === 'boolean') next[key] = record[key]
-      // Widen the previous default for the new sidebar, preserving material and
-      // any deliberately narrower custom layout from the last preview.
-      if (!current && !previous && record.width === 1100) next.width = DEFAULT_APPEARANCE.width
-      if (!current) {
-        next.blur = 6
-        next.backgroundBlur = 2
-        if (record.transmission === 100) next.transmission = DEFAULT_APPEARANCE.transmission
-        if (record.shadow === 25) next.shadow = DEFAULT_APPEARANCE.shadow
-        if (record.background === 15) next.background = DEFAULT_APPEARANCE.background
-      }
       return next
     } catch { return { ...DEFAULT_APPEARANCE } }
   })
@@ -58,5 +49,5 @@ export function useAppearance() {
 }
 
 export function appearanceSummary(value: Appearance) {
-  return `排列 ${value.columns === 2 ? '双列' : '单列'} · 内容宽度 ${value.width}px · 字号 ${value.font}px · 事项高度 ${value.row}px · 间距 ${value.gap}px · 位置 ${value.top}px\n通透度 ${value.transmission}% · 磨砂 ${value.blur}px · 圆角 ${value.radius}px · 边缘亮度 ${value.rim}% · 阴影 ${value.shadow}% · 背景 ${value.background}% · 背景磨砂 ${value.backgroundBlur}px\n进度 ${value.progress ? '显示' : '隐藏'} · 时间与分类 ${value.metadata ? '显示' : '隐藏'} · 已完成 ${value.completed ? '保留' : '隐藏'}`
+  return `外观 ${value.theme === 'dark' ? '深色' : '浅色'} · 排列 ${value.columns === 2 ? '双列' : '单列'} · 内容宽度 ${value.width}px · 字号 ${value.font}px · 事项高度 ${value.row}px · 间距 ${value.gap}px · 位置 ${value.top}px\n通透度 ${value.transmission}% · 磨砂 ${value.blur}px · 圆角 ${value.radius}px · 边缘亮度 ${value.rim}% · 阴影 ${value.shadow}% · 背景 ${value.background}% · 背景磨砂 ${value.backgroundBlur}px\n进度 ${value.progress ? '显示' : '隐藏'} · 时间与分类 ${value.metadata ? '显示' : '隐藏'} · 已完成 ${value.completed ? '保留' : '隐藏'}`
 }

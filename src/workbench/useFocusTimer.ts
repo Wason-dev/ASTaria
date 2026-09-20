@@ -4,6 +4,7 @@ import {
   restoreFocusTimer, selectFocusTask, startFocusRest, startFocusTimer, taskFocusSpentMs,
 } from './focusTimer'
 import type { FocusDurations, FocusTimerState } from './focusTimer'
+import { usePreferences } from '../xixi/preferences'
 
 function loadTimer(storageKey: string) {
   try {
@@ -15,6 +16,7 @@ function loadTimer(storageKey: string) {
 
 /** Mount a separate instance/key for sample previews so they never alter real focus records. */
 export function useFocusTimer(storageKey: string) {
+  const preferences = usePreferences()
   const [initial] = useState(() => loadTimer(storageKey))
   const model = useRef(initial.state)
   const [session, setSession] = useState(() => focusTimerSession(initial.state))
@@ -74,6 +76,9 @@ export function useFocusTimer(storageKey: string) {
   const nextFocus = useCallback(() => commit(nextFocusRound(model.current, Date.now())), [commit])
   const getSpentMs = useCallback((taskId: string) => taskFocusSpentMs(advanceFocusTimer(model.current, Date.now()), taskId), [])
   const setDurations = useCallback((next: FocusDurations) => commit(changeFocusDurations(model.current, next)), [commit])
+  useEffect(() => {
+    if (preferences.loaded && !storageKey.includes('preview')) setDurations(preferences.value.focus)
+  }, [preferences.loaded, preferences.value.focus.focusMin, preferences.value.focus.restMin, storageKey, setDurations])
 
   return { session, selectTask, start, pause, startRest, nextFocus, getSpentMs, durations, setDurations, storageError }
 }

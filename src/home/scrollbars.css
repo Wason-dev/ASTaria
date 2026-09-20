@@ -1,0 +1,17 @@
+/* A shared track with a reserved text gutter, scoped to the current workspace. */
+.p0 { --scroll-thumb: #c1b8a366; --scroll-hover: #d9c9a5a6 }
+.p0[data-night=false] { --scroll-thumb: #5d636755; --scroll-hover: #5d636799 }
+.p0 :is(textarea,.home-agenda-scroll,.xixi-conversation,.home-task-content,.xixi-topic-popover,.xixi-memory-list,.xixi-settings,.wb-scroll,.wb-customize,.wb-focus-note,.pl-scroll,.pl-board-scroll,.pl-side-scroll,.pl-dialog-body,.pl-week-board,.pl-timetable-scroll,.xixi-markdown pre,.home-menu-list) {
+  scrollbar-width: thin; scrollbar-color: var(--scroll-thumb) transparent;
+}
+.p0 :is(textarea,.home-agenda-scroll,.xixi-conversation,.home-task-content,.xixi-topic-popover,.xixi-memory-list,.xixi-settings,.wb-scroll,.wb-customize,.wb-focus-note,.pl-scroll,.pl-board-scroll,.pl-side-scroll,.pl-dialog-body) { scrollbar-gutter: stable; overscroll-behavior: contain }
+.p0 ::-webkit-scrollbar { width: 6px; height: 6px }
+.p0 ::-webkit-scrollbar-track,.p0 ::-webkit-scrollbar-corner { background: transparent }
+.p0 ::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border-radius: 999px; border: 1px solid transparent; background-clip: padding-box }
+.p0 ::-webkit-scrollbar-thumb:hover { background-color: var(--scroll-hover) }
+.p0 .home-agenda-scroll { margin-inline-end: 0; padding-inline-end: 10px }
+.p0 .xixi-conversation { margin-inline-end: 0; padding-inline-end: 12px }
+.p0 :is(.home-input-shell textarea,.wb-input-textarea) { padding-inline-end: 16px; scrollbar-gutter: stable }
+.p0 :is(.xixi-memory-list,.wb-focus-note) { padding-inline-end: 10px }
+.p0 .xixi-topic-popover { padding-inline-end: 12px }
+.p0 .home-task-content { padding-inline-end: 20px }

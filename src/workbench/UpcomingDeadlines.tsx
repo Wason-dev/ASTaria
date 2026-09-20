@@ -7,6 +7,7 @@ import { deadlineContext } from './briefing'
 import { MeasuredGlassSurface } from '../home/GlassSurface'
 import type { Appearance } from './appearance'
 import { WorkbenchIcon } from './WorkbenchIcon'
+import type { WorkbenchIconName } from './WorkbenchIcon'
 import './deadline-panel.css'
 
 export function DeadlineSummary({ tasks, now, onReveal }: { tasks: Task[]; now: Date; onReveal: () => void }) {
@@ -128,15 +129,24 @@ function DeadlineRow({ item, featured, offpage, pageRevision, now, focusMin, get
   const toggle = useRef<HTMLButtonElement>(null)
   const spentMs = getSpentMs(item.task.id)
   const estimate = Number.isFinite(item.task.estimateMin) && (item.task.estimateMin ?? 0) > 0 ? Math.ceil(item.task.estimateMin!) : null
+  const evidenceFields: Array<{ icon: WorkbenchIconName; label: string }> = [
+    { icon: 'calendar', label: '截止' }, { icon: 'hourglass', label: '原估时' },
+    { icon: 'timer', label: '已专注' }, { icon: 'xixi', label: '节奏参考' },
+  ]
   useEffect(() => { setExpanded(false) }, [pageRevision])
+  useEffect(() => { if (offpage) setExpanded(false) }, [offpage])
   return <li className="wb-ddl-item" data-urgency={item.urgency} data-offpage={offpage} inert={offpage} aria-hidden={offpage} onKeyDown={event => { if (event.key === 'Escape' && expanded) { event.stopPropagation(); setExpanded(false); toggle.current?.focus() } }}>
     <time className="wb-ddl-node-date" dateTime={item.task.due} aria-label={`${item.dateLabel}截止`}>{item.dateLabel}</time>
     <span className="wb-ddl-node-dot" aria-hidden="true" />
+    <div className="wb-ddl-card">
     <button className="wb-ddl-select" data-deadline-id={item.task.id} disabled={disabled} onClick={() => onSelect(item.task.id)} aria-label={`${item.task.title}，${item.remainingLabel}，${item.dateLabel}截止，${context.effortLabel}，${context.suggestion}，进入专注`}>
       <span className="wb-ddl-copy"><span className="wb-ddl-status"><span className="wb-ddl-countdown">{item.remainingLabel}</span></span><strong>{item.task.title}</strong><span className="wb-ddl-meta"><span className="wb-ddl-effort" title={estimate ? `原预计 ${estimate} 分钟` : '用时待估'}><WorkbenchIcon name="hourglass" />{estimate ? `${estimate} 分钟` : '待估'}</span>{spentMs > 0 && <span className="wb-ddl-effort" title={`累计专注 ${Math.floor(spentMs / 60000)} 分钟`}><WorkbenchIcon name="timer" />{spentMs < 60000 ? '<1' : Math.floor(spentMs / 60000)} 分钟</span>}</span>{featured && <span className="wb-ddl-advice" data-tone={context.tone}>{context.suggestion}</span>}</span>
       <span className="wb-ddl-arrow"><WorkbenchIcon name="arrow" /></span>
     </button>
-    <button ref={toggle} className="wb-reason-toggle wb-ddl-reason-toggle wb-icon-button" disabled={disabled} aria-label={expanded ? `收起「${item.task.title}」的建议依据` : `查看「${item.task.title}」的建议依据`} title={expanded ? '收起依据' : '建议依据'} data-tooltip={expanded ? '收起依据' : '建议依据'} aria-expanded={expanded} aria-controls={regionId} onClick={() => setExpanded(value => !value)}><WorkbenchIcon name="info" /><span className="wb-tooltip" role="tooltip">{expanded ? '收起依据' : '建议依据'}</span></button>
-    <div className="wb-insight-reveal wb-ddl-evidence" data-open={expanded} inert={!expanded} aria-hidden={!expanded} id={regionId} onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); setExpanded(false); toggle.current?.focus() } }}><div>{!featured && <p className="wb-ddl-expanded-advice">{context.suggestion}</p>}<ul>{context.evidence.map(reason => <li key={reason}>{reason}</li>)}</ul></div></div>
+      <button ref={toggle} className="wb-reason-toggle wb-ddl-reason-toggle wb-icon-button" disabled={disabled} aria-label={expanded ? `收起「${item.task.title}」的建议依据` : `查看「${item.task.title}」的建议依据`} title={expanded ? '收起依据' : '建议依据'} data-tooltip={expanded ? '收起依据' : '建议依据'} aria-expanded={expanded} aria-controls={regionId} onClick={() => setExpanded(value => !value)}><WorkbenchIcon name="info" /><span className="wb-tooltip" role="tooltip">{expanded ? '收起依据' : '建议依据'}</span></button>
+    </div>
+    <div className="wb-ddl-details">
+      <div className="wb-insight-reveal wb-ddl-evidence" data-open={expanded} inert={!expanded} aria-hidden={!expanded} id={regionId} onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); setExpanded(false); toggle.current?.focus() } }}><div>{!featured && <p className="wb-ddl-expanded-advice">{context.suggestion}</p>}<ul>{context.evidence.map((reason, index) => <li key={reason}><span className="wb-ddl-evidence-label"><WorkbenchIcon name={evidenceFields[index]?.icon ?? 'info'} />{evidenceFields[index]?.label ?? '依据'}</span><p>{reason}</p></li>)}</ul></div></div>
+    </div>
   </li>
 }

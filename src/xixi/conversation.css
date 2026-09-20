@@ -1,0 +1,136 @@
+.xixi-conversation {
+  --xixi-muted: var(--wb-muted, var(--p0-muted));
+  --xixi-line: var(--wb-line, var(--p0-line));
+  --xixi-gold: var(--wb-gold, #d5bb8b);
+  flex: 1;
+  min-height: 40px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-gutter: stable;
+  scrollbar-color: #b6aa9466 transparent;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  padding: 14px 1px;
+  padding-inline-end: 12px;
+  /* Place the native scroll rail in the panel's side padding, away from prose. */
+  margin-inline-end: -8px;
+  pointer-events: auto;
+  font-size: var(--wb-font, 12px);
+  line-height: 1.75;
+}
+.xixi-conversation::-webkit-scrollbar { width: 5px; height: 5px }
+.xixi-conversation::-webkit-scrollbar-track { background: transparent }
+.xixi-conversation::-webkit-scrollbar-thumb { border-radius: 999px; background: #b6aa9466 }
+.xixi-conversation > * { flex-shrink: 0 }
+.xixi-message { min-width: 0; animation: xixi-message-enter 240ms ease both }
+.xixi-message[data-role=user] { margin-left: 24px; padding: 8px 11px; border-radius: 12px 12px 3px 12px; background: #ffffff08; border: 1px solid var(--xixi-line) }
+.xixi-message > span { display: block; font-size: 10px; color: var(--xixi-muted); margin-bottom: 3px }
+.xixi-message p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere }
+.xixi-markdown { min-width: 0; overflow-wrap: anywhere; word-break: break-word }
+.xixi-markdown > :first-child { margin-top: 0 }
+.xixi-markdown > :last-child { margin-bottom: 0 }
+.xixi-markdown p { white-space: pre-wrap; margin: 0 0 7px }
+.xixi-markdown strong { font-weight: 650; color: var(--xixi-text, inherit) }
+.xixi-markdown em { font-style: italic }
+.xixi-markdown ul, .xixi-markdown ol { margin: 5px 0 7px; padding-left: 19px; white-space: normal }
+.xixi-markdown li { margin: 2px 0; padding-left: 2px; overflow-wrap: anywhere }
+.xixi-markdown li::marker { color: var(--xixi-gold) }
+.xixi-markdown blockquote { margin: 7px 0; padding-left: 10px; border-left: 2px solid var(--xixi-gold); color: var(--xixi-muted) }
+.xixi-markdown a { color: var(--xixi-gold); text-decoration: underline; text-decoration-color: #d5bb8b70; text-underline-offset: 2px; overflow-wrap: anywhere }
+.xixi-markdown code { padding: 1px 4px; border-radius: 4px; background: #ffffff10; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .9em; overflow-wrap: anywhere }
+.xixi-markdown pre { max-width: 100%; overflow: auto; margin: 7px 0; padding: 8px 9px; border-radius: 8px; background: #00000020; white-space: pre; font-size: .9em }
+.xixi-markdown pre code { padding: 0; background: none }
+.xixi-markdown-image-alt { display: inline-block; color: var(--xixi-muted); font-size: .9em; border: 1px dashed var(--xixi-line); border-radius: 5px; padding: 1px 5px }
+.xixi-message[data-retracted=true] > p { color: var(--xixi-muted); font-size: 11px }
+.xixi-message-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin-top: 5px; min-height: 21px; opacity: .38; transition: opacity 180ms ease }
+.xixi-message:is(:hover,:focus-within) .xixi-message-actions { opacity: 1 }
+.p0 .xixi-message-actions button { display: inline-flex; align-items: center; gap: 4px; padding: 2px 0; font-size: 10px; color: var(--xixi-muted); background: transparent; border: 0; border-radius: 4px; box-shadow: none }
+.xixi-message-actions svg, .xixi-undo svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.1; stroke-linecap: round; stroke-linejoin: round; flex: none }
+.xixi-message-actions small { font-size: 10px; color: var(--xixi-muted) }
+.xixi-delivery { display: flex; align-items: center; gap: 8px; margin-top: 5px; color: var(--xixi-muted); font-size: 10px; line-height: 1.6 }
+.xixi-message[data-delivery=failed] .xixi-delivery { color: #d5bb8b }
+.xixi-quick-options { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px }
+.p0 .xixi-quick-options button { border: 1px solid #d5bb8b40; border-radius: 999px; padding: 5px 10px; font-size: 11px; line-height: 1.6; background: #ffffff08; color: inherit; text-align: left; transition: background 180ms ease, border-color 180ms ease, transform 180ms ease }
+.p0 .xixi-quick-options button:enabled:hover { background: #d5bb8b20; border-color: #d5bb8b80; transform: translateY(-1px) }
+.p0 .xixi-quick-options button:disabled { opacity: .5; cursor: default }
+.xixi-empty { margin: auto 0 4px; color: var(--xixi-muted) }
+.xixi-status { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin: 0; color: var(--xixi-muted); font-size: 11px }
+.xixi-thinking { display: inline-flex; gap: 3px; align-items: center; min-height: 18px; color: var(--xixi-gold) }
+.xixi-thinking > span { width: 3px; height: 3px; background: currentColor; border-radius: 50%; animation: xixi-thinking 1200ms ease-in-out infinite }
+.xixi-thinking > span:nth-child(2) { animation-delay: 140ms }
+.xixi-thinking > span:nth-child(3) { animation-delay: 280ms }
+.xixi-receipt { margin-top: 9px; padding: 9px 10px; border-radius: 11px; border: 1px solid var(--xixi-line); background: #a9906010; font-size: 11px }
+.xixi-receipt > header, .wb-xixi .xixi-receipt > header { display: flex; gap: 8px; justify-content: space-between; align-items: start; padding: 0; border: 0 }
+.xixi-receipt > header strong { font-size: 11px; font-weight: 400; letter-spacing: 0 }
+.xixi-receipt ul { margin: 6px 0 0; padding-left: 15px; color: var(--xixi-muted) }
+.xixi-receipt li + li { margin-top: 4px }
+.xixi-receipt small { font-size: 10px; color: var(--xixi-muted) }
+.p0 .xixi-text-button { font-size: 11px; padding: 2px 0; border-radius: 4px; color: inherit; text-decoration: underline; text-decoration-color: #ad956f66; text-underline-offset: 3px; background: transparent; border: 0; box-shadow: none }
+.p0 .xixi-receipt button { font-size: 11px; text-align: left; line-height: 1.65 }
+.p0 .xixi-undo { display: inline-flex; align-items: center; gap: 4px; flex: none; color: var(--xixi-gold); padding-left: 8px }
+.p0 .xixi-load-older { align-self: center; color: var(--xixi-muted); font-size: 10px; margin-bottom: 5px }
+.xixi-send-error { margin: 8px 0 0; font-size: 11px; line-height: 1.7; color: #e5baa8; overflow-wrap: anywhere }
+.xixi-send-error .xixi-text-button { margin-left: 8px }
+.home-compose-actions .xixi-manual { color: var(--p0-muted); font-size: 10px }
+.home-xixi .xixi-conversation { margin-block: 0 }
+.xixi-header-actions { display: flex; align-items: center; gap: 10px }
+.p0 .home-xixi .xixi-header-actions .xixi-text-button { font-size: 10px; color: var(--p0-muted); text-decoration: none }
+.xixi-topic-menu { position: relative; z-index: 10; flex: none }
+.xixi-topic-popover { pointer-events: auto; position: absolute; top: calc(100% + 8px); right: 0; width: 278px; max-width: calc(100vw - 64px); max-height: min(340px, 55dvh); overflow: auto; border: 1px solid #d5bb8b35; background: linear-gradient(135deg, #ffffff09, #ffffff00 60%), #14161aeb; -webkit-backdrop-filter: blur(14px) saturate(1.12); backdrop-filter: blur(14px) saturate(1.12); color: #eeeae3; border-radius: 14px; padding: 7px; box-shadow: inset 0 1px #ffffff10, 0 10px 24px #0004; text-shadow: none; animation: xixi-message-enter 180ms ease both; scrollbar-width: thin }
+.home-morph[data-compact=true] .xixi-topic-popover { width: 248px }
+.xixi-topic-popover ul { margin: 5px 0 0; padding: 0; list-style: none }
+.p0 .xixi-topic-popover button { width: 100%; padding: 7px 8px; display: flex; align-items: center; justify-content: space-between; gap: 10px; text-align: left; font-size: 11px; line-height: 1.6; border-radius: 7px }
+.p0 .xixi-topic-popover button:is(:hover,[aria-current]) { background: #d5bb8b12 }
+.xixi-topic-popover button > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.xixi-topic-popover time { color: #abb0b8; font-size: 10px; flex: none }
+.xixi-topic-popover p { font-size: 11px; margin: 8px }
+.p0 .xixi-topic-popover .xixi-topic-new { color: #d5bb8b; border-bottom: 1px solid #d5bb8b20; border-radius: 0; padding-bottom: 9px }
+.xixi-topic-row { display: flex; align-items: center; gap: 2px; min-width: 0; border-radius: 8px; transition: background 150ms ease }
+.xixi-topic-row[data-active=true], .xixi-topic-row:focus-within { background: #d5bb8b0c }
+.p0 .xixi-topic-popover .xixi-topic-select { flex: 1; min-width: 0; width: auto; gap: 8px }
+.xixi-topic-actions { display: flex; flex: none; align-items: center; gap: 1px; opacity: .48; transition: opacity 150ms ease }
+.xixi-topic-row:is(:hover,:focus-within) .xixi-topic-actions { opacity: 1 }
+.p0 .xixi-topic-popover .xixi-topic-icon { width: 25px; height: 29px; flex: none; padding: 5px; display: inline-flex; justify-content: center; color: inherit; border: 0; background: transparent; box-shadow: none; text-decoration: none }
+.xixi-topic-icon svg { width: 14px; height: 14px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.1; stroke-linecap: round; stroke-linejoin: round }
+.p0 .xixi-topic-popover .xixi-topic-icon:hover { background: #d5bb8b16 }
+.p0 .xixi-topic-popover button:focus-visible, .p0 .xixi-topic-edit input:focus-visible { outline: 1px solid #d5bb8b; outline-offset: -1px }
+.p0 .xixi-topic-edit { display: flex; align-items: center; gap: 3px; width: 100%; margin: 0; min-height: auto; padding: 5px 3px; border: 0; overflow: visible; animation: xixi-message-enter 150ms ease both }
+.p0 .xixi-topic-edit input { min-width: 0; flex: 1; width: 0; padding: 6px 7px; border: 1px solid #d5bb8b55; border-radius: 7px; background: #ffffff06; color: inherit; font: inherit; font-size: 11px; line-height: 1.6; box-shadow: none }
+.xixi-topic-confirm { width: 100%; min-width: 0; padding: 7px 8px; border: 1px solid #d5bb8b30; border-radius: 9px; background: #d5bb8b08; animation: xixi-message-enter 150ms ease both }
+.xixi-topic-popover .xixi-topic-confirm p { margin: 0 0 8px; display: grid; gap: 3px; line-height: 1.65 }
+.xixi-topic-confirm p strong { font-size: 11px; font-weight: 500 }
+.xixi-topic-confirm p span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .7 }
+.xixi-topic-confirm p small { font-size: 10px; opacity: .65 }
+.xixi-topic-confirm > div { display: flex; justify-content: flex-end; gap: 7px }
+.p0 .xixi-topic-popover .xixi-topic-confirm button { width: auto; padding: 4px 8px; line-height: 1.6; font-size: 10px; border: 1px solid #d5bb8b25; background: #ffffff08; justify-content: center }
+.p0 .xixi-topic-popover .xixi-topic-confirm-delete { color: #e4c28f; background: #d5bb8b12 }
+.xixi-topic-popover .xixi-topic-error { color: #e5baa8; overflow-wrap: anywhere }
+.p0 .workbench[data-theme=light] .xixi-topic-popover { background: #f7f8faf5; color: #303941; border-color: #8f7d5d30 }
+.p0 .workbench[data-theme=light] .xixi-topic-popover .xixi-topic-new { color: #806337 }
+.p0 .workbench[data-theme=light] .xixi-topic-popover time { color: #65717c }
+.p0 .workbench[data-theme=light] .xixi-topic-popover .xixi-topic-confirm-delete { color: #806337 }
+.p0 .workbench[data-theme=light] .xixi-topic-popover .xixi-topic-error { color: #965944 }
+.p0 .wb-xixi .xixi-conversation { flex-basis: clamp(160px, calc(100dvh - 540px), 360px); max-height: min(500px, calc(100dvh - 360px)); margin-top: 6px; color: inherit }
+.wb-xixi .xixi-compose { flex: none }
+.wb-xixi .xixi-compose footer { margin-top: 9px }
+.wb-xixi .xixi-compose .xixi-send-error { margin-top: 8px }
+.wb-xixi .xixi-preview-message { margin: 16px 0; font-size: calc(var(--wb-font) - 1px); color: var(--wb-muted) }
+.p0 .wb-xixi .xixi-send { padding: 6px 12px; min-height: 31px; font-size: 11px; border-radius: 999px }
+.p0 .workbench[data-theme=light] .xixi-message[data-role=user] { background: #ffffff40 }
+.p0 .workbench[data-theme=light] .xixi-send-error { color: #965944 }
+.p0 .workbench[data-theme=light] .xixi-message[data-delivery=failed] .xixi-delivery { color: #896934 }
+.p0 .workbench[data-theme=light] .xixi-quick-options button { background: #ffffff40; border-color: #92754850 }
+@keyframes xixi-message-enter { from { opacity: 0; transform: translateY(5px) } to { opacity: 1; transform: translateY(0) } }
+@keyframes xixi-thinking { 0%, 70%, 100% { opacity: .28; transform: translateY(0) } 35% { opacity: 1; transform: translateY(-2px) } }
+@media (max-width: 760px) { .p0 .wb-xixi .xixi-conversation { flex-basis: min(360px, 44dvh); max-height: min(500px, 55dvh) } }
+@media (pointer: coarse) { .xixi-message-actions { opacity: .8 }.p0 .xixi-message-actions button { min-height: 32px; padding-inline: 3px } }
+@media (max-height: 520px) { .home-xixi .xixi-conversation { padding-block: 8px; min-height: 0 }.p0 .wb-xixi .xixi-conversation { flex-basis: 160px; max-height: 240px } }
+@media (prefers-reduced-motion: reduce) { .xixi-message, .xixi-thinking > span, .xixi-topic-popover, .xixi-topic-edit, .xixi-topic-confirm { animation: none }.p0 .xixi-quick-options button,.xixi-message-actions,.xixi-topic-row,.xixi-topic-actions { transition: none } }
+@media (forced-colors: active) {
+  .xixi-message[data-role=user], .xixi-receipt { border: 1px solid CanvasText; background: Canvas }
+  .xixi-send-error, .xixi-status, .xixi-empty { color: CanvasText }
+}
+.xixi-receipt-details{padding-left:15px;margin:7px 0 0;font-size:11px;line-height:1.65;color:var(--settings-muted,#bdb7a8);overflow-wrap:anywhere}

@@ -1,9 +1,35 @@
-import Dexie, { type Table } from 'dexie'
 import type { Assignment, AssignmentFeedback, AssignmentStatus } from '../domain/schedule'
+import { localApi } from '../xixi/api'
+import { ensureLocalMigration, notifyLocalDataChange } from './migration'
 
 export type DailyAvailability = { date: string; until: string; updatedAt: string }
-class ScheduleDatabase extends Dexie { availability!: Table<DailyAvailability, string>; assignments!: Table<Assignment, string>; constructor() { super('astaria-schedule'); this.version(1).stores({ availability: 'date, updatedAt', assignments: 'id, taskId, status, updatedAt' }) } }
-const db = new ScheduleDatabase()
-export interface ScheduleStore { getAvailability(date: string): Promise<DailyAvailability | null>; saveAvailability(date: string, until: string): Promise<DailyAvailability>; saveAssignment(input: { taskId: string; blockId: string; plannedMin: number; reason: string; status?: AssignmentStatus; feedback?: AssignmentFeedback }): Promise<Assignment>; listAssignments(): Promise<Assignment[]> }
-export class LocalScheduleStore implements ScheduleStore { async getAvailability(date: string) { const row = await db.availability.get(date); return row ? structuredClone(row) : null }; async saveAvailability(date: string, until: string) { const row = { date, until, updatedAt: new Date().toISOString() }; await db.availability.put(row); return structuredClone(row) }; async saveAssignment(input: { taskId: string; blockId: string; plannedMin: number; reason: string; status?: AssignmentStatus; feedback?: AssignmentFeedback }) { const row: Assignment = { ...input, id: crypto.randomUUID(), status: input.status ?? 'suggested', updatedAt: new Date().toISOString() }; await db.assignments.put(row); return structuredClone(row) }; async listAssignments() { return (await db.assignments.toArray()).sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt)).map((row)=>structuredClone(row)) } }
+type AssignmentInput = { taskId: string; blockId: string; plannedMin: number; reason: string; status?: AssignmentStatus; feedback?: AssignmentFeedback }
+export interface ScheduleStore {
+  getAvailability(date: string): Promise<DailyAvailability | null>
+  saveAvailability(date: string, until: string): Promise<DailyAvailability>
+  saveAssignment(input: AssignmentInput): Promise<Assignment>
+  listAssignments(): Promise<Assignment[]>
+}
+export class LocalScheduleStore implements ScheduleStore {
+  async getAvailability(date: string) {
+    await ensureLocalMigration()
+    return localApi<DailyAvailability | null>(`/availability?date=${encodeURIComponent(date)}`)
+  }
+  async saveAvailability(date: string, until: string) {
+    await ensureLocalMigration()
+    const availability = await localApi<DailyAvailability>('/availability', { date, until })
+    notifyLocalDataChange()
+    return availability
+  }
+  async saveAssignment(input: AssignmentInput) {
+    await ensureLocalMigration()
+    const assignment = await localApi<Assignment>('/assignments', input)
+    notifyLocalDataChange()
+    return assignment
+  }
+  async listAssignments() {
+    await ensureLocalMigration()
+    return localApi<Assignment[]>('/assignments')
+  }
+}
 export const scheduleStore: ScheduleStore = new LocalScheduleStore()

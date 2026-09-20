@@ -11,7 +11,8 @@ export function localDateKey(date: Date): string {
 
 /** Returns null on weekends because the built-in timetable has no weekend rows. */
 export function weekdayForDate(date: Date): Weekday | null {
-  return WORKDAYS[date.getDay() - 1] ?? null
+  const label = WEEKDAY_LABELS[date.getDay()]
+  return WORKDAYS.includes(label as Weekday) ? label as Weekday : null
 }
 
 export function weekdayLabel(date: Date): (typeof WEEKDAY_LABELS)[number] {
@@ -42,6 +43,6 @@ export function calendarTaskMatches(due: string | undefined, year: number, month
 export function calendarEventMatches(startDate: string, endDate: string, year: number, month: number, day: number): boolean {
   const start = agendaDate(startDate)
   const end = agendaDate(endDate)
-  const target = localDateKey(new Date(year, month, day, 12))
-  return Boolean(start && end && localDateKey(start) <= target && target <= localDateKey(end))
+  const target = new Date(year, month, day, 12)
+  return Boolean(start && end && start.getTime() <= target.getTime() && target.getTime() <= end.getTime())
 }

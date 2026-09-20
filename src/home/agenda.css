@@ -3,7 +3,7 @@
 .home-agenda-header h2 { margin: 0; font-size: 12px; font-weight: 400; letter-spacing: .12em }
 .home-agenda-header > span { font-size: 10px; color: var(--p0-muted) }
 .p0 .home-agenda-back { padding: 6px 0; font-size: 11px; color: var(--p0-muted) }
-.home-agenda-scroll { min-height: 0; overflow: auto; scrollbar-width: thin; overscroll-behavior: contain; pointer-events: auto; padding-top: 8px; padding-right: 2px }
+.home-agenda-scroll { min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; scrollbar-gutter: stable; overscroll-behavior: contain; pointer-events: auto; margin-inline-end: -8px; padding: 8px 12px 0 0 }
 .home-agenda-scroll:focus-visible { outline: 1px solid var(--p0-line); outline-offset: 2px }
 .home-month-controls { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 3px }
 .home-month-controls strong { font-size: 11px; font-weight: 400; font-variant-numeric: tabular-nums }
@@ -45,7 +45,10 @@
 .home-agenda-error { font-size: 11px; color: var(--p0-muted) }
 .home-agenda-error button { text-decoration: underline }
 .home-agenda-list { list-style: none; padding: 0; margin: 0 }
-.p0 .home-agenda-list button { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; width: 100%; min-height: 33px; padding: 3px 0; text-align: left; border-radius: 4px }
+.p0 .home-agenda-list button { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; width: 100%; min-height: 33px; padding: 4px 5px 4px 13px; text-align: left; border-radius: 6px; transition: background-color 180ms, box-shadow 180ms }
+.home-agenda-list button::before { content: ''; position: absolute; left: 1px; top: 10px; width: 5px; height: 5px; border-radius: 50%; background: var(--task-state-color); box-shadow: 0 0 8px color-mix(in srgb, var(--task-state-color) 22%, transparent); transition: background-color 180ms, box-shadow 180ms }
+.home-agenda-list button[data-task-status=doing] { box-shadow: inset 1px 0 color-mix(in srgb, var(--task-state-color) 30%, transparent) }
+.home-agenda-list button[data-task-status=doing] > span { color: #e1c68f }
 .home-agenda-list button > span { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px }
 .home-agenda-list button > small { font-size: 9px; color: var(--p0-muted); line-height: 1.5 }
 .home-agenda-list button[data-overdue=true] > small { color: #dfc292 }

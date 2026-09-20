@@ -62,6 +62,49 @@ test('precise timestamps use their actual timezone and human readable remaining 
   assert.equal(item('2026-09-17T12:45').deadlineMs, item('2026-09-17T04:45:00Z').deadlineMs)
 })
 
+test('screenshot deadline shows one day and 32 minutes instead of rounding up to two days', () => {
+  const screenshotTime = new Date('2026-09-18T17:28:00+08:00')
+  const deadline = item('2026-09-19T18:00:00+08:00', screenshotTime)
+  assert.equal(deadline.remainingLabel, '剩1天32分钟')
+  assert.equal(deadline.dateLabel, '9月19日 · 18:00')
+  assert.equal(deadline.urgency, 'soon')
+  assert.equal(item('2026-09-19T10:00:00Z', screenshotTime).remainingLabel, '剩1天32分钟')
+  assert.equal(item('2026-09-19', screenshotTime).remainingLabel, '明天截止')
+})
+
+test('precise remaining and overdue durations retain their smaller units at minute, hour and day boundaries', () => {
+  const minute = 60_000
+  const hour = 60 * minute
+  const day = 24 * hour
+  const cases = [
+    [1, '不到1分钟'],
+    [minute - 1, '不到1分钟'],
+    [minute, '1分钟'],
+    [minute + 59_999, '1分钟'],
+    [hour - 1, '59分钟'],
+    [hour, '1小时'],
+    [hour + minute, '1小时1分钟'],
+    [hour + 32 * minute + 59_999, '1小时32分钟'],
+    [day - 1, '23小时59分钟'],
+    [day, '1天'],
+    [day + minute, '1天1分钟'],
+    [day + 32 * minute, '1天32分钟'],
+    [day + hour - 1, '1天59分钟'],
+    [day + hour, '1天1小时'],
+    [day + hour + 32 * minute, '1天1小时'],
+    [2 * day - 1, '1天23小时'],
+    [2 * day, '2天'],
+    [3 * day + 6 * hour, '3天6小时'],
+  ]
+  for (const [duration, label] of cases) {
+    assert.equal(item(new Date(now.getTime() + duration).toISOString()).remainingLabel, `剩${label}`, `remaining ${duration}ms`)
+    const overdue = item(new Date(now.getTime() - duration).toISOString())
+    assert.equal(overdue.remainingLabel, `逾期${label}`, `overdue ${duration}ms`)
+    assert.equal(overdue.urgency, 'overdue')
+  }
+  assert.equal(item(now.toISOString()).remainingLabel, '刚刚到期')
+})
+
 test('urgency boundaries cover 24 hours, 72 hours, one week and beyond', () => {
   const atHours = hours => item(new Date(now.getTime() + hours * 3_600_000).toISOString()).urgency
   assert.equal(atHours(-1), 'overdue')

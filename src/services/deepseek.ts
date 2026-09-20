@@ -1,7 +1,7 @@
 import type { ApiSettings } from '../stores/settingsStore'
+import { localApi } from '../xixi/api'
 
 export async function testDeepSeekConnection(settings: ApiSettings): Promise<void> {
-  if (!settings.apiKey.trim()) throw new Error('请先填写 API Key')
-  const response = await fetch(settings.endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${settings.apiKey.trim()}` }, body: JSON.stringify({ model: settings.model, messages: [{ role: 'user', content: 'Reply with OK.' }], max_tokens: 8 }) })
-  if (!response.ok) throw new Error(`连接失败（HTTP ${response.status}）`)
+  if (settings.apiKey.trim()) throw new Error('先将密钥保存到本机钥匙串，再测试连接')
+  await localApi('/settings/test', {})
 }

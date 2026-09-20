@@ -6,14 +6,25 @@
 .p0[data-night=false] .home-notification { box-shadow: 0 6px 18px #20252d12 }
 .p0[data-night=false] .home-glass-surface { background: rgb(255 255 255 / var(--glass-tint)) }
 .home-clock,.home-notification { z-index: 4 }
-.workbench { position: absolute; inset: 0; z-index: 1; font-size: var(--wb-font); color: #30343a; pointer-events: none; visibility: hidden; transition: visibility 0s 320ms; --wb-muted: #626b75; --wb-line: #4146501c; --wb-gold: #a58752 }
+.workbench { position: absolute; inset: 0; z-index: 1; font-size: var(--wb-font); color: #30343a; pointer-events: none; visibility: hidden; transition: visibility 0s 200ms; --wb-muted: #626b75; --wb-line: #4146501c; --wb-gold: #a58752 }
 .workbench[data-active=true] { visibility: visible; transition-delay: 0s }
 .wb-background { position: absolute; inset: 0; background: rgb(248 246 242 / var(--wb-background)); -webkit-backdrop-filter: blur(var(--wb-backdrop-blur)); backdrop-filter: blur(var(--wb-backdrop-blur)); opacity: 0; transition: opacity 520ms cubic-bezier(.2,.7,.2,1), background 200ms, backdrop-filter 240ms }
-.workbench[data-active=false] .wb-background { transition-duration: 300ms, 200ms, 240ms }
+.workbench[data-active=false] .wb-background { transition: opacity 200ms ease; -webkit-backdrop-filter: none; backdrop-filter: none }
 .p0[data-night=false] .workbench .home-glass-surface { background: rgb(222 232 242 / var(--glass-tint)) }
 .workbench[data-active=true] .wb-background { opacity: 1 }
-.wb-scroll { position: absolute; inset: 76px 0 60px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; opacity: 0; transition: opacity 260ms; pointer-events: none }
+.wb-scroll { position: absolute; inset: 76px 0 60px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; opacity: 0; pointer-events: none }
 .workbench[data-active=true] .wb-scroll { opacity: 1; pointer-events: auto }
+/* Keep the sampling surface and its ancestors opaque. Chromium drops SVG
+   backdrop displacement below opacity 1; animate the tint and rim instead. */
+.workbench[data-active=true] .home-glass-surface { animation: wb-state-in 260ms both }
+/* Sampling is detached by GlassSamplingContext before the whole panel fades.
+   One ancestor carries text, border, hover paint and outer shadows together. */
+.workbench[data-active=false] .wb-scroll { transition: opacity 200ms ease }
+.workbench[data-active=false] .wb-scroll * { animation: none !important }
+.workbench[data-active=false] .home-glass-surface { -webkit-backdrop-filter: none !important; backdrop-filter: none !important }
+.workbench[data-active=true] .home-glass-surface::after { animation: wb-rim-in 260ms both }
+.workbench[data-active=false] .home-glass-surface::after { animation: none }
+.workbench[data-active=true] :is(.wb-toolbar,.wb-glass-content,.wb-task-body,.wb-heading,.wb-section-heading) { animation: wb-content-in 300ms cubic-bezier(.16,.8,.25,1) both }
 .wb-container { width: min(var(--wb-width), calc(100% - 2 * var(--home-left))); margin: max(12px, calc(var(--wb-top) - 76px)) auto 24px; container: workbench-content / inline-size }
 .wb-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 28px; margin-bottom: 22px }
 .wb-eyebrow { color: var(--wb-muted); font-size: calc(var(--wb-font) - 1px); letter-spacing: .08em }
@@ -239,8 +250,10 @@
 .wb-stage[data-leaving=true] .home-glass-surface { animation: wb-surface-out 150ms both }
 @keyframes wb-content-in { from { opacity: 0; transform: translateY(9px) } to { opacity: 1; transform: translateY(0) } }
 @keyframes wb-content-out { to { opacity: 0; transform: translateY(-5px) } }
-@keyframes wb-state-in { from { opacity: 0 } to { opacity: 1 } }
-@keyframes wb-surface-out { to { opacity: 0 } }
+@keyframes wb-state-in { from { background-color: transparent; box-shadow: none } }
+@keyframes wb-surface-out { to { background-color: transparent; box-shadow: none; visibility: hidden } }
+@keyframes wb-rim-in { from { opacity: 0 } to { opacity: 1 } }
+@keyframes wb-rim-out { to { opacity: 0 } }
 .wb-customize { position: fixed; inset: 78px 26px auto auto; width: 300px; max-width: calc(100vw - 36px); max-height: calc(100dvh - 100px); margin: 0; padding: 20px; border: 1px solid #ffffff80; border-radius: 22px; color: #38414a; background: #f6f8faed; backdrop-filter: blur(6px); box-shadow: 0 10px 48px #27304026; overflow: auto; scrollbar-width: thin; font-size: 11px; pointer-events: auto; animation: wb-content-in 240ms both }
 .wb-customize::backdrop { background: #27304006 }
 .wb-customize[data-closing=true] { animation: wb-content-out 170ms both }
@@ -333,4 +346,9 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .workbench *,.home-scene-ui { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workbench[data-active] :is(.home-glass-surface,.wb-toolbar,.wb-glass-content,.wb-task-body,.wb-heading,.wb-section-heading) { animation: none }
+  .workbench[data-active] .home-glass-surface::after { animation: none }
 }

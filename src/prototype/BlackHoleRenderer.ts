@@ -5,6 +5,12 @@ import { SelectiveBloom } from './postprocessing'
 import { StarInfall } from './StarInfall'
 import { AdaptiveQualityController } from './adaptiveQuality'
 import type { AdaptiveQuality } from './adaptiveQuality'
+import { ResponseEffectController } from './responseEffects'
+import type { ResponseEffectSettings, ResponsePhase } from './responseEffects'
+import { normalizeRenderProfile, RENDER_PROFILES } from './renderProfile'
+import type { RenderProfile } from './renderProfile'
+export type { ResponseEffectSettings, ResponsePhase } from './responseEffects'
+export type { RenderProfile } from './renderProfile'
 
 export type Quality = AdaptiveQuality
 export type QualityMode = Quality | 'auto'
@@ -36,6 +42,9 @@ export interface RenderStats {
   pointerStrength: number
   pointerX: number
   pointerY: number
+  responseEffect: ReturnType<ResponseEffectController['getSnapshot']>
+  renderProfile: RenderProfile
+  targetFps: number
 }
 
 interface CameraSpring {
@@ -199,15 +208,20 @@ export class BlackHoleRenderer {
   private contextLost = false
   private disposed = false
   private raf = 0
+  private frameTimer: ReturnType<typeof setTimeout> | null = null
   private statsTimer: ReturnType<typeof setInterval> | null = null
   private previousFrame: number | null = null
   private previousWasAmbient = false
+  private nextFrameAt = 0
+  private renderProfile: RenderProfile = 'full'
   private renderedFrames = 0
   private simulationTime = 0
   private night = 0
   private nightTarget = 0
   private nightVelocity = 0
   private readonly adaptiveQuality = new AdaptiveQualityController()
+  private readonly responseEffect = new ResponseEffectController()
+  private readonly responseWeights = new THREE.Vector3(1, 0, 0)
   private cssWidth = 0
   private cssHeight = 0
   private activeDpr = 0
@@ -271,6 +285,11 @@ export class BlackHoleRenderer {
         uCriticalImpact: { value: geodesics.criticalImpact },
         uMaxImpact: { value: geodesics.maxImpact },
         uCameraRadius: { value: geodesics.cameraRadius },
+        uResponseStrength: { value: 0 },
+        uResponseReply: { value: 0 },
+        uResponseTime: { value: 0 },
+        uResponseMotion: { value: 1 },
+        uResponseWeights: { value: this.responseWeights },
       },
     })
     const quad = new THREE.Mesh(this.geometry, this.material)
@@ -309,6 +328,18 @@ export class BlackHoleRenderer {
     this.publishStats()
   }
 
+  setRenderProfile(profile: RenderProfile) {
+    const next = normalizeRenderProfile(profile)
+    this.renderProfile = next
+    const config = RENDER_PROFILES[next]
+    this.requestedQuality = config.quality
+    this.adaptiveQuality.reset()
+    this.applyQuality(config.quality)
+    this.cancelFrame()
+    this.requestFrame()
+    this.publishStats()
+  }
+
   setPaused(paused: boolean) {
     if (this.paused === paused) return
     this.paused = paused
@@ -326,6 +357,18 @@ export class BlackHoleRenderer {
 
   setDoppler(enabled: boolean) {
     this.material.uniforms.uDoppler.value = enabled ? 1 : 0
+    this.requestFrame()
+  }
+
+  setResponseEffect(settings: ResponseEffectSettings) {
+    this.responseEffect.setSettings(settings)
+    this.syncResponseEffect(0)
+    this.requestFrame()
+  }
+
+  setResponsePhase(phase: ResponsePhase) {
+    this.responseEffect.setPhase(phase)
+    this.syncResponseEffect(0)
     this.requestFrame()
   }
 
@@ -400,6 +443,9 @@ export class BlackHoleRenderer {
       pointerStrength: this.pointerStrength,
       pointerX: this.pointer.x,
       pointerY: this.pointer.y,
+      responseEffect: this.responseEffect.getSnapshot(this.reducedMotion),
+      renderProfile: this.renderProfile,
+      targetFps: RENDER_PROFILES[this.renderProfile].frameRate,
     }
   }
 
@@ -518,13 +564,36 @@ export class BlackHoleRenderer {
 
   private requestFrame() {
     if (!this.raf && !this.disposed && !this.contextLost && !this.visibilityPaused) {
-      this.raf = requestAnimationFrame(this.frame)
+      const delay = Math.max(0, this.nextFrameAt - performance.now())
+      if (delay > 1) {
+        if (this.frameTimer === null) {
+          this.frameTimer = setTimeout(() => {
+            this.frameTimer = null
+            if (!this.disposed && !this.contextLost && !this.visibilityPaused) this.raf = requestAnimationFrame(this.frame)
+          }, delay)
+        }
+      } else {
+        this.raf = requestAnimationFrame(this.frame)
+      }
     }
+  }
+
+  private syncResponseEffect(delta: number) {
+    this.responseEffect.advance(delta, this.reducedMotion, this.paused)
+    const state = this.responseEffect.getSnapshot(this.reducedMotion)
+    this.material.uniforms.uResponseStrength.value = state.strength
+    this.material.uniforms.uResponseReply.value = state.reply
+    this.material.uniforms.uResponseTime.value = state.time
+    this.material.uniforms.uResponseMotion.value = state.reducedMotion ? 0 : 1
+    this.responseWeights.set(...state.weights)
   }
 
   private cancelFrame() {
     if (this.raf) cancelAnimationFrame(this.raf)
+    if (this.frameTimer !== null) clearTimeout(this.frameTimer)
     this.raf = 0
+    this.frameTimer = null
+    this.nextFrameAt = 0
     this.previousFrame = null
     this.previousWasAmbient = false
   }
@@ -545,6 +614,7 @@ export class BlackHoleRenderer {
     if (ambient) this.simulationTime += delta
     this.advanceCamera(delta)
     this.advancePointer(delta)
+    this.syncResponseEffect(delta)
     if (this.springIsRunning()) {
       // Exact critically damped spring integration stays stable after long frames.
       const dt = this.previousFrame === null ? 1 / 60 : delta
@@ -577,7 +647,9 @@ export class BlackHoleRenderer {
     this.renderer.render(this.scene, this.camera)
     this.bloom.render(this.sceneTarget.texture, this.night, this.pointer, this.pointerStrength)
     this.renderedFrames++
-    if (ambient || this.springIsRunning() || this.cameraIsRunning() || this.pointerIsRunning()) {
+    this.nextFrameAt = now + 1000 / RENDER_PROFILES[this.renderProfile].frameRate
+    if (ambient || this.springIsRunning() || this.cameraIsRunning() || this.pointerIsRunning()
+      || this.responseEffect.needsFrame(this.reducedMotion, this.paused)) {
       this.previousFrame = now
       this.previousWasAmbient = ambient
       this.requestFrame()

@@ -1,33 +1,23 @@
-import Dexie, { type Table } from 'dexie'
+import { localApi } from '../xixi/api'
+import type { LocalStatus } from '../xixi/types'
 
+// Compatibility metadata only: secrets are never returned or loaded from browser storage.
 export type ApiSettings = {
-  id: 'default'
-  provider: 'deepseekflash'
-  endpoint: string
-  model: string
-  apiKey: string
-  updatedAt: string
+  id: 'default'; provider: 'deepseekflash'; endpoint: string; model: string;
+  apiKey: string; configured: boolean; updatedAt: string
 }
-
-class SettingsDatabase extends Dexie {
-  settings!: Table<ApiSettings, string>
-  constructor() {
-    super('astaria-settings')
-    this.version(1).stores({ settings: 'id, updatedAt' })
-  }
-}
-
-const db = new SettingsDatabase()
-const defaults: ApiSettings = { id: 'default', provider: 'deepseekflash', endpoint: 'https://api.deepseek.com/chat/completions', model: 'deepseek-chat', apiKey: '', updatedAt: new Date(0).toISOString() }
-
 export interface SettingsStore {
   getApiSettings(): Promise<ApiSettings>
-  saveApiSettings(patch: Omit<ApiSettings, 'id' | 'updatedAt'>): Promise<ApiSettings>
+  saveApiSettings(patch: Omit<ApiSettings, 'id' | 'updatedAt' | 'configured'>): Promise<ApiSettings>
 }
-
 export class LocalSettingsStore implements SettingsStore {
-  async getApiSettings() { const stored = await db.settings.get('default'); return stored ? structuredClone(stored) : structuredClone(defaults) }
-  async saveApiSettings(patch: Omit<ApiSettings, 'id' | 'updatedAt'>) { const next: ApiSettings = { ...patch, id: 'default', updatedAt: new Date().toISOString() }; await db.settings.put(next); return structuredClone(next) }
+  async getApiSettings(): Promise<ApiSettings> {
+    const status = await localApi<LocalStatus>('/status')
+    return { id: 'default', provider: 'deepseekflash', endpoint: 'https://api.deepseek.com/chat/completions', model: status.model, apiKey: '', configured: status.configured, updatedAt: new Date().toISOString() }
+  }
+  async saveApiSettings(patch: Omit<ApiSettings, 'id' | 'updatedAt' | 'configured'>) {
+    if (patch.apiKey.trim()) await localApi('/settings/key', { key: patch.apiKey.trim() })
+    return this.getApiSettings()
+  }
 }
-
 export const settingsStore: SettingsStore = new LocalSettingsStore()

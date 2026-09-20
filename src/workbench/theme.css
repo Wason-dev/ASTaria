@@ -1,0 +1,92 @@
+/* Theme only changes the UI palette. Camera, glass optics and task state stay shared. */
+.p0:has(.home-workspace:not([data-page=home])) .p0-whisper { visibility: hidden }
+.workbench { transition: visibility 0s 200ms, color 320ms }
+.workbench[data-theme] :where(.home-glass-surface,.wb-customize,.wb-parameters,.wb-segment button,.wb-toggle,.wb-customize footer button) { transition: color 320ms, background-color 320ms, border-color 320ms, box-shadow 220ms }
+.workbench[data-theme] :where(.wb-task-top strong,.wb-task-detail,.wb-task-meta,.wb-today-metrics dd,.wb-section-heading h3,.wb-brief-message h3,.wb-brief-message p,.wb-xixi-identity strong,.wb-ddl-copy strong,.wb-ddl-node-date,.wb-ddl-effort,.wb-xixi-body) { transition: color 320ms }
+
+@media (forced-colors: none) {
+  .p0 .workbench :is(.wb-brief-start,.wb-reason-toggle.wb-icon-button) { background: #dfcfaf; color: #201c16; box-shadow: 0 2px 8px #9a784518 }
+  .p0 .workbench :is(.wb-brief-start,.wb-reason-toggle.wb-icon-button):enabled:hover { background: #eee0c5; color: #201c16; box-shadow: 0 3px 16px #b2936028 }
+  .p0 .workbench .wb-reason-toggle.wb-icon-button[aria-expanded=true] { background: #d6bd90; color: #201c16; box-shadow: inset 0 0 0 1px #96784a55, 0 2px 8px #9a784518 }
+  .p0 .workbench .wb-reason-toggle.wb-icon-button[aria-expanded=true]:enabled:hover { background: #e4cda5 }
+  .p0 .workbench .wb-reason-toggle.wb-icon-button:enabled:active { background: #ccb180; box-shadow: inset 0 1px 4px #6d51262e }
+  .p0 .workbench .wb-brief-start > span { color: #63533a }
+  .p0 .workbench[data-theme=dark] {
+    color-scheme: dark;
+    color: #eeeae3;
+    --wb-text: #eeeae3;
+    --wb-body: #d4d0c9;
+    --wb-muted: #bcc0c7;
+    --wb-line: #e1ded526;
+    --wb-gold: #d5bb8b;
+  }
+  /* The night scene is already dark; use a lighter veil to keep its flow visible. */
+  .p0 .workbench[data-theme=dark] .wb-background { background: rgb(0 0 0 / calc(var(--wb-background) * .68)) }
+  .p0 .workbench[data-theme=dark] .wb-background::after { background-image: linear-gradient(to right, #c3c9d510 1px, transparent 1px), linear-gradient(to bottom, #c3c9d510 1px, transparent 1px) }
+  .p0 .workbench[data-theme=dark] .home-glass-surface { background: rgb(8 10 14 / var(--glass-tint)) }
+  .p0 .workbench[data-theme=dark] .wb-glass { box-shadow: 0 8px 28px rgb(0 0 0 / var(--wb-shadow)) }
+  .p0 .workbench[data-theme=dark] .wb-task[data-recommended=true] { box-shadow: 0 8px 28px rgb(0 0 0 / var(--wb-shadow)), inset 0 1px 0 #d5bb8b40 }
+  .p0 .workbench[data-theme=dark] .wb-task:hover { box-shadow: 0 9px 32px rgb(0 0 0 / calc(var(--wb-shadow) + .045)), 0 0 0 1px #d5bb8b50, 0 0 16px #d5bb8b18 }
+  .p0 .workbench[data-theme=dark] :is(.wb-task-top strong,.wb-today-metrics dd,.wb-section-heading h3,.wb-brief-message h3,.wb-xixi-identity strong,.wb-ddl-copy strong) { color: var(--wb-text) }
+  .p0 .workbench[data-theme=dark] :is(.wb-task-detail,.wb-task-spent,.wb-brief-message p,.wb-brief-rhythm p strong,.wb-watch,.wb-watch-item h4,.wb-watch-related button,.wb-focus-note,.wb-xixi-body,.wb-completed-row,.wb-finished) { color: var(--wb-body) }
+  .p0 .workbench[data-theme=dark] :is(.wb-task-meta,.wb-task-meta .wb-icon,.wb-task-arrow,.wb-section-heading h3 span,.wb-section-heading > span,.wb-section-empty span,.wb-rule-note,.wb-completed-row small,.wb-back > span,.wb-muted,.wb-adjustment output,.wb-xixi footer) { color: var(--wb-muted) }
+  .p0 .workbench[data-theme=dark] :is(.wb-brief-source,.wb-brief-rhythm > span,.wb-brief-rhythm > small,.wb-brief-estimate,.wb-brief-estimate > small,.wb-brief-evidence,.wb-brief-evidence small,.wb-watch > header > span:last-child,.wb-watch-item p,.wb-watch-related button span) { color: var(--wb-muted) }
+  .p0 .workbench[data-theme=dark] :is(.wb-xixi-identity > span,.wb-brief-rhythm p,.wb-brief-evidence > span,.wb-task-spent .wb-icon,.wb-ddl-heading .wb-eyebrow,.wb-ddl-heading svg,.wb-ddl-unconfirmed) { color: var(--wb-gold) }
+  .p0 .workbench[data-theme=dark] .wb-xixi-mark { stroke: var(--wb-gold) }
+  .p0 .workbench[data-theme=dark] .wb-xixi-mark circle:not(.wb-xixi-satellite) { fill: #101014 }
+  .p0 .workbench[data-theme=dark] .wb-recommendation { color: #e2c892; background: #d5bb8b18 }
+  .p0 .workbench[data-theme=dark] :is(.wb-completed-mark,.wb-finished-mark) { color: #a3c1ae }
+  .p0 .workbench[data-theme=dark] .wb-finished-mark { background: #a3c1ae12 }
+  .p0 .workbench[data-theme=dark] :is(.wb-watch,.wb-watch-item,.wb-brief-rhythm,.wb-xixi-identity > span,.wb-deadlines.wb-ddl-embedded) { border-color: var(--wb-line) }
+  .p0 .workbench[data-theme=dark] .wb-error { color: #edb6a4 }
+
+  .p0 .workbench[data-theme=dark] :is(.wb-tool,.wb-secondary,.wb-back,.wb-inline-button) { color: var(--wb-body) }
+  .p0 .workbench[data-theme=dark] .wb-inline-button { text-decoration-color: #d4d0c94d }
+  .p0 .workbench[data-theme=dark] .wb-customize-trigger { background: #ffffff0d; box-shadow: 0 2px 10px #0003 }
+  .p0 .workbench[data-theme=dark] :is(.wb-tool,.wb-secondary,.wb-watch-related button):hover { background: #ffffff0c; color: var(--wb-text) }
+  .p0 .workbench[data-theme=dark] .wb-action { background: #dfcfaf; color: #201c16 }
+  .p0 .workbench[data-theme=dark] .wb-action:hover { background: #eee0c5; box-shadow: 0 3px 16px #d5bb8b20 }
+  .p0 .workbench[data-theme=dark] .wb-progress { background: #e1ded51a }
+  .p0 .workbench[data-theme=dark] .wb-progress > span { background: #d5bb8bad }
+  .p0 .workbench[data-theme=dark] input[type=range] { accent-color: #c9b68f }
+
+  .p0 .workbench[data-theme=dark] :is(.wb-ddl-item,.wb-ddl-compact) { --ddl-color: #bacbd7; --ddl-dot: #91a9b9; --ddl-wash: #91a9b908 }
+  .p0 .workbench[data-theme=dark] [data-urgency=overdue] { --ddl-color: #e7a28e; --ddl-dot: #d5917f; --ddl-wash: #d5917f12 }
+  .p0 .workbench[data-theme=dark] [data-urgency=urgent] { --ddl-color: #e2bf7e; --ddl-dot: #c9a567; --ddl-wash: #c9a56712 }
+  .p0 .workbench[data-theme=dark] [data-urgency=soon] { --ddl-color: #ccbc9e; --ddl-dot: #b4a283 }
+  .p0 .workbench[data-theme=dark] [data-urgency=later] { --ddl-color: #aeb5be; --ddl-dot: #929da6 }
+  .p0 .workbench[data-theme=dark] :is(.wb-ddl-node-date,.wb-ddl-effort,.wb-ddl-meta .wb-icon,.wb-ddl-copy time,.wb-ddl-phase,.wb-ddl-caption,.wb-ddl-heading h3 span,.wb-ddl-page-status > span) { color: var(--wb-muted) }
+  .p0 .workbench[data-theme=dark] :is(.wb-ddl-advice,.wb-ddl-evidence ul,.wb-ddl-page-status) { color: var(--wb-body) }
+  .p0 .workbench[data-theme=dark] :is(.wb-ddl-advice[data-tone=urgent],.wb-ddl-expanded-advice,.wb-ddl-page-alert) { color: var(--wb-gold) }
+  .p0 .workbench[data-theme=dark] .wb-ddl-page-alert[data-urgency=overdue] { color: #e7a28e }
+  .p0 .workbench[data-theme=dark] .wb-ddl-node-dot { background: #101116; box-shadow: 0 0 0 3px #10111670 }
+  .p0 .workbench[data-theme=dark] .wb-ddl-item:is([data-urgency=overdue],[data-urgency=urgent]) .wb-ddl-node-dot { background: var(--ddl-dot) }
+  .p0 .workbench[data-theme=dark] .wb-ddl-timeline-track .wb-ddl-item::before { background: linear-gradient(90deg, #c9ae7659, #a9b7c342) }
+  .p0 .workbench[data-theme=dark] .wb-ddl-select:hover { background-color: #ffffff0b; box-shadow: 0 3px 12px #0002 }
+  .p0 .workbench[data-theme=dark] .wb-ddl-evidence ul { background: #ffffff08 }
+  .p0 .workbench[data-theme=dark] .wb-ddl-pager { border-color: var(--wb-line) }
+  .p0 .workbench[data-theme=dark] :is(.wb-ddl-page-prev,.wb-ddl-page-next) { background: linear-gradient(145deg, #ffffff10, #ffffff04); color: var(--wb-body); border-color: #ddd6c52e; box-shadow: inset 0 1px 0 #ffffff1c, 0 2px 7px #0002 }
+  .p0 .workbench[data-theme=dark] :is(.wb-ddl-page-prev,.wb-ddl-page-next):enabled:is(:hover,:focus-visible) { color: #e8d0a4; border-color: #d5bb8b80; background-color: #d5bb8b12; box-shadow: inset 0 1px 0 #ffffff33, 0 3px 12px #d5bb8b15 }
+  .p0 .workbench[data-theme=dark] :is(.wb-ddl-page-prev,.wb-ddl-page-next):enabled:active { background-color: #d5bb8b1c; box-shadow: inset 0 1px 5px #0003 }
+  .p0 .workbench[data-theme=dark] .wb-icon-button .wb-tooltip { color: #eeeae3; background: #17181bf5; border-color: #d5bb8b40; box-shadow: 0 5px 14px #0005 }
+
+  .p0 .workbench[data-theme=dark] .wb-input-shell { background: #080a0e50; box-shadow: inset 0 0 0 1px #d8d4cb30 }
+  .p0 .workbench[data-theme=dark] .wb-input-shell:focus-within { background: #080a0e80; box-shadow: inset 0 0 0 1px #d5bb8b80 }
+  .p0 .workbench[data-theme=dark] .wb-input-shell:has(textarea:focus-visible) { box-shadow: inset 0 0 0 1.5px #d5bb8ba6 }
+  .p0 .workbench[data-theme=dark] .wb-input-textarea { color: var(--wb-text); caret-color: #e2c892 }
+  .p0 .workbench[data-theme=dark] .wb-input-textarea::placeholder { color: var(--wb-muted) }
+  .p0 .workbench[data-theme=dark] .wb-customize { color: var(--wb-text); background: #14161af0; border-color: #d8d4cb26; box-shadow: 0 10px 48px #0006 }
+  .p0 .workbench[data-theme=dark] .wb-customize::backdrop { background: #0000000a }
+  .p0 .workbench[data-theme=dark] :is(.wb-segment button,.wb-toggle,.wb-customize header button) { color: var(--wb-muted) }
+  .p0 .workbench[data-theme=dark] :is(.wb-segment button[aria-pressed=true],.wb-toggle[aria-checked=true]) { color: #eee0c5; background: #d5bb8b1f }
+  .p0 .workbench[data-theme=dark] .wb-parameters { color: var(--wb-body); background: #0002; border-color: var(--wb-line) }
+  .p0 .workbench[data-theme=dark] .wb-customize footer button { color: var(--wb-body); background: #ffffff0c }
+
+  /* Dim the broad hover wash, preserving the pointer-following rim on dark glass. */
+  .p0 .workbench[data-theme=dark] :is(.wb-task,.wb-brief,.wb-focus-main,.wb-xixi,.wb-watch-related button,.wb-ddl-select,.wb-icon-button,.wb-tool,.wb-action,.wb-secondary,.wb-brief-start,.wb-ddl-fold-toggle)::before { background: radial-gradient(circle 120px at var(--wb-pointer-x, 50%) var(--wb-pointer-y, 50%), rgb(255 243 217 / .09), transparent 72%) }
+  .p0 .workbench[data-theme=dark] :is(button,input,textarea):focus-visible { outline-color: #d5bb8bb3 }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workbench,.workbench[data-theme] :where(.home-glass-surface,.wb-customize,.wb-parameters,.wb-segment button,.wb-toggle,.wb-customize footer button,.wb-task-top strong,.wb-task-detail,.wb-task-meta,.wb-today-metrics dd,.wb-section-heading h3,.wb-brief-message h3,.wb-brief-message p,.wb-xixi-identity strong,.wb-ddl-copy strong,.wb-ddl-node-date,.wb-ddl-effort,.wb-xixi-body) { transition: none }
+}

@@ -1,4 +1,4 @@
-import type { Task } from '../domain/task'
+import type { Task } from '../domain/task.ts'
 
 export function localDay(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`

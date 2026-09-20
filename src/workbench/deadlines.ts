@@ -61,9 +61,15 @@ function calendarDay(date: Date): number {
 
 function durationLabel(milliseconds: number): string {
   if (milliseconds < MINUTE) return '不到1分钟'
-  if (milliseconds < HOUR) return `${Math.ceil(milliseconds / MINUTE)}分钟`
-  if (milliseconds < DAY) return `${Math.ceil(milliseconds / HOUR)}小时`
-  return `${Math.ceil(milliseconds / DAY)}天`
+  const minutes = Math.floor(milliseconds / MINUTE)
+  if (milliseconds < HOUR) return `${minutes}分钟`
+  const hours = Math.floor(minutes / 60)
+  const remainingMinutes = minutes % 60
+  if (milliseconds < DAY) return `${hours}小时${remainingMinutes ? `${remainingMinutes}分钟` : ''}`
+  const days = Math.floor(hours / 24)
+  const remainingHours = hours % 24
+  const remainder = remainingHours ? `${remainingHours}小时` : remainingMinutes ? `${remainingMinutes}分钟` : ''
+  return `${days}天${remainder}`
 }
 
 function remainingLabel(deadline: ParsedDeadline, now: Date): string {

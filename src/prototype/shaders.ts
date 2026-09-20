@@ -30,6 +30,11 @@ uniform float uMaxPhi;
 uniform float uCriticalImpact;
 uniform float uMaxImpact;
 uniform float uCameraRadius;
+uniform float uResponseStrength;
+uniform float uResponseReply;
+uniform float uResponseTime;
+uniform float uResponseMotion;
+uniform vec3 uResponseWeights;
 const float PI = 3.14159265359;
 
 float hash(vec2 p) {
@@ -91,7 +96,7 @@ vec4 diskAtTime(vec3 p, vec3 ray, float order, float flowTime) {
   return vec4(material,opacity * mix(1.0,.60,order));
 }
 
-vec4 disk(vec3 p, vec3 ray, float order) {
+vec4 diskBase(vec3 p, vec3 ray, float order) {
   // Unbounded differential advection winds every stream into subpixel noise
   // after a few minutes. Overlap two finite-age copies of the original field:
   // each copy resets only while fully hidden, with zero blend slope at either
@@ -105,6 +110,101 @@ vec4 disk(vec3 p, vec3 ray, float order) {
   float opacity = mix(a.a,b.a,blend);
   vec3 emission = mix(a.rgb*a.a,b.rgb*b.a,blend);
   return vec4(emission/max(opacity,.00001),opacity);
+}
+
+// AI response light is emission on the same equatorial surface as the disk.
+// It therefore follows every geodesic crossing, its occlusion and its optical
+// depth. No screen-space halo or displaced horizon is introduced.
+float responseBand(float distanceToCurve, float width) {
+  float footprint = max(fwidth(distanceToCurve),.001);
+  float filteredWidth = sqrt(width*width+footprint*footprint*.65);
+  float normalizedDistance = distanceToCurve/filteredWidth;
+  return exp(-.5*normalizedDistance*normalizedDistance)*width/filteredWidth;
+}
+
+vec2 responseLight(vec3 p) {
+  float r = length(p.xz);
+  float angle = atan(p.z,p.x);
+  float t = uResponseTime;
+  float speaking = uResponseReply;
+  float breathing = 1.0-uResponseMotion*(.08+.08*cos(t*.73));
+  float light = 0.0;
+  float spark = 0.0;
+
+  if (uResponseWeights.x > .001) {
+    // Broad unequal tide fronts carry soft light through existing material.
+    float phase = angle-t*.14;
+    float centerA = mix(4.5,5.4,speaking)+.75*sin(phase+.3)+.23*sin(phase*2.0-1.1);
+    float centerB = mix(7.0,8.2,speaking)+1.1*sin(phase-1.9);
+    float tideA = responseBand(r-centerA,mix(.43,.78,speaking));
+    float tideB = responseBand(r-centerB,mix(.64,1.04,speaking));
+    float arcA = pow(max(0.0,.5+.5*cos(phase-.65)),2.0);
+    float arcB = pow(max(0.0,.5+.5*cos(phase+2.1)),3.0);
+    light += (tideA*(.24+.76*arcA)+tideB*arcB*.64)*breathing*uResponseWeights.x;
+  }
+
+  if (uResponseWeights.y > .001) {
+    // Three tapered filaments, with analytic curvature and derivative-filtered
+    // width. Their paths stay finite; no ever-tightening differential winding.
+    float filaments = 0.0;
+    for (int i=0;i<3;i++) {
+      float seed = float(i);
+      float phase = angle-t*.19+seed*2.23;
+      float curve = 4.0+seed*1.93+(1.0+seed*.22)*sin(phase)+.18*sin(phase*2.0+.7);
+      float taper = pow(max(0.0,.5+.5*cos(phase-1.2)),mix(5.0,2.2,speaking));
+      float core = responseBand(r-curve,.065+seed*.025);
+      float shoulder = responseBand(r-curve,.19+seed*.032)*.23;
+      filaments += (core+shoulder)*taper;
+    }
+    light += filaments*1.85*breathing*uResponseWeights.y;
+  }
+
+  if (uResponseWeights.z > .001) {
+    // Five sparse grains spiral inward in the disk plane. Every cycle resets
+    // while invisible, so waiting longer never accumulates grains or brightness.
+    for (int i=0;i<5;i++) {
+      float seed = float(i);
+      float age = fract(t/(18.0+seed*1.7)+seed*.213);
+      float journey = age*age*(3.0-2.0*age);
+      float radius = mix(12.2-seed*.23,4.4+seed*.37,journey);
+      float orbit = seed*2.399+age*3.2;
+      float angularDistance = atan(sin(orbit-angle),cos(orbit-angle));
+      float fade = smoothstep(.0,.16,age)*(1.0-smoothstep(.78,1.0,age));
+      float tangent = angularDistance*radius;
+      float head = responseBand(r-radius,.075)*responseBand(tangent,.095);
+      // The tail's larger radius follows the earlier part of the same curved
+      // trajectory instead of drawing a straight segment behind the grain.
+      float trailRadius = radius+max(angularDistance,0.0)*2.1;
+      float tail = responseBand(r-trailRadius,.055)
+        *exp(-max(tangent,0.0)/mix(.23,.66,speaking))
+        *smoothstep(-.06,.1,tangent)*(1.0-smoothstep(.9,2.5,tangent));
+      float merge = responseBand(r-(4.4+seed*.37),.17)
+        *pow(max(0.0,.5+.5*cos(angle-orbit)),12.0)*smoothstep(.62,.84,age)
+        *(1.0-smoothstep(.88,1.0,age));
+      spark += (head*6.0+tail*1.4)*fade*uResponseWeights.z;
+      light += merge*.8*speaking*uResponseWeights.z;
+    }
+  }
+  return vec2(light,spark);
+}
+
+vec4 disk(vec3 p, vec3 ray, float order) {
+  vec4 material = diskBase(p,ray,order);
+  // Exact zero restores the original material path, including after a fade.
+  if (uResponseStrength <= 0.0) return material;
+  float r = length(p.xz);
+  vec2 response = responseLight(p);
+  float aperture = smoothstep(3.05,3.65,r)*(1.0-smoothstep(11.5,14.2,r));
+  float surface = mix(.28,.65,uResponseReply)*response.x;
+  float amount = aperture*uResponseStrength;
+  // Keep the original fine flow visible inside the soft tide rather than
+  // laying a uniform emissive fog over it. HDR light enters existing bloom.
+  vec3 warm = vec3(1.0,.83,.57);
+  vec3 emission = material.rgb*surface+warm*(surface*.45+response.y*.34);
+  material.rgb += emission*amount*uNight;
+  // Day mode uses the same paths as a small warm-ink contrast change.
+  material.rgb *= 1.0+(surface+response.y*.12)*amount*(1.0-uNight)*.24;
+  return material;
 }
 
 vec3 sky(vec3 direction, vec2 p) {

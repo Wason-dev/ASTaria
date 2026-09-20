@@ -5,27 +5,91 @@ import type { SceneCamera } from '../spatial/scene'
 import { readableDate, STATUS_LABELS } from '../spatial/scene'
 import { useSceneCamera } from '../spatial/useSceneCamera'
 import { useSpatialTasks } from '../spatial/useSpatialTasks'
-import { GlassSurface, MeasuredGlassSurface } from './GlassSurface'
+import { GlassSamplingContext, GlassSurface, MeasuredGlassSurface } from './GlassSurface'
 import { HomeStatus } from './HomeStatus'
 import { HomeAgenda } from './HomeAgenda'
 import { useLocalTime } from './useLocalTime'
 import { Workbench } from '../workbench/Workbench'
+import { useAppearance } from '../workbench/appearance'
+import { useXixiConversation } from '../xixi/useXixiConversation'
+import { ConversationLog } from '../xixi/ConversationLog'
+import { ConversationMenu } from '../xixi/ConversationMenu'
+import { useChatSubmitKey } from '../xixi/useChatSubmitKey'
+import { restoreWithdrawnDraft } from '../xixi/draft'
+import { selectCurrentTask } from './currentTask'
+import { LocalSettings } from '../xixi/LocalSettings'
+import { notifyLocalDataChange } from '../stores/migration'
+import { PlannerWorkspace } from '../planner/PlannerWorkspace'
+import type { PlannerPage } from '../planner/PlannerWorkspace'
+import type { ResponseEffectSettings, ResponsePhase } from '../prototype/responseEffects'
+import type { RenderProfile } from '../prototype/renderProfile'
+import { usePreferences, notificationsAllowed } from '../xixi/preferences'
+import { CompanionPanel } from '../xixi/CompanionPanel'
+import { useXixiNotice } from '../xixi/useXixiNotice'
 import './home.css'
+import './scrollbars.css'
+import './theme.css'
 
 type Props = {
   readCamera: () => SceneCamera | undefined
   onViewChange: (view: 'panorama' | 'interstellar') => void
   onThemeChange: (night: boolean) => void
   sceneUnavailable: boolean
+  onResponseEffect: (settings: ResponseEffectSettings) => void
+  onResponsePhase: (phase: ResponsePhase) => void
+  onRenderProfile: (profile: RenderProfile) => void
 }
 const DRAFT_KEY = 'astaria-home-draft'
+type WorkspacePage = 'home' | 'workbench' | 'settings' | 'companion' | PlannerPage
+type CompanionTarget = { tab: 'scenarios' | 'wishes' | 'opportunities'; targetId?: string }
 function readDraft() { try { return sessionStorage.getItem(DRAFT_KEY) ?? '' } catch { return '' } }
 
-export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, sceneUnavailable }: Props) {
+export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onResponseEffect, onResponsePhase, onRenderProfile, sceneUnavailable }: Props) {
   const data = useSpatialTasks()
   const now = useLocalTime()
-  const [page, setPage] = useState<'home' | 'workbench'>('home')
+  const [page, setPage] = useState<WorkspacePage>('home')
+  const appearance = useAppearance()
+  const preferences = usePreferences()
+  const started = useRef(false)
+  const [companionTarget, setCompanionTarget] = useState<CompanionTarget>({ tab: 'scenarios' })
+  const [previewPhase, setPreviewPhase] = useState<ResponsePhase | null>(null)
+  const previewTimers = useRef<Array<ReturnType<typeof setTimeout>>>([])
+  useEffect(() => {
+    onThemeChange(appearance.value.theme === 'dark')
+  }, [appearance.value.theme, onThemeChange])
   const [notification, setNotification] = useState('')
+  const proactiveNotice = useXixiNotice(preferences.value, preferences.loaded)
+  useEffect(() => { if (!notification) return; const timer = setTimeout(() => setNotification(''), 12000); return () => clearTimeout(timer) }, [notification])
+  const chat = useXixiConversation(() => { data.retry(); notifyLocalDataChange() }, setNotification)
+  useEffect(() => { onResponseEffect(preferences.value.effect) }, [preferences.value.effect, onResponseEffect])
+  useEffect(() => { onRenderProfile(preferences.value.render?.profile ?? 'full') }, [preferences.value.render?.profile, onRenderProfile])
+  useEffect(() => { onResponsePhase(previewPhase ?? chat.responsePhase) }, [previewPhase, chat.responsePhase, onResponsePhase])
+  useEffect(() => () => { previewTimers.current.forEach(clearTimeout); onResponsePhase('idle') }, [onResponsePhase])
+  useEffect(() => {
+    if (!preferences.loaded) return
+    const value = preferences.value
+    appearance.setValue(current => ({ ...current, theme: value.theme, ...(value.glass === 'soft' ? { blur: 6 } : { blur: 0 }), font: value.density === 'comfortable' ? 14 : 13, gap: value.density === 'comfortable' ? 12 : 8 }))
+    if (!started.current) { started.current = true; setPage(value.startupPage) }
+  }, [preferences.loaded, preferences.value.theme, preferences.value.glass, preferences.value.density])
+  const stopPreview = () => { previewTimers.current.forEach(clearTimeout); previewTimers.current = []; setPreviewPhase(null) }
+  const previewEffect = () => {
+    stopPreview(); setPreviewPhase('thinking')
+    previewTimers.current = [setTimeout(() => setPreviewPhase('replying'), 3200), setTimeout(() => setPreviewPhase('idle'), 7200), setTimeout(() => setPreviewPhase(null), 10500)]
+  }
+  const openCompanion = (target: CompanionTarget = { tab: 'scenarios' }) => {
+    if (page !== 'companion') changePage('companion')
+    else setMenuOpen(false)
+    setCompanionTarget(target)
+  }
+  useEffect(() => {
+    const open = (event: Event) => { const detail = (event as CustomEvent).detail; openCompanion({ tab: ['scenarios', 'wishes', 'opportunities'].includes(detail?.tab) ? detail.tab : 'scenarios', targetId: typeof detail?.targetId === 'string' ? detail.targetId : undefined }) }
+    window.addEventListener('astaria-open-companion', open)
+    return () => window.removeEventListener('astaria-open-companion', open)
+  })
+  const settingsReturn = useRef<{ page: Exclude<WorkspacePage, 'settings'>; chat: boolean }>({ page: 'home', chat: false })
+  const settingsOpen = page === 'settings'
+  const [settingsTab, setSettingsTab] = useState<'析熙' | '通知'>('析熙')
+  const settingsOpener = useRef<HTMLElement | null>(null)
   const [chatOpen, setChatOpen] = useState(false)
   const [informationActive, setInformationActive] = useState(false)
   const camera = useSceneCamera(readCamera, String(chatOpen))
@@ -33,6 +97,7 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, sceneUn
   const progress = sceneUnavailable || cameraMissing ? Number(chatOpen) : Math.max(0, Math.min(1, (camera.zoom - .7) / (2.05 - .7)))
   const [menuOpen, setMenuOpen] = useState(false)
   const [draft, setDraft] = useState(readDraft)
+  const draftRevision = useRef(0)
   const [inputPulse, setInputPulse] = useState<number | null>(null)
   const inputPulseSequence = useRef(0)
   const [draftWarning, setDraftWarning] = useState('')
@@ -43,10 +108,12 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, sceneUn
   const root = useRef<HTMLDivElement>(null)
   const nav = useRef<HTMLElement>(null)
   const brand = useRef<HTMLButtonElement>(null)
+  const menuList = useRef<HTMLUListElement>(null)
   const current = useRef<HTMLDivElement>(null)
   const currentButton = useRef<HTMLButtonElement>(null)
   const launch = useRef<HTMLButtonElement>(null)
   const compose = useRef<HTMLTextAreaElement>(null)
+  const submitKeys = useChatSubmitKey(() => compose.current?.form?.requestSubmit())
   const informationToggle = useRef<HTMLButtonElement>(null)
   const menuTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const menuOpenedByHover = useRef(false)
@@ -59,10 +126,7 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, sceneUn
     if (compact && document.activeElement?.closest('.home-agenda')) setInformationActive(true)
   }, [compact])
 
-  const currentTask = useMemo(() => data.tasks.filter(task => task.status === 'doing' || task.status === 'todo')
-    .sort((a, b) => Number(b.status === 'doing') - Number(a.status === 'doing')
-      || (a.due ?? '9999').localeCompare(b.due ?? '9999')
-      || a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))[0], [data.tasks])
+  const currentTask = useMemo(() => selectCurrentTask(data.tasks), [data.tasks])
   const selectedTask = data.tasks.find(task => task.id === selectedId)
   const receipts = savedIds.map(id => data.tasks.find(task => task.id === id)).filter((task): task is Task => Boolean(task))
 
@@ -78,6 +142,19 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, sceneUn
     return () => observer.disconnect()
   }, [])
   useEffect(() => () => clearTimeout(menuTimer.current), [])
+  useEffect(() => {
+    const list = menuList.current
+    if (!list) return
+    const updateEdges = () => {
+      list.dataset.overflowStart = String(list.scrollLeft > 1)
+      list.dataset.overflowEnd = String(list.scrollWidth - list.clientWidth - list.scrollLeft > 1)
+    }
+    const observer = new ResizeObserver(updateEdges)
+    observer.observe(list)
+    list.addEventListener('scroll', updateEdges, { passive: true })
+    updateEdges()
+    return () => { observer.disconnect(); list.removeEventListener('scroll', updateEdges) }
+  }, [])
   const stopInputPulse = () => setInputPulse(null)
   const flashInput = () => setInputPulse(++inputPulseSequence.current)
   useEffect(() => { if (!chatOpen || (compact && informationActive)) stopInputPulse() }, [chatOpen, compact, informationActive])
@@ -120,14 +197,14 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, sceneUn
     onViewChange(open ? 'interstellar' : 'panorama')
     setChatOpen(open)
   }
-  const changePage = (next: 'home' | 'workbench', openChat = false) => {
+  const changePage = (next: WorkspacePage, openChat = false) => {
+    if (page === 'settings' && next !== 'settings') stopPreview()
     clearTimeout(menuTimer.current)
     if (next === page) brand.current?.focus({ preventScroll: true })
     setMenuOpen(false)
     setSelectedId(null)
     setPage(next)
-    onThemeChange(next === 'home')
-    if (next === 'workbench') {
+    if (next !== 'home') {
       focusAfterTransition.current = false
       setChatOpen(false)
       onViewChange('panorama')
@@ -141,16 +218,15 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, sceneUn
   }
   useEffect(() => {
     const escape = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing || selectedId) return
+      if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing || selectedId || settingsOpen) return
       if (menuOpen) { event.preventDefault(); brand.current?.focus(); setMenuOpen(false) }
       else if (page === 'home' && chatOpen) { event.preventDefault(); changeChat(false) }
     }
     window.addEventListener('keydown', escape)
     return () => window.removeEventListener('keydown', escape)
   })
-  const submit = async (event: FormEvent) => {
-    event.preventDefault()
-    if (!draft.trim() || data.saving || data.loading || data.loadError) return
+  const capture = async () => {
+    if (!draft.trim() || data.saving || data.loading || data.loadError || chat.busy) return
     setSaveError('')
     const lines = draft.trim().split(/\r?\n/)
     const title = lines[0].trim()
@@ -162,6 +238,45 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, sceneUn
       stopInputPulse()
       compose.current?.focus()
     } catch (reason) { setSaveError(reason instanceof Error ? reason.message : '保存失败，请保留原文后重试') }
+  }
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    if (!draft.trim() || data.saving || data.loading || data.loadError || chat.busy) return
+    setSaveError('')
+    const sent = draft
+    const revision = draftRevision.current
+    const accepted = await chat.send(sent, { page: 'home', timezone: Intl.DateTimeFormat().resolvedOptions().timeZone })
+    if (accepted && revision === draftRevision.current) {
+      setDraft(value => value === sent ? '' : value)
+      stopInputPulse()
+      compose.current?.focus()
+    }
+  }
+  const restoreDraft = (text: string) => {
+    draftRevision.current += 1
+    setDraft(value => restoreWithdrawnDraft(value, text))
+    requestAnimationFrame(() => {
+      compose.current?.focus({ preventScroll: true })
+      if (compose.current) compose.current.setSelectionRange(compose.current.value.length, compose.current.value.length)
+    })
+  }
+  const openSettings = () => {
+    setSettingsTab('析熙')
+    if (page === 'settings') { setMenuOpen(false); return }
+    settingsReturn.current = { page, chat: chatOpen }
+    settingsOpener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    clearTimeout(menuTimer.current)
+    setMenuOpen(false)
+    changePage('settings')
+  }
+  const closeSettings = () => {
+    stopPreview()
+    changePage(settingsReturn.current.page, settingsReturn.current.chat)
+    requestAnimationFrame(() => {
+      const previous = settingsOpener.current
+      const fallback = page === 'home' && chatOpen ? compose.current : brand.current
+      ;(previous?.isConnected && !previous.closest('[inert]') ? previous : fallback)?.focus({ preventScroll: true })
+    })
   }
   const openTask = (id: string) => {
     taskOpener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
@@ -180,7 +295,7 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, sceneUn
   }
   const startTop = layout.taskBottom + 12
   const endWidth = Math.min(340, layout.width - (layout.width <= 600 ? 44 : 68))
-  const endHeight = Math.max(180, Math.min(460, layout.height - 149))
+  const endHeight = Math.max(180, Math.min(680, layout.height - 149))
   const endTop = Math.max(84, (layout.height - endHeight) / 2)
   const width = 128 + (endWidth - 128) * progress
   // Extend only the UI surface, reading the existing camera transition.
@@ -189,34 +304,59 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, sceneUn
   const radius = 19 + (15 - 19) * progress
   const chatVisible = progress > .35
 
-  return <div ref={root} className="home-workspace" data-spatial-ui data-chat-open={chatOpen} data-page={page}>
+  return <div ref={root} className="home-workspace" data-spatial-ui data-theme={appearance.value.theme} data-chat-open={chatOpen} data-page={page} data-grid={preferences.value.grid} data-motion={preferences.value.effect.motion} data-effect-preview={previewPhase !== null}>
     <nav ref={nav} className="home-nav" aria-label="ASTaria 导航" data-menu-open={menuOpen}
       onPointerEnter={event => { if (event.pointerType !== 'touch') { clearTimeout(menuTimer.current); menuOpenedByHover.current = !menuOpen; setMenuOpen(true) } }}
       onPointerLeave={() => { menuTimer.current = setTimeout(() => { if (!nav.current?.contains(document.activeElement)) setMenuOpen(false) }, 180) }}
       onFocus={() => clearTimeout(menuTimer.current)}
       onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setMenuOpen(false) }}>
-      <button ref={brand} className="home-brand" aria-expanded={menuOpen} aria-controls="home-menu" title="ASTaria 导航" onClick={event => {
+      <button ref={brand} className="home-brand" aria-expanded={menuOpen} aria-controls="home-menu" aria-label="ASTaria 导航" onKeyDown={event => {
+        if (event.key !== 'ArrowRight' && event.key !== 'ArrowDown') return
+        event.preventDefault()
+        menuOpenedByHover.current = false
+        setMenuOpen(true)
+        requestAnimationFrame(() => menuList.current?.querySelector('button')?.focus({ preventScroll: true }))
+      }} onClick={event => {
         // The pointer opens a hover preview before its first click reaches us.
         // Keep that first click open; subsequent clicks and keyboard activation toggle.
         const keepOpen = event.detail > 0 && menuOpenedByHover.current
         menuOpenedByHover.current = false
         setMenuOpen(open => keepOpen || !open)
       }}>
-        <span className="home-brand-wordmark">AST<span>aria</span></span>
+        <span className="home-brand-wordmark" aria-hidden="true">AST<span>aria</span></span>
+        <span className="home-brand-mark" aria-hidden="true">A</span>
         <svg className="home-nav-hint" viewBox="0 0 10 10" aria-hidden="true"><path d="m3.5 2 3 3-3 3" /></svg>
       </button>
       <div id="home-menu" className="home-menu" data-open={menuOpen} inert={!menuOpen} aria-hidden={!menuOpen}>
-        <MeasuredGlassSurface radius={13} />
-        <ul className="home-menu-list">
+        <GlassSamplingContext.Provider value={menuOpen}><MeasuredGlassSurface radius={13} settleResize /></GlassSamplingContext.Provider>
+        <ul ref={menuList} className="home-menu-list" onFocusCapture={event => {
+          const list = event.currentTarget, target = event.target as HTMLElement
+          const listBox = list.getBoundingClientRect(), targetBox = target.getBoundingClientRect()
+          if (targetBox.left < listBox.left + 12) list.scrollLeft -= listBox.left + 12 - targetBox.left
+          else if (targetBox.right > listBox.right - 12) list.scrollLeft += targetBox.right - listBox.right + 12
+        }} onKeyDown={event => {
+          if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+          const items = Array.from(event.currentTarget.querySelectorAll('button'))
+          const currentIndex = items.indexOf(event.target as HTMLButtonElement)
+          if (currentIndex < 0) return
+          event.preventDefault()
+          const nextIndex = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (currentIndex + (event.key === 'ArrowRight' ? 1 : -1) + items.length) % items.length
+          items[nextIndex]?.focus({ preventScroll: true })
+        }}>
           <li><button aria-current={page === 'home' ? 'page' : undefined} onClick={() => changePage('home')}>首页</button></li>
           <li><button aria-current={page === 'workbench' ? 'page' : undefined} onClick={() => changePage('workbench')}>工作台</button></li>
-          {['时间表', '日历'].map(label => <li key={label}><button disabled title="稍后开放">{label}<span className="p0-sr-only">，稍后开放</span></button></li>)}
-          <li><button disabled title="稍后开放">设置<span className="p0-sr-only">，稍后开放</span></button></li>
+          <li><button aria-current={page === 'schedule' ? 'page' : undefined} onClick={() => changePage('schedule')}>日程</button></li>
+          <li><button aria-current={page === 'companion' ? 'page' : undefined} onClick={() => openCompanion()}>平行宇宙</button></li>
+          <li><button aria-current={page === 'settings' ? 'page' : undefined} onClick={openSettings}>设置</button></li>
         </ul>
       </div>
     </nav>
-    <HomeStatus now={now} showClock={!sceneUnavailable} notification={notification} />
+    <HomeStatus now={now} showClock={!sceneUnavailable} notification={notificationsAllowed(preferences.value.notifications, now) ? notification || proactiveNotice : notification || '免打扰 · 变更记录已保留'} onNotification={() => {
+      if (proactiveNotice.startsWith('有未读变更') || notification) { openSettings(); setSettingsTab('通知') }
+      else openCompanion({ tab: 'opportunities' })
+    }} />
 
+    <GlassSamplingContext.Provider value={page === 'home' && previewPhase === null}>
     <div className="home-scene-ui" inert={page !== 'home'} aria-hidden={page !== 'home'}>
     <div ref={current} className="home-current" style={{ opacity: Math.max(0, 1 - progress * 3), visibility: progress > .6 ? 'hidden' : 'visible' }} inert={chatOpen}>
       <span>当前任务</span>
@@ -238,13 +378,13 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, sceneUn
             <svg viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="6" /><path d="m5 5 4 4m0-4-4 4" /></svg>
           </button>
           <strong>析熙</strong>
-        </div>{compact && <button ref={informationToggle} className="home-information-toggle" onClick={() => setInformationActive(true)} aria-controls="home-agenda">日程 →</button>}</header>
-        <div className="home-conversation" role="log" aria-label="事项录入记录" aria-live="polite">
-          {receipts.length === 0 && <p className="home-greeting">有什么事，交给我</p>}
+        </div><div className="xixi-header-actions"><ConversationMenu chat={chat} />{compact && <button ref={informationToggle} className="home-information-toggle" onClick={() => setInformationActive(true)} aria-controls="home-agenda">日程 →</button>}</div></header>
+        <ConversationLog chat={chat} active={page === 'home' && chatOpen && progress >= .99 && (!compact || !informationActive)} onSettings={openSettings}
+          context={{ page: 'home', timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }} onSent={sent => setDraft(value => value.trim() === sent ? '' : value)} onRetracted={restoreDraft}>
           {receipts.map(task => <div className="home-receipt" key={task.id}><span>已记为事项</span><button onClick={() => openTask(task.id)}>{task.title}</button></div>)}
-        </div>
+        </ConversationLog>
         <form onSubmit={event => void submit(event)}>
-          <label className="p0-sr-only" htmlFor="home-compose">写下你的事情，第一行是标题，其余是备注</label>
+          <label className="p0-sr-only" htmlFor="home-compose">写下你的事情，发送给析熙，或手动记为事项</label>
           <div className="home-input-shell" data-pulsing={inputPulse !== null}>
           {inputPulse !== null && <span key={inputPulse} className="home-input-flash" aria-hidden="true" onAnimationEnd={event => {
             if (event.target === event.currentTarget) setInputPulse(current => current === inputPulse ? null : current)
@@ -252,17 +392,16 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, sceneUn
             <span className="home-input-glow" />
             <span className="home-input-rim" />
           </span>}
-          <textarea ref={compose} id="home-compose" placeholder="写下你的事情" rows={2} maxLength={2161} value={draft} disabled={data.saving}
+          <textarea ref={compose} id="home-compose" placeholder="写下你的事情" rows={2} maxLength={4000} value={draft} disabled={data.saving || chat.busy}
             onChange={event => {
               const value = event.target.value
               const inputType = (event.nativeEvent as InputEvent).inputType
               if (value !== draft && (inputType ? inputType.startsWith('insert') : value.length > draft.length)) flashInput()
               setDraft(value)
-            }} onBlur={stopInputPulse} onKeyDown={event => {
-              if (event.key === 'Enter' && (event.metaKey || event.ctrlKey) && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit() }
-            }} />
+            }} onBlur={stopInputPulse} {...submitKeys} />
           </div>
-          <div className="home-compose-actions"><small>对话稍后接入</small><button className="home-capture" type="submit" disabled={data.saving || data.loading || Boolean(data.loadError) || !draft.trim()}>{data.saving ? '正在保存' : '记为事项'}</button></div>
+          <div className="home-compose-actions"><button className="xixi-text-button xixi-manual" type="button" disabled={data.saving || chat.busy || data.loading || Boolean(data.loadError) || !draft.trim()} onClick={() => void capture()}>{data.saving ? '正在保存' : '只记为事项'}</button><button className="home-capture" type="submit" disabled={data.saving || data.loading || Boolean(data.loadError) || chat.busy || chat.loading || !draft.trim()}>{chat.sending ? '正在想' : '发给析熙'}</button></div>
+          {chat.error && <p className="xixi-send-error" role="alert">{chat.error}{!chat.status?.configured && <button type="button" className="xixi-text-button" onClick={openSettings}>打开设置</button>}</p>}
           {(saveError || draftWarning || data.loadError) && <p className="home-form-error" role="alert">{saveError || draftWarning || data.loadError}{data.loadError && <button type="button" onClick={data.retry}>重试读取</button>}</p>}
         </form>
       </section>
@@ -276,7 +415,11 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, sceneUn
       </div>
     </div>
     </div>
-    <Workbench active={page === 'workbench'} data={data} now={now} onCapture={() => changePage('home', true)} onNotice={setNotification} />
+    </GlassSamplingContext.Provider>
+    <Workbench active={page === 'workbench'} appearance={appearance} data={data} now={now} onCapture={() => changePage('home', true)} onNotice={setNotification} chat={chat} onSettings={openSettings} />
+    <PlannerWorkspace active={page === 'schedule'} tasks={data.tasks} tasksLoading={data.loading} tasksError={data.loadError} now={now} appearance={appearance} chat={chat} onSettings={openSettings} onNotice={setNotification} onRefresh={data.retry} />
+    {settingsOpen && <LocalSettings initialTab={settingsTab} onClose={closeSettings} onSaved={chat.refreshStatus} onPreviewEffect={previewEffect} onStopPreview={stopPreview} previewPhase={previewPhase} />}
+    {page === 'companion' && <CompanionPanel readCamera={readCamera} initialTab={companionTarget.tab} initialScenarioId={companionTarget.targetId} onChanged={() => { data.retry(); notifyLocalDataChange(); void chat.refresh() }} onNotice={setNotification} />}
     {selectedId && <TaskDialog task={selectedTask} saving={data.saving} onClose={closeTask} onStatus={data.setStatus} />}
   </div>
 }
@@ -286,18 +429,36 @@ function TaskDialog({ task, saving, onClose, onStatus }: {
 }) {
   const dialog = useRef<HTMLDialogElement>(null)
   const [error, setError] = useState('')
-  useEffect(() => { const element = dialog.current!; element.showModal(); return () => element.close() }, [])
-  return <dialog ref={dialog} className="home-task-dialog" aria-labelledby="home-task-heading" onCancel={event => { event.preventDefault(); if (!saving) onClose() }} onKeyDown={event => event.stopPropagation()}>
-    <header><h2 id="home-task-heading">任务详情</h2><button onClick={onClose} disabled={saving} aria-label="关闭任务详情">关闭</button></header>
+  const [closing, setClosing] = useState(false)
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const closingRef = useRef(false)
+  useEffect(() => {
+    const element = dialog.current!
+    element.showModal()
+    return () => { clearTimeout(closeTimer.current); element.close() }
+  }, [])
+  const requestClose = () => {
+    if (saving || closingRef.current) return
+    closingRef.current = true
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) { onClose(); return }
+    setClosing(true)
+    closeTimer.current = setTimeout(onClose, 180)
+  }
+  return <GlassSamplingContext.Provider value={!closing}><dialog ref={dialog} className="home-task-dialog" data-closing={closing} aria-labelledby="home-task-heading" onCancel={event => { event.preventDefault(); requestClose() }} onKeyDown={event => event.stopPropagation()}>
+    <MeasuredGlassSurface radius={19} />
+    <div className="home-task-content">
+    <header><h2 id="home-task-heading">任务详情</h2><button className="home-task-close" type="button" onClick={requestClose} disabled={saving || closing} aria-label="关闭任务详情"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4.5 4.5 7 7m0-7-7 7" /></svg></button></header>
     {task ? <>
       <p className="home-task-title">{task.title}</p>
       {task.notes && <p className="home-task-notes">{task.notes}</p>}
       <p className="home-task-meta">{readableDate(task.due)}</p>
-      <div className="home-task-status" role="group" aria-label="任务状态">{(['todo', 'doing', 'done', 'dropped'] as const).map(status => <button key={status} aria-pressed={task.status === status} disabled={saving || task.status === status} onClick={async () => {
+      <div className="home-task-status" role="group" aria-label="任务状态">{(['todo', 'doing', 'done', 'dropped'] as const).map(status => <button key={status} data-status={status} data-task-status={status} aria-pressed={task.status === status} disabled={saving || closing} onClick={async () => {
+        if (task.status === status) return
         setError(''); try { await onStatus(task.id, status) } catch (reason) { setError(reason instanceof Error ? reason.message : '状态保存失败，请重试') }
       }}>{STATUS_LABELS[status]}</button>)}</div>
       <p className="p0-sr-only" role="status">{STATUS_LABELS[task.status]}</p>
     </> : <p>这条事项已不在本地记录中</p>}
     {error && <p className="home-form-error" role="alert">{error}</p>}
-  </dialog>
+    </div>
+  </dialog></GlassSamplingContext.Provider>
 }

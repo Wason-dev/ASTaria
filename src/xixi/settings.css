@@ -1,0 +1,84 @@
+.xixi-settings{--settings-ink:#eeeae3;--settings-muted:#aaa9a3;--settings-line:#ffffff12;--settings-control:#ffffff06;--settings-accent:#d8bb79;position:absolute;inset:0;z-index:2;width:100%;height:100%;color:var(--settings-ink);font-size:13px;line-height:1.65;pointer-events:auto;isolation:isolate}
+.xixi-settings[data-theme=light]{--settings-ink:#302f2b;--settings-muted:#68675f;--settings-line:#302a2014;--settings-control:#ffffff4d;--settings-accent:#917139}
+.xixi-settings-background{position:absolute;inset:0;pointer-events:none;background:#0006;transition:opacity .24s ease}
+.xixi-settings[data-theme=light] .xixi-settings-background{background:#f3f1eb75}
+.xixi-settings-background::after{content:"";position:absolute;inset:0;background-image:linear-gradient(to right,#c3c9d510 1px,transparent 1px),linear-gradient(to bottom,#c3c9d510 1px,transparent 1px);background-size:48px 48px}
+.xixi-settings[data-theme=light] .xixi-settings-background::after{background-image:linear-gradient(to right,#433b2610 1px,transparent 1px),linear-gradient(to bottom,#433b2610 1px,transparent 1px)}
+.xixi-settings[data-grid=false] .xixi-settings-background::after{display:none}
+.xixi-settings-scroll{position:absolute;inset:0;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable;padding:88px 40px 64px;box-sizing:border-box;scrollbar-width:thin;scrollbar-color:#d5bb8b50 transparent}
+.xixi-settings-container{max-width:1320px;margin:0 auto}
+.xixi-settings-page-header,.xixi-settings-shell{animation:settings-page-in .32s ease both}
+.xixi-settings-page-header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:20px}
+.xixi-settings-page-header>div>span{font-size:10px;letter-spacing:.13em;color:var(--settings-muted)}
+:is(.p0,.app-shell) .xixi-settings h2{font-size:23px;font-weight:500;letter-spacing:.04em;margin:3px 0;outline:none}
+:is(.p0,.app-shell) .xixi-settings h3{font-size:13px;font-weight:600;margin:0 0 8px}
+:is(.p0,.app-shell) .xixi-settings p{font-size:12px;color:var(--settings-muted);margin:9px 0;overflow-wrap:anywhere}
+.xixi-settings-page-header p{font-size:11px;margin:0}
+.xixi-settings-panel{position:relative;isolation:isolate;min-width:0;border-radius:24px}
+.xixi-settings-panel>.home-glass-measure,.xixi-preview-dock>.home-glass-measure{position:absolute;inset:0;pointer-events:none;border-radius:inherit;overflow:hidden}
+:is(.p0,.app-shell) .xixi-settings .home-glass-surface{background:rgb(8 10 14 / .56)}
+:is(.p0,.app-shell) .xixi-settings[data-theme=light] .home-glass-surface{background:rgb(250 247 240 / .46)}
+.xixi-settings-shell{position:relative;z-index:1;padding:18px 28px 22px;min-width:0}
+.xixi-settings-tabs{display:flex;gap:5px;overflow-x:auto;overscroll-behavior-x:contain;margin:0 0 10px;padding:3px 0 12px;scrollbar-width:thin;scrollbar-color:#d5bb8b50 transparent}
+:is(.p0,.app-shell) .xixi-settings button{font:inherit;font-size:11px;border:1px solid var(--settings-line);background:var(--settings-control);color:var(--settings-ink);border-radius:12px;padding:7px 11px;cursor:pointer;transition:background .2s,border-color .2s,transform .2s;line-height:1.5}
+:is(.p0,.app-shell) .xixi-settings button:hover{background:#d8bb791c;border-color:#d8bb7960}
+:is(.p0,.app-shell) .xixi-settings button:focus-visible,:is(.p0,.app-shell) .xixi-settings :is(input,select,textarea):focus-visible{outline:2px solid var(--settings-accent);outline-offset:3px}
+:is(.p0,.app-shell) .xixi-settings button:disabled{opacity:.4;cursor:default}
+:is(.p0,.app-shell) .xixi-settings .xixi-settings-close{display:flex;align-items:center;gap:6px;flex:none;background:transparent;border-color:transparent}
+.xixi-settings-close svg{display:block;width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}
+:is(.p0,.app-shell) .xixi-settings-tabs button{white-space:nowrap;border-color:transparent;background:transparent;color:var(--settings-muted)}
+:is(.p0,.app-shell) .xixi-settings-tabs button[aria-current=page]{color:var(--settings-accent);border-color:#d8bb794f;background:#d8bb7914}
+.xixi-settings-content{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px 36px;align-items:start;overflow:visible;min-width:0;animation:settings-content-in .23s ease both}
+.xixi-settings-content>section{min-width:0;padding:14px 0 0}
+.xixi-settings-content>section:only-child{grid-column:1/-1}
+.xixi-setting-row{display:flex;align-items:center;justify-content:space-between;gap:24px;padding:14px 0;border-bottom:1px solid var(--settings-line);font-size:12px}
+.xixi-setting-row>div{min-width:0}.xixi-setting-row>div:first-child{flex:1}.xixi-setting-row>div:last-child{max-width:60%}
+.xixi-setting-row strong{font-size:12px;font-weight:500}.xixi-setting-row small{display:block;margin-top:4px;line-height:1.6}
+:is(.p0,.app-shell) .xixi-settings small{font-size:10px;color:var(--settings-muted)}
+.xixi-settings-section-title,.xixi-settings-actions{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.xixi-settings-section-title h3{margin:0}
+.xixi-settings-actions{justify-content:flex-start;flex-wrap:wrap;margin-top:12px}
+:is(.p0,.app-shell) .xixi-settings label{font-size:11px;display:block;margin:12px 0 6px}
+:is(.p0,.app-shell) .xixi-settings :is(input,select,textarea){display:block;box-sizing:border-box;max-width:100%;background:var(--settings-control);color:var(--settings-ink);border:1px solid var(--settings-line);border-radius:12px;padding:9px 11px;font:inherit;font-size:12px;outline:none;color-scheme:dark}
+:is(.p0,.app-shell) .xixi-settings[data-theme=light] :is(input,select,textarea){color-scheme:light}
+:is(.p0,.app-shell) .xixi-settings input{width:100%}:is(.p0,.app-shell) .xixi-settings textarea{width:100%;min-height:80px;resize:vertical}
+:is(.p0,.app-shell) .xixi-settings .xixi-setting-row select{margin:0;padding:7px 9px;max-width:230px;font-size:12px}
+:is(.p0,.app-shell) .xixi-settings select option{background:#1c2023;color:#eeeae3}:is(.p0,.app-shell) .xixi-settings[data-theme=light] select option{background:#f6f3ec;color:#302f2b}
+:is(.p0,.app-shell) .xixi-settings .xixi-settings-note{font-size:10px;line-height:1.8}
+:is(.p0,.app-shell) .xixi-settings .xixi-toggle{width:34px;height:20px;border-radius:12px;padding:2px;background:#ffffff16;display:block}
+.xixi-toggle span{display:block;width:14px;height:14px;background:#afafab;border-radius:50%;transition:transform .2s,background .2s}
+.xixi-toggle[aria-checked=true] span{transform:translateX(12px);background:#e4cb90}
+:is(.p0,.app-shell) .xixi-settings .xixi-toggle[aria-checked=true]{background:#d8bb7933;border-color:#d8bb7970}
+.xixi-inline-form{display:flex;align-items:center;gap:6px;font-size:11px;flex-wrap:wrap}
+:is(.p0,.app-shell) .xixi-settings .xixi-inline-form input{width:75px;padding:6px;font-size:12px}
+:is(.p0,.app-shell) .xixi-settings .xixi-inline-form input[type=time]{width:99px}
+.xixi-setting-row:has(input[type=time]){flex-wrap:wrap;gap:8px}.xixi-setting-row:has(input[type=time])>div:first-child{flex-basis:100%}.xixi-setting-row:has(input[type=time])>div:last-child{max-width:100%}
+.xixi-effect-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:14px 0}
+:is(.p0,.app-shell) .xixi-settings .xixi-effect-options button{text-align:left;padding:12px;min-width:0;min-height:66px}
+.xixi-effect-options strong{display:block;font-weight:500;font-size:13px}.xixi-effect-options small{display:block;line-height:1.5;margin-top:5px}
+:is(.p0,.app-shell) .xixi-settings .xixi-effect-options button[aria-pressed=true]{border-color:#d8bb79b3;box-shadow:inset 0 0 0 1px #d8bb793b;background:#d8bb7917}
+.xixi-memory-list{padding:0;list-style:none;max-height:none;overflow:visible}.xixi-memory-list li{display:flex;align-items:flex-start;gap:12px;padding:12px 0;border-bottom:1px solid var(--settings-line)}.xixi-memory-list li>div{flex:1;min-width:0}.xixi-memory-list p{margin:0;color:var(--settings-ink);white-space:pre-wrap;overflow-wrap:anywhere}.xixi-memory-list details{font-size:10px;color:var(--settings-muted);margin-top:5px}.xixi-memory-list summary{cursor:pointer}.xixi-memory-list blockquote{margin:6px 0;white-space:pre-wrap;overflow-wrap:anywhere}.xixi-memory-list button{flex:none}
+.xixi-memory-actions{display:flex;gap:5px;flex-direction:column}
+.xixi-settings-feedback{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:24px;margin-top:20px;padding-top:14px;border-top:1px solid var(--settings-line);font-size:11px;color:var(--settings-accent)}
+:is(.p0,.app-shell) .xixi-settings .xixi-file-label{position:relative;display:inline-flex;align-items:center;border:1px solid var(--settings-line);border-radius:12px;padding:7px 11px;font-size:11px;margin:0;cursor:pointer;overflow:hidden}
+.xixi-file-label input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer}.xixi-import-confirm{margin-top:16px;padding:12px;border:1px solid #d8bb7960;border-radius:14px}.xixi-import-confirm button{margin-right:7px}
+.xixi-preview-dock{position:fixed;left:max(24px,calc((100vw - 1320px)/2));bottom:28px;width:340px;max-width:calc(100vw - 32px);isolation:isolate;border-radius:24px;pointer-events:auto}
+.xixi-preview-content{position:relative;z-index:1;display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;padding:16px;animation:settings-dock-in .24s ease both}
+.xixi-preview-content>span{width:100%;text-align:center;font-size:11px;color:var(--settings-accent)}.xixi-preview-content>div{display:flex;gap:7px;width:100%;justify-content:center}.xixi-preview-content button[aria-pressed=true]{border-color:var(--settings-accent);background:#d8bb7924}
+.xixi-settings[data-previewing=true]{pointer-events:none}
+.xixi-settings[data-preview-state=entering] :is(.xixi-settings-page-header,.xixi-settings-shell){animation:settings-page-out .24s ease both}
+.xixi-settings[data-preview-state=active] .xixi-settings-scroll{visibility:hidden;pointer-events:none}
+.xixi-settings[data-preview-state=entering] .xixi-settings-panel .home-glass-surface,.xixi-settings[data-preview-state=active] .xixi-settings-panel .home-glass-surface{opacity:0;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;box-shadow:none!important;transition:none}
+.xixi-settings[data-preview-state=entering] .xixi-settings-background,.xixi-settings[data-preview-state=active] .xixi-settings-background{opacity:0}
+.xixi-settings[data-preview-state=leaving] .xixi-preview-content{animation:settings-dock-out .18s ease both}
+.xixi-settings[data-preview-state=leaving] .xixi-preview-dock .home-glass-surface,.xixi-settings[data-closing=true] .home-glass-surface{backdrop-filter:none!important;-webkit-backdrop-filter:none!important;box-shadow:none!important;opacity:0;transition:none}
+.xixi-settings[data-closing=true]{pointer-events:none}.xixi-settings[data-closing=true] .xixi-settings-background{opacity:0;transition:none}.xixi-settings[data-closing=true] :is(.xixi-settings-page-header,.xixi-settings-shell){animation:settings-page-out .18s ease both}
+.xixi-settings-scroll::-webkit-scrollbar,.xixi-settings-tabs::-webkit-scrollbar{width:7px;height:5px}.xixi-settings-scroll::-webkit-scrollbar-thumb,.xixi-settings-tabs::-webkit-scrollbar-thumb{background:#d5bb8b50;border:2px solid transparent;background-clip:padding-box;border-radius:8px}
+@keyframes settings-page-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@keyframes settings-page-out{to{opacity:0;transform:translateY(6px)}}
+@keyframes settings-content-in{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+@keyframes settings-dock-in{from{opacity:0;transform:translateY(12px) scale(.97)}to{opacity:1;transform:none}}
+@keyframes settings-dock-out{to{opacity:0;transform:translateY(10px) scale(.98)}}
+@media(max-width:800px){.xixi-settings-scroll{padding:84px 22px 48px}.xixi-settings-shell{padding:15px 20px 20px}.xixi-settings-content{grid-template-columns:minmax(0,1fr);gap:16px}.xixi-settings-content>section+section{padding-top:22px;border-top:1px solid var(--settings-line)}}
+@media(max-width:600px){.xixi-settings-scroll{padding:78px 16px 40px}.xixi-settings-page-header{margin-bottom:15px}:is(.p0,.app-shell) .xixi-settings h2{font-size:21px}.xixi-settings-shell{padding:13px 16px 18px}.xixi-setting-row{gap:12px;flex-wrap:wrap}.xixi-setting-row>div:last-child{max-width:100%}.xixi-setting-row:has(.xixi-inline-form)>div:first-child{flex-basis:100%}.xixi-settings-tabs{gap:3px}.xixi-settings-tabs button{padding:7px 9px}.xixi-preview-dock{left:12px;right:12px;bottom:16px;width:auto;max-width:none;max-height:40dvh}.xixi-preview-content{padding:14px}.xixi-settings-page-header p{font-size:10px}}
+@media(prefers-reduced-motion:reduce){.xixi-settings-page-header,.xixi-settings-shell,.xixi-settings-content,.xixi-preview-content,.xixi-settings[data-preview-state=leaving] .xixi-preview-content,.xixi-settings[data-closing=true] :is(.xixi-settings-page-header,.xixi-settings-shell){animation:none}.xixi-settings-scroll,.xixi-settings-background,:is(.p0,.app-shell) .xixi-settings button,.xixi-toggle span{transition:none}}

@@ -1,7 +1,7 @@
-import { liveQuery } from 'dexie'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Task, TaskStatus } from '../domain/task'
 import { taskStore } from '../stores/taskStore'
+import { LOCAL_DATA_CHANGE } from '../stores/migration'
 
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback
@@ -30,29 +30,46 @@ export function useSpatialTasks() {
 
   useEffect(() => {
     let active = true
-    const subscription = liveQuery(async () => {
+    let request = 0
+    let pending = false
+    let again = false
+    const read = async () => {
+      if (pending) { again = true; return }
+      pending = true
+      const currentRequest = ++request
       const revision = writeRevision.current
-      const rows = await taskStore.listTasks()
-      return { rows, revision }
-    }).subscribe({
-      next: ({ rows, revision }) => {
-        // A read started before a completed local write cannot replace it.
-        if (!active || revision !== writeRevision.current) return
+      try {
+        const rows = await taskStore.listTasks()
+        // In-flight reads cannot replace a later successful local write.
+        if (!active || currentRequest !== request || revision !== writeRevision.current) return
         readState.current = 'ready'
         setTasks(rows)
         setLoading(false)
         setLoadError('')
-      },
-      error: (error: unknown) => {
-        if (!active) return
+      } catch (error: unknown) {
+        if (!active || currentRequest !== request || revision !== writeRevision.current) return
         readState.current = 'error'
         setLoading(false)
-        setLoadError(`无法读取本地任务：${errorMessage(error, '请重试。')}`)
-      },
-    })
+        setLoadError(`无法读取本地任务：${errorMessage(error, '请重试')}`)
+      } finally {
+        pending = false
+        if (active && again) { again = false; void read() }
+      }
+    }
+    const refresh = () => { void read() }
+    const visible = () => { if (document.visibilityState === 'visible') refresh() }
+    void read()
+    const poll = window.setInterval(visible, 5000)
+    window.addEventListener(LOCAL_DATA_CHANGE, refresh)
+    window.addEventListener('focus', visible)
+    document.addEventListener('visibilitychange', visible)
     return () => {
       active = false
-      subscription.unsubscribe()
+      request += 1
+      clearInterval(poll)
+      window.removeEventListener(LOCAL_DATA_CHANGE, refresh)
+      window.removeEventListener('focus', visible)
+      document.removeEventListener('visibilitychange', visible)
     }
   }, [observation])
 
@@ -78,7 +95,7 @@ export function useSpatialTasks() {
       writeRevision.current += 1
       if (mounted.current) {
         setTasks(current => mergeTask(current, saved))
-        // Resubscribe after the commit so even an invalidated in-flight read
+        // Refresh after the commit so even an invalidated in-flight read
         // is followed by a fresh snapshot, including changes from other tabs.
         setObservation(value => value + 1)
       }
@@ -115,8 +132,12 @@ export function useSpatialTasks() {
     return write(() => taskStore.updateTask(id, {
       status,
       doneAt: status === 'done' ? new Date().toISOString() : undefined,
-    }), '任务状态未保存')
+    }, tasks.find(task => task.id === id)?.updatedAt), '任务状态未保存')
+  }, [write, tasks])
+
+  const reopen = useCallback(async (id: string, expectedUpdatedAt: string): Promise<Task> => {
+    return write(() => taskStore.reopenTask(id, expectedUpdatedAt), '完成状态尚未撤回')
   }, [write])
 
-  return { tasks, loading, loadError, saving, retry, create, setStatus }
+  return { tasks, loading, loadError, saving, retry, create, setStatus, reopen }
 }

@@ -16,10 +16,13 @@
 .planner .pl-setup>div { gap:10px; flex-wrap:wrap }
 
 /* Status is typography, not another button inside every date button. */
-.planner .pl-timetable-heading .pl-timetable-capacity { margin:3px 0 0; padding:0; border:0; border-radius:0; background:none; box-shadow:none; display:block }
+.planner .pl-timetable-heading .pl-timetable-capacity { margin:0; padding:0; border:0; border-radius:0; background:none; box-shadow:none; display:block; width:auto }
 .planner .pl-timetable-capacity b { display:block; white-space:nowrap; font-size:11px; font-weight:400; color:var(--pl-muted); line-height:1.6 }
-.planner .pl-timetable-date { padding:7px 3px 8px; gap:3px }
-.planner .pl-timetable-corner { display:flex; flex-direction:column; justify-content:space-between; padding:8px 0; gap:8px; font-size:9px }
+.planner .pl-timetable-date { padding:6px 4px; gap:2px }
+.planner .pl-timetable-date-main { display:flex; align-items:baseline; justify-content:center; gap:6px; line-height:20px; white-space:nowrap }
+.planner .pl-timetable-date-main strong { font-size:15px }
+.planner .pl-timetable-date-meta { display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:2px 7px; min-width:0 }
+.planner .pl-timetable-corner { display:flex; flex-direction:column; justify-content:center; padding:6px 0; gap:4px; font-size:9px }
 .planner .pl-timetable-corner small { font-size:8px }
 .planner .pl-calendar-capacity>small { font-size:9px; color:var(--pl-muted) }
 .planner :is(.pl-capacity,.pl-calendar-summary-focus) { background:none; border:0; border-radius:0; box-shadow:none; padding:6px 4px 12px; margin-bottom:4px; border-bottom:1px solid var(--pl-line) }
@@ -63,17 +66,18 @@
 .planner .pl-chat>.pl-glass-content>.pl-muted { flex:none; margin:8px 0 }
 /* The daily briefing comes first; the board uses the complete row below. */
 .planner .pl-container,.planner[data-chat-open=true] .pl-container { width:min(var(--pl-width),calc(100% - 2 * var(--home-left))) }
-.planner .pl-overview { height:232px; margin:0 0 14px; min-height:0 }
-.planner .pl-overview>.pl-glass-content { padding:18px 20px; min-height:0 }
-.planner .pl-overview-grid { display:grid; grid-template-columns:minmax(210px,.82fr) minmax(0,1.5fr) minmax(210px,1fr); gap:24px; height:100%; min-height:0; padding:0; overflow:visible; max-height:none }
+.planner .pl-overview { height:auto; margin:0 0 14px; min-height:220px }
+.planner .pl-overview>.pl-glass-content { padding:18px 20px; min-height:0; height:auto }
+.planner .pl-overview-grid { display:grid; grid-template-columns:minmax(210px,.82fr) minmax(0,1.5fr) minmax(210px,1fr); gap:22px; height:auto; min-height:0; padding:0; overflow:visible; max-height:none; align-items:start }
+.planner .pl-overview-grid[data-view=timetable] { grid-template-columns:minmax(210px,1fr) minmax(0,1.25fr) minmax(0,.95fr) minmax(0,.95fr) }
 .planner .pl-overview-grid>section { min-width:0; min-height:0; display:flex; flex-direction:column }
-.planner .pl-overview-summary { overflow:auto; scrollbar-gutter:stable; padding-right:4px }
+.planner .pl-overview-summary { overflow:visible; padding:0 }
 .planner .pl-overview .pl-day-header { gap:6px; padding:0; margin:0 0 10px; flex:none }
 .planner .pl-overview .pl-day-header>div { text-align:left; flex:1 }
 .planner .pl-overview .pl-day-header>.pl-day-arrows { flex:none }
 .planner .pl-day-arrows { display:flex; flex:none; gap:0 }
 .planner .pl-day-arrows .pl-icon-button { width:24px; min-height:24px; height:24px; padding:3px }
-.planner .pl-overview .pl-day-header h3 { font-size:13px; margin-top:3px; white-space:nowrap }
+.planner .pl-overview .pl-day-header h3 { font-size:13px; margin-top:3px; line-height:1.6 }
 .planner .pl-overview :is(.pl-capacity,.pl-calendar-summary-focus) { margin:0; padding:0; border:0; flex:none }
 .planner .pl-overview .pl-capacity-hero { gap:3px }
 .planner .pl-overview .pl-capacity-hero strong { font-size:24px; line-height:1.5 }
@@ -86,7 +90,7 @@
 .planner .pl-overview-heading h4 small { font-size:10px; font-weight:400; color:var(--pl-muted); margin-left:5px }
 .planner .pl-overview-heading .pl-add-inline { font-size:10px; padding:3px 0; margin:0; flex:none }
 .planner .pl-overview-heading .pl-icon { width:13px; height:13px }
-.planner .pl-overview-list { overflow:auto; min-height:0; flex:1; scrollbar-gutter:stable; overscroll-behavior:contain; padding-right:6px }
+.planner .pl-overview-list { overflow:visible; min-height:0; flex:none; padding:0 }
 .planner .pl-overview-date-content { animation:pl-day-enter 240ms var(--pl-motion-ease) both }
 .planner .pl-overview .pl-overview-date-content.pl-capacity { overflow:visible; max-height:none }
 .planner .pl-overview .pl-overview-date-content.pl-calendar-summary-focus { overflow:visible }
@@ -100,7 +104,10 @@
 .planner .pl-overview .pl-checklist small { font-size:9px }
 .planner .pl-overview .pl-preparation { margin-top:8px; border:0; padding:7px 0; background:transparent }
 .planner .pl-overview .pl-submission-row .pl-text-button { padding:6px 0 }
-.planner .pl-overview-unscheduled { margin-top:12px }
+.planner .pl-overview .pl-overview-unscheduled { margin-top:0; flex:none }
+.planner .pl-overview-unscheduled .task-stack-stage { min-height:96px; height:96px; margin:2px 3px 0 }
+.planner .pl-overview .pl-checklist li>div { min-width:0 }
+.planner .pl-overview .pl-checklist strong { overflow-wrap:anywhere }
 .planner .pl-month-deadline { display:flex; gap:12px; align-items:baseline; width:100%; text-align:left; padding:7px 0; font-size:12px; border-radius:6px }
 .planner .pl-month-deadline:hover { background:var(--pl-plate-hover) }
 .planner .pl-month-deadline time { flex:none; min-width:34px; font-size:11px; color:var(--pl-gold); font-variant-numeric:tabular-nums }
@@ -125,7 +132,7 @@
 .planner .pl-timetable-board[data-mode=day] .pl-period-window { min-width:0 }
 .planner .pl-timetable-board[data-mode=day] .pl-timetable-date { flex-direction:row; justify-content:flex-start; gap:12px; padding:10px 12px }
 .planner .pl-timetable-board[data-mode=day] .pl-timetable-date strong { font-size:20px }
-.planner .pl-timetable-board[data-mode=day] .pl-timetable-capacity { margin-left:auto; width:auto }
+.planner .pl-timetable-board[data-mode=day] .pl-timetable-date-meta { margin-left:auto }
 .planner .pl-timetable-board[data-mode=day] .pl-slot { padding-left:12px; padding-right:12px }
 .planner .pl-timetable-board[data-mode=day] .pl-slot strong { font-size:12px }
 .planner .pl-timetable-board[data-mode=day] .pl-slot-time { font-size:10px }
@@ -159,7 +166,10 @@
   .planner .pl-header-edit>span,.planner .pl-header-add>span { display:none }
   .planner :is(.pl-header-edit,.pl-header-add) { width:32px; padding:6px }
   .planner .pl-overview-grid { grid-template-columns:minmax(190px,.9fr) minmax(0,1fr) minmax(175px,.9fr); gap:16px }
-  .planner .pl-overview-task-grid { grid-template-columns:1fr }
+  .planner .pl-overview-grid[data-view=timetable] { grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px 24px }
+  .planner .pl-overview-grid[data-view=timetable] .pl-overview-summary { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:12px }
+  .planner .pl-overview-grid[data-view=timetable] .pl-day-header { align-items:flex-start; flex-wrap:wrap }
+  .planner .pl-overview-task-grid { grid-template-columns:repeat(2,minmax(0,1fr)) }
   .planner .pl-overview .pl-capacity-hero strong { font-size:21px }
   .planner .pl-overview>.pl-glass-content { padding:16px }
 }
@@ -182,19 +192,20 @@
   .planner .pl-selected-summary { display:flex; justify-content:space-between; gap:8px; color:var(--pl-muted); font-size:11px; padding:3px 2px 10px; font-variant-numeric:tabular-nums }
   .planner .pl-layout,.planner .pl-layout[data-chat=true],.planner .pl-layout[data-chat-open=true] { grid-template-columns:minmax(0,1fr); grid-template-rows:auto; height:auto; min-height:0; gap:0; transition:none }
   .planner .pl-layout>.pl-board { grid-column:1; grid-row:1; min-height:0; height:auto }
-  .planner .pl-overview { height:340px }
+  .planner .pl-overview { height:auto; min-height:0 }
   .planner .pl-overview>.pl-glass-content { padding:14px }
-  .planner .pl-overview-grid { grid-template-columns:minmax(0,1fr) minmax(0,1fr); grid-template-rows:auto minmax(0,1fr); gap:16px }
+  .planner .pl-overview-grid,.planner .pl-overview-grid[data-view=timetable] { grid-template-columns:minmax(0,1fr) minmax(0,1fr); grid-template-rows:auto; gap:20px 16px }
   .planner .pl-overview-summary { grid-column:1/-1; display:grid!important; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:16px; padding:0; overflow:visible }
+  .planner .pl-overview-grid[data-view=timetable] .pl-overview-tasks { grid-column:1/-1 }
   .planner .pl-overview .pl-day-header { align-self:start; margin:0; flex-wrap:wrap }
   .planner .pl-overview .pl-capacity-hero strong { font-size:18px }
   .planner .pl-overview .pl-calendar-summary-focus strong { font-size:17px; margin:0 }
-  .planner .pl-overview .pl-capacity-detail { display:none }
-  .planner .pl-overview .pl-free-slots { max-height:28px; overflow:auto }
-  .planner .pl-overview-task-grid { grid-template-columns:1fr }
+  .planner .pl-overview .pl-capacity-detail { display:flex }
+  .planner .pl-overview .pl-free-slots { max-height:none; overflow:visible }
+  .planner .pl-overview-task-grid { grid-template-columns:repeat(2,minmax(0,1fr)) }
   .planner .pl-overview-heading { gap:4px; flex-wrap:wrap; align-items:center; min-height:28px }
   .planner .pl-overview .pl-overview-heading h4 { font-size:11px }
-  .planner .pl-overview-list { padding-right:3px }
+  .planner .pl-overview-list { padding-right:0 }
   .planner .pl-board-scroll { max-height:none; min-height:0 }
   .planner .pl-setup { align-items:stretch; gap:6px; padding:8px 10px }
   .planner .pl-setup>div { justify-content:flex-end }
@@ -235,3 +246,42 @@
   .planner .pl-chat-column::backdrop,.planner .pl-chat-column .pl-chat .home-glass-surface::after,.planner .pl-chat-column .pl-chat>.pl-glass-content { animation:none!important }
   .planner dialog.pl-chat-column,.planner .pl-layout>:is(.pl-day-panel,.pl-calendar-summary) { transition:none!important }
 }
+
+/* Month cells share the live glass below. Light-catching rims distinguish
+   days without painting a second dark surface over the scene. */
+.planner {
+  --pl-calendar-plate: linear-gradient(145deg, rgb(255 255 255 / .065), transparent 34%, transparent 76%, rgb(255 255 255 / .025));
+  --pl-calendar-plate-hover: linear-gradient(145deg, rgb(255 255 255 / .11), transparent 38%, transparent 72%, rgb(255 255 255 / .04));
+  --pl-calendar-line: rgb(225 222 213 / .16);
+  --pl-calendar-shadow: inset 0 1px 0 rgb(255 255 255 / .13), inset 0 -1px 0 rgb(255 255 255 / .035);
+}
+.planner[data-theme=light] {
+  --pl-calendar-plate: linear-gradient(145deg, rgb(255 255 255 / .28), transparent 38%, rgb(255 255 255 / .07));
+  --pl-calendar-plate-hover: linear-gradient(145deg, rgb(255 255 255 / .4), transparent 38%, rgb(255 255 255 / .12));
+  --pl-calendar-line: rgb(65 70 80 / .20);
+  --pl-calendar-shadow: inset 0 1px 0 rgb(255 255 255 / .6), inset 0 -1px 0 rgb(255 255 255 / .16);
+}
+.planner .pl-calendar-grid { gap: 8px; padding: 4px; }
+.p0 .planner .pl-calendar-day {
+  overflow: hidden;
+  border: 1px solid var(--pl-calendar-line);
+  border-radius: 14px;
+  background: var(--pl-calendar-plate);
+  box-shadow: var(--pl-calendar-shadow);
+  isolation: isolate;
+}
+.p0 .planner .pl-calendar-day:is(:hover,:focus-visible,[data-hovered=true]) {
+  border-color: rgb(213 187 139 / .62);
+  background: var(--pl-calendar-plate-hover);
+  box-shadow: var(--pl-calendar-shadow), inset 0 0 0 1px rgb(213 187 139 / .14);
+}
+.p0 .planner .pl-calendar-day[aria-pressed=true] {
+  border-color: rgb(213 187 139 / .74);
+  background: var(--pl-calendar-plate-hover);
+  box-shadow: var(--pl-calendar-shadow), inset 0 0 0 1px rgb(213 187 139 / .22);
+}
+.planner .pl-calendar-day[data-today=true] { border-color: rgb(213 187 139 / .52); }
+.planner .pl-calendar-date,.planner .pl-calendar-entries,.planner .pl-calendar-more { position: relative; z-index: 1; }
+.planner[data-theme=light] .pl-calendar-day[data-outside=true] { opacity: .56; }
+@media(max-width:850px) { .planner .pl-calendar-grid { gap: 5px; padding: 3px; } }
+@media(max-width:500px) { .planner .pl-calendar-grid { gap: 4px; padding: 2px; } .p0 .planner .pl-calendar-day { border-radius: 11px; } }

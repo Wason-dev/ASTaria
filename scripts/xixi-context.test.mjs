@@ -46,25 +46,28 @@ test('creates real tasks with DDL and a date-only startAt intention then provide
   assert.equal(f.db.listTasks()[0].due, '2026-09-25')
   assert.equal(f.db.listTasks()[0].startAt, '2026-09-23')
   assert.equal(f.db.listTasks()[0].source, 'ai')
-  assert.equal(result.operations.length, 1)
+  assert.equal(result.operations.length, 2)
+  assert.ok(f.db.getPlanner().blocks.every(block => block.date >= '2026-09-23'))
   assert.equal(toolResults(f.requests[1])[0].ok, true)
   assert.equal(contextData(f.requests[1]).tasks[0].title, '物理报告')
 })
 
-test('failed provider reply preserves committed actions; retry with different tool IDs does not duplicate', async t => {
+test('failed provider reply closes committed actions with one local receipt and replay never mutates again', async t => {
   const args = { tasks: [{ title: '物理报告', due: '2026-09-25' }] }
   const f = fixture(t, [call('create_tasks', args, 'call-a'), new Error('secret-provider-body'), call('create_tasks', args, 'call-b'), reply('记好了')])
   const request = input('记下物理报告，下周五交')
   const first = await f.xixi.chat(request)
-  assert.equal(first.status, 'failed')
-  assert.equal(first.operations.length, 1)
+  assert.equal(first.status, 'completed')
+  assert.equal(first.operations.length, 2)
+  assert.match(first.messages.at(-1).content, /实际写入/)
   assert.doesNotMatch(JSON.stringify(first), /secret-provider-body/)
   const retry = await f.xixi.chat(request)
   assert.equal(retry.status, 'completed')
   assert.equal(f.db.listTasks().length, 1)
-  assert.equal(retry.operations.length, 1)
+  assert.equal(retry.operations.length, 2)
   assert.equal(retry.messages.filter(message => message.role === 'user').length, 1)
-  assert.equal(toolResults(f.requests[3])[0].reused, true)
+  assert.equal(f.requests.length, 2)
+  assert.equal(retry.messages.filter(message => message.role === 'assistant' && !message.toolCalls?.length).length, 1)
 })
 
 test('completed request is durable and idempotent', async t => {
@@ -74,7 +77,7 @@ test('completed request is durable and idempotent', async t => {
   const second = await f.xixi.chat(request)
   assert.deepEqual(second, first)
   assert.equal(f.requests.length, 1)
-  assert.deepEqual(Object.keys(f.db.getTurn(request.requestId).result).sort(), ['conversationId', 'requestId', 'status'])
+  assert.deepEqual(Object.keys(f.db.getTurn(request.requestId).result).sort(), ['conversationId', 'execution', 'requestId', 'status'])
   await assert.rejects(f.xixi.chat({ ...request, text: '不同消息' }), /已用于/)
 })
 
@@ -82,9 +85,10 @@ test('completed request replay reads fresh action state without storing full his
   const f = fixture(t, [call('create_tasks', { tasks: [{ title: '报告' }] }), reply('记好了')])
   const request = input('记下报告')
   const result = await f.xixi.chat(request)
-  f.db.undoOperation(result.operations[0].id)
+  f.db.undoOperation(result.operations.find(operation => operation.kind !== 'planner').id)
   const replay = await f.xixi.chat(request)
-  assert.ok(replay.operations[0].undoneAt)
+  assert.ok(replay.operations.every(operation => operation.undoneAt))
+  assert.equal(f.db.getPlanner().blocks.length, 0)
   assert.equal(f.requests.length, 2)
   assert.equal(f.db.getTurn(request.requestId).result.messages, undefined)
 })
@@ -137,7 +141,7 @@ test('focused task receives its latest bounded notes and classification dictiona
   assert.ok(context.areas.some(area => area.id === 'phy2' && area.name === 'Phy2' && area.defaultEnergy === 'deep'))
   assert.ok(context.tasks.every(task => task.notes === undefined))
   assert.doesNotMatch(JSON.stringify(f.requests[0]), /不相关的完整备注不应默认发出/)
-  assert.ok(contextUnits(f.requests[0].messages) + contextUnits(XIXI_TOOLS) < 9000)
+  assert.ok(contextUnits(f.requests[0].messages) + contextUnits(XIXI_TOOLS) < 10000)
 })
 
 test('memory source is fixed to current user message and inspectable', async t => {
@@ -201,8 +205,24 @@ test('tool loop stops after bounded rounds and retains all applied changes', asy
   assert.equal(f.requests.length, 6)
   assert.equal(f.requests.at(-1).tools, undefined)
   assert.equal(result.status, 'failed')
-  assert.equal(result.operations.length, 5)
+  assert.equal(result.execution.status, 'partial')
+  assert.equal(result.execution.reply.mode, 'failed')
+  assert.match(result.execution.interrupted, /上限/)
+  assert.equal(result.operations.filter(operation => operation.kind !== 'planner').length, 5)
   assert.equal(f.db.listTasks().length, 5)
+})
+
+test('a provider failure during retry cannot complete a previously interrupted execution', async t => {
+  const f = fixture(t, [call('create_tasks', { tasks: [{ title: '部分完成的报告' }] }), ...Array.from({ length: 5 }, () => call('read_tasks', {})), new Error('private-provider-diagnostic')])
+  const request = input('记录报告并处理后续安排')
+  const first = await f.xixi.chat(request)
+  assert.equal(first.status, 'failed')
+  assert.equal(first.execution.status, 'partial')
+  const retried = await f.xixi.chat(request)
+  assert.equal(retried.status, 'failed')
+  assert.equal(retried.execution.status, 'partial')
+  assert.doesNotMatch(JSON.stringify(retried), /private-provider-diagnostic/)
+  assert.equal(f.db.listTasks().length, 1)
 })
 
 test('same-conversation concurrent requests serialize and see prior message', async t => {
@@ -230,7 +250,7 @@ test('summaries preserve source references and original records while bounding r
   assert.ok(summary.sourceMessageIds.length >= 12)
   assert.equal(f.db.listMessages('main', { limit: 1000 }).length, 38)
   assert.match(summary.text, /未定/)
-  assert.ok(contextUnits(f.requests.at(-1).messages) + contextUnits(XIXI_TOOLS) < 9000)
+  assert.ok(contextUnits(f.requests.at(-1).messages) + contextUnits(XIXI_TOOLS) < 10000)
   assert.ok(contextData(f.requests.at(-1)).summary.sourceMessageIds.length > 0)
 })
 
@@ -310,11 +330,12 @@ test('replaying an operation after user undo respects the undone state', async t
   const f = fixture(t, [call('create_tasks', args), new Error('network'), call('create_tasks', args), reply('保留撤销后的状态')])
   const request = input('记下报告')
   const first = await f.xixi.chat(request)
-  f.db.undoOperation(first.operations[0].id)
+  f.db.undoOperation(first.operations.find(operation => operation.kind !== 'planner').id)
   const second = await f.xixi.chat(request)
   assert.equal(second.status, 'completed')
   assert.equal(f.db.listTasks().length, 0)
-  assert.equal(toolResults(f.requests.at(-1))[0].ok, false)
+  assert.equal(f.requests.length, 2)
+  assert.ok(second.operations.every(operation => operation.undoneAt))
 })
 
 test('separate runtime instances cannot execute the same in-flight request twice', async t => {

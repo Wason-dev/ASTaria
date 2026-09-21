@@ -3,7 +3,8 @@ import type { CSSProperties } from 'react'
 import type { Task } from '../domain/task'
 import { upcomingDeadlines, unconfirmedDeadlineCount } from './deadlines'
 import type { DeadlineItem } from './deadlines'
-import { deadlineContext } from './briefing'
+import { deadlineContext, estimateLabel } from './briefing'
+import type { ScheduledMinutes } from './briefing'
 import { MeasuredGlassSurface } from '../home/GlassSurface'
 import type { Appearance } from './appearance'
 import { WorkbenchIcon } from './WorkbenchIcon'
@@ -24,9 +25,9 @@ export function DeadlineSummary({ tasks, now, onReveal }: { tasks: Task[]; now: 
 export const UpcomingDeadlines = forwardRef<HTMLHeadingElement, {
   tasks: Task[]; now: Date; disabled: boolean; loading: boolean; error: string; appearance: Appearance;
   highlighted: boolean; onSelect: (id: string) => void; onRetry: () => void
-  focusMin: number; getSpentMs: (id: string) => number
+  focusMin: number; getSpentMs: (id: string) => number; scheduledMinutes: ScheduledMinutes
   embedded?: boolean; revealTaskId?: string | null
-}>(function UpcomingDeadlines({ tasks, now, disabled, loading, error, highlighted, onSelect, onRetry, focusMin, getSpentMs, appearance, embedded = false, revealTaskId }, ref) {
+}>(function UpcomingDeadlines({ tasks, now, disabled, loading, error, highlighted, onSelect, onRetry, focusMin, getSpentMs, scheduledMinutes, appearance, embedded = false, revealTaskId }, ref) {
   const items = useMemo(() => upcomingDeadlines(tasks, now), [tasks, now])
   const unconfirmed = unconfirmedDeadlineCount(tasks)
   const viewport = useRef<HTMLDivElement>(null)
@@ -104,7 +105,7 @@ export const UpcomingDeadlines = forwardRef<HTMLHeadingElement, {
         {items.length > 0 && <>
           <div ref={viewport} className="wb-ddl-timeline-window" style={listHeight === undefined ? undefined : { height: listHeight }}>
             <ol ref={track} id={listId} className="wb-ddl-timeline-track" aria-label="按截止时间排列的事项" style={{ '--wb-ddl-node-width': `${nodeWidth}px`, '--wb-ddl-node-gap': `${nodeGap}px`, transform: `translateX(${-pageStart * (nodeWidth + nodeGap)}px)` } as CSSProperties}>
-              {items.map((item, index) => <DeadlineRow key={item.task.id} item={item} featured={index === 0} offpage={index < pageStart || index >= pageEnd} pageRevision={pageRevision} now={now} focusMin={focusMin} getSpentMs={getSpentMs} disabled={disabled} onSelect={onSelect} />)}
+              {items.map((item, index) => <DeadlineRow key={item.task.id} item={item} featured={index === 0} offpage={index < pageStart || index >= pageEnd} pageRevision={pageRevision} now={now} focusMin={focusMin} getSpentMs={getSpentMs} scheduledMinutes={scheduledMinutes} disabled={disabled} onSelect={onSelect} />)}
             </ol>
           </div>
           {pageCount > 1 && <nav className="wb-ddl-pager" aria-label="截止时间线翻页">
@@ -122,15 +123,15 @@ export const UpcomingDeadlines = forwardRef<HTMLHeadingElement, {
   </aside>
 })
 
-function DeadlineRow({ item, featured, offpage, pageRevision, now, focusMin, getSpentMs, disabled, onSelect }: { item: DeadlineItem; featured: boolean; offpage: boolean; pageRevision: number; now: Date; focusMin: number; getSpentMs: (id: string) => number; disabled: boolean; onSelect: (id: string) => void }) {
-  const context = deadlineContext(item.task, now, focusMin, getSpentMs)
+function DeadlineRow({ item, featured, offpage, pageRevision, now, focusMin, getSpentMs, scheduledMinutes, disabled, onSelect }: { item: DeadlineItem; featured: boolean; offpage: boolean; pageRevision: number; now: Date; focusMin: number; getSpentMs: (id: string) => number; scheduledMinutes: ScheduledMinutes; disabled: boolean; onSelect: (id: string) => void }) {
+  const context = deadlineContext(item.task, now, focusMin, getSpentMs, scheduledMinutes)
   const [expanded, setExpanded] = useState(false)
   const regionId = useId()
   const toggle = useRef<HTMLButtonElement>(null)
   const spentMs = getSpentMs(item.task.id)
-  const estimate = Number.isFinite(item.task.estimateMin) && (item.task.estimateMin ?? 0) > 0 ? Math.ceil(item.task.estimateMin!) : null
+  const estimateText = estimateLabel(item.task, scheduledMinutes)
   const evidenceFields: Array<{ icon: WorkbenchIconName; label: string }> = [
-    { icon: 'calendar', label: '截止' }, { icon: 'hourglass', label: '原估时' },
+    { icon: 'calendar', label: '截止' }, { icon: 'hourglass', label: '用时' },
     { icon: 'timer', label: '已专注' }, { icon: 'xixi', label: '节奏参考' },
   ]
   useEffect(() => { setExpanded(false) }, [pageRevision])
@@ -140,7 +141,7 @@ function DeadlineRow({ item, featured, offpage, pageRevision, now, focusMin, get
     <span className="wb-ddl-node-dot" aria-hidden="true" />
     <div className="wb-ddl-card">
     <button className="wb-ddl-select" data-deadline-id={item.task.id} disabled={disabled} onClick={() => onSelect(item.task.id)} aria-label={`${item.task.title}，${item.remainingLabel}，${item.dateLabel}截止，${context.effortLabel}，${context.suggestion}，进入专注`}>
-      <span className="wb-ddl-copy"><span className="wb-ddl-status"><span className="wb-ddl-countdown">{item.remainingLabel}</span></span><strong>{item.task.title}</strong><span className="wb-ddl-meta"><span className="wb-ddl-effort" title={estimate ? `原预计 ${estimate} 分钟` : '用时待估'}><WorkbenchIcon name="hourglass" />{estimate ? `${estimate} 分钟` : '待估'}</span>{spentMs > 0 && <span className="wb-ddl-effort" title={`累计专注 ${Math.floor(spentMs / 60000)} 分钟`}><WorkbenchIcon name="timer" />{spentMs < 60000 ? '<1' : Math.floor(spentMs / 60000)} 分钟</span>}</span>{featured && <span className="wb-ddl-advice" data-tone={context.tone}>{context.suggestion}</span>}</span>
+      <span className="wb-ddl-copy"><span className="wb-ddl-status"><span className="wb-ddl-countdown">{item.remainingLabel}</span></span><strong>{item.task.title}</strong><span className="wb-ddl-meta"><span className="wb-ddl-effort" title={estimateText ?? '用时待估'}><WorkbenchIcon name="hourglass" />{estimateText ?? '待估'}</span>{spentMs > 0 && <span className="wb-ddl-effort" title={`累计专注 ${Math.floor(spentMs / 60000)} 分钟`}><WorkbenchIcon name="timer" />{spentMs < 60000 ? '<1' : Math.floor(spentMs / 60000)} 分钟</span>}</span>{featured && <span className="wb-ddl-advice" data-tone={context.tone}>{context.suggestion}</span>}</span>
       <span className="wb-ddl-arrow"><WorkbenchIcon name="arrow" /></span>
     </button>
       <button ref={toggle} className="wb-reason-toggle wb-ddl-reason-toggle wb-icon-button" disabled={disabled} aria-label={expanded ? `收起「${item.task.title}」的建议依据` : `查看「${item.task.title}」的建议依据`} title={expanded ? '收起依据' : '建议依据'} data-tooltip={expanded ? '收起依据' : '建议依据'} aria-expanded={expanded} aria-controls={regionId} onClick={() => setExpanded(value => !value)}><WorkbenchIcon name="info" /><span className="wb-tooltip" role="tooltip">{expanded ? '收起依据' : '建议依据'}</span></button>

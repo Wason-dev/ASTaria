@@ -6,11 +6,15 @@ import { StarInfall } from './StarInfall'
 import { AdaptiveQualityController } from './adaptiveQuality'
 import type { AdaptiveQuality } from './adaptiveQuality'
 import { ResponseEffectController } from './responseEffects'
+import { DECISION_EFFECT_EVENT, DECISION_EXIT_EVENT, DECISION_EXIT_MS, DecisionEffectController, getDecisionEffect } from './decisionEffect'
+import type { DecisionEffectDetail } from './decisionEffect'
 import type { ResponseEffectSettings, ResponsePhase } from './responseEffects'
-import { normalizeRenderProfile, RENDER_PROFILES } from './renderProfile'
-import type { RenderProfile } from './renderProfile'
+import { nextRenderDeadline, normalizeRenderProfile, renderFrameIsDue, resolveRenderProfile } from './renderProfile'
+import type { RenderProfile, RenderScene } from './renderProfile'
 export type { ResponseEffectSettings, ResponsePhase } from './responseEffects'
 export type { RenderProfile } from './renderProfile'
+export type { DecisionEffectDetail } from './decisionEffect'
+export { setDecisionEffect, beginDecisionExit, DECISION_EXIT_MS } from './decisionEffect'
 
 export type Quality = AdaptiveQuality
 export type QualityMode = Quality | 'auto'
@@ -44,7 +48,9 @@ export interface RenderStats {
   pointerY: number
   responseEffect: ReturnType<ResponseEffectController['getSnapshot']>
   renderProfile: RenderProfile
+  renderScene: RenderScene
   targetFps: number
+  decisionEffect: ReturnType<DecisionEffectController['getSnapshot']>
 }
 
 interface CameraSpring {
@@ -208,12 +214,13 @@ export class BlackHoleRenderer {
   private contextLost = false
   private disposed = false
   private raf = 0
-  private frameTimer: ReturnType<typeof setTimeout> | null = null
   private statsTimer: ReturnType<typeof setInterval> | null = null
   private previousFrame: number | null = null
   private previousWasAmbient = false
   private nextFrameAt = 0
   private renderProfile: RenderProfile = 'full'
+  private renderScene: RenderScene = 'home'
+  private targetFps = 60
   private renderedFrames = 0
   private simulationTime = 0
   private night = 0
@@ -221,6 +228,7 @@ export class BlackHoleRenderer {
   private nightVelocity = 0
   private readonly adaptiveQuality = new AdaptiveQualityController()
   private readonly responseEffect = new ResponseEffectController()
+  private readonly decisionEffect = new DecisionEffectController()
   private readonly responseWeights = new THREE.Vector3(1, 0, 0)
   private cssWidth = 0
   private cssHeight = 0
@@ -290,6 +298,17 @@ export class BlackHoleRenderer {
         uResponseTime: { value: 0 },
         uResponseMotion: { value: 1 },
         uResponseWeights: { value: this.responseWeights },
+        uDecisionActive: { value: 0 },
+        uDecisionRadius: { value: 1 },
+        uDecisionWarp: { value: 0 },
+        uDecisionThickness: { value: 1 },
+        uDecisionLens: { value: 0 },
+        uDecisionFlow: { value: 1 },
+        uDecisionTime: { value: 0 },
+        uDecisionHorizon: { value: 0 },
+        uDecisionBranch: { value: 0 },
+        uDecisionComparing: { value: 0 },
+        uDecisionEmphasis: { value: 0 },
       },
     })
     const quad = new THREE.Mesh(this.geometry, this.material)
@@ -302,6 +321,9 @@ export class BlackHoleRenderer {
     canvas.addEventListener('webglcontextrestored', this.handleContextRestored)
     host.addEventListener('pointermove', this.handlePointer)
     host.addEventListener('pointerleave', this.handlePointerLeave)
+    window.addEventListener(DECISION_EFFECT_EVENT, this.handleDecisionEffect)
+    window.addEventListener(DECISION_EXIT_EVENT, this.handleDecisionExit)
+    this.decisionEffect.setDetail(getDecisionEffect())
     document.addEventListener('visibilitychange', this.handleVisibility)
     this.motionQuery.addEventListener('change', this.handleMotion)
     this.resizeObserver = new ResizeObserver(this.handleResize)
@@ -328,10 +350,12 @@ export class BlackHoleRenderer {
     this.publishStats()
   }
 
-  setRenderProfile(profile: RenderProfile) {
+  setRenderProfile(profile: RenderProfile, scene: RenderScene = 'home') {
     const next = normalizeRenderProfile(profile)
     this.renderProfile = next
-    const config = RENDER_PROFILES[next]
+    this.renderScene = scene
+    const config = resolveRenderProfile(next, scene)
+    this.targetFps = config.frameRate
     this.requestedQuality = config.quality
     this.adaptiveQuality.reset()
     this.applyQuality(config.quality)
@@ -363,12 +387,34 @@ export class BlackHoleRenderer {
   setResponseEffect(settings: ResponseEffectSettings) {
     this.responseEffect.setSettings(settings)
     this.syncResponseEffect(0)
+    this.syncDecisionEffect(0)
+    this.syncStatsTimer()
     this.requestFrame()
+  }
+
+  /** Apply the decision studio state without creating a second WebGL renderer. */
+  setDecisionEffect(detail: Partial<DecisionEffectDetail>) {
+    this.decisionEffect.setDetail(detail)
+    this.syncDecisionEffect(0)
+    this.syncStatsTimer()
+    this.requestFrame()
+    this.publishStats()
+  }
+
+  /** Shares the UI's finite retreat instead of leaving a delayed afterimage. */
+  beginDecisionExit() {
+    this.decisionEffect.beginExit(this.decisionMotionIsReduced() || this.visibilityPaused || this.contextLost, this.paused)
+    this.syncDecisionEffect(0)
+    this.syncStatsTimer()
+    this.requestFrame()
+    this.publishStats()
   }
 
   setResponsePhase(phase: ResponsePhase) {
     this.responseEffect.setPhase(phase)
     this.syncResponseEffect(0)
+    this.syncDecisionEffect(0)
+    this.syncStatsTimer()
     this.requestFrame()
   }
 
@@ -445,7 +491,9 @@ export class BlackHoleRenderer {
       pointerY: this.pointer.y,
       responseEffect: this.responseEffect.getSnapshot(this.reducedMotion),
       renderProfile: this.renderProfile,
-      targetFps: RENDER_PROFILES[this.renderProfile].frameRate,
+      renderScene: this.renderScene,
+      targetFps: this.targetFps,
+      decisionEffect: this.decisionEffect.getSnapshot(this.decisionMotionIsReduced()),
     }
   }
 
@@ -463,6 +511,8 @@ export class BlackHoleRenderer {
     this.motionQuery.removeEventListener('change', this.handleMotion)
     this.host.removeEventListener('pointermove', this.handlePointer)
     this.host.removeEventListener('pointerleave', this.handlePointerLeave)
+    window.removeEventListener(DECISION_EFFECT_EVENT, this.handleDecisionEffect)
+    window.removeEventListener(DECISION_EXIT_EVENT, this.handleDecisionExit)
     this.renderer.domElement.removeEventListener('webglcontextlost', this.handleContextLost)
     this.renderer.domElement.removeEventListener('webglcontextrestored', this.handleContextRestored)
     this.geometry.dispose()
@@ -486,6 +536,7 @@ export class BlackHoleRenderer {
 
   private ambientIsRunning() {
     return !this.disposed && !this.contextLost && !this.visibilityPaused && !this.paused && !this.reducedMotion
+      && !(this.decisionEffect.getSnapshot().active && this.decisionMotionIsReduced())
   }
 
   private springIsRunning() {
@@ -564,17 +615,7 @@ export class BlackHoleRenderer {
 
   private requestFrame() {
     if (!this.raf && !this.disposed && !this.contextLost && !this.visibilityPaused) {
-      const delay = Math.max(0, this.nextFrameAt - performance.now())
-      if (delay > 1) {
-        if (this.frameTimer === null) {
-          this.frameTimer = setTimeout(() => {
-            this.frameTimer = null
-            if (!this.disposed && !this.contextLost && !this.visibilityPaused) this.raf = requestAnimationFrame(this.frame)
-          }, delay)
-        }
-      } else {
-        this.raf = requestAnimationFrame(this.frame)
-      }
+      this.raf = requestAnimationFrame(this.frame)
     }
   }
 
@@ -588,11 +629,43 @@ export class BlackHoleRenderer {
     this.responseWeights.set(...state.weights)
   }
 
+  private decisionMotionIsReduced() {
+    return this.reducedMotion || this.responseEffect.getSnapshot(this.reducedMotion).reducedMotion
+  }
+
+  private syncDecisionEffect(delta: number) {
+    const reduced = this.decisionMotionIsReduced()
+    this.decisionEffect.advance(delta, reduced, this.paused)
+    const state = this.decisionEffect.getSnapshot(reduced)
+    const uniforms = this.material.uniforms
+    uniforms.uDecisionActive.value = state.strength
+    uniforms.uDecisionHorizon.value = state.renderedHorizon
+    uniforms.uDecisionBranch.value = state.renderedBranch
+    uniforms.uDecisionComparing.value = state.comparison
+    uniforms.uDecisionEmphasis.value = state.renderedEmphasis
+    uniforms.uDecisionRadius.value = state.radiusScale
+    uniforms.uDecisionWarp.value = state.warpHeight
+    uniforms.uDecisionThickness.value = state.diskThickness
+    uniforms.uDecisionLens.value = state.lensStrength
+    uniforms.uDecisionFlow.value = state.flowSpeed
+    uniforms.uDecisionTime.value = state.time
+    // Presentation is an additive view over the current camera. It never
+    // overwrites the homepage/chat camera springs, so leaving restores them.
+    this.syncCameraUniforms()
+    if (state.strength > 0) {
+      const amount = state.strength
+      const narrow = this.cssWidth < 760
+      this.cameraCenter.x = THREE.MathUtils.lerp(this.cameraCenter.x, narrow ? .5 : .43, amount)
+      this.cameraCenter.y = THREE.MathUtils.lerp(this.cameraCenter.y, .43, amount)
+      uniforms.uZoom.value = THREE.MathUtils.lerp(this.cameraMotion.zoom.value, .40 - state.renderedHorizon * .08, amount)
+      uniforms.uRoll.value = THREE.MathUtils.degToRad(THREE.MathUtils.lerp(this.cameraMotion.roll.value, 5, amount))
+      uniforms.uInclination.value = THREE.MathUtils.degToRad(this.cameraMotion.inclination.value + state.inclinationOffset)
+    }
+  }
+
   private cancelFrame() {
     if (this.raf) cancelAnimationFrame(this.raf)
-    if (this.frameTimer !== null) clearTimeout(this.frameTimer)
     this.raf = 0
-    this.frameTimer = null
     this.nextFrameAt = 0
     this.previousFrame = null
     this.previousWasAmbient = false
@@ -601,6 +674,10 @@ export class BlackHoleRenderer {
   private frame = (now: number) => {
     this.raf = 0
     if (this.disposed || this.contextLost || this.visibilityPaused) return
+    if (!renderFrameIsDue(this.nextFrameAt, now)) {
+      this.requestFrame()
+      return
+    }
     const ambient = this.ambientIsRunning()
     const elapsed = this.previousFrame === null ? 0 : Math.max(0, now - this.previousFrame)
     const delta = elapsed * 0.001
@@ -615,6 +692,7 @@ export class BlackHoleRenderer {
     this.advanceCamera(delta)
     this.advancePointer(delta)
     this.syncResponseEffect(delta)
+    this.syncDecisionEffect(delta)
     if (this.springIsRunning()) {
       // Exact critically damped spring integration stays stable after long frames.
       const dt = this.previousFrame === null ? 1 / 60 : delta
@@ -647,9 +725,10 @@ export class BlackHoleRenderer {
     this.renderer.render(this.scene, this.camera)
     this.bloom.render(this.sceneTarget.texture, this.night, this.pointer, this.pointerStrength)
     this.renderedFrames++
-    this.nextFrameAt = now + 1000 / RENDER_PROFILES[this.renderProfile].frameRate
+    this.nextFrameAt = nextRenderDeadline(this.nextFrameAt, now, this.targetFps)
     if (ambient || this.springIsRunning() || this.cameraIsRunning() || this.pointerIsRunning()
-      || this.responseEffect.needsFrame(this.reducedMotion, this.paused)) {
+      || this.responseEffect.needsFrame(this.reducedMotion, this.paused)
+      || this.decisionEffect.needsFrame(this.decisionMotionIsReduced(), this.paused)) {
       this.previousFrame = now
       this.previousWasAmbient = ambient
       this.requestFrame()
@@ -749,12 +828,25 @@ export class BlackHoleRenderer {
     this.statsTimer = null
   }
 
+  private handleDecisionEffect = (event: Event) => {
+    const detail = (event as CustomEvent<Partial<DecisionEffectDetail>>).detail
+    this.setDecisionEffect(detail)
+  }
+
+  private handleDecisionExit = () => {
+    this.beginDecisionExit()
+  }
+
   private handleResize = () => {
     this.resize()
   }
 
   private handleVisibility = () => {
     this.visibilityPaused = document.hidden
+    if (this.visibilityPaused && this.decisionEffect.getSnapshot().exiting) {
+      this.decisionEffect.advance(DECISION_EXIT_MS / 1000)
+      this.syncDecisionEffect(0)
+    }
     this.cancelFrame()
     this.resetMeasurements()
     this.syncStatsTimer()

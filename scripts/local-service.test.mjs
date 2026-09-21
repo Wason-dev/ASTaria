@@ -8,6 +8,7 @@ import { randomUUID } from 'node:crypto'
 import { createDatabase } from '../server/database.mjs'
 import { createLocalService, validateRequest } from '../server/index.mjs'
 import { createCompletion, ProviderError } from '../server/provider.mjs'
+import { localDay } from '../src/home/agenda.ts'
 
 const SECRET = 'sk-fake-TEST-ONLY-not-a-real-provider-secret'
 const reply = content => ({ choices: [{ message: { role: 'assistant', content } }] })
@@ -88,6 +89,29 @@ test('HTTP exposes no CORS permission and rejects browser form or cross-origin w
   assert.equal(f.db.listTasks().length, 0)
 })
 
+test('decision HTTP endpoint returns persisted draft metadata and applies through the existing receipt route', async t => {
+  const f = await fixture(t)
+  const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1)
+  const date = localDay(tomorrow)
+  const task = f.db.createTask({ title: 'HTTP decision fixture', estimateMin: 30 })
+  const before = f.db.getPlanner()
+  const response = await f.request('/companion/decision', { date, taskId: task.id, strategy: 'split', recurrence: 'weekly', todayMin: 15 })
+  assert.equal(response.status, 200)
+  assert.equal(response.value.decision.taskId, task.id)
+  assert.equal(response.value.decision.todayMin, 15)
+  assert.equal(response.value.decision.recurrence, 'weekly')
+  assert.deepEqual(f.db.getPlanner(), before)
+  const loaded = await f.request('/companion')
+  assert.deepEqual(loaded.value.scenarios.find(item => item.id === response.value.id).decision, response.value.decision)
+  const applied = await f.request('/companion/scenario/apply', { id: response.value.id, expectedVersion: 1 })
+  assert.equal(applied.status, 200)
+  assert.equal(applied.value.scenario.status, 'applied')
+  assert.ok(applied.value.operation.details.length > 0)
+  const invalid = await f.request('/companion/decision', { date, taskId: '', strategy: 'split', recurrence: 'weekly' })
+  assert.equal(invalid.status, 400)
+  assert.equal(f.requests.length, 0)
+})
+
 test('separate clients share task edits and persisted history across service restart', async t => {
   const directory = mkdtempSync(join(tmpdir(), 'astaria-http-shared-'))
   t.after(() => rmSync(directory, { recursive: true, force: true }))
@@ -136,14 +160,14 @@ test('history pagination returns newest by default and traverses all older raw r
   }
 })
 
-test('chat receipts are public, failed replies retry without duplicating and undo restores state', async t => {
+test('chat receipts close after a committed write and undo restores state', async t => {
   const args = { tasks: [{ title: '物理报告', due: '2026-09-25', estimateMin: 120 }] }
   const f = await fixture(t, { responses: [toolCall('create_tasks', args), new Error(`provider dumped ${SECRET}`), toolCall('create_tasks', args), reply('记好了')] })
   const input = chatInput()
   const first = await f.request('/chat', input)
   assert.equal(first.status, 200)
-  assert.equal(first.value.status, 'failed')
-  assert.equal(first.value.operations.length, 1)
+  assert.equal(first.value.status, 'completed')
+  assert.equal(first.value.operations.length, 2)
   assert.doesNotMatch(first.raw, new RegExp(SECRET))
   assert.equal(first.value.operations[0].changes, undefined)
   assert.equal(first.value.messages.some(message => message.role === 'tool' || message.toolCalls), false)
@@ -151,15 +175,16 @@ test('chat receipts are public, failed replies retry without duplicating and und
   assert.equal(retried.value.status, 'completed')
   assert.equal(retried.value.messages.filter(message => message.role === 'user').length, 1)
   assert.equal((await f.request('/tasks')).value.length, 1)
-  assert.equal(retried.value.operations.length, 1)
+  assert.equal(retried.value.operations.length, 2)
   const completedAgain = await f.request('/chat', input)
   assert.deepEqual(completedAgain.value, retried.value)
-  assert.equal(f.requests.length, 4)
-  const operationId = retried.value.operations[0].id
+  assert.equal(f.requests.length, 2)
+  const operationId = retried.value.operations.find(operation => operation.createdTasks?.length).id
   const undone = await f.request(`/operations/${operationId}/undo`, {})
   assert.equal(undone.status, 200)
   assert.ok(undone.value.undoneAt)
   assert.equal((await f.request('/tasks')).value.length, 0)
+  assert.equal((await f.request('/planner')).value.blocks.length, 0)
 })
 
 test('keys remain only in the injected vault and never enter database, responses or model payloads', async t => {

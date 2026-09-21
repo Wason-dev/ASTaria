@@ -1,22 +1,36 @@
 import { homedir } from 'node:os'
+import { AsyncLocalStorage } from 'node:async_hooks'
 import { join } from 'node:path'
 import { createDatabase } from './database.mjs'
 import { createKeychain } from './keychain.mjs'
-import { createCompletion, MODELS, ProviderError } from './provider.mjs'
+import { createCompletion, discoverLocalModels, testLocalCompletion, MODELS, ProviderError } from './provider.mjs'
+import { getModelSettings, saveModelSettings, deviceRecommendation } from './modelSettings.mjs'
 import { createXixi } from './xixi.mjs'
 import { createCompanion } from './companion.mjs'
 import { getPreferences, savePreferences } from './preferences.mjs'
 import { normalizeAssistantProtocol } from './provider-protocol.mjs'
+import { toggleTaskStep } from './taskSteps.mjs'
 import { ValidationError, object, identifier, knownKeys } from './validation.mjs'
 
 export const DATA_DIRECTORY = join(homedir(), 'Library', 'Application Support', 'ASTaria')
 const localAddresses = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
 const hosts = new Set(['127.0.0.1', 'localhost', '[::1]'])
-const publicOperation = ({ id, requestId, summary, createdAt, readAt, undoneAt, undoable, planChanges, changes = [] }) => ({ id, requestId, summary, createdAt, readAt, undoneAt, undoable,
+const receiptDeadline = value => value.length === 10 ? value : new Intl.DateTimeFormat('zh-CN', {
+  year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+}).format(new Date(value))
+const publicOperation = ({ id, requestId, summary, createdAt, readAt, undoneAt, undoable, planChanges, changes = [] }, db) => ({ id, requestId, summary, createdAt, readAt, undoneAt, undoable,
   details: [
-    ...changes.map(change => change.table === 'tasks' ? `${change.after?.title ?? change.before?.title ?? '事项'}${change.after?.due ? ` · 截止 ${change.after.due}` : ''}${change.after?.estimateMin ? ` · 预计 ${change.after.estimateMin} 分钟` : ''}` : '记忆已更新'),
+    ...changes.map(change => {
+      if (change.table !== 'tasks') return '记忆已更新'
+      const task = change.before === null ? db.getTask(change.id) ?? change.after : change.after ?? change.before
+      return `${task?.title ?? '事项'}${task?.due ? ` · 截止 ${receiptDeadline(task.due)}` : ''}${task?.estimateMin ? ` · 预计 ${task.estimateMin} 分钟` : ''}`
+    }),
     ...(planChanges ?? []).map(change => change.after ? `${change.after.date} ${change.after.start}–${change.after.end}` : change.before ? `移除 ${change.before.date} ${change.before.start}–${change.before.end}` : ''),
   ].filter(Boolean),
+  createdTasks: changes.filter(change => change.table === 'tasks' && change.before === null && change.after).flatMap(change => {
+    const task = db.getTask(change.id)
+    return task && !task.deletedAt ? [{ id: task.id, title: task.title, due: task.due, updatedAt: task.updatedAt }] : []
+  }),
 })
 const publicMessage = (raw) => {
   const { id, seq, role, content, createdAt, requestId, taskId, excludeFromContext, question, retractedAt } = raw.role === 'assistant' && !raw.retractedAt ? normalizeAssistantProtocol(raw) : raw
@@ -50,18 +64,33 @@ async function body(req) {
   catch (error) { if (error instanceof ValidationError) throw error; throw new ValidationError('JSON 内容无法读取') }
 }
 
-export function createLocalService({ db = createDatabase(join(DATA_DIRECTORY, 'astaria.sqlite')), vault = createKeychain(DATA_DIRECTORY), complete, dataDirectory = DATA_DIRECTORY } = {}) {
-  const completion = complete ?? createCompletion(vault, fetch, () => db.getModel())
+export function createLocalService({ db = createDatabase(join(DATA_DIRECTORY, 'astaria.sqlite')), vault = createKeychain(DATA_DIRECTORY), complete, fetcher = fetch, dataDirectory = DATA_DIRECTORY } = {}) {
+  // Capture provider selection for the full tool loop, even if another tab
+  // changes settings while a reply is in flight. Never silently change where
+  // an existing conversation request is sent.
+  const completionScope = new AsyncLocalStorage()
+  const selectedCompletion = () => { const config = getModelSettings(db); return createCompletion(vault, fetcher, () => config.cloudModel, () => config) }
+  const completion = complete ?? (payload => (completionScope.getStore() ?? selectedCompletion())(payload))
   const xixi = createXixi({ db, complete: completion })
   const companion = createCompanion({ db })
   const state = (id = db.getActiveConversation().id, before) => {
     const raw = db.listMessages(id, { limit: 200, ...(before === undefined ? {} : { before }) })
     const oldestSeq = raw[0]?.seq ?? null
+    const messages = raw.filter(message => message.role !== 'tool' && !message.toolCalls?.length && !(message.retractedAt && message.role === 'assistant'))
+    const visibleRequests = new Set(messages.map(message => message.requestId))
+    // A raw page can start inside a long tool round (or a withdrawn reply).
+    // Keep its successful receipts attached to the original user message even
+    // before a final assistant bubble exists; the raw pagination cursor stays put.
+    for (const requestId of new Set(raw.map(message => message.requestId).filter(Boolean))) {
+      if (visibleRequests.has(requestId)) continue
+      const turn = db.getTurn(requestId)
+      const anchor = turn?.conversationId === id ? db.getMessage(turn.userMessageId) : null
+      if (anchor?.role === 'user') messages.push(anchor)
+    }
     return {
       conversationId: id,
-      messages: raw.filter(message => message.role !== 'tool' && !message.toolCalls?.length && !(message.retractedAt && message.role === 'assistant'))
-        .map(publicMessage),
-      operations: db.listOperations().filter(operation => db.getTurn(operation.requestId)?.conversationId === id).map(publicOperation),
+      messages: messages.sort((a, b) => a.seq - b.seq).map(publicMessage),
+      operations: db.listOperations().filter(operation => db.getTurn(operation.requestId)?.conversationId === id).map(operation => publicOperation(operation, db)),
       companionActions: raw.filter(message => message.role === 'tool' && !message.retractedAt && !message.excludeFromContext).flatMap(message => {
         try {
           const value = JSON.parse(message.content)
@@ -85,7 +114,20 @@ export function createLocalService({ db = createDatabase(join(DATA_DIRECTORY, 'a
     if (!next.messages.some(item => item.id === message.id)) next.messages.unshift(publicMessage(message))
     return next
   }
-  const status = async () => ({ service: 'astaria-local', configured: await vault.status(), model: db.getModel(), models: MODELS, storage: 'SQLite', dataDirectory })
+  const status = async () => {
+    const providerSettings = getModelSettings(db)
+    // A broken or locked system Keychain must not prevent the settings page
+    // from opening. Local mode never needs to touch the cloud secret, and in
+    // cloud mode an unavailable vault simply means "not configured" until the
+    // user fixes access or switches provider.
+    let cloudConfigured = null
+    if (providerSettings.provider !== 'local') {
+      try { cloudConfigured = await vault.status() } catch { cloudConfigured = false }
+    }
+    return { service: 'astaria-local', provider: providerSettings.provider, providerSettings, cloudConfigured,
+      configured: providerSettings.provider === 'local' ? Boolean(providerSettings.local.model) : cloudConfigured,
+      model: providerSettings.provider === 'local' ? providerSettings.local.model : providerSettings.cloudModel, models: MODELS, storage: 'SQLite', dataDirectory }
+  }
 
   async function dispatch(req) {
     validateRequest(req)
@@ -98,8 +140,9 @@ export function createLocalService({ db = createDatabase(join(DATA_DIRECTORY, 'a
     }
     if (input === null) {
       if (path === '/status') return status()
+      if (path === '/settings/device') return deviceRecommendation()
       if (path === '/preferences') return getPreferences(db)
-      if (path === '/operations') return db.listOperations().map(publicOperation)
+      if (path === '/operations') return db.listOperations().map(operation => publicOperation(operation, db))
       if (path === '/data/export') return db.exportData()
       if (path === '/companion') return companion.listState({ ...(url.searchParams.get('date') ? { date: url.searchParams.get('date') } : {}), ...(url.searchParams.get('days') ? { days: Number(url.searchParams.get('days')) } : {}) })
       if (path === '/planner') return db.getPlanner()
@@ -129,17 +172,20 @@ export function createLocalService({ db = createDatabase(join(DATA_DIRECTORY, 'a
       if (path === '/companion/wish') return companion.saveWish(input)
       if (path === '/companion/wish/update') { knownKeys(input, ['id', 'status', 'expectedVersion']); return companion.updateWish(input.id, { status: input.status, expectedVersion: input.expectedVersion }) }
       if (path === '/companion/scenario') return companion.previewScenario(input)
-      if (path === '/companion/scenario/apply') { knownKeys(input, ['id', 'expectedVersion']); const result = companion.applyScenario(input.id, { expectedVersion: input.expectedVersion }); return { ...result, operation: result.operation ? publicOperation(result.operation) : null } }
+      if (path === '/companion/decision') return companion.previewDecision(input)
+      if (path === '/companion/scenario/apply') { knownKeys(input, ['id', 'expectedVersion']); const result = companion.applyScenario(input.id, { expectedVersion: input.expectedVersion }); return { ...result, operation: result.operation ? publicOperation(result.operation, db) : null } }
       if (path === '/companion/scenario/discard') { knownKeys(input, ['id', 'expectedVersion']); return companion.discardScenario(input.id, { expectedVersion: input.expectedVersion }) }
       const correction = path.match(/^\/memories\/([^/]+)\/correct$/)
       if (correction) { knownKeys(input, ['content', 'expectedUpdatedAt']); return db.correctMemory(decodeId(correction[1]), input) }
       const fields = {
         '/planner': ['expectedRevision', 'action'],
         '/settings/key': ['key'], '/settings/key/remove': [], '/settings/test': [], '/settings/model': ['model'],
+        '/settings/provider': ['provider', 'cloudModel', 'local'], '/settings/local/models': ['engine', 'baseUrl'],
         '/chat': ['requestId', 'conversationId', 'text', 'context'], '/conversations': [],
         '/conversations/select': ['id'], '/conversations/rename': ['conversationId', 'title'], '/conversations/delete': ['conversationId'], '/operations/read': ['ids'],
         '/messages/retract': ['requestId', 'conversationId'],
-        '/tasks/update': ['id', 'patch', 'expectedUpdatedAt'], '/tasks/delete': ['id'], '/tasks/reopen': ['id', 'expectedUpdatedAt'], '/areas/create': ['name', 'defaultEnergy'],
+        '/tasks/update': ['id', 'patch', 'expectedUpdatedAt'], '/tasks/delete': ['id'], '/tasks/reopen': ['id', 'expectedUpdatedAt'],
+        '/tasks/steps/check': ['taskId', 'stepId', 'checked', 'expectedUpdatedAt'], '/areas/create': ['name', 'defaultEnergy'],
         '/areas/rename': ['id', 'name'], '/events/delete': ['id'], '/availability': ['date', 'until'],
       }[path]
       if (fields) knownKeys(input, fields)
@@ -150,16 +196,27 @@ export function createLocalService({ db = createDatabase(join(DATA_DIRECTORY, 'a
       }
       if (path === '/settings/key/remove') { await vault.remove(); return status() }
       if (path === '/settings/model') { db.setModel(input.model); return status() }
+      if (path === '/settings/provider') { saveModelSettings(db, input); return status() }
+      if (path === '/settings/local/models') return discoverLocalModels(input, fetcher)
       if (path === '/settings/test') {
-        if (!await vault.status()) throw new ValidationError('先保存 API Key 再测试连接')
-        await completion({ messages: [{ role: 'user', content: 'Reply with OK' }], max_tokens: 8 })
-        return { ok: true }
+        const config = getModelSettings(db)
+        let cloudConfigured = null
+        if (config.provider !== 'local') {
+          try { cloudConfigured = await vault.status() } catch { cloudConfigured = false }
+        }
+        const current = { provider: config.provider, configured: config.provider === 'local' ? Boolean(config.local.model) : cloudConfigured }
+        if (!current.configured) throw new ValidationError(current.provider === 'local' ? '先保存本地模型名称再测试连接' : '先保存 API Key 再测试连接')
+        const testCompletion = complete ?? createCompletion(vault, fetcher, () => config.cloudModel, () => config)
+        if (current.provider === 'local') return testLocalCompletion(testCompletion)
+        await testCompletion({ messages: [{ role: 'user', content: 'Reply with OK' }], max_tokens: 8 })
+        return { ok: true, toolCalling: null, message: '云端连接成功，析熙准备好了' }
       }
       if (path === '/chat') {
         knownKeys(input.context ?? {}, ['timezone', 'page', 'taskId', 'date'], '页面上下文')
-        if (!await vault.status()) throw new ValidationError('请先在设置中连接 DeepSeek')
-        const result = await xixi.chat(input)
-        return { ...state(result.conversationId), requestId: result.requestId, status: result.status, ...(result.error ? { error: result.error } : {}) }
+        if (!(await status()).configured) throw new ValidationError('请先在设置中连接模型')
+        const result = await completionScope.run(selectedCompletion(), () => xixi.chat(input))
+        return { ...state(result.conversationId), requestId: result.requestId, status: result.status,
+          ...(result.execution ? { execution: result.execution } : {}), ...(result.error ? { error: result.error } : {}) }
       }
       if (path === '/conversations') return state(db.createConversation().id)
       if (path === '/conversations/select') return state(db.selectConversation(identifier(input.id)).id)
@@ -173,13 +230,14 @@ export function createLocalService({ db = createDatabase(join(DATA_DIRECTORY, 'a
       if (retract) { knownKeys(input, []); return retractedState(db.retractMessage(decodeId(retract[1]))) }
       if (path === '/operations/read') { db.markOperationsRead(input.ids); return { ok: true } }
       const undo = path.match(/^\/operations\/([^/]+)\/undo$/)
-      if (undo) { knownKeys(input, []); return publicOperation(db.undoOperation(decodeId(undo[1]))) }
+      if (undo) { knownKeys(input, []); return publicOperation(db.undoOperation(decodeId(undo[1])), db) }
       const forget = path.match(/^\/memories\/([^/]+)\/forget$/)
       if (forget) { knownKeys(input, []); db.forgetMemory(decodeId(forget[1])); return { ok: true } }
       if (path === '/tasks/create') return db.createTask(input)
       if (path === '/tasks/update') return db.updateTask(input.id, input.patch, input.expectedUpdatedAt)
       if (path === '/tasks/delete') return db.deleteTask(input.id)
       if (path === '/tasks/reopen') return db.reopenTask(input.id, input.expectedUpdatedAt)
+      if (path === '/tasks/steps/check') return toggleTaskStep(db, input)
       if (path === '/areas/create') return db.createArea(input.name, input.defaultEnergy)
       if (path === '/areas/rename') return db.renameArea(input.id, input.name)
       if (path === '/events/create') return db.createEvent(input)

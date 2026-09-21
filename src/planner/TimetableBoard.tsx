@@ -8,7 +8,7 @@ import { usePeriodMotion } from './usePeriodMotion'
 
 type Props = {
   state: PlannerState; tasks: Task[]; selected: string; anchor: Date; now: Date; direction: number; mode?: 'week' | 'day'
-  onSelect: (date: string) => void; onRoutine: (routine: Routine) => void; onTask: (id: string) => void
+  onSelect: (date: string) => void; onRoutine: (routine: Routine, date: string) => void; onTask: (id: string) => void
 }
 type Slot = { key: string; start: number; end: number; kind: Routine['kind'] | 'plan'; routine?: Routine; block?: PlanBlock; task?: Task }
 type PlacedSlot = Slot & { lane: number; lanes: number }
@@ -94,16 +94,6 @@ export function TimetableBoard({ state, tasks, selected, anchor, now, direction,
     event.preventDefault()
     const next = localDay(shiftDay(date, delta)); keyboardDate.current = next; onSelect(next)
   }
-  const editRoutine = (routine: Routine) => onRoutine(state.routines.find(original => original.id === routine.id) ?? routine)
-  const showDayOverride = (day: string) => {
-    onSelect(day)
-    // A one-day snapshot is not an editor for its original weekly template.
-    requestAnimationFrame(() => {
-      const summary = root.current?.closest('.planner')?.querySelector<HTMLElement>(`.pl-day-template[data-date="${day}"]`)
-      summary?.scrollIntoView({ block: 'nearest', behavior: 'instant' })
-      summary?.focus({ preventScroll: true })
-    })
-  }
   const slotStyle = (slot: PlacedSlot): CSSProperties => {
     // Keep the real time interval as the anchor, with a small visual inset so
     // consecutive tasks and the availability frame remain separate surfaces.
@@ -128,9 +118,11 @@ export function TimetableBoard({ state, tasks, selected, anchor, now, direction,
             aria-pressed={day === selected} aria-current={day === today ? 'date' : undefined} tabIndex={day === focusDate ? 0 : -1}
             aria-label={`${date.getMonth() + 1}月${date.getDate()}日，周${weekdays[(date.getDay() + 6) % 7]}，${capacityLabel}${overrideLabel ? `，${overrideLabel}` : ''}`}
             onClick={() => onSelect(day)} onKeyDown={event => moveDate(event, date)}>
-            <span>周{weekdays[(date.getDay() + 6) % 7]}{day === today && <small>今天</small>}</span><strong>{date.getDate()}</strong>
-            <span className="pl-timetable-capacity" title={state.timetableConfirmed ? capacityLabel : `仅按已知时段 · ${capacityLabel}`}><b>{known ? compactMinutesLabel(availableMinutes) : '待补充'}</b></span>
-            {dayOverride && <small className="pl-timetable-override" title={overrideLabel}>调课 · 周{sourceWeekdays[dayOverride.sourceWeekday]}</small>}
+            <span className="pl-timetable-date-main"><span>周{weekdays[(date.getDay() + 6) % 7]}</span><strong>{date.getDate()}</strong>{day === today && <small>今天</small>}</span>
+            <span className="pl-timetable-date-meta">
+              <span className="pl-timetable-capacity" title={state.timetableConfirmed ? capacityLabel : `仅按已知时段 · ${capacityLabel}`}><b>{known ? compactMinutesLabel(availableMinutes) : '待补充'}</b></span>
+              {dayOverride && <small className="pl-timetable-override" title={overrideLabel}>调课 · 周{sourceWeekdays[dayOverride.sourceWeekday]}</small>}
+            </span>
           </button>
         })}</div>
         <div className="pl-timetable-grid">
@@ -144,9 +136,9 @@ export function TimetableBoard({ state, tasks, selected, anchor, now, direction,
               const isAvailable = slot.kind === 'available'
               const coverage = isAvailable ? availableLabelCoverage(slot, slots, density, scale.position) : null
               const dayOverride = slot.routine ? state.dayOverrides?.[day] : undefined
-              const activate = () => slot.routine ? dayOverride ? showDayOverride(day) : editRoutine(slot.routine) : slot.task && onTask(slot.task.id)
+              const activate = () => slot.routine ? onRoutine(slot.routine, day) : slot.task && onTask(slot.task.id)
               const label = `${kindLabels[slot.kind]}，${title}，${range}${slot.routine?.location ? `，${slot.routine.location}` : ''}`
-              const actionLabel = dayOverride ? `${label}，临时按周${sourceWeekdays[dayOverride.sourceWeekday]}课表，查看当日调课说明` : `${isAvailable ? '编辑' : ''}${label}`
+              const actionLabel = dayOverride ? `${label}，临时按周${sourceWeekdays[dayOverride.sourceWeekday]}课表，编辑来源每周安排` : `${isAvailable ? '编辑' : ''}${label}`
               return isAvailable ? <button key={slot.key} type="button" className="pl-slot" data-kind="available" data-density={density} data-override={Boolean(dayOverride)} data-title-covered={coverage?.title} data-time-covered={coverage?.time} style={slotStyle(slot)} onClick={activate} aria-label={actionLabel} title={actionLabel}>
                 <strong>{title}</strong><small className="pl-slot-time">{range}</small>
               </button> : <button key={slot.key} type="button" className="pl-slot" data-kind={slot.kind} data-density={density} data-done={slot.task?.status === 'done'}
@@ -174,7 +166,7 @@ export function TimetableBoard({ state, tasks, selected, anchor, now, direction,
       {!hasContent ? <p>这{mode === 'day' ? '一天' : '一周'}还没有课程或安排，可以先添加固定课程与空课</p>
         : !hasAvailability ? <p>已显示课程与安排，添加空课后才能计算可支配时间</p>
           : !state.timetableConfirmed ? <p>仅按已知时段计算空课，未填写的时间不默认空闲</p>
-            : <p>{days.some(({ day }) => state.dayOverrides?.[day]) ? '点击临时课节查看调课说明，常规课程和空课仍可编辑' : '点击课程或空课编辑，点击任务查看安排'}</p>}
+            : <p>{days.some(({ day }) => state.dayOverrides?.[day]) ? '点击课程或空课编辑每周安排，调课日会打开对应的来源安排' : '点击课程或空课编辑，点击任务查看安排'}</p>}
     </footer>
   </div>
 }

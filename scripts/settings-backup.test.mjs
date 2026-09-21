@@ -33,6 +33,25 @@ test('preferences written before render profiles gain the full visual default', 
   } finally { db.close() }
 })
 
+test('legacy rest profile migrates to economy and remains editable using either legacy or normalized expected preferences', () => {
+  const db = createDatabase(':memory:')
+  try {
+    for (const profile of ['smooth120', 'smooth90', 'full', 'balanced', 'economy']) {
+      for (const useLegacyExpected of [true, false]) {
+        const legacy = { ...getPreferences(db), render: { profile: 'rest' } }
+        db.setPreference('app', legacy)
+        const migrated = getPreferences(db)
+        assert.deepEqual(migrated.render, { profile: 'economy' })
+        const expected = useLegacyExpected ? legacy : migrated
+        const saved = savePreferences(db, { expected, value: { ...migrated, render: { profile } } })
+        assert.equal(saved.render.profile, profile)
+        assert.equal(getPreferences(db).render.profile, profile)
+        assert.equal(db.getPreference('app').render.profile, profile)
+      }
+    }
+  } finally { db.close() }
+})
+
 test('legacy calendar startup preferences open the unified schedule and remain editable', () => {
   const db = createDatabase(':memory:')
   try {

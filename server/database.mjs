@@ -757,6 +757,12 @@ export function createDatabase(filename) {
       // A forgotten source must never return through an older undo record.
       for (const change of operation.changes) if (change.table === 'memories' && change.before !== null) fullMemory(change.before)
       for (const assignment of operation.removedAssignments ?? []) if (get('assignments', assignment.id)) fail('关联安排后来有新的修改，无法直接撤销', 409)
+      // Initial scheduling belongs to the creation action. Undo both inside
+      // this transaction, retaining the planner's normal revision checks so
+      // a later manual schedule edit can never be rolled back accidentally.
+      for (const child of listOperations({ requestId: operation.requestId }).filter(item => item.parentOperationId === id && !item.undoneAt)) {
+        undoOperation(child.id)
+      }
       const plannerState = planner.getPlanner()
       for (const change of operation.changes) {
         if (change.table === 'tasks' && change.before === null && (
@@ -778,7 +784,7 @@ export function createDatabase(filename) {
     })
   }
   function applyPlannerOperation(input, { scenario = false } = {}) {
-    knownKeys(input, ['id', 'requestId', 'summary', 'actions', 'expectedRevision'], '安排操作')
+    knownKeys(input, ['id', 'requestId', 'summary', 'actions', 'expectedRevision', 'parentOperationId'], '安排操作')
     const id = identifier(input.id, '操作标识'), requestId = identifier(input.requestId, '请求标识')
     const summary = text(input.summary, '操作摘要', 2000)
     const expectedRevision = input.expectedRevision
@@ -789,9 +795,17 @@ export function createDatabase(filename) {
     for (const action of requestedActions) choice(action?.type, ['save-block', 'delete-block', 'save-details', 'set-day-template', 'remove-day-template', 'edit-weekday'], '析熙安排操作')
     return transaction(() => {
       assertTurnWritable(requestId)
+      const parentOperationId = input.parentOperationId === undefined ? undefined : identifier(input.parentOperationId, '来源操作标识')
+      if (parentOperationId) {
+        const parent = get('operations', parentOperationId)
+        if (!parent || parent.requestId !== requestId || parent.kind === 'planner' || parent.undoneAt ||
+          !requestedActions.every(action => action.type === 'save-block' && parent.changes.some(change => change.table === 'tasks' && change.before === null && change.after && change.id === action.block.taskId))) {
+          fail('自动安排需要关联本轮新建的事项', 409)
+        }
+      }
       const previous = get('operations', id)
       if (previous) {
-        if (previous.kind !== 'planner' || !same(
+        if (previous.kind !== 'planner' || previous.parentOperationId !== parentOperationId || !same(
           { requestId: previous.requestId, summary: previous.summary, actions: previous.requestedActions, expectedRevision: previous.plannerBefore.revision },
           { requestId, summary, actions: requestedActions, expectedRevision },
         )) fail('操作标识已用于不同内容', 409)
@@ -799,14 +813,10 @@ export function createDatabase(filename) {
       }
       const plannerBefore = planner.getPlanner()
       if (plannerBefore.revision !== expectedRevision) fail('安排已在其他窗口更新，请刷新后重试', 409)
-      let state = plannerBefore
-      for (const action of requestedActions) {
-        const blockId = action.type === 'save-block' ? action.block?.id : action.type === 'delete-block' ? action.id : null
-        if (blockId && state.blocks.some(block => block.id === blockId && block.locked)) fail('这段安排已锁定，请先由你手动解锁', 409)
-        state = planner.updatePlanner(action, state.revision)
-      }
+      const state = planner.updatePlannerBatch(requestedActions, expectedRevision)
       const operation = {
         id, requestId, summary, kind: 'planner', changes: [], requestedActions, plannerBefore,
+        ...(parentOperationId ? { parentOperationId } : {}),
         planChanges: [...new Set(requestedActions.flatMap(action => action.type === 'save-block' ? [action.block.id] : action.type === 'delete-block' ? [action.id] : []))]
           .map(blockId => ({ id: blockId, before: plannerBefore.blocks.find(block => block.id === blockId) ?? null,
             after: state.blocks.find(block => block.id === blockId) ?? null })),
@@ -879,6 +889,17 @@ export function createDatabase(filename) {
   }
   function finishTurn(requestId, input) {
     return transaction(() => finishTurnRecord(requestId, input))
+  }
+  function updateTurnProgress(requestId, progress) {
+    return transaction(() => {
+      const current = get('turns', identifier(requestId))
+      if (!current) fail('找不到这次对话', 404)
+      if (current.retractedAt) return current
+      if (current.ownerToken !== ownerToken) fail('这次对话正在其他本地服务处理中', 409)
+      const next = clean({ ...current, progress: jsonValue(progress, '执行进度', 256000), updatedAt: now() })
+      put('turns', requestId, next)
+      return next
+    })
   }
   function finishTurnRecord(requestId, input) {
     const current = get('turns', requestId)
@@ -960,6 +981,6 @@ export function createDatabase(filename) {
     getSummary: conversationId => get('summaries', conversationId), saveSummary,
     listMemories, rememberMemory, forgetMemory,
     listOperations, applyOperation, applyPlannerOperation, undoOperation, markOperationsRead, recordForgottenOperation,
-    getTurn: requestId => get('turns', requestId), beginTurn, finishTurn,
+    getTurn: requestId => get('turns', requestId), beginTurn, finishTurn, updateTurnProgress,
   }
 }

@@ -9,7 +9,7 @@ const resolution = registerHooks({
     return nextResolve(specifier, context)
   },
 })
-const { minuteOf, timeOf, minutesLabel, compactMinutesLabel, routinesForDay, blocksForDay, dayCapacity, carryItems } = await import('../src/planner/model.ts')
+const { minuteOf, timeOf, minutesLabel, compactMinutesLabel, routinesForDay, weeklyRoutineSource, blocksForDay, dayCapacity, carryItems } = await import('../src/planner/model.ts')
 resolution.deregister()
 process.env.TZ = 'Asia/Shanghai'
 
@@ -22,6 +22,25 @@ const routine = (id, kind, start, end, patch = {}) => ({ id, title: id, kind, st
 const block = (id, taskId, start, end, date = friday) => ({ id, taskId, date, start, end, locked: false })
 const details = (items, patch = {}) => ({ items, preparation: '', needsSubmission: false, submittedAt: null, ...patch })
 const range = (start, end) => ({ start: minuteOf(start), end: minuteOf(end) })
+
+test('editing a timetable fragment or temporary lesson resolves to the current full weekly row', () => {
+  const current = routine('course', 'class', '08:00', '08:40', { title: '更新后的课', weekdays: [4, 5] })
+  const free = routine('free', 'available', '09:00', '12:00')
+  const s = state({ routines: [current, free] })
+  assert.equal(weeklyRoutineSource(s, { ...current, title: '旧调课记录' }, 4), current)
+  assert.equal(weeklyRoutineSource(s, { ...free, start: '10:00', end: '10:30' }), free)
+})
+
+test('detached historical snapshots cannot recreate removed rows or edit a different weekday after splitting', () => {
+  const snapshot = routine('shared', 'class', '08:00', '08:40', { weekdays: [4, 5] })
+  const remaining = { ...snapshot, weekdays: [5] }
+  const thursday = { ...snapshot, id: 'split-thursday', weekdays: [4] }
+  const s = state({ routines: [remaining, thursday] })
+  assert.equal(weeklyRoutineSource(s, snapshot, 4), undefined)
+  assert.equal(weeklyRoutineSource(s, { ...snapshot, id: 'removed' }, 4), undefined)
+  assert.equal(weeklyRoutineSource(s, snapshot, 5), remaining)
+  assert.equal(weeklyRoutineSource(s, thursday, 4), thursday)
+})
 
 test('minute helpers preserve midnight boundaries without inventing values for invalid input', () => {
   assert.equal(minuteOf('00:00'), 0)

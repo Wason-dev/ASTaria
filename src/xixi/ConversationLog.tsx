@@ -3,6 +3,8 @@ import type { ReactNode } from 'react'
 import type { XixiConversation, XixiContext } from './useXixiConversation'
 import type { Operation } from './types'
 import { MessageMarkdown } from './MessageMarkdown'
+import { conversationTimeline } from './conversationTimeline'
+import { ReceiptDeadline } from './ReceiptDeadline'
 import './conversation.css'
 
 type Props = {
@@ -22,11 +24,9 @@ export function ConversationLog({ chat, active, onSettings, context, onSent, onR
   const [copyFeedback, setCopyFeedback] = useState<{ id: string; text: string } | null>(null)
   const copyTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const draftRevision = useRef(0)
-  const messages = chat.conversation?.messages.filter(item => item.role !== 'tool') ?? []
+  const rows = conversationTimeline(chat.conversation)
+  const messages = rows.map(row => row.message)
   const operations = chat.conversation?.operations ?? []
-  const lastAssistant = new Map<string, string>()
-  for (const entry of messages) if (entry.role === 'assistant' && entry.requestId) lastAssistant.set(entry.requestId, entry.id)
-  const unmatched = operations.filter(operation => !lastAssistant.has(operation.requestId))
   const signature = `${chat.conversation?.conversationId}:${messages.at(-1)?.requestId ?? messages.at(-1)?.id}:${messages.at(-1)?.delivery}:${operations.map(item => `${item.id}:${item.undoneAt}`).join(',')}:${chat.sending}`
   const currentQuestion = messages.at(-1)?.role === 'assistant' && messages.at(-1)?.question ? messages.at(-1)?.id : null
   useEffect(() => () => clearTimeout(copyTimer.current), [])
@@ -83,7 +83,7 @@ export function ConversationLog({ chat, active, onSettings, context, onSent, onR
     {chat.olderError && <p className="xixi-status" role="alert">{chat.olderError}</p>}
     {chat.loadError && <p className="xixi-status">{chat.loadError}<button type="button" className="xixi-text-button" onClick={() => void chat.refresh()}>重试读取</button></p>}
     {!chat.loading && !chat.loadError && messages.length === 0 && <p className="xixi-empty">我在，慢慢说</p>}
-    {messages.map(entry => <article className="xixi-message" data-role={entry.role} data-message-id={entry.id} data-delivery={entry.delivery} data-retracted={Boolean(entry.retractedAt)} key={entry.role === 'user' && entry.requestId ? `user:${entry.requestId}` : entry.id}>
+    {rows.map(({ message: entry, operations: receipts, companionActions }) => <article className="xixi-message" data-role={entry.role} data-message-id={entry.id} data-delivery={entry.delivery} data-retracted={Boolean(entry.retractedAt)} key={entry.role === 'user' && entry.requestId ? `user:${entry.requestId}` : entry.id}>
       <span>{entry.role === 'user' ? '你' : '析熙'}</span>
       {entry.retractedAt ? <p>已撤回</p> : entry.role === 'assistant' ? <MessageMarkdown content={entry.content} /> : <p>{entry.content}</p>}
       {!entry.retractedAt && <div className="xixi-message-actions">
@@ -103,12 +103,11 @@ export function ConversationLog({ chat, active, onSettings, context, onSent, onR
           if (await chat.send(option, context) && revision === draftRevision.current) onSent(option)
         }}>{option}</button>)}
       </div>}
-      {entry.requestId && lastAssistant.get(entry.requestId) === entry.id && operations.filter(operation => operation.requestId === entry.requestId).map(operation => <Receipt key={operation.id} operation={operation} chat={chat} />)}
-      {entry.requestId && lastAssistant.get(entry.requestId) === entry.id && chat.conversation?.companionActions?.filter(action => action.requestId === entry.requestId).map(action => <div className="xixi-receipt" key={action.id}><strong>{action.label}</strong><button type="button" className="xixi-text-button" onClick={() => window.dispatchEvent(new CustomEvent('astaria-open-companion', { detail: { tab: action.kind === 'wish' ? 'wishes' : 'scenarios', targetId: action.targetId } }))}>查看 ↗</button></div>)}
+      {receipts.map(operation => <Receipt key={operation.id} operation={operation} chat={chat} />)}
+      {companionActions.map(action => <div className="xixi-receipt" key={action.id}><strong>{action.label}</strong><button type="button" className="xixi-text-button" onClick={() => window.dispatchEvent(new CustomEvent('astaria-open-companion', { detail: { tab: action.kind === 'wish' ? 'wishes' : 'scenarios', targetId: action.targetId } }))}>查看 ↗</button></div>)}
     </article>)}
-    {unmatched.map(operation => <Receipt key={operation.id} operation={operation} chat={chat} />)}
     {children}
-    {!chat.loading && !chat.status?.configured && <p className="xixi-status"><button className="xixi-text-button" type="button" onClick={onSettings}>连接 DeepSeek</button><span>在设置里安全导入密钥</span></p>}
+    {!chat.loading && !chat.status?.configured && <p className="xixi-status"><button className="xixi-text-button" type="button" onClick={onSettings}>连接模型</button><span>在设置里选择 API 或本地模型</span></p>}
     {chat.sending && <div className="xixi-thinking" role="status" aria-label="析熙正在想"><span /><span /><span /></div>}
   </div>
 }
@@ -119,6 +118,7 @@ function Receipt({ operation, chat }: { operation: Operation; chat: XixiConversa
       ? <small>已撤销</small>
       : operation.undoable === false ? null : <button type="button" className="xixi-text-button xixi-undo" disabled={chat.busy} onClick={() => void chat.undo(operation.id)}><ReturnIcon /><span>{chat.undoing === operation.id ? '撤销中' : '撤销'}</span></button>}</header>
     {Boolean(operation.details?.length) && <ul className="xixi-receipt-details">{operation.details!.map((detail, index) => <li key={index}>{detail}</li>)}</ul>}
+    {!operation.undoneAt && operation.createdTasks?.map(task => <ReceiptDeadline key={task.id} task={task} disabled={chat.busy} multiple={operation.createdTasks!.length > 1} onSaved={chat.refresh} />)}
   </div>
 }
 

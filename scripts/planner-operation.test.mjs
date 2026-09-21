@@ -78,6 +78,153 @@ test('a conflicting later action rolls back the entire planner batch and its rec
   assert.deepEqual(db.getPlanner(), before); assert.deepEqual(db.listOperations(), [])
 })
 
+test('a new meeting and chained task moves validate the final layout in every action order', t => {
+  const { db, open } = fixture(t)
+  const meeting = db.createTask({ title: '会议' })
+  const sat = db.createTask({ title: 'SAT', due: '2026-09-21', startAt: new Date('2026-09-21T18:00:00').toISOString(), estimateMin: 60 })
+  const math = db.createTask({ title: '数学', due: '2026-09-21', startAt: new Date('2026-09-21T19:00:00').toISOString(), estimateMin: 30 })
+  const untouchedTask = db.createTask({ title: '其他安排' })
+  const satBefore = block(sat.id, { start: '18:00', end: '19:00' })
+  const mathBefore = block(math.id, { start: '19:00', end: '19:30' })
+  const untouched = block(untouchedTask.id, { start: '20:30', end: '21:00', locked: true })
+  for (const value of [satBefore, mathBefore, untouched]) db.updatePlanner({ type: 'save-block', block: value }, db.getPlanner().revision)
+  const taskBefore = db.listTasks(), final = [
+    block(meeting.id, { start: '18:00', end: '18:30' }),
+    { ...satBefore, start: '18:30', end: '19:30' },
+    { ...mathBefore, start: '19:30', end: '20:00' },
+  ]
+  const second = open()
+  for (const order of [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]]) {
+    const before = db.getPlanner()
+    const input = operation(db, order.map(index => ({ type: 'save-block', block: final[index] })))
+    const originalInput = structuredClone(input), receipt = db.applyPlannerOperation(input)
+    const current = second.getPlanner()
+    assert.deepEqual(input, originalInput)
+    assert.equal(current.revision, before.revision + 3)
+    assert.equal(current.blocks.length, 4)
+    for (const expected of [...final, untouched]) assert.deepEqual(current.blocks.find(value => value.id === expected.id), expected)
+    assert.deepEqual(db.listTasks(), taskBefore, 'DDL, legacy times and unrelated tasks remain unchanged')
+    assert.deepEqual(receipt.plannerBefore, before)
+    for (const change of receipt.planChanges) {
+      assert.deepEqual(change.before, before.blocks.find(value => value.id === change.id) ?? null)
+      assert.deepEqual(change.after, final.find(value => value.id === change.id))
+    }
+    assert.deepEqual(second.applyPlannerOperation(input), receipt)
+    assert.deepEqual(db.getPlanner(), current, 'retry must not perform the batch again')
+    second.undoOperation(receipt.id)
+    assert.deepEqual(db.getPlanner(), { ...before, revision: current.revision + 1 })
+  }
+})
+
+test('swapping two time slots can include preparation edits without restoring old startAt occupancy', t => {
+  const { db } = fixture(t)
+  const first = db.createTask({ title: '甲', startAt: new Date('2026-09-21T18:00:00').toISOString(), estimateMin: 30 })
+  const second = db.createTask({ title: '乙', startAt: new Date('2026-09-21T18:30:00').toISOString(), estimateMin: 30 })
+  const a = block(first.id, { end: '18:30' }), b = block(second.id, { start: '18:30', end: '19:00' })
+  for (const value of [a, b]) db.updatePlanner({ type: 'save-block', block: value }, db.getPlanner().revision)
+  const before = db.getPlanner()
+  const receipt = db.applyPlannerOperation(operation(db, [
+    { type: 'save-block', block: { ...a, start: b.start, end: b.end } },
+    { type: 'save-details', taskId: first.id, details: detail() },
+    { type: 'save-block', block: { ...b, start: a.start, end: a.end } },
+  ]))
+  assert.deepEqual(db.getPlanner().blocks, [{ ...a, start: b.start, end: b.end }, { ...b, start: a.start, end: a.end }])
+  assert.deepEqual(db.getPlanner().details[first.id], detail())
+  assert.equal(db.getPlanner().revision, before.revision + 3)
+  db.undoOperation(receipt.id)
+  assert.deepEqual(db.getPlanner(), { ...before, revision: before.revision + 4 })
+})
+
+test('an eight-block cycle commits as one layout and retains the normal action bound', t => {
+  const { db } = fixture(t)
+  const times = ['18:00', '18:30', '19:00', '19:30', '20:00', '20:30', '21:00', '21:30', '22:00']
+  const original = times.slice(0, -1).map((start, index) => block(db.createTask({ title: `任务${index + 1}` }).id, { start, end: times[index + 1] }))
+  for (const value of original) db.updatePlanner({ type: 'save-block', block: value }, db.getPlanner().revision)
+  const before = db.getPlanner(), actions = original.map((value, index) => ({ type: 'save-block', block: { ...value, start: times[(index + 1) % 8], end: times[(index + 1) % 8 + 1] } }))
+  const receipt = db.applyPlannerOperation(operation(db, actions))
+  assert.deepEqual(db.getPlanner().blocks, actions.map(action => action.block))
+  assert.equal(receipt.plannerAfterRevision, before.revision + 8)
+  assert.throws(() => db.applyPlannerOperation(operation(db, [...actions, actions[0]])), invalid)
+  assert.deepEqual(db.getPlanner().blocks, actions.map(action => action.block))
+  db.undoOperation(receipt.id)
+  assert.deepEqual(db.getPlanner(), { ...before, revision: before.revision + 9 })
+})
+
+for (const cause of ['batch overlap', 'unrelated block', 'legacy startAt', 'fixed course', 'deadline', 'locked block', 'finished task', 'invalid fields']) {
+  test(`final batch rejects ${cause} and rolls back every move, preparation edit and receipt`, t => {
+    const { db, open } = fixture(t)
+    const meeting = db.createTask({ title: '会议' }), sat = db.createTask({ title: 'SAT' }), math = db.createTask({ title: '数学' })
+    const a = block(sat.id, { start: '18:00', end: '19:00' })
+    const b = block(math.id, { start: '19:00', end: '19:30', locked: cause === 'locked block' })
+    for (const value of [a, b]) db.updatePlanner({ type: 'save-block', block: value }, db.getPlanner().revision)
+    const proposed = [block(meeting.id, { start: '18:00', end: '18:30' }), { ...a, start: '18:30', end: '19:30' }, { ...b, start: '19:30', end: '20:00', locked: false }]
+    if (cause === 'batch overlap') Object.assign(proposed[2], { start: '19:15', end: '19:45' })
+    if (cause === 'unrelated block') {
+      const other = db.createTask({ title: '不相关任务' })
+      db.updatePlanner({ type: 'save-block', block: block(other.id, { start: '19:45', end: '20:15' }) }, db.getPlanner().revision)
+    }
+    if (cause === 'legacy startAt') db.createTask({ title: '遗留精确安排', startAt: new Date('2026-09-21T19:45:00').toISOString(), estimateMin: 30 })
+    if (cause === 'fixed course') db.updatePlanner({ type: 'save-routine', routine: { id: 'fixed-evening-course', title: '固定课程', kind: 'class', weekdays: [1], start: '19:45', end: '20:15', location: '学校', items: [], enabled: true } }, db.getPlanner().revision)
+    if (cause === 'deadline') db.updateTask(sat.id, { due: new Date('2026-09-21T19:15:00').toISOString() })
+    if (cause === 'finished task') db.updateTask(math.id, { status: 'done' })
+    if (cause === 'invalid fields') proposed[2].unknown = true
+    const before = db.getPlanner(), taskBefore = db.listTasks(), second = open()
+    const input = operation(db, [{ type: 'save-details', taskId: sat.id, details: detail() }, ...proposed.map(value => ({ type: 'save-block', block: value }))])
+    assert.throws(() => db.applyPlannerOperation(input), cause === 'invalid fields' ? invalid : conflict)
+    assert.deepEqual(db.getPlanner(), before)
+    assert.deepEqual(second.getPlanner(), before)
+    assert.deepEqual(db.listTasks(), taskBefore)
+    assert.deepEqual(db.listOperations(), [])
+  })
+}
+
+test('mixed block deletion and replacement uses final occupancy while preserving all remaining placements', t => {
+  const { db } = fixture(t), first = db.createTask({ title: '甲' }), second = db.createTask({ title: '乙' })
+  const original = block(first.id, { start: '18:00', end: '19:00' })
+  const retained = block(second.id, { start: '19:00', end: '19:30' })
+  for (const value of [original, retained]) db.updatePlanner({ type: 'save-block', block: value }, db.getPlanner().revision)
+  const replacement = block(first.id, { start: '18:30', end: '19:00' }), before = db.getPlanner()
+  const receipt = db.applyPlannerOperation(operation(db, [
+    { type: 'save-block', block: replacement },
+    { type: 'save-details', taskId: first.id, details: detail() },
+    { type: 'delete-block', id: original.id },
+  ]))
+  assert.deepEqual(db.getPlanner().blocks, [retained, replacement])
+  assert.deepEqual(receipt.planChanges, [{ id: replacement.id, before: null, after: replacement }, { id: original.id, before: original, after: null }])
+  db.undoOperation(receipt.id)
+  assert.deepEqual(db.getPlanner(), { ...before, revision: before.revision + 4 })
+})
+
+test('batch saves validate against a day template applied later in the same transaction', t => {
+  const { db } = fixture(t), task = db.createTask({ title: '临时调课冲突' })
+  db.updatePlanner({ type: 'save-routine', routine: { id: 'tuesday-class', title: '周二课程', kind: 'class', weekdays: [2], start: '18:00', end: '19:00', location: '', items: [], enabled: true } }, db.getPlanner().revision)
+  const before = db.getPlanner()
+  assert.throws(() => db.applyPlannerOperation(operation(db, [
+    { type: 'save-block', block: block(task.id) },
+    { type: 'set-day-template', date: '2026-09-21', sourceWeekday: 2 },
+  ])), conflict)
+  assert.deepEqual(db.getPlanner(), before)
+  assert.deepEqual(db.listOperations(), [])
+})
+
+test('a concurrent planner edit blocks a stale batch and cannot be erased by retry or undo', t => {
+  const { db, open } = fixture(t), first = db.createTask({ title: '甲' }), second = db.createTask({ title: '乙' })
+  const a = block(first.id, { end: '18:30' }), b = block(second.id, { start: '18:30', end: '19:00' })
+  for (const value of [a, b]) db.updatePlanner({ type: 'save-block', block: value }, db.getPlanner().revision)
+  const input = operation(db, [{ type: 'save-block', block: { ...a, start: b.start, end: b.end } }, { type: 'save-block', block: { ...b, start: a.start, end: a.end } }])
+  const other = open()
+  const edited = other.updatePlanner({ type: 'check-item', date: '2026-09-21', key: 'calculator', checked: true }, other.getPlanner().revision)
+  assert.throws(() => db.applyPlannerOperation(input), conflict)
+  assert.deepEqual(db.getPlanner(), edited)
+  assert.deepEqual(db.listOperations(), [])
+  const freshInput = { ...input, expectedRevision: edited.revision }, receipt = db.applyPlannerOperation(freshInput)
+  const later = other.updatePlanner({ type: 'check-item', date: '2026-09-21', key: 'book', checked: true }, other.getPlanner().revision)
+  assert.deepEqual(db.applyPlannerOperation(freshInput), receipt)
+  assert.throws(() => db.undoOperation(receipt.id), conflict)
+  assert.deepEqual(db.getPlanner(), later)
+  assert.equal(db.listOperations()[0].undoneAt, null)
+})
+
 test('retracted turns cannot schedule new planner operations and existing receipts remain explicitly undoable', t => {
   const { db } = fixture(t), task = db.createTask({ title: '报告' }), input = request()
   db.beginTurn(input)

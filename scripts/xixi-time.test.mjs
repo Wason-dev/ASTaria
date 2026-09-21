@@ -131,6 +131,21 @@ test('mixed timing requests receive fresh authoritative clock data alongside the
   }
 })
 
+test('the prompt carries the real next schedule and execution-first guidance', async t => {
+  const db = database(t)
+  const task = db.createTask({ title: '数学作业', estimateMin: 60, due: '2026-09-22' })
+  db.updatePlanner({ type: 'save-block', block: { id: 'math-evening', taskId: task.id, date: '2026-09-21', start: '17:00', end: '18:00', locked: false } }, db.getPlanner().revision)
+  const requests = []
+  const xixi = createXixi({ db, now: () => '2026-09-21T01:59:00Z', complete: async request => { requests.push(request); return reply('先看下一段安排') } })
+  await xixi.chat(input('帮我看看接下来做什么'))
+  const facts = contextData(requests[0])
+  assert.equal(facts.planner.nextSchedule.items[0].title, '数学作业')
+  assert.equal(facts.planner.nextSchedule.items[0].start, '17:00')
+  assert.equal(facts.planner.nextSchedule.items[0].status, '接下来')
+  assert.match(requests[0].messages[0].content, /先做事，再解释/)
+  assert.match(requests[0].messages[0].content, /nextSchedule/)
+})
+
 test('read_current_time samples invocation time and a correction round gets a fresh post-tool clock', async t => {
   const db = database(t)
   let at = '2026-09-18T12:22:00Z', calls = 0

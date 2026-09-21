@@ -1,12 +1,22 @@
-/** Unified month/week/day QA with an intercepted in-memory API and fake AI. */
+/** Isolated month/week/day QA: owned temporary Chrome and Vite, intercepted in-memory API, no personal data. */
 import assert from 'node:assert/strict'
-import { mkdir, writeFile } from 'node:fs/promises'
+import { spawn } from 'node:child_process'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { createServer } from 'vite'
+import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
 import { Readable } from 'node:stream'
 import { createDatabase } from '../server/database.mjs'
 import { createLocalService } from '../server/index.mjs'
 
 const output = process.env.SCHEDULE_QA_OUTPUT ?? '/tmp/astaria-schedule-ui'
-const base = process.env.SCHEDULE_QA_URL ?? 'http://127.0.0.1:5188/'
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+const temporary = await mkdtemp(join(tmpdir(), 'astaria-schedule-ui-runtime-'))
+const profile = join(temporary, 'chrome-profile')
+let base, chrome, vite, ws, stopping = false
 const db = createDatabase(':memory:')
 const task = db.createTask({ title: '日程测试报告', due: '2026-09-23', estimateMin: 35, inbox: false })
 const edit = action => db.updatePlanner(action, db.getPlanner().revision)
@@ -20,14 +30,14 @@ const adjacent = db.createTask({ title: '紧邻的小事项', due: '2026-09-23',
 edit({ type: 'save-block', block: { id: 'qa-adjacent', taskId: adjacent.id, date: '2026-09-23', start: '09:55', end: '10:25', locked: false } })
 const short = db.createTask({ title: '五分钟检查', due: '2026-09-23', estimateMin: 5, inbox: false })
 edit({ type: 'save-block', block: { id: 'qa-short', taskId: short.id, date: '2026-09-23', start: '10:25', end: '10:30', locked: false } })
+edit({ type: 'save-routine', routine: { id: 'qa-retired', title: '已移除的历史课', kind: 'class', weekdays: [4], start: '07:00', end: '07:20', location: '', items: [], enabled: true } })
+edit({ type: 'set-day-template', date: '2026-09-13', sourceWeekday: 4 })
+edit({ type: 'delete-routine', id: 'qa-retired' })
 edit({ type: 'set-day-template', date: '2026-09-27', sourceWeekday: 4 })
-const service = createLocalService({ db, vault: { status: async () => true }, complete: async () => ({ choices: [{ message: { content: '这一天有清楚的空课和计划' } }] }), dataDirectory: ':memory:' })
-const version = await fetch('http://127.0.0.1:9233/json/version').then(result => result.json())
-const ws = new WebSocket(version.webSocketDebuggerUrl)
-await new Promise((resolve, reject) => { ws.onopen = resolve; ws.onerror = reject })
-let serial = 0, session, contextId
+const service = createLocalService({ db, vault: { status: async () => true, read: async () => { throw Error('QA must never access credentials') } }, complete: async () => ({ choices: [{ message: { content: '这一天有清楚的空课和计划' } }] }), dataDirectory: ':memory:' })
+let serial = 0
 const pending = new Map(), checks = [], errors = [], apiPaths = []
-const send = (method, params = {}, sid = session) => new Promise((resolve, reject) => { const id = ++serial; pending.set(id, { resolve, reject }); ws.send(JSON.stringify({ id, method, params, ...(sid ? { sessionId: sid } : {}) })) })
+const send = (method, params = {}) => new Promise((resolve, reject) => { const id = ++serial; const timeout = setTimeout(() => { pending.delete(id); reject(Error(`CDP timeout: ${method}`)) }, 15000); pending.set(id, { resolve, reject, timeout }); ws.send(JSON.stringify({ id, method, params })) })
 const api = request => new Promise(resolve => {
   const parsed = new URL(request.url), origin = new URL(base)
   apiPaths.push({ method: request.method, path: parsed.pathname })
@@ -38,12 +48,22 @@ const api = request => new Promise(resolve => {
   const res = { statusCode: 200, setHeader() {}, end(body) { resolve({ status: this.statusCode, body }) } }
   service.middleware(req, res, () => resolve({ status: 404, body: '{}' }))
 })
-ws.onmessage = event => {
+const onMessage = event => {
   const message = JSON.parse(event.data)
   if (message.method === 'Runtime.exceptionThrown') errors.push(message.params.exceptionDetails)
-  if (message.method === 'Fetch.requestPaused') api(message.params.request).then(result => send('Fetch.fulfillRequest', { requestId: message.params.requestId, responseCode: result.status,
-    responseHeaders: [{ name: 'Content-Type', value: 'application/json' }], body: Buffer.from(result.body).toString('base64') }, message.sessionId)).catch(error => errors.push(error.message))
-  if (message.id) { const callback = pending.get(message.id); pending.delete(message.id); message.error ? callback.reject(message.error) : callback.resolve(message.result) }
+  if (message.method === 'Fetch.requestPaused') {
+    const { requestId, request } = message.params, url = new URL(request.url)
+    const handle = async () => {
+      if (url.origin !== new URL(base).origin) await send('Fetch.failRequest', { requestId, errorReason: 'BlockedByClient' })
+      else if (url.pathname.startsWith('/api/')) {
+        const result = await api(request)
+        await send('Fetch.fulfillRequest', { requestId, responseCode: result.status,
+          responseHeaders: [{ name: 'Content-Type', value: 'application/json' }, { name: 'Cache-Control', value: 'no-store' }], body: Buffer.from(result.body).toString('base64') })
+      } else await send('Fetch.continueRequest', { requestId })
+    }
+    void handle().catch(error => { if (!stopping) errors.push(error.message) })
+  }
+  if (message.id) { const callback = pending.get(message.id); if (!callback) return; pending.delete(message.id); clearTimeout(callback.timeout); message.error ? callback.reject(message.error) : callback.resolve(message.result) }
 }
 const evaluate = async expression => { const result = await send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true }); if (result.exceptionDetails) throw new Error(JSON.stringify(result.exceptionDetails)); return result.result.value }
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms))
@@ -69,18 +89,41 @@ const slotSpacing = async name => check(name, `(()=>{
   const short=slots.find(e=>e.textContent.includes('五分钟检查')).getBoundingClientRect();
   const frame=column.querySelector('[data-kind=available]').getBoundingClientRect();
   const ruler=column.getBoundingClientRect();
-  const expected=ruler.top+(140/900)*ruler.height;
+  const marks=[...document.querySelectorAll('${current} .pl-timetable-ruler span')];
+  const nine=marks.find(e=>e.textContent==='09:00'),ten=marks.find(e=>e.textContent==='10:00');
+  const expected=ruler.top+nine.offsetTop+(ten.offsetTop-nine.offsetTop)/3;
   return next.top-first.bottom>=3.5&&short.top-next.bottom>=2.5&&short.height>2&&
     first.left-frame.left>=5&&frame.right-first.right>=5&&Math.abs(first.top-expected-2)<1&&
     slots[0].getAttribute('aria-label').includes('09:20–09:55');
 })()`)
 try {
   await mkdir(output, { recursive: true })
-  contextId = (await send('Target.createBrowserContext', {}, null)).browserContextId
-  const targetId = (await send('Target.createTarget', { url: 'about:blank', browserContextId: contextId }, null)).targetId
-  session = (await send('Target.attachToTarget', { targetId, flatten: true }, null)).sessionId
+  vite = await createServer({ configFile: false, root, cacheDir: join(temporary, 'vite-cache'), plugins: [react(), tailwindcss()], logLevel: 'error', server: { host: '127.0.0.1', port: 0, open: false } })
+  vite.middlewares.use((req, res, next) => {
+    if (!req.url?.startsWith('/api/')) return next()
+    res.statusCode = 503; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ error: 'QA API escaped interception' }))
+  })
+  await vite.listen(); base = `http://127.0.0.1:${vite.httpServer.address().port}/`
+  chrome = spawn(process.env.SCHEDULE_QA_CHROME ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', [
+    '--headless=new', '--remote-debugging-port=0', `--user-data-dir=${profile}`,
+    '--no-first-run', '--no-default-browser-check', '--disable-background-networking', '--disable-component-update', '--disable-sync', '--disable-default-apps',
+    '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows', 'about:blank',
+  ], { stdio: 'ignore' })
+  let chromeError, debugPort
+  chrome.on('error', error => { chromeError = error })
+  for (let i = 0; i < 150; i++) {
+    if (chromeError) throw chromeError
+    try { debugPort = Number((await readFile(join(profile, 'DevToolsActivePort'), 'utf8')).split('\n')[0]); if (debugPort) break } catch {}
+    if (chrome.exitCode !== null) throw Error(`Temporary Chrome exited: ${chrome.exitCode}`)
+    await delay(100)
+  }
+  assert.ok(debugPort, 'owned browser debugging port is available')
+  const target = (await fetch(`http://127.0.0.1:${debugPort}/json`).then(result => result.json())).find(item => item.type === 'page')
+  ws = new WebSocket(target.webSocketDebuggerUrl)
+  await new Promise((resolve, reject) => { ws.onopen = resolve; ws.onerror = reject })
+  ws.onmessage = onMessage
   await send('Page.enable'); await send('Runtime.enable'); await send('Network.setBypassServiceWorker', { bypass: true })
-  await send('Fetch.enable', { patterns: [{ urlPattern: '*/api/*', requestStage: 'Request' }] })
+  await send('Fetch.enable', { patterns: [{ urlPattern: '*', requestStage: 'Request' }] })
   await send('Emulation.setTimezoneOverride', { timezoneId: 'Asia/Shanghai' })
   await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false })
   await send('Page.addScriptToEvaluateOnNewDocument', { source: `{const NativeDate=Date;window.Date=class extends NativeDate{constructor(...args){super(...(args.length?args:['2026-09-21T10:00:00+08:00']))}static now(){return new NativeDate('2026-09-21T10:00:00+08:00').getTime()}};localStorage.setItem('astaria-sqlite-migration-v1','complete')}` })
@@ -127,13 +170,30 @@ try {
   assert.equal(db.getPlanner().routines.find(item => item.id === 'qa-class').title, '已修改物理课'); checks.push('daily routine editing persists to the same planner database')
   await mode('week')
   await check('week date header visibly marks the one-day Thursday template', `document.querySelector('${current} .pl-timetable-date[data-date="2026-09-27"] .pl-timetable-override')?.textContent==='调课 · 周四'`)
-  const originalWeekly = JSON.stringify(db.getPlanner().routines)
+  assert.equal(db.getPlanner().dayOverrides['2026-09-27'].routines.find(item => item.id === 'qa-class').title, '已修改物理课')
+  checks.push('ordinary weekly edit synchronizes future one-day templates')
+  await click(`${current} .pl-timetable-date[data-date="2026-09-27"]`)
   await click(`${current} .pl-day-column[data-date="2026-09-27"] .pl-slot[data-kind=class]`)
-  await check('temporary lesson selects its date and opens summary rather than weekly template editor', `!document.querySelector('.pl-dialog[open]')&&document.querySelector('.planner').dataset.selectedDate==='2026-09-27'&&document.activeElement.matches('.pl-day-template')&&document.querySelector('.pl-day-template').textContent.includes('临时按周四课表')`)
-  await check('temporary lesson keeps its captured details after weekly template edits', `document.querySelector('${current} .pl-day-column[data-date="2026-09-27"] .pl-slot[data-kind=class]').getAttribute('aria-label').includes('测试物理课，08:00–08:40，实验室，临时按周四课表')`)
-  await click(`${current} .pl-day-column[data-date="2026-09-27"] .pl-slot[data-kind=available]`)
-  await check('temporary availability is also read-only and routes to the summary', `!document.querySelector('.pl-dialog[open]')&&document.activeElement.matches('.pl-day-template')`)
-  assert.equal(JSON.stringify(db.getPlanner().routines), originalWeekly); checks.push('viewing temporary routines leaves permanent weekly template intact')
+  await wait('!!document.querySelector(".pl-dialog[open]")')
+  await check('temporary class opens current source weekly routine with explicit scope', `document.querySelector('.pl-dialog').getAttribute('aria-label')==='编辑每周安排'&&document.querySelector('.pl-dialog input[maxlength="100"]').value==='已修改物理课'&&document.querySelector('.pl-dialog').textContent.includes('周四')&&document.querySelector('.pl-dialog').textContent.includes('调课')`)
+  await shot('temporary-lesson-editor')
+  await fill('.pl-dialog input[maxlength="100"]', '调课来源修正物理课')
+  await click('.pl-dialog button[type=submit]'); await wait('!document.querySelector(".pl-dialog[open]")')
+  assert.equal(db.getPlanner().routines.find(item => item.id === 'qa-class').title, '调课来源修正物理课')
+  assert.equal(db.getPlanner().dayOverrides['2026-09-27'].routines.find(item => item.id === 'qa-class').title, '调课来源修正物理课')
+  assert.equal(db.getPlanner().dayOverrides['2026-09-13'].routines.find(item => item.id === 'qa-class').title, '测试物理课')
+  checks.push('editing a temporary class persists its source and future override while retaining historical snapshots')
+  await check('saved source changes appear immediately on the temporary lesson card', `document.querySelector('${current} .pl-day-column[data-date="2026-09-27"] .pl-slot[data-kind=class]').textContent.includes('调课来源修正物理课')`)
+  const originalWeekly = JSON.stringify(db.getPlanner().routines)
+  for (const kind of ['break', 'available']) {
+    const before = JSON.stringify(db.getPlanner())
+    await click(`${current} .pl-day-column[data-date="2026-09-27"] .pl-slot[data-kind=${kind}]`)
+    await wait('!!document.querySelector(".pl-dialog[open]")')
+    await check(`temporary ${kind} opens an enabled weekly editor`, `document.querySelector('.pl-dialog').getAttribute('aria-label')==='编辑每周安排'&&document.querySelector('.pl-dialog select').value===${JSON.stringify(kind)}&&!document.querySelector('.pl-dialog fieldset').disabled`)
+    await fill('.pl-dialog input[maxlength="100"]', '取消的草稿')
+    await click('button[aria-label="关闭编辑每周安排"]'); await wait('!document.querySelector(".pl-dialog[open]")')
+    assert.equal(JSON.stringify(db.getPlanner()), before); checks.push(`cancelling temporary ${kind} leaves the complete planner unchanged`)
+  }
   await mode('day')
   await check('single day exposes both override marker and restore action', `document.querySelector('${current} .pl-timetable-override')?.textContent==='调课 · 周四'&&!!document.querySelector('.pl-day-template button[aria-label="恢复这一天原来的课表"]')`)
   await mode('month')
@@ -147,10 +207,22 @@ try {
   await mode('day')
   await check('restored Sunday removes temporary classes and date marker', `!document.querySelector('${current} .pl-slot[data-kind=class]')&&!document.querySelector('${current} .pl-timetable-override')`)
   await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false }); await delay(300)
+  await mode('month')
+  await click(`${current} .pl-calendar-day[data-date="2026-09-13"]`); await mode('day')
+  const historicalBefore = JSON.stringify(db.getPlanner())
+  await click(`${current} .pl-slot[data-kind=class]`); await wait('!!document.querySelector(".pl-dialog[open]")')
+  await check('historical routine whose source was removed offers no enabled save action', `document.querySelector('.pl-dialog input[maxlength="100"]').value==='已移除的历史课'&&![...document.querySelectorAll('.pl-dialog button[type=submit]')].some(button=>!button.disabled&&!button.closest('fieldset[disabled]'))`)
+  await check('orphaned historical routine offers an explicit route to weekly schedules', `[...document.querySelectorAll('.pl-dialog button')].some(button=>button.textContent.includes('查看每周安排'))`)
+  await shot('historical-missing-source')
+  await evaluate(`(()=>{const button=[...document.querySelectorAll('.pl-dialog button')].find(button=>button.textContent.includes('查看每周安排'));button.dataset.qaWeekly='true';return true})()`)
+  await click('[data-qa-weekly=true]'); await wait('!!document.querySelector(".pl-dialog[open][aria-label=每周安排]")')
+  await click('button[aria-label="关闭每周安排"]'); await wait('!document.querySelector(".pl-dialog[open]")')
+  assert.equal(JSON.stringify(db.getPlanner()), historicalBefore); checks.push('viewing an orphaned historical snapshot never recreates the deleted weekly routine')
+  await mode('month'); await click(`${current} .pl-calendar-day[data-date="2026-09-27"]`); await mode('day')
   for (const value of ['month', 'week', 'day']) {
     await mode(value)
     await click('button[aria-label="每周安排"]'); await wait('!!document.querySelector(".pl-dialog[open]")')
-    await check(`${value} exposes weekly routines and add-time action`, `document.querySelector('.pl-dialog').textContent.includes('添加时段')&&document.querySelector('.pl-dialog').textContent.includes('已修改物理课')`)
+    await check(`${value} exposes weekly routines and add-time action`, `document.querySelector('.pl-dialog').textContent.includes('添加时段')&&document.querySelector('.pl-dialog').textContent.includes('调课来源修正物理课')`)
     await click('button[aria-label="关闭每周安排"]'); await wait('!document.querySelector(".pl-dialog[open]")')
     await click('button[aria-label="记录事项"]'); await wait('!!document.querySelector(".pl-dialog[open]")')
     await check(`${value} exposes task creation`, `document.querySelector('.pl-dialog').getAttribute('aria-label')==='记录一件事'`)
@@ -182,6 +254,11 @@ try {
   await writeFile(`${output}/failure.json`, JSON.stringify({ message: error.message, checks, errors, apiPaths }, null, 2))
   throw error
 } finally {
-  if (contextId) await send('Target.disposeBrowserContext', { browserContextId: contextId }, null)
-  ws.close(); service.close()
+  stopping = true
+  if (ws?.readyState === WebSocket.OPEN) ws.close()
+  if (chrome && chrome.exitCode === null) {
+    chrome.kill('SIGTERM'); await Promise.race([new Promise(resolve => chrome.once('exit', resolve)), delay(3000)])
+    if (chrome.exitCode === null) { chrome.kill('SIGKILL'); await delay(150) }
+  }
+  await vite?.close(); service.close(); await rm(temporary, { recursive: true, force: true })
 }

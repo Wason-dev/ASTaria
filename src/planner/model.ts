@@ -95,6 +95,11 @@ const duration = (ranges: readonly MinuteRange[]) => ranges.reduce((sum, range) 
 const overlap = (a: MinuteRange, b: MinuteRange) => a.start < b.end && b.start < a.end
 const knownTask = (task: Task) => !task.deletedAt && task.status !== 'dropped'
 
+/** Resolve to the live weekly row, never save a clipped slot or a detached snapshot. */
+export function weeklyRoutineSource(state: PlannerState, routine: Routine, sourceWeekday?: number): Routine | undefined {
+  return state.routines.find(item => item.id === routine.id && (sourceWeekday === undefined || item.weekdays.includes(sourceWeekday)))
+}
+
 /** Weekdays follow Date.getDay(): Sunday is 0. Explicit routines stay within a day. */
 export function routinesForDay(state: PlannerState, date: string): Routine[] {
   const bounds = dayBounds(date)

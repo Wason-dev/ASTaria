@@ -1,34 +1,35 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
-import type { FormEvent, ReactNode } from 'react'
+import type { CSSProperties, FormEvent, ReactNode } from 'react'
+import type { Task } from '../domain/task'
 import { agendaDate, localDay } from '../home/agenda'
-import { MeasuredGlassSurface } from '../home/GlassSurface'
+import { GlassSamplingContext, MeasuredGlassSurface } from '../home/GlassSurface'
 import type { GlassMaterial } from '../home/GlassSurface'
 import { WorkbenchIcon } from '../workbench/WorkbenchIcon'
-import { notifyLocalDataChange } from '../stores/migration'
-import { sceneProjection } from '../spatial/scene'
-import type { SceneCamera } from '../spatial/scene'
-import { useSceneCamera } from '../spatial/useSceneCamera'
+import { LOCAL_DATA_CHANGE, notifyLocalDataChange } from '../stores/migration'
+import { usePlanner } from '../planner/usePlanner'
 import { localApi } from './api'
 import { usePreferences } from './preferences'
-import type { CompanionDay, CompanionMode, CompanionScenario, CompanionState, Handoff, Wish } from './companionTypes'
+import { DecisionStudio } from './DecisionStudio'
+import { beginDecisionExit, DECISION_CONTENT_EXIT_MS, DECISION_ENTER_MS, DECISION_EXIT_MS, DECISION_REVEAL_MS, getDecisionEffect, setDecisionEffect } from '../prototype/decisionEffect'
+import type { CompanionState, Handoff, Wish } from './companionTypes'
 import './companion.css'
+import './decision-studio.css'
 
+type Tab = 'scenarios' | 'wishes' | 'opportunities'
 type Props = {
+  tasks: Task[]
+  tasksLoading: boolean
+  tasksError: string
   onChanged: () => void | Promise<void>
   onNotice: (message: string) => void
-  initialMode?: CompanionMode
-  readCamera?: () => SceneCamera | undefined
   initialTab?: Tab
   initialScenarioId?: string
+  exiting?: boolean
+  onExited?: () => void
+  onRevealDestination?: () => void
 }
-type Tab = 'scenarios' | 'wishes' | 'opportunities'
-const MODES: Array<{ id: CompanionMode; label: string; description: string }> = [
-  { id: 'rebalance', label: '重新梳理', description: '按截止时间，找合适的空闲' },
-  { id: 'rest', label: '这天休息', description: '从明天开始，看看安排怎么变' },
-  { id: 'light', label: '轻一点', description: '拆成短段，留出缓冲和休息' },
-]
-const TABS: Array<{ id: Tab; label: string }> = [{ id: 'scenarios', label: '平行宇宙' }, { id: 'wishes', label: '牵挂清单' }, { id: 'opportunities', label: '合适的时机' }]
-const STATE_LABEL = { preview: '尚未应用', applied: '已应用', discarded: '已放下', undone: '已撤销' }
+const TABS: Array<{ id: Tab; label: string }> = [{ id: 'scenarios', label: '决策推演' }, { id: 'wishes', label: '牵挂清单' }, { id: 'opportunities', label: '合适的时机' }]
+const GLASS_RELEASE_MS = 240
 const formatDate = (value: string) => new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric', weekday: 'short' }).format(agendaDate(value) ?? new Date())
 const duration = (value: number) => {
   const minutes = Math.max(0, Math.floor(value))
@@ -36,12 +37,23 @@ const duration = (value: number) => {
 }
 const errorText = (reason: unknown) => reason instanceof Error ? reason.message : '暂时没有完成，请重试'
 
-export function CompanionPanel({ onChanged, onNotice, initialMode = 'rebalance', readCamera, initialTab = 'scenarios', initialScenarioId }: Props) {
+export function CompanionPanel({ tasks, tasksLoading, tasksError, onChanged, onNotice, initialTab = 'scenarios', initialScenarioId, exiting = false, onExited, onRevealDestination }: Props) {
   const preferences = usePreferences().value
+  const planner = usePlanner(true)
   const id = useId()
-  const dialog = useRef<HTMLElement>(null)
   const heading = useRef<HTMLHeadingElement>(null)
   const [tab, setTab] = useState<Tab>(initialTab)
+  const [pendingTab, setPendingTab] = useState<Tab | null>(null)
+  const [sampling, setSampling] = useState(true)
+  const leaving = exiting || pendingTab !== null
+  const departure = useRef({ exiting, pendingTab, onExited, onRevealDestination })
+  departure.current = { exiting, pendingTab, onExited, onRevealDestination }
+  const reducedMotion = preferences.effect.motion === 'reduced' || matchMedia('(prefers-reduced-motion: reduce)').matches
+  const requestTab = (next: Tab) => {
+    if (next === tab) { setPendingTab(null); return }
+    if (reducedMotion) { setTab(next); setPendingTab(null) }
+    else setPendingTab(next)
+  }
   const [date, setDate] = useState(() => localDay(new Date()))
   const [state, setState] = useState<CompanionState | null>(null)
   const [loading, setLoading] = useState(true)
@@ -49,51 +61,48 @@ export function CompanionPanel({ onChanged, onNotice, initialMode = 'rebalance',
   const actionLock = useRef(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
-  const [mode, setMode] = useState<CompanionMode>(initialMode)
-  const [budgetMin, setBudgetMin] = useState(60)
-  const [selectedId, setSelectedId] = useState<string | null>(initialScenarioId ?? null)
-  const initialTarget = useRef(initialScenarioId)
-  const [dayIndex, setDayIndex] = useState(0)
-  const [spatial, setSpatial] = useState(false)
-  const [wide, setWide] = useState(() => innerWidth >= 1000)
-  const [focusedTask, setFocusedTask] = useState<string | null>(null)
   const loadRevision = useRef(0)
-  const selected = state?.scenarios.find(item => item.id === selectedId) ?? null
-
   const refresh = useCallback(async () => {
     const revision = ++loadRevision.current
     const next = await localApi<CompanionState>(`/companion?date=${encodeURIComponent(date)}&days=7`)
     if (revision === loadRevision.current) setState(next)
   }, [date])
+  useEffect(() => { heading.current?.focus({ preventScroll: true }); return () => { loadRevision.current += 1 } }, [])
+  useEffect(() => { requestTab(initialTab) }, [initialTab, initialScenarioId])
   useEffect(() => {
-    heading.current?.focus({ preventScroll: true })
-    return () => {
-      loadRevision.current += 1
+    if (!leaving) {
+      setSampling(true)
+      const current = getDecisionEffect()
+      if (current.active) setDecisionEffect(current)
+      return
     }
-  }, [])
+    if (tab === 'scenarios') beginDecisionExit()
+    // Fade the optical layer before releasing it; removing it on the first
+    // frame makes the glass edge pop even when the rest of the pane fades.
+    const release = setTimeout(() => setSampling(false), reducedMotion || document.hidden ? 0 : GLASS_RELEASE_MS)
+    const finish = () => {
+      const latest = departure.current
+      if (latest.exiting) latest.onExited?.()
+      else if (latest.pendingTab) { setTab(latest.pendingTab); setPendingTab(null) }
+    }
+    const timer = setTimeout(finish, reducedMotion || document.hidden ? 0 : DECISION_EXIT_MS)
+    return () => { clearTimeout(timer); clearTimeout(release) }
+  }, [leaving, reducedMotion])
   useEffect(() => {
-    setTab(initialTab)
-    initialTarget.current = initialScenarioId
-    if (initialScenarioId) setSelectedId(initialScenarioId)
-  }, [initialTab, initialScenarioId])
-  useEffect(() => {
-    const query = matchMedia('(min-width:1000px)')
-    const update = () => setWide(query.matches)
-    query.addEventListener('change', update)
-    return () => query.removeEventListener('change', update)
-  }, [])
-  useEffect(() => {
-    if (!initialTarget.current || !state) return
-    const target = state.scenarios.find(item => item.id === initialTarget.current)
-    initialTarget.current = undefined
-    if (target) { setSelectedId(target.id); setDate(target.date) }
-    else setNotice('这份方案已不在当前记录中，可以重新推演')
-  }, [state, initialScenarioId])
+    if (!exiting) return
+    const reveal = setTimeout(() => departure.current.onRevealDestination?.(), reducedMotion || document.hidden ? 0 : DECISION_REVEAL_MS)
+    return () => clearTimeout(reveal)
+  }, [exiting, reducedMotion])
   useEffect(() => {
     let cancelled = false
-    setLoading(true); setError(''); setState(null); setDayIndex(0)
+    setLoading(true); setError('')
     void refresh().catch(reason => { if (!cancelled) setError(errorText(reason)) }).finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true; loadRevision.current += 1 }
+  }, [refresh])
+  useEffect(() => {
+    const reload = () => { if (!actionLock.current) void refresh().catch(reason => setError(errorText(reason))) }
+    window.addEventListener(LOCAL_DATA_CHANGE, reload); window.addEventListener('focus', reload)
+    return () => { window.removeEventListener(LOCAL_DATA_CHANGE, reload); window.removeEventListener('focus', reload) }
   }, [refresh])
   const action = async <T,>(operation: () => Promise<T>, success: string, changed = false): Promise<T | undefined> => {
     if (actionLock.current) return undefined
@@ -102,131 +111,33 @@ export function CompanionPanel({ onChanged, onNotice, initialMode = 'rebalance',
       const result = await operation()
       setNotice(success); onNotice(success)
       if (changed) notifyLocalDataChange()
-      try { await refresh(); if (changed) await onChanged() }
+      try { await refresh(); if (changed) { await planner.refresh(); await onChanged() } }
       catch (reason) { setError(`操作已保存，但页面尚未同步：${errorText(reason)}`) }
       return result
     } catch (reason) { setError(errorText(reason)); return undefined }
     finally { actionLock.current = false; setBusy(false) }
   }
-  const createScenario = async () => {
-    const result = await action(() => localApi<CompanionScenario>('/companion/scenario', { date, days: 7, mode, ...(mode === 'light' ? { budgetMin } : {}) }), '方案已生成，查看变化后再决定')
-    if (result) { setSelectedId(result.id); setDayIndex(0) }
-  }
-  const chooseScenario = (value: string) => {
-    setSelectedId(value || null)
-    const candidate = state?.scenarios.find(item => item.id === value)
-    if (candidate && candidate.date !== date) setDate(candidate.date)
-  }
-  const day = state?.timeline?.[dayIndex]
-  const shownScenario = selected?.date === date ? selected : null
-  const spaceOpen = spatial && wide && tab === 'scenarios' && Boolean(day)
-  const selectSpatialTask = (taskId: string) => {
-    setFocusedTask(taskId)
-    requestAnimationFrame(() => {
-      const row = dialog.current?.querySelector<HTMLElement>(`[data-lens-task="${CSS.escape(taskId)}"]`)
-      row?.scrollIntoView({ block: 'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' })
-      row?.focus({ preventScroll: true })
-    })
-  }
-  const dateControls = <div className="xc-date-row"><label htmlFor={`${id}-date`}>从哪天看起</label><input id={`${id}-date`} type="date" value={date} disabled={busy} onChange={event => { if (event.target.value) { setDate(event.target.value); setSelectedId(null) } }} /><span>接下来 7 天</span><button type="button" className="xc-text-button" disabled={busy || loading} onClick={() => { const today = localDay(new Date()); setDate(today); setSelectedId(null); if (today === date) void refresh().catch(reason => setError(errorText(reason))) }}>回到今天</button></div>
-
-  const material: GlassMaterial | null = spaceOpen ? null : { transmission: 70, blur: preferences.glass === 'soft' ? 6 : 0, rim: 40, shadow: 30 }
-
-  return <section className="xc-page" data-spatial={spaceOpen} data-theme={preferences.theme} data-grid={preferences.grid} data-motion={preferences.effect.motion} aria-label="平行宇宙" onKeyDown={event => { if (spaceOpen && event.key === 'Escape' && !event.defaultPrevented) { event.preventDefault(); event.stopPropagation(); setSpatial(false); requestAnimationFrame(() => dialog.current?.querySelector<HTMLButtonElement>('.xc-space-toggle')?.focus({ preventScroll: true })) } }}>
+  const material: GlassMaterial = { transmission: 70, blur: preferences.glass === 'soft' ? 6 : 0, rim: 40, shadow: 30 }
+  return <section className="xc-page" data-studio={tab === 'scenarios'} data-leaving={leaving} data-exiting={exiting} data-spatial="false" data-theme={preferences.theme} data-grid={preferences.grid} data-motion={preferences.effect.motion} style={{ '--decision-enter-duration': `${DECISION_ENTER_MS}ms`, '--decision-exit-duration': `${DECISION_EXIT_MS}ms`, '--decision-reveal-duration': `${DECISION_REVEAL_MS}ms`, '--decision-glass-release': `${GLASS_RELEASE_MS}ms`, '--decision-content-duration': `${(exiting ? DECISION_CONTENT_EXIT_MS : DECISION_EXIT_MS) - GLASS_RELEASE_MS}ms` } as CSSProperties} inert={exiting} aria-hidden={exiting} aria-label="平行宇宙">
     <div className="xc-page-background" aria-hidden="true" />
-    <div className="xc-page-scroll"><section ref={dialog} className="xc-dialog" data-spatial={spaceOpen} aria-labelledby={`${id}-title`}>
-      {spaceOpen && <MeasuredGlassSurface radius={24} material={{ transmission: 70, blur: preferences.glass === 'soft' ? 6 : 0, rim: 40, shadow: 30 }} />}
+    <div className="xc-page-scroll"><section className="xc-dialog" data-spatial="false" aria-labelledby={`${id}-title`}>
       <div className="xc-shell">
-        <header className="xc-header"><div className="xc-heading"><span className="xc-eyebrow">与析熙一起</span><h2 id={`${id}-title`} tabIndex={-1} ref={heading}>平行宇宙</h2></div><nav className="xc-tabs" aria-label="析熙探索分区">{TABS.map(item => <button key={item.id} type="button" aria-current={tab === item.id ? 'page' : undefined} onClick={() => setTab(item.id)}>{item.label}{item.id === 'wishes' && state && <small>{state.wishes.filter(wish => wish.status === 'active').length}</small>}</button>)}</nav></header>
-        <div className="xc-scroll">
-          {loading ? <p className="xc-empty" role="status">正在读取真实事项和课表</p> : state ? <div key={tab} className="xc-tab-content">
-            {tab === 'scenarios' && <div className="xc-scenario-layout">
-              <section aria-label="选择推演方式" className="xc-scenario-start xc-glass"><GlassCardContent material={material}><div className="xc-control-heading"><h3>如果换一种安排</h3></div><div className="xc-modes">{MODES.map(item => <button key={item.id} type="button" aria-pressed={mode === item.id} disabled={busy} onClick={() => setMode(item.id)}><strong>{item.label}</strong><span>{item.description}</span></button>)}</div>
-                {dateControls}
-                <div className="xc-scenario-actions">{mode === 'light' ? <label className="xc-budget">每天最多安排 <input type="number" min={15} max={480} step={15} value={budgetMin} onChange={event => setBudgetMin(Math.max(15, Math.min(480, Number(event.target.value) || 15)))} disabled={busy} /> 分钟</label> : <p>结合课表、预计用时和截止时间</p>}<button className="xc-primary" type="button" disabled={busy || loading} onClick={() => void createScenario()}>{busy ? '正在处理' : '看看会怎样'}<WorkbenchIcon name="arrow" /></button></div>
-              </GlassCardContent></section>
-              <section className="xc-lens" aria-labelledby={`${id}-lens`}>
-                <div className="xc-overview xc-glass"><GlassCardContent material={material}><div className="xc-section-heading"><div><h3 id={`${id}-lens`}>时间透镜</h3>{shownScenario ? <div className="xc-scenario-status"><span data-status={shownScenario.status}>{STATE_LABEL[shownScenario.status]}</span><small>查看变化后再决定</small></div> : <p>原安排与候选方案，放在一起看</p>}</div><label className="xc-history"><span className="p0-sr-only">选择已保存方案</span><select aria-label="选择已保存方案" value={selectedId ?? ''} onChange={event => chooseScenario(event.target.value)} disabled={busy}><option value="">当前安排</option>{state.scenarios.map(item => <option key={item.id} value={item.id}>{formatDate(item.date)} · {MODES.find(value => value.id === item.mode)?.label} · {STATE_LABEL[item.status]}</option>)}</select></label>{wide && <button type="button" className="xc-space-toggle" aria-pressed={spaceOpen} onClick={() => setSpatial(value => !value)}><WorkbenchIcon name="xixi" />{spaceOpen ? '返回完整时间线' : '在黑洞上预演'}</button>}</div>
-                <div className="xc-day-selector" role="group" aria-label="时间透镜日期">{state.timeline.map((item, index) => <button type="button" key={item.date} aria-pressed={index === dayIndex} onClick={() => setDayIndex(index)}><span>{index === 0 ? formatDate(item.date) : formatDate(item.date).replace(/^\d+\//, '')}</span><small>{item.deadlines.length ? `${item.deadlines.length} 项截止` : `空闲 ${duration(item.freeMin)}`}</small></button>)}</div>
-                {state.timeline.length > 1 && <label className="xc-timeline-range"><span className="p0-sr-only">移动日期查看安排</span><input type="range" min={0} max={state.timeline.length - 1} step={1} value={dayIndex} aria-label="时间透镜日期滑条" aria-valuetext={day ? formatDate(day.date) : ''} onChange={event => setDayIndex(Number(event.target.value))} /></label>}
-                </GlassCardContent></div>
-                {day ? <DayComparison key={`${day.date}-${shownScenario?.id ?? ''}`} day={day} scenario={shownScenario} focusedTask={focusedTask} material={material} /> : <p className="xc-empty">还没有可查看的时间信息</p>}
-                {shownScenario && <ScenarioResult scenario={shownScenario} busy={busy} onApply={() => void action(() => localApi('/companion/scenario/apply', { id: shownScenario.id, expectedVersion: shownScenario.version }), '安排已更新，日程已同步', true)} onDiscard={() => void action(() => localApi('/companion/scenario/discard', { id: shownScenario.id, expectedVersion: shownScenario.version }), '这份方案已放下，原安排保持原样')} onUndo={() => void action(() => localApi(`/operations/${encodeURIComponent(shownScenario.operationId!)}/undo`, {}), '已撤销这次调整，原安排已恢复', true)} />}
-              </section>
-            </div>}
-            {tab !== 'scenarios' && <section className="xc-auxiliary xc-glass"><GlassCardContent material={material}>{dateControls}
+        <header className="xc-header"><div className="xc-heading"><span className="xc-eyebrow">PARALLEL WORLDS</span><h2 id={`${id}-title`} tabIndex={-1} ref={heading}>平行宇宙</h2></div><nav className="xc-tabs" aria-label="析熙探索分区">{TABS.map(item => <button key={item.id} type="button" aria-current={tab === item.id ? 'page' : undefined} onClick={() => requestTab(item.id)}>{item.label}{item.id === 'wishes' && state && <small>{state.wishes.filter(wish => wish.status === 'active').length}</small>}</button>)}</nav></header>
+        <GlassSamplingContext.Provider value={sampling}><div className="xc-scroll" inert={leaving}>
+          {state ? tab === 'scenarios' ? <DecisionStudio exiting={leaving} tasks={tasks} tasksLoading={tasksLoading} tasksError={tasksError} state={state} date={date} onDate={setDate} plannerRevision={planner.state?.revision} plannerLoading={planner.loading} plannerError={planner.error} loading={loading} busy={busy} action={action} material={material} initialScenarioId={initialScenarioId} /> : <section className="xc-auxiliary xc-glass"><GlassCardContent material={material}>
+            <div className="xc-date-row"><label htmlFor={`${id}-date`}>从哪天看起</label><input id={`${id}-date`} type="date" value={date} disabled={busy} onChange={event => { if (event.target.value) setDate(event.target.value) }} /><span>接下来 7 天</span></div>
             {tab === 'wishes' && <Wishes wishes={state.wishes} busy={busy} action={action} />}
-            {tab === 'opportunities' && <section aria-label="根据真实条件找到的机会"><div className="xc-section-heading"><div><h3>条件刚好合适</h3><p>来自可用时段、已记录的牵挂和任务准备物品</p></div></div>{state.opportunities.length ? <ul className="xc-opportunities">{state.opportunities.map(item => <li key={item.id}><span className="xc-opportunity-icon"><WorkbenchIcon name={item.kind === 'carry' ? 'book' : 'xixi'} /></span><div><strong>{item.title}</strong><p>{item.reason}</p><small>{formatDate(item.date)}{item.start && ` · ${item.start}${item.end ? `–${item.end}` : ''}`}</small>{item.items && item.items.length > 0 && <div className="xc-tags">{item.items.map(value => <span key={value}>{value}</span>)}</div>}</div></li>)}</ul> : <p className="xc-empty">暂时没有匹配的机会<br /><span>记下想做的事，或为任务补充需要带的物品，合适时会在这里出现</span></p>}<p className="xc-footnote">这里展示候选机会，不会自行占用时间；地点与设备状态以你提供的信息为准</p></section>}
-            </GlassCardContent></section>}
-          </div> : <div className="xc-empty"><p>还没有读取到本机数据</p><button type="button" onClick={() => { setLoading(true); void refresh().catch(reason => setError(errorText(reason))).finally(() => setLoading(false)) }}>重新读取</button></div>}
-        </div>
+            {tab === 'opportunities' && <section aria-label="根据真实条件找到的机会"><div className="xc-section-heading"><div><h3>条件刚好合适</h3><p>来自可用时段、已记录的牵挂和任务准备物品</p></div></div>{state.opportunities.length ? <ul className="xc-opportunities">{state.opportunities.map(item => <li key={item.id}><span className="xc-opportunity-icon"><WorkbenchIcon name={item.kind === 'carry' ? 'book' : 'xixi'} /></span><div><strong>{item.title}</strong><p>{item.reason}</p><small>{formatDate(item.date)}{item.start && ` · ${item.start}${item.end ? `–${item.end}` : ''}`}</small>{item.items && item.items.length > 0 && <div className="xc-tags">{item.items.map(value => <span key={value}>{value}</span>)}</div>}</div></li>)}</ul> : <p className="xc-empty">暂时没有匹配的机会<br /><span>记下想做的事，或为任务补充需要带的物品，合适时会在这里出现</span></p>}<p className="xc-footnote">候选机会以你提供的地点与设备条件为依据</p></section>}
+          </GlassCardContent></section> : <div className="xc-empty" role="status"><p>{loading ? '正在读取真实事项和课表' : '还没有读取到本机数据'}</p>{!loading && <button type="button" onClick={() => { setLoading(true); void refresh().catch(reason => setError(errorText(reason))).finally(() => setLoading(false)) }}>重新读取</button>}</div>}
+        </div></GlassSamplingContext.Provider>
         {error ? <footer className="xc-feedback"><span role="alert">{error}</span></footer> : <span className="p0-sr-only" aria-live="polite">{busy ? '正在处理' : notice}</span>}
       </div>
-      {spaceOpen && day && <SpatialLens day={day} scenario={shownScenario} readCamera={readCamera} selectedTask={focusedTask} onSelect={selectSpatialTask} />}
     </section></div>
-    </section>
-
-}
-
-function GlassCardContent({ material, children }: { material: GlassMaterial | null; children: ReactNode }) {
-  return material ? <><MeasuredGlassSurface radius={20} material={material} /><div className="xc-glass-content">{children}</div></> : <>{children}</>
-}
-
-function DayComparison({ day, scenario, focusedTask, material }: { day: CompanionDay; scenario: CompanionScenario | null; focusedTask: string | null; material: GlassMaterial | null }) {
-  const existing = day.blocks.filter(block => block.kind !== 'available').sort((a, b) => a.start.localeCompare(b.start))
-  const candidate = scenario ? [...existing.filter(block => !scenario.removedBlockIds.includes(block.id)), ...scenario.plans.filter(plan => plan.date === day.date).map(plan => ({ ...plan, kind: 'task' as const }))].sort((a, b) => a.start.localeCompare(b.start)) : []
-  const column = (title: string, blocks: typeof existing, proposed = false) => <div className="xc-day-column xc-glass" data-proposed={proposed}><GlassCardContent material={material}><h4>{title}</h4>{blocks.length ? <ol>{blocks.map(block => <li key={block.id} data-kind={block.kind} data-lens-task={block.taskId} data-selected={Boolean(block.taskId && block.taskId === focusedTask)} tabIndex={block.taskId ? -1 : undefined}><time>{block.start}<span>–{block.end}</span></time><span>{block.title}{block.kind === 'class' && <small>课程</small>}{block.kind === 'break' && <small>休息</small>}</span></li>)}</ol> : <p className="xc-empty">这一天尚未安排</p>}</GlassCardContent></div>
-  return <div className="xc-day-content"><div className="xc-day-metrics"><strong>{formatDate(day.date)}</strong><span>可支配 {duration(day.availableMin)}</span><span>尚余 {duration(day.remainingMin ?? day.freeMin)}</span></div><div className="xc-comparison" data-comparing={Boolean(scenario)}>{column(scenario?.status === 'applied' ? '目前已应用的安排' : '当前安排', existing)}{scenario && scenario.status === 'preview' && column('如果这样安排', candidate, true)}</div>{day.deadlines.length > 0 && <div className="xc-deadlines"><span>这天截止</span>{day.deadlines.map(item => <div key={item.taskId} data-lens-task={item.taskId} data-selected={item.taskId === focusedTask} tabIndex={-1}><strong>{item.title}</strong><small>{item.due.length > 10 ? new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(agendaDate(item.due)) : '当天'}</small></div>)}</div>}</div>
-}
-
-const noCamera = () => undefined
-function SpatialLens({ day, scenario, readCamera, selectedTask, onSelect }: { day: CompanionDay; scenario: CompanionScenario | null; readCamera?: () => SceneCamera | undefined; selectedTask: string | null; onSelect: (taskId: string) => void }) {
-  const camera = useSceneCamera(readCamera ?? noCamera, day.date)
-  const [viewport, setViewport] = useState(() => ({ width: innerWidth, height: innerHeight }))
-  useEffect(() => {
-    const update = () => setViewport({ width: innerWidth, height: innerHeight })
-    window.addEventListener('resize', update)
-    return () => window.removeEventListener('resize', update)
-  }, [])
-  const projection = sceneProjection(camera, viewport.width, viewport.height)
-  const items = new Map<string, { taskId: string; title: string; current: string[]; proposed: string[]; due?: string }>()
-  const get = (taskId: string, title: string) => {
-    if (!items.has(taskId)) items.set(taskId, { taskId, title, current: [], proposed: [] })
-    return items.get(taskId)!
-  }
-  for (const block of day.blocks) if (block.kind === 'task' && block.taskId) get(block.taskId, block.title).current.push(`${block.start}–${block.end}`)
-  if (scenario?.status === 'preview') for (const plan of scenario.plans.filter(item => item.date === day.date)) get(plan.taskId, plan.title).proposed.push(`${plan.start}–${plan.end}`)
-  for (const due of day.deadlines) get(due.taskId, due.title).due = due.due
-  const visible = [...items.values()].slice(0, 6)
-  const left = 474, right = viewport.width - 240, top = 190, bottom = viewport.height - 90
-  const radius = Math.min(viewport.height * .3, (viewport.width - left) * .55)
-  const orbit = Array.from({ length: 61 }, (_, index) => {
-    const point = projection.point(radius / projection.unit, (70 + index * 220 / 60) * Math.PI / 180)
-    return `${index ? 'L' : 'M'}${point.x.toFixed(1)},${point.y.toFixed(1)}`
-  }).join(' ')
-  return <section className="xc-space" data-date={day.date} aria-label={`${formatDate(day.date)}的黑洞空间预演`}>
-    <header><span>时间透镜 · 空间预演</span><h3>{formatDate(day.date)}</h3><p>浅银是当前安排，暖金是候选，截止用菱形标记</p></header>
-    <svg className="xc-space-orbit" viewBox={`0 0 ${viewport.width} ${viewport.height}`} aria-hidden="true"><path d={orbit} /></svg>
-    {visible.length ? visible.map((item, index) => {
-      const angle = (105 + index * 150 / Math.max(1, visible.length - 1)) * Math.PI / 180
-      const point = projection.point(radius / projection.unit, angle)
-      const x = Math.max(left + 80, Math.min(right, point.x))
-      const y = top + (index + 1) * (bottom - top) / (visible.length + 1)
-      const proposed = item.proposed.length > 0
-      return <button type="button" key={`${day.date}-${item.taskId}`} className="xc-space-node" data-candidate={proposed} data-selected={selectedTask === item.taskId} data-task-id={item.taskId} style={{ left: x, top: y }} onClick={() => onSelect(item.taskId)} aria-label={`${item.title}，${proposed ? `候选 ${item.proposed.join('、')}` : item.current.length ? `当前 ${item.current.join('、')}` : '当天截止'}，查看时间线`}><i aria-hidden="true" /><span><strong>{item.title}</strong>{item.current.length > 0 && <small>当前 {item.current.join(' · ')}</small>}{proposed && <small className="xc-space-candidate">候选 {item.proposed.join(' · ')}</small>}{item.due && <small>◇ 当天截止</small>}</span></button>
-    }) : <p className="xc-space-empty">这一天没有已排事项或截止节点<br /><span>移动左侧日期滑条，看看接下来的日子</span></p>}
-    <footer>{items.size > 6 ? `还有 ${items.size - 6} 项，完整内容在左侧时间线` : '点击节点，回到对应事项的时间与细节'}<span>节点是可读索引，位置不代表物理距离或紧急程度</span></footer>
   </section>
 }
 
-function ScenarioResult({ scenario, busy, onApply, onDiscard, onUndo }: { scenario: CompanionScenario; busy: boolean; onApply: () => void; onDiscard: () => void; onUndo: () => void }) {
-  const changes = scenario.plans.length + scenario.removedBlockIds.length
-  return <div className="xc-scenario-result">
-    {scenario.metrics && <p className="xc-result-metrics">计划用时 {duration(scenario.metrics.scheduledMin)}<span>待安排 {duration(scenario.metrics.unscheduledMin)}</span></p>}
-    {scenario.warnings.length > 0 && <ul className="xc-warnings">{scenario.warnings.map((warning, index) => <li key={`${index}-${warning}`}>{warning}</li>)}</ul>}
-    {scenario.unscheduled.length > 0 && <div className="xc-unscheduled"><h4>这些还需要你和析熙商量</h4><ul>{scenario.unscheduled.map(item => <li key={item.taskId}><strong>{item.title}</strong><span>{item.reason}{item.remainingMin > 0 && ` · 剩余 ${duration(item.remainingMin)}`}</span></li>)}</ul></div>}
-    <div className="xc-apply-row">{scenario.status === 'preview' ? <><p>{changes ? `${scenario.plans.length} 个时段将被安排，${scenario.removedBlockIds.length} 个原时段将被替换` : '没有需要调整的时段'}</p><button type="button" disabled={busy} onClick={onDiscard}>放下方案</button><button type="button" className="xc-primary" disabled={busy || !changes} onClick={onApply}>就这样安排<WorkbenchIcon name="check" /></button></> : scenario.status === 'applied' && scenario.operationId ? <><p>安排已保存，打开日历和时间表就能看到</p><button type="button" disabled={busy} onClick={onUndo}><WorkbenchIcon name="undo" />撤销这次调整</button></> : <p>这份方案已{scenario.status === 'undone' ? '撤销' : '放下'}，可以重新推演</p>}</div>
-  </div>
+function GlassCardContent({ material, children }: { material: GlassMaterial; children: ReactNode }) {
+  return <><MeasuredGlassSurface radius={20} material={material} /><div className="xc-glass-content">{children}</div></>
 }
 
 type Action = <T>(operation: () => Promise<T>, success: string, changed?: boolean) => Promise<T | undefined>
@@ -274,8 +185,15 @@ function Wishes({ wishes, busy, action }: { wishes: Wish[]; busy: boolean; actio
 type HandoffDraft = { progress: string; obstacle: string; nextStep: string; materials: string }
 const handoffDraft = (value?: Handoff | null): HandoffDraft => ({ progress: value?.progress ?? '', obstacle: value?.obstacle ?? '', nextStep: value?.nextStep ?? '', materials: value?.materials.join('\n') ?? '' })
 
-export function TaskHandoff({ taskId, disabled = false, preview = false }: { taskId: string; disabled?: boolean; preview?: boolean }) {
+export function TaskHandoff({ taskId, disabled = false, preview = false, embedded = false, focusRequest, onLoaded, onSaved }: {
+  taskId: string; disabled?: boolean; preview?: boolean; embedded?: boolean
+  focusRequest?: { field: 'progress' | 'obstacle' | 'nextStep'; revision: number } | null
+  onLoaded?: (value: Handoff | null) => void; onSaved?: (value: Handoff) => void
+}) {
   const id = useId()
+  const root = useRef<HTMLElement>(null)
+  const callbacks = useRef({ onLoaded, onSaved })
+  callbacks.current = { onLoaded, onSaved }
   const [saved, setSaved] = useState<Handoff | null>(null)
   const [draft, setDraft] = useState<HandoffDraft>(handoffDraft)
   const [loading, setLoading] = useState(!preview)
@@ -287,6 +205,8 @@ export function TaskHandoff({ taskId, disabled = false, preview = false }: { tas
   const savingLock = useRef(false)
   const revision = useRef(0)
   const dirty = JSON.stringify(draft) !== JSON.stringify(handoffDraft(saved))
+  const latestDraft = useRef({ dirty, saved, loading })
+  latestDraft.current = { dirty, saved, loading }
   const load = useCallback(async () => {
     if (preview) return
     const current = ++revision.current
@@ -296,6 +216,7 @@ export function TaskHandoff({ taskId, disabled = false, preview = false }: { tas
       if (current !== revision.current) return
       const value = state.handoffs.find(item => item.taskId === taskId) ?? null
       setSaved(value)
+      callbacks.current.onLoaded?.(value)
       let restored = handoffDraft(value)
       try {
         const raw = sessionStorage.getItem(`astaria-handoff-draft:${taskId}`)
@@ -314,6 +235,30 @@ export function TaskHandoff({ taskId, disabled = false, preview = false }: { tas
   }, [taskId, preview])
   useEffect(() => { void load(); return () => { revision.current += 1 } }, [load])
   useEffect(() => {
+    if (preview || !loaded) return
+    const refresh = async () => {
+      if (latestDraft.current.dirty || latestDraft.current.loading || savingLock.current) return
+      const current = ++revision.current
+      try {
+        const state = await localApi<CompanionState>('/companion')
+        // A remote refresh must never replace a draft or a save started meanwhile.
+        if (current !== revision.current || latestDraft.current.dirty || savingLock.current) return
+        const value = state.handoffs.find(item => item.taskId === taskId) ?? null
+        if (JSON.stringify(value) === JSON.stringify(latestDraft.current.saved)) return
+        setSaved(value); setDraft(handoffDraft(value))
+        callbacks.current.onLoaded?.(value)
+      } catch { /* Preserve the visible record; explicit reload still reports failures. */ }
+    }
+    window.addEventListener(LOCAL_DATA_CHANGE, refresh)
+    window.addEventListener('focus', refresh)
+    return () => { window.removeEventListener(LOCAL_DATA_CHANGE, refresh); window.removeEventListener('focus', refresh) }
+  }, [taskId, preview, loaded])
+  useEffect(() => {
+    if (!focusRequest || loading || disabled) return
+    const frame = requestAnimationFrame(() => root.current?.querySelector<HTMLTextAreaElement>(`textarea[name="${focusRequest.field}"]`)?.focus({ preventScroll: true }))
+    return () => cancelAnimationFrame(frame)
+  }, [focusRequest, loading, disabled])
+  useEffect(() => {
     if (loading || preview || !loaded) return
     try {
       if (dirty) sessionStorage.setItem(`astaria-handoff-draft:${taskId}`, JSON.stringify(draft))
@@ -328,15 +273,18 @@ export function TaskHandoff({ taskId, disabled = false, preview = false }: { tas
   }, [dirty, preview])
   const save = async (event: FormEvent) => {
     event.preventDefault()
-    if (savingLock.current || preview) return
+    if (savingLock.current || disabled || loading || !loaded || preview) return
+    const current = revision.current
     savingLock.current = true; setSaving(true); setError(''); setNotice('')
     try {
       const value = await localApi<Handoff>('/companion/handoff', { taskId, progress: draft.progress.trim(), obstacle: draft.obstacle.trim(), nextStep: draft.nextStep.trim(), materials: draft.materials.split('\n').map(item => item.trim()).filter(Boolean), expectedVersion: saved?.version ?? 0 })
-      setSaved(value); setDraft(handoffDraft(value)); setNotice('接力现场已保存，下次从这里继续')
       notifyLocalDataChange()
-    } catch (reason) { setError(errorText(reason)) }
-    finally { savingLock.current = false; setSaving(false) }
+      if (current !== revision.current) return
+      setSaved(value); setDraft(handoffDraft(value)); setNotice('接力现场已保存，下次从这里继续')
+      callbacks.current.onSaved?.(value)
+    } catch (reason) { if (current === revision.current) setError(errorText(reason)) }
+    finally { savingLock.current = false; if (current === revision.current) setSaving(false) }
   }
-  const field = (key: keyof HandoffDraft, label: string, placeholder: string, rows = 2): ReactNode => <label htmlFor={`${id}-${key}`}><span>{label}</span><textarea id={`${id}-${key}`} value={draft[key]} maxLength={key === 'materials' ? 6000 : 1500} rows={rows} placeholder={placeholder} onChange={event => { const value = event.target.value; setDraft(current => ({ ...current, [key]: value })); setNotice('') }} disabled={disabled || loading || saving || preview} /></label>
-  return <section className="xc-handoff" aria-labelledby={`${id}-title`}><header><div><h3 id={`${id}-title`}>给下一次，留个接力现场</h3><p>{saved ? `上次保存 ${new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(saved.updatedAt))}` : '做到哪、卡在哪，下次打开就能接着做'}</p></div><WorkbenchIcon name="book" /></header>{loading ? <p role="status">正在恢复接力现场</p> : <form onSubmit={event => void save(event)}><div className="xc-handoff-grid">{field('progress', '已经做到', '给未来的自己留一句进度')}{field('nextStep', '下一步', '回来后先做哪一小步')}{field('obstacle', '卡住的地方', '可选，析熙会一起记着')}{field('materials', '相关材料', '文件名、链接或准备物品，每行一项')}</div><footer><span>{preview ? '示例不保存接力记录' : draftWarning || (dirty ? '修改尚未保存 · 当前窗口已保留草稿' : notice || '接力记录会提供给析熙，帮助你继续当前事项')}</span><button type="submit" disabled={disabled || saving || preview || !dirty}>{saving ? '正在保存' : '保存接力'}<WorkbenchIcon name="check" /></button></footer></form>}{error && <p className="xc-handoff-error" role="alert">{error}<button type="button" disabled={saving || disabled} onClick={() => void load()}>重新读取</button></p>}</section>
+  const field = (key: keyof HandoffDraft, label: string, placeholder: string, rows = 2): ReactNode => <label htmlFor={`${id}-${key}`}><span>{label}</span><textarea id={`${id}-${key}`} name={key} value={draft[key]} maxLength={key === 'materials' ? 6000 : 1500} rows={rows} placeholder={placeholder} onChange={event => { const value = event.target.value; setDraft(current => ({ ...current, [key]: value })); setNotice('') }} disabled={disabled || loading || saving || preview} /></label>
+  return <section ref={root} className="xc-handoff" data-embedded={embedded} aria-labelledby={`${id}-title`}><header><div><h3 id={`${id}-title`} className={embedded ? 'p0-sr-only' : undefined}>给下一次，留个接力现场</h3><p>{saved ? `上次保存 ${new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(saved.updatedAt))}` : '做到哪、卡在哪，下次打开就能接着做'}</p></div>{!embedded && <WorkbenchIcon name="book" />}</header>{loading ? <p role="status">正在恢复接力现场</p> : <form onSubmit={event => void save(event)}><div className="xc-handoff-grid">{field('progress', '已经做到', '给未来的自己留一句进度')}{field('nextStep', '下一步', '回来后先做哪一小步')}{field('obstacle', '卡住的地方', '可选，析熙会一起记着')}{field('materials', '相关材料', '文件名、链接或准备物品，每行一项')}</div><footer><span>{preview ? '示例不保存接力记录' : draftWarning || (dirty ? '修改尚未保存 · 当前窗口已保留草稿' : notice || '接力记录会提供给析熙，帮助你继续当前事项')}</span><button type="submit" disabled={disabled || loading || !loaded || saving || preview || !dirty}>{saving ? '正在保存' : '保存接力'}<WorkbenchIcon name="check" /></button></footer></form>}{error && <p className="xc-handoff-error" role="alert">{error}<button type="button" disabled={saving || disabled} onClick={() => void load()}>重新读取</button></p>}</section>
 }

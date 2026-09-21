@@ -23,8 +23,8 @@ const task = (id, extra = {}) => ({
   createdAt: '2026-09-01T00:00:00Z', updatedAt: '2026-09-01T00:00:00Z', deletedAt: null,
   ...extra,
 })
-const briefing = (tasks, spent = () => 0, focus = 35, at = now) => buildWorkbenchBriefing(tasks, at, focus, spent)
-const context = (entry, spent = 0, focus = 35, at = now) => deadlineContext(entry, at, focus, () => spent)
+const briefing = (tasks, spent = () => 0, focus = 35, at = now, scheduled = {}) => buildWorkbenchBriefing(tasks, at, focus, spent, scheduled)
+const context = (entry, spent = 0, focus = 35, at = now, scheduled = {}) => deadlineContext(entry, at, focus, () => spent, scheduled)
 
 test('empty and invalid clock produce no fabricated tasks or advice', () => {
   const empty = { availableCount: 0, dueSoonCount: 0, overdueCount: 0, completedTodayCount: 0, estimatedMin: 0, unestimatedCount: 0, recommendation: null, notices: [] }
@@ -140,4 +140,34 @@ test('briefing preserves input tasks and returns the existing task identity', ()
   const result = briefing(tasks)
   assert.equal(result.recommendation.task, tasks[1])
   assert.equal(JSON.stringify(tasks), before)
+})
+
+test('scheduled planner blocks fill missing estimates without overwriting task data', () => {
+  const sat = task('sat', { due: '2026-09-17' })
+  const meeting = task('meeting', { due: '2026-09-17' })
+  const result = briefing([sat, meeting], () => 0, 35, now, { sat: 60, meeting: 30 })
+  assert.equal(result.estimatedMin, 90)
+  assert.equal(result.unestimatedCount, 0)
+  assert.equal(result.notices.some(notice => notice.id === 'missing-estimates'), false)
+  const scheduledContext = context(sat, 0, 35, now, { sat: 60 })
+  assert.match(scheduledContext.effortLabel, /^已排 60 分钟 · /)
+  assert.match(scheduledContext.suggestion, /已排时长约合/)
+  assert.doesNotMatch(scheduledContext.suggestion, /原估时/)
+  assert.equal(sat.estimateMin, undefined)
+  assert.equal(meeting.estimateMin, undefined)
+})
+
+test('tasks without estimates or planner blocks remain explicitly unestimated', () => {
+  const result = briefing([task('missing')], () => 0, 35, now)
+  assert.equal(result.estimatedMin, 0)
+  assert.equal(result.unestimatedCount, 1)
+  assert.match(context(task('missing')).effortLabel, /^用时待估 · /)
+})
+
+test('original task estimates take precedence over scheduled duration', () => {
+  const entry = task('known', { estimateMin: 30 })
+  const result = briefing([entry], () => 0, 35, now, { known: 60 })
+  assert.equal(result.estimatedMin, 30)
+  assert.equal(result.unestimatedCount, 0)
+  assert.match(context(entry, 0, 35, now, { known: 60 }).effortLabel, /^原预计 30 分钟 · /)
 })

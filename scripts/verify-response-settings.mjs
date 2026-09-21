@@ -82,6 +82,44 @@ try {
   await check('settings is a full page rather than a modal',"document.querySelector('.home-workspace').dataset.page==='settings'&&document.querySelector('.xixi-settings').tagName==='SECTION'&&!document.querySelector('dialog.xixi-settings')")
   await check('settings contents use outer page scrolling',"getComputedStyle(document.querySelector('.xixi-settings-content')).overflowY==='visible'&&getComputedStyle(document.querySelector('.xixi-settings-scroll')).overflowY==='auto'")
   await check('default glass keeps zero blur and background grid enabled',"document.querySelector('.xixi-settings feGaussianBlur').getAttribute('stdDeviation')==='0'&&document.querySelector('.home-workspace').dataset.grid==='true'")
+  for (const [width, height] of [[1440,900],[1366,768],[1280,800],[1024,768]]) {
+    await send('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false})
+    for (const section of ['通用','析熙','时间安排','通知','外观与动画','数据']) {
+      await tab(section)
+      await check(`${width}×${height} ${section}: all settings fit without scrolling`, `(()=>{const s=document.querySelector('.xixi-settings-scroll'),f=document.querySelector('.xixi-settings-feedback').getBoundingClientRect();return s.scrollHeight<=s.clientHeight+1&&f.bottom<=innerHeight&&s.scrollWidth<=s.clientWidth+1})()`)
+    }
+    await tab('外观与动画');await shot(`fit-${width}x${height}`)
+  }
+  await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false})
+  await check('exactly five render tiers in requested order',`JSON.stringify([...document.querySelectorAll('.xixi-render-options strong')].map(e=>e.textContent))===JSON.stringify(['满特效 120','满特效 90','满特效 60','轻特效 45','低特效 30'])`)
+  for (const [index,profile,rate] of [[1,'smooth120',60],[2,'smooth90',60],[3,'full',60],[4,'balanced',45],[5,'economy',30]]) {
+    await click(`.xixi-render-options button:nth-child(${index})`)
+    await wait(`window.__ASTARIA_P0__.getSnapshot().targetFps===${rate}&&window.__ASTARIA_P0__.getSnapshot().renderProfile==='${profile}'`)
+    await check(`${profile}: setting persists and one choice stays selected`,getPreferences(db).render.profile===profile&&await ev(`document.querySelectorAll('.xixi-render-options button[aria-pressed=true]').length===1`))
+    if(rate<60) {
+      await delay(500)
+      const before=await ev('({frames:window.__ASTARIA_P0__.getSnapshot().renderedFrames,time:performance.now()})')
+      await delay(2200)
+      const after=await ev('({frames:window.__ASTARIA_P0__.getSnapshot().renderedFrames,time:performance.now()})')
+      const measured=(after.frames-before.frames)*1000/(after.time-before.time)
+      console.log('render cadence',profile,measured.toFixed(1))
+      await check(`${profile}: renderer cadence is near ${rate} FPS`,Math.abs(measured-rate)<4)
+    }
+  }
+  await click('.xixi-render-options button:nth-child(1)');await close()
+  await wait('window.__ASTARIA_P0__.getSnapshot().targetFps===120')
+  await check('120 profile gives homepage a 120 FPS target',"window.__ASTARIA_P0__.getSnapshot().renderScene==='home'")
+  await click('.home-launch');await wait('!window.__ASTARIA_P0__.getSnapshot().cameraTransition')
+  await check('home chat keeps 120 FPS target',"window.__ASTARIA_P0__.getSnapshot().targetFps===120")
+  for (const destination of ['工作台','日程','平行宇宙','首页']) {
+    await click('.home-brand');await textClick('#home-menu button',destination)
+    await wait(`window.__ASTARIA_P0__.getSnapshot().targetFps===${destination==='首页'?120:60}`)
+    await check(`${destination}: page-aware FPS switches without changing selected tier`,"window.__ASTARIA_P0__.getSnapshot().renderProfile==='smooth120'")
+    await wait('document.querySelector("#home-menu").dataset.open==="false"&&!window.__ASTARIA_P0__.getSnapshot().cameraTransition');await delay(400)
+  }
+  await openSettings();await tab('外观与动画')
+  await check('render selection survives leaving and reopening settings',"document.querySelector('.xixi-render-options button:first-child').getAttribute('aria-pressed')==='true'")
+  await click('.xixi-render-options button:nth-child(3)')
   for(const name of ['通用','析熙','记忆','时间安排','通知','外观与动画','数据']){
     await tab(name)
     await check(`desktop ${name} renders and remains within viewport`,`(()=>{const d=document.querySelector('.xixi-settings'),r=d.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth+1&&r.top>=0&&r.bottom<=innerHeight+1&&!!d.querySelector('section h3')})()`)
@@ -94,11 +132,11 @@ try {
   await click('button[aria-label="背景网格"]');await check('grid toggle updates shared page state',"document.querySelector('.home-workspace').dataset.grid==='false'")
   await click('button[aria-label="背景网格"]');await check('grid can return to its default state',"document.querySelector('.home-workspace').dataset.grid==='true'")
   for(const [index,style] of ['tide','filaments','stardust','off'].entries()){
-    await click(`.xixi-effect-options button:nth-child(${index+1})`)
+    await click(`[aria-label="黑洞回应特效"] button:nth-child(${index+1})`)
     await wait(`window.__ASTARIA_P0__.getSnapshot().responseEffect.settings.style==='${style}'`)
     await check(`${style} persists to local service`,getPreferences(db).effect.style===style)
   }
-  await click('.xixi-effect-options button:nth-child(2)')
+  await click('[aria-label="黑洞回应特效"] button:nth-child(2)')
   await field('select[aria-label="光效强度"]','vivid');await field('select[aria-label="动态偏好"]','full')
   await check('intensity and motion persist',getPreferences(db).effect.intensity==='vivid'&&getPreferences(db).effect.motion==='full')
   await field('select[aria-label="动态偏好"]','reduced');await textClick('.xixi-settings-actions button','预览思考与回复')
@@ -115,11 +153,11 @@ try {
   await textClick('.xixi-settings-actions button','预览思考与回复');await textClick('.xixi-preview-dock button','返回设置');await delay(250);await close();await delay(3400)
   await check('closing cancels pending preview transitions',await phase()==='idle')
   await openSettings();await tab('外观与动画')
-  await click('.xixi-effect-options button:nth-child(1)')
+  await click('[aria-label="黑洞回应特效"] button:nth-child(1)')
   const remote=getPreferences(db);remote.effect.style='stardust';db.setPreference('app',remote)
   await ev('document.dispatchEvent(new Event("visibilitychange"));true');await delay(500)
   await probe('remote preference refresh updates renderer while settings is open',"window.__ASTARIA_P0__.getSnapshot().responseEffect.settings.style==='stardust'")
-  await probe('remote preference refresh updates open settings selected style',"document.querySelector('.xixi-effect-options button:nth-child(3)').getAttribute('aria-pressed')==='true'")
+  await probe('remote preference refresh updates open settings selected style',"document.querySelector('[aria-label=\"黑洞回应特效\"] button:nth-child(3)').getAttribute('aria-pressed')==='true'")
   const polled=getPreferences(db);polled.effect.intensity='standard';db.setPreference('app',polled)
   await wait("window.__ASTARIA_P0__.getSnapshot().responseEffect.settings.intensity==='standard'&&document.querySelector('select[aria-label=光效强度]').value==='standard'")
   await check('periodic polling updates renderer and settings without visibility events',"document.querySelector('select[aria-label=光效强度]').value==='standard'")

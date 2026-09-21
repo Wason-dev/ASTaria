@@ -29,6 +29,18 @@ export type Wish = {
 }
 
 export type ScenarioPlan = { id: string; taskId: string; title: string; date: string; start: string; end: string }
+export type DecisionStrategy = 'today' | 'split' | 'defer'
+export type DecisionRecurrence = 'once' | 'weekly'
+export type DecisionInput = { date: string; taskId: string; strategy: DecisionStrategy; recurrence: DecisionRecurrence; todayMin?: number }
+export type ScenarioDecision = {
+  taskId: string
+  title: string
+  strategy: DecisionStrategy
+  recurrence: DecisionRecurrence
+  todayMin: number
+  effortMin: number | null
+  baseline: ScenarioPlan[]
+}
 export type CompanionScenario = {
   id: string
   version: number
@@ -37,9 +49,10 @@ export type CompanionScenario = {
   date: string
   days: number
   mode: CompanionMode
+  decision?: ScenarioDecision
   plans: ScenarioPlan[]
   removedBlockIds: string[]
-  unscheduled: Array<{ taskId: string; title: string; reason: string; remainingMin: number }>
+  unscheduled: Array<{ taskId: string; title: string; reason: string; remainingMin: number | null }>
   warnings: string[]
   taskVersions: Record<string, string>
   metrics?: { scheduledMin: number; unscheduledMin: number; bufferMin: number }

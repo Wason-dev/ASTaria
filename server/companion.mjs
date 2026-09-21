@@ -208,6 +208,98 @@ export function createCompanion({ db, now = () => new Date() }) {
     })
   }
 
+  /** A decision is deliberately local to one task. Weekly repetition is a
+   * projection assumption, never permission to manufacture recurring work. */
+  function previewDecision(input) {
+    knownKeys(input, ['date', 'taskId', 'strategy', 'recurrence', 'todayMin'], '决策推演')
+    const date = day(input.date), taskId = identifier(input.taskId, '任务标识')
+    const strategy = choice(input.strategy, ['today', 'split', 'defer'], '决策路径')
+    const recurrence = choice(input.recurrence, ['once', 'weekly'], '持续条件')
+    const todayMin = number(input.todayMin, '今天先做的分钟数', 5, 720, 30)
+    if (!Number.isInteger(todayMin)) fail('分钟数需要为整数')
+    return db.transaction(() => {
+      const at = clock(), task = requireTask(taskId)
+      if (!active(task)) fail('已完成或已放下的任务不能推演', 409)
+      if (date < localDay(at)) fail('请选择今天或未来的日期')
+      const planner = db.getPlanner(), tasks = db.listTasks(), dates = datesFrom(date, 7), value = state()
+      const original = planner.blocks.filter(block => block.taskId === taskId)
+      const baseline = dates.flatMap(currentDate => blocksForDay(planner, tasks, currentDate)
+        .filter(block => block.taskId === taskId).map(({ id, taskId, date, start, end }) => ({ id, taskId, title: task.title, date, start, end })))
+      const movable = original.filter(block => dates.includes(block.date) && !block.locked && instant(block.date, block.start) >= at.getTime())
+      if (movable.length > 64) fail('这一范围包含较多安排，请先缩小任务安排范围')
+      const removedBlockIds = movable.map(block => block.id), removed = new Set(removedBlockIds)
+      const working = { ...planner, blocks: planner.blocks.filter(block => !removed.has(block.id)) }
+      const remainingDuration = block => Math.min(duration(block), Math.max(0, Math.ceil((instant(block.date, block.end) - at.getTime()) / 60_000)))
+      const held = original.filter(block => !removed.has(block.id)).reduce((sum, block) => sum + remainingDuration(block), 0)
+      const heldToday = original.filter(block => !removed.has(block.id) && block.date === date).reduce((sum, block) => sum + remainingDuration(block), 0)
+      const movableMin = movable.reduce((sum, block) => sum + duration(block), 0)
+      const estimated = Number.isFinite(task.estimateMin) && task.estimateMin > 0 ? Math.ceil(task.estimateMin) : null
+      // Capture effort before removing blocks. Preserve already committed work
+      // when its duration exceeds an older estimate, without counting it twice.
+      const effortMin = estimated === null ? (movableMin || null) : Math.max(estimated, held + movableMin)
+      let remaining = estimated === null ? movableMin : Math.max(0, effortMin - held)
+      const bufferMin = Math.round(Math.min(60, Math.max(0, db.getPreference('app')?.scheduling?.bufferMin ?? 10)))
+      const plans = [], unscheduled = [], warnings = []
+      const exactLegacy = task.startAt?.includes('T') && original.length === 0
+      if (exactLegacy) {
+        remaining = 0
+        warnings.push('这项任务已有精确开始时间，保持原安排；请先在任务详情调整开始时间再比较')
+      }
+      if (original.some(block => instant(block.date, block.end) <= at.getTime())) warnings.push('过去的计划不代表已完成；推演依据当前预计用时，实际进度可在任务中调整')
+      if (original.some(block => !removed.has(block.id) && dates.includes(block.date) && instant(block.date, block.end) > at.getTime())) warnings.push('已锁定或已开始的时段保持原样')
+      if (estimated !== null && held + movableMin > estimated) warnings.push(`已有未来安排合计 ${held + movableMin} 分钟，长于任务估时 ${estimated} 分钟；本次按已有工作量推演，不因换位置缩短任务`)
+      if (recurrence === 'weekly') warnings.push('每周持续只是远期投影条件；应用仅调整本次 7 天内的安排')
+      if (effortMin === null) unscheduled.push({ taskId, title: task.title, remainingMin: null, reason: '还需要确认预计用时；没有为未知工作量虚构时长' })
+      // Removing the last explicit block must not temporarily resurrect a stale
+      // legacy startAt while finding replacement slots. The persisted task is
+      // untouched, and a removal-only result below keeps this fallback stable.
+      const capacityTasks = original.length ? tasks.map(item => item.id === taskId ? { ...item, startAt: undefined } : item) : tasks
+      const slots = dates.flatMap(currentDate => dayCapacity(working, capacityTasks, currentDate, at).remaining.map(range => ({
+        date: currentDate, start: Math.ceil(range.start / 5) * 5 + bufferMin, end: Math.floor(range.end) - bufferMin,
+      })).filter(range => range.end > range.start))
+      const limit = deadline(task)
+      let usedToday = heldToday
+      for (const slot of slots) {
+        if (remaining <= 0 || plans.length >= 64 || (strategy === 'defer' && slot.date === date)) continue
+        const dueMinute = Math.floor((limit - instant(slot.date, '00:00')) / 60_000)
+        const end = Math.min(slot.end, Number.isFinite(limit) ? dueMinute : 1440)
+        while (remaining > 0 && plans.length < 64) {
+          const budget = strategy === 'split' && slot.date === date ? Math.max(0, todayMin - usedToday) : Infinity
+          const chunk = Math.floor(Math.min(remaining, end - slot.start, budget, 60))
+          if (chunk < Math.min(5, remaining)) break
+          plans.push({ id: randomUUID(), taskId, title: task.title, date: slot.date, start: timeOf(slot.start), end: timeOf(slot.start + chunk) })
+          if (slot.date === date) usedToday += chunk
+          remaining -= chunk
+          slot.start += chunk + bufferMin
+        }
+      }
+      if (remaining > 0) unscheduled.push({ taskId, title: task.title, remainingMin: remaining,
+        reason: limit < at.getTime() ? '截止时间已过，需要重新决定完成时间' : limit <= instant(dates.at(-1), '24:00')
+          ? '这条路径在截止前的明确空闲不足，保留原 DDL，剩余部分待安排' : '未来 7 天的明确空闲不足，剩余部分待安排' })
+      const spillMin = plans.filter(plan => plan.date > date).reduce((sum, plan) => sum + duration(plan), 0)
+      if (strategy === 'today' && spillMin > 0) warnings.push(`${date} 的明确空闲不足以全部完成；${spillMin} 分钟需在随后几天补完，具体时段见对比`)
+      if (strategy === 'defer') warnings.push(`${date} 不新增这项任务；已锁定或已开始的原安排保留`)
+      if (strategy === 'split') warnings.push(`${date} 新旧安排合计最多按 ${todayMin} 分钟试排；已锁定或已开始的安排不强行缩短`)
+      if (!slots.length) warnings.push('未来 7 天没有明确可用空闲，请先补充时间表')
+      if (unscheduled.some(item => item.reason.includes('截止'))) warnings.push('这条路径存在截止风险，应用不会修改 DDL')
+      if (!plans.length && task.startAt?.includes('T') && original.length && !working.blocks.some(block => block.taskId === taskId)) {
+        removedBlockIds.length = 0
+        warnings.push('原精确开始时间仍有效，暂保留原时段，避免移除后旧时间重新出现')
+      }
+      const record = { id: randomUUID(), version: 1, status: 'preview', baseRevision: planner.revision, date, days: 7,
+        mode: strategy === 'defer' ? 'rest' : strategy === 'split' ? 'light' : 'rebalance', budgetMin: todayMin, bufferMin,
+        timezone: timezone(), decision: { taskId, title: task.title, strategy, recurrence, todayMin, effortMin, baseline },
+        plans, removedBlockIds, unscheduled, warnings, taskVersions: Object.fromEntries(tasks.map(item => [item.id, item.updatedAt])),
+        source: { kind: 'user' }, createdAt: at.toISOString(),
+        metrics: { scheduledMin: plans.reduce((sum, plan) => sum + duration(plan), 0),
+          unscheduledMin: unscheduled.reduce((sum, item) => sum + (item.remainingMin ?? 0), 0), bufferMin } }
+      value.scenarios.push(record)
+      if (value.scenarios.length > 100) value.scenarios = value.scenarios.filter(item => item.status === 'preview').concat(value.scenarios.filter(item => item.status !== 'preview').slice(-30))
+      save(value)
+      return record
+    })
+  }
+
   function applyScenario(id, input) {
     knownKeys(input, ['expectedVersion'], '应用方案')
     return db.transaction(() => {
@@ -226,24 +318,34 @@ export function createCompanion({ db, now = () => new Date() }) {
       if (timezone() !== record.timezone) fail('本机时区已变化，请重新推演', 409)
       const versions = Object.fromEntries(tasks.map(task => [task.id, task.updatedAt]))
       if (Object.keys(versions).length !== Object.keys(record.taskVersions).length || Object.entries(record.taskVersions).some(([key, stamp]) => versions[key] !== stamp)) fail('任务已有变化，请重新推演', 409)
+      if (record.decision) {
+        const currentBuffer = Math.round(Math.min(60, Math.max(0, db.getPreference('app')?.scheduling?.bufferMin ?? 10)))
+        if (record.bufferMin !== currentBuffer) fail('安排缓冲设置已有变化，请重新推演', 409)
+        if (record.plans.some(plan => plan.taskId !== record.decision.taskId || !datesFrom(record.date, 7).includes(plan.date))) fail('决策方案超出本次任务或日期范围，请重新推演', 409)
+      }
       for (const blockId of record.removedBlockIds) {
         const block = planner.blocks.find(item => item.id === blockId)
         if (!block || block.locked || instant(block.date, block.start) < at.getTime()) fail('原安排已经锁定、开始或变化，请重新推演', 409)
+        if (record.decision && (block.taskId !== record.decision.taskId || !datesFrom(record.date, 7).includes(block.date))) fail('决策方案超出本次任务或日期范围，请重新推演', 409)
       }
       const working = { ...planner, blocks: planner.blocks.filter(block => !record.removedBlockIds.includes(block.id)) }
+      const capacityTasks = record.decision && planner.blocks.some(block => block.taskId === record.decision.taskId) && record.plans.length
+        ? tasks.map(task => task.id === record.decision.taskId ? { ...task, startAt: undefined } : task) : tasks
       for (const plan of record.plans) {
         const task = requireTask(plan.taskId), start = minuteOf(plan.start), end = minuteOf(plan.end)
         if (!active(task) || instant(plan.date, plan.start) < at.getTime()) fail('任务状态或时间已有变化，请重新推演', 409)
         if (instant(plan.date, plan.end) > deadline(task)) fail('方案超过了任务DDL，请重新推演', 409)
-        const capacity = dayCapacity(working, tasks, plan.date, at)
-        if (!capacity.remaining.some(range => range.start <= start && range.end >= end)) fail('方案已不在明确的可用空闲中，请重新推演', 409)
+        const capacity = dayCapacity(working, capacityTasks, plan.date, at)
+        const margin = record.decision ? record.bufferMin : 0
+        if (!capacity.remaining.some(range => range.start + margin <= start && range.end - margin >= end)) fail('方案已不在明确的可用空闲与缓冲中，请重新推演', 409)
         working.blocks.push({ id: plan.id, taskId: plan.taskId, date: plan.date, start: plan.start, end: plan.end, locked: false })
       }
       const actions = [...record.removedBlockIds.map(blockId => ({ type: 'delete-block', id: blockId })),
         ...record.plans.map(({ title: unused, ...plan }) => ({ type: 'save-block', block: { ...plan, locked: false } }))]
       if (!actions.length) fail('这份方案没有可应用的时间变更，待安排事项继续保留', 409)
       const operation = db.applyPlannerOperation({ id: `scenario:${record.id}`, requestId: `scenario:${record.id}`,
-        summary: `应用${record.mode === 'rest' ? '休息' : record.mode === 'light' ? '轻量' : '平衡'}方案：安排 ${record.plans.length} 段，${record.unscheduled.length} 项待安排`,
+        summary: record.decision ? `采用「${record.decision.title}」${record.decision.strategy === 'defer' ? '明天再做' : record.decision.strategy === 'split' ? '今天先做一部分' : '今天优先'}路径：本次 7 天安排 ${record.plans.length} 段，${record.unscheduled.length} 项待安排`
+          : `应用${record.mode === 'rest' ? '休息' : record.mode === 'light' ? '轻量' : '平衡'}方案：安排 ${record.plans.length} 段，${record.unscheduled.length} 项待安排`,
         actions, expectedRevision: record.baseRevision }, { scenario: true })
       Object.assign(record, { status: 'applied', version: record.version + 1, operationId: operation.id, appliedAt: at.toISOString() })
       save(value)
@@ -298,5 +400,5 @@ export function createCompanion({ db, now = () => new Date() }) {
     }
     return { handoffs: value.handoffs.filter(item => validSource(item.source) && taskMap.has(item.taskId)), wishes, scenarios, opportunities, timeline }
   }
-  return { listState, saveHandoff, clearHandoff, saveWish, updateWish, previewScenario, applyScenario, discardScenario }
+  return { listState, saveHandoff, clearHandoff, saveWish, updateWish, previewScenario, previewDecision, applyScenario, discardScenario }
 }

@@ -225,7 +225,7 @@ export function createPlannerStore({ db, transaction, getTask, listTasks, now = 
       state.dayOverrides[date] = { ...override, routines: structuredClone(snapshots.get(override.sourceWeekday)) }
     }
   }
-  function updatePlanner(action, expectedRevision) {
+  function applyPlannerAction(action, expectedRevision, deferBlockValidation = false) {
     if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0) fail('安排版本不正确')
     choice(action?.type, ['save-routine', 'delete-routine', 'import-routines', 'edit-weekday', 'set-day-template', 'remove-day-template', 'save-block', 'delete-block', 'save-details', 'check-item'], '安排操作')
     knownKeys(action, ['type', ...({
@@ -330,7 +330,10 @@ export function createPlannerStore({ db, transaction, getTask, listTasks, now = 
           const samePlacement = previous && ['taskId', 'date', 'start', 'end'].every(key => previous[key] === block[key])
           if (previous?.locked && !(samePlacement && !block.locked)) fail('先解锁这段安排，再修改时间或任务', 409)
           // Unlock must remain possible after external task edits introduce a conflict.
-          if (!(previous?.locked && samePlacement && !block.locked)) validateBlock(block, state)
+          if (!(previous?.locked && samePlacement && !block.locked)) {
+            if (deferBlockValidation) requireTask(block.taskId, true)
+            else validateBlock(block, state)
+          }
           if (index < 0) state.blocks.push(block); else state.blocks[index] = block
           break
         }
@@ -360,6 +363,28 @@ export function createPlannerStore({ db, transaction, getTask, listTasks, now = 
       if (!Number.isSafeInteger(state.revision + 1)) fail('安排版本超出范围', 409)
       state.revision += 1
       return save(state)
+    })
+  }
+  const updatePlanner = (action, expectedRevision) => applyPlannerAction(action, expectedRevision)
+  // Operation batches may exchange occupied slots or move an entire chain.
+  // Apply their normal shape, task, lock and revision checks in order, but
+  // validate saved placements against the final snapshot before committing.
+  // The outer transaction makes intermediate overlapping placements invisible;
+  // keeping every final explicit block also suppresses superseded startAt slots.
+  function updatePlannerBatch(actions, expectedRevision) {
+    if (!Array.isArray(actions) || !actions.length || actions.length > 128) fail('安排批次需要 1–128 项变更')
+    return transaction(() => {
+      let state = getPlanner()
+      if (state.revision !== expectedRevision) fail('安排已在其他窗口更新，请刷新后重试', 409)
+      const savedIds = new Set()
+      for (const action of actions) {
+        const blockId = action?.type === 'save-block' ? action.block?.id : action?.type === 'delete-block' ? action.id : null
+        if (blockId && state.blocks.some(block => block.id === blockId && block.locked)) fail('这段安排已锁定，请先由你手动解锁', 409)
+        state = applyPlannerAction(action, state.revision, true)
+        if (action.type === 'save-block') savedIds.add(action.block.id)
+      }
+      for (const block of state.blocks) if (savedIds.has(block.id)) validateBlock(block, state)
+      return state
     })
   }
   function removeTask(taskId) {
@@ -421,5 +446,5 @@ export function createPlannerStore({ db, transaction, getTask, listTasks, now = 
     const stored = read.get(STATE_KEY)
     if (stored) validateState(JSON.parse(stored.value))
   }
-  return { getPlanner, updatePlanner, removeTask, restorePlanner, validateStoredState }
+  return { getPlanner, updatePlanner, updatePlannerBatch, removeTask, restorePlanner, validateStoredState }
 }

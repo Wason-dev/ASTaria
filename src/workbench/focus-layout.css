@@ -1,38 +1,65 @@
-/* A focus session uses the available width before asking the user to scroll.
-   Glass surfaces stay on stable parents; only their existing content animates. */
+/* The timer, current steps and conversation each have a stable glass surface. */
 .wb-scroll[data-focus=true] .wb-container { margin-bottom: 12px }
 .wb-scroll[data-focus=true] .wb-toolbar { margin-bottom: 12px }
 .wb-scroll[data-focus=true] .wb-focus { max-width: none }
 .workbench .wb-scroll[data-focus=true] .wb-back.wb-icon-button { margin-bottom: 0 }
 .wb-focus-layout > * { min-width: 0 }
-.wb-focus-main,.wb-focus-handoff { padding: 22px; min-height: 0 }
-.wb-focus-handoff > .wb-glass-content { height: 100% }
-.p0 .wb-focus-handoff .xc-handoff { margin: 0; padding: 0; border: 0; font-size: var(--wb-font) }
-.p0 .wb-focus-handoff .xc-handoff h3 { font-size: var(--wb-font); line-height: 1.6 }
-.p0 .wb-focus-handoff .xc-handoff p { line-height: 1.65 }
-.wb-focus-handoff .xc-handoff-grid { gap: 12px }
-.wb-focus-handoff .xc-handoff footer { align-items: start }
+.wb-focus-main,.wb-focus-steps { padding: 22px; min-height: 0 }
+.wb-focus-steps > .wb-glass-content { display: flex; flex-direction: column; min-height: 0; height: 100% }
+/* Only the content switches: the glass surface stays mounted and stationary. */
+.wb-focus-modes { display: grid; flex: 1; min-height: 0; min-width: 0 }
+.wb-focus-view { grid-area: 1 / 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; opacity: 0; visibility: hidden; transform: translateY(6px); transition: opacity 180ms ease, transform 240ms cubic-bezier(.2,.8,.2,1), visibility 0s 240ms }
+.wb-focus-modes[data-mode=focus] > [data-view=focus],.wb-focus-modes[data-mode=handoff] > [data-view=handoff] { opacity: 1; visibility: visible; transform: none; transition-delay: 60ms, 60ms, 0s }
+.home-workspace[data-motion=reduced] .wb-focus-view { transition: none; transform: none }
+.wb-handoff-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 24px; flex: none }
+.p0 .wb-handoff-back { display: inline-flex; align-items: center; gap: 6px; padding: 3px 0 3px 6px; color: var(--wb-muted); font-size: calc(var(--wb-font) - 2px) }
+.wb-handoff-back svg { width: 14px; height: 14px }
+.wb-handoff-clock { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--wb-gold); font-variant-numeric: tabular-nums; margin: 4px 0 8px; flex: none }
+.wb-handoff-clock svg { width: 14px; height: 14px }
+.wb-handoff-clock > span { font-size: calc(var(--wb-font) + 5px); font-weight: 350 }
+.wb-handoff-clock small { color: var(--wb-muted); font-size: calc(var(--wb-font) - 2px) }
+.p0 .wb-handoff-summary { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding: 10px 0 0; border-top: 1px solid var(--wb-line); text-align: left; color: var(--wb-gold); font-size: calc(var(--wb-font) - 2px); flex: none }
+.wb-handoff-summary > span { flex: 1; min-width: 0 }
+.wb-handoff-summary small { display: block; font-size: inherit; margin-bottom: 3px }
+.wb-handoff-summary > span > span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; color: var(--wb-muted); line-height: 1.6 }
+.wb-handoff-summary svg { width: 14px; height: 14px; flex: none }
+.p0 :is(.wb-handoff-back,.wb-handoff-summary):focus-visible { outline: 2px solid var(--wb-gold); outline-offset: 4px; border-radius: 4px }
+.p0 .wb-focus-handoff .xc-handoff { display: flex; flex-direction: column; flex: 1; min-height: 0; margin: 0; padding: 0; border: 0; font-size: var(--wb-font) }
+.p0 .wb-focus-handoff .xc-handoff > header { margin-bottom: 14px; flex: none }
+.p0 .wb-focus-handoff .xc-handoff p { line-height: 1.65; font-size: calc(var(--wb-font) - 2px) }
+.wb-focus-handoff .xc-handoff > form { display: flex; flex-direction: column; flex: 1; min-height: 0 }
+.wb-focus-handoff .xc-handoff-grid { flex: 1; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(86px, 1fr)); gap: 14px 12px }
+.wb-focus-handoff .xc-handoff-grid label { display: flex; flex-direction: column; min-height: 0 }
+.p0 .wb-focus-handoff .xc-handoff textarea { flex: 1; min-height: 60px; max-height: none; resize: none; padding: 8px 9px }
+.p0 .wb-focus-handoff .xc-handoff footer { align-items: center; flex: none; margin-top: 16px; gap: 12px }
 .wb-focus-handoff .xc-handoff footer span { line-height: 1.6 }
-.wb-focus-main .xc-focus-checkout { justify-content: flex-start; gap: 7px; margin-top: 12px; padding-top: 0 }
+.wb-focus-primary-actions { display: inline-flex; align-items: stretch; gap: 10px; min-width: 0; max-width: 100% }
+.p0 .wb-focus-primary-actions > button { min-width: 0; min-height: 36px; overflow-wrap: anywhere }
+.p0 .wb-focus-main .wb-handoff-trigger { display: inline-flex; align-items: center; justify-content: center; padding: 8px 14px; border: 1px solid transparent; border-radius: 999px; background: #dfcfaf; color: #201c16; font-size: var(--wb-font); line-height: 1.4; cursor: pointer; transition: background 180ms, box-shadow 180ms, transform 180ms }
+.p0 .wb-focus-main .wb-handoff-trigger:enabled:hover { background: #eee0c5; color: #201c16; border-color: transparent; box-shadow: 0 3px 16px #d5bb8b20 }
+.p0 .wb-focus-main .wb-handoff-trigger:enabled:active { transform: scale(.98); background: #d6bd90 }
+.p0 .wb-focus-main .wb-handoff-trigger:focus-visible { outline: 2px solid var(--wb-gold); outline-offset: 3px }
+.p0 .wb-focus-main .wb-handoff-trigger:disabled { opacity: .45; cursor: default }
+.home-workspace[data-motion=reduced] .wb-focus-main .wb-handoff-trigger { transition: none }
 .wb-focus-main .wb-duration { margin-top: 10px; padding: 10px 0 0 }
 .wb-focus-main .wb-duration label { gap: 8px; margin-bottom: 8px }
 
-@media (min-width: 1180px) {
-  .wb-scroll[data-focus=true] { --focus-height: max(440px, calc(100dvh - max(88px, var(--wb-top)) - 116px)) }
-  .wb-focus-layout { grid-template-columns: minmax(0, 1fr) minmax(0, .98fr) minmax(280px, .95fr); gap: 14px }
-  .wb-focus-main,.wb-focus-handoff { min-height: var(--focus-height) }
+@media (min-width: 1024px) {
+  .wb-scroll[data-focus=true] { --focus-height: max(360px, calc(100dvh - max(88px, var(--wb-top)) - 116px)) }
+  .wb-focus-layout { grid-template-columns: minmax(0, .94fr) minmax(0, 1.04fr) minmax(280px, .95fr); gap: 14px }
+  .wb-focus-main { height: var(--focus-height); box-sizing: border-box }
+  .wb-focus-steps { height: var(--focus-height); box-sizing: border-box }
   .wb-focus-main > .wb-glass-content { display: flex; flex-direction: column; min-height: calc(var(--focus-height) - 44px); height: 100% }
-  .wb-focus-main .wb-clock-area { margin-block: auto; padding-block: 24px }
-  .wb-focus-main .wb-focus-note { max-height: 112px; line-height: 1.75; margin-block: 8px }
+  /* Let long task text yield space before the timer and its controls do. */
+  .wb-focus-details { flex: 0 1 auto; min-height: 76px; overflow-y: auto; scrollbar-width: thin; overscroll-behavior: contain }
+  .wb-focus-main .wb-clock-area { flex: none; margin-block: auto; padding-block: 24px }
+  .wb-focus-main .wb-focus-note { max-height: none; overflow: visible; line-height: 1.75; margin-block: 8px }
   .wb-focus-main .wb-clock { font-size: clamp(42px, 4.2vw, 60px) }
   .wb-focus-main .wb-focus-meta { line-height: 1.7; margin-bottom: 8px }
-  .wb-focus-main .wb-focus-bottom { margin-top: auto; padding-top: 12px }
+  .wb-focus-main .wb-focus-bottom { flex: none; margin-top: auto; padding-top: 12px }
+  .wb-focus-main .wb-duration-reveal { flex: none }
   .wb-focus-main .wb-finished { flex: 1 }
-  .p0 .wb-focus-handoff .xc-handoff { display: flex; flex-direction: column; height: 100% }
-  .wb-focus-handoff .xc-handoff > form { flex: 1; display: flex; flex-direction: column; min-height: 0 }
-  .wb-focus-handoff .xc-handoff-grid { flex: 1; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(110px, 1fr)); gap: 12px }
-  .wb-focus-handoff .xc-handoff-grid label { display: flex; flex-direction: column }
-  .p0 .wb-focus-handoff .xc-handoff textarea { flex: 1; min-height: 56px; max-height: 180px }
+  .wb-focus-view { overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: color-mix(in srgb,var(--wb-gold) 30%,transparent) transparent }
   .wb-focus-layout > .wb-xixi { height: var(--focus-height); padding: 20px }
   .wb-focus-layout > .wb-xixi > .wb-glass-content { min-height: 0 }
   .wb-focus-layout .wb-xixi > .wb-glass-content > header { flex: none; padding-bottom: 12px }
@@ -42,36 +69,53 @@
   .wb-focus-layout .wb-xixi .xixi-preview-message { flex: 1 }
 }
 
-@media (min-width: 901px) and (max-width: 1179px) {
+@media (min-width: 901px) and (max-width: 1023px) {
   .wb-focus-layout { grid-template-columns: minmax(0, 1fr) minmax(280px, .72fr); gap: 12px }
   .wb-focus-main { grid-area: 1 / 1 }
-  .wb-focus-handoff { grid-area: 2 / 1 }
+  .wb-focus-steps { grid-area: 2 / 1 }
   .wb-focus-layout > .wb-xixi { grid-area: 1 / 2 / 3 / 3; align-self: start; position: sticky; top: 0; height: max(470px, calc(100dvh - 216px)) }
   .p0 .wb-focus-layout .wb-xixi .xixi-conversation { flex: 1 1 0; min-height: 70px; max-height: none }
   .wb-focus-main .wb-clock-area { padding-block: 16px }
   .wb-focus-main .wb-focus-note { max-height: 72px }
 }
 
-@media (min-width: 1180px) and (max-height: 780px) {
+@media (min-width: 1024px) and (max-width: 1179px) {
+  .wb-focus-layout { gap: 12px; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr) minmax(260px, 1fr) }
+  .wb-focus-main,.wb-focus-steps,.wb-focus-layout > .wb-xixi { padding: 18px }
+  .wb-focus-main > .wb-glass-content { min-height: 0 }
+  .wb-focus-main h2 { font-size: calc(var(--wb-font) + 5px) }
+  .wb-focus-handoff .xc-handoff-grid { gap: 10px 8px }
+  .wb-steps-footer { flex-wrap: wrap; gap: 6px }
+}
+
+@media (min-width: 1024px) and (max-height: 780px) {
   .wb-focus-main .wb-clock-area { padding-block: 16px }
   .wb-focus-main .wb-clock-state { margin-block: 8px 12px }
   .wb-focus-main .wb-progress { margin-bottom: 16px }
   .wb-focus-main .wb-focus-note { margin-block: 6px }
   .wb-focus-main .wb-focus-bottom { padding-top: 10px }
-  .wb-focus-main .xc-focus-checkout { margin-top: 10px }
+  .wb-focus-steps { padding: 20px }
+  .wb-steps-list label { padding-block: 8px }
 }
-@media (min-width: 1180px) and (max-height: 700px) {
+@media (min-width: 1024px) and (max-height: 700px) {
   .wb-focus-main .wb-clock-area { padding-block: 10px }
   .wb-focus-main .wb-clock-state { margin-block: 8px }
   .wb-focus-main .wb-progress { margin-bottom: 12px }
-  .wb-focus-main .xc-focus-checkout { margin-top: 6px }
 }
 
 @media (max-width: 900px) {
   .wb-focus-layout { grid-template-columns: minmax(0, 1fr); gap: 12px }
-  .wb-focus-main,.wb-focus-handoff { padding: 20px }
+  .wb-focus-main,.wb-focus-steps { padding: 20px }
   .wb-focus-handoff .xc-handoff-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) }
 }
 @media (max-width: 460px) {
-  .wb-focus-handoff .xc-handoff-grid { grid-template-columns: minmax(0, 1fr) }
+  .wb-focus-handoff .xc-handoff-grid { grid-template-columns: minmax(0, 1fr); grid-template-rows: repeat(4, minmax(78px, auto)); gap: 10px }
+  .p0 .wb-focus-handoff .xc-handoff textarea { min-height: 54px; height: 54px }
+  .p0 .wb-focus-handoff .xc-handoff footer { margin-top: 12px }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wb-focus-view { transition: none; transform: none }
+}
+@media (forced-colors: active) {
+  .p0 .wb-focus-main .wb-handoff-trigger { background: ButtonFace; color: ButtonText; border-color: ButtonText }
 }

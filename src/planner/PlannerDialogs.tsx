@@ -4,7 +4,9 @@ import type { Task } from '../domain/task'
 import { GlassSamplingContext, MeasuredGlassSurface } from '../home/GlassSurface'
 import { agendaDate, localDay } from '../home/agenda'
 import { taskStore } from '../stores/taskStore'
+import { deadlineShortcuts } from '../xixi/deadlineShortcuts'
 import { PlannerIcon as Icon } from './PlannerIcon'
+import { weeklyRoutineSource } from './model'
 import type { PlanBlock, PlannerAction, PlannerState, Routine, TaskPreparation } from './types'
 
 type Act = (action: PlannerAction, expectedRevision?: number) => Promise<PlannerState>
@@ -48,35 +50,39 @@ export function PlannerDialog({ title, onClose, busy = false, closeRequested = f
   </dialog></GlassSamplingContext.Provider>
 }
 
-export function RoutineDialog({ routine, state, act, onClose, onNotice }: { routine?: Routine; state: PlannerState; act: Act; onClose: () => void; onNotice: (text: string) => void }) {
-  const [draft, setDraft] = useState<Routine>(routine ?? { id: crypto.randomUUID(), title: '', kind: 'class', weekdays: [1,2,3,4,5], start: '08:00', end: '08:40', location: '', items: [], enabled: true })
+export function RoutineDialog({ routine, source, state, act, onClose, onNotice, onBrowseRoutines }: { routine?: Routine; source?: { date: string; weekday: number }; state: PlannerState; act: Act; onClose: () => void; onNotice: (text: string) => void; onBrowseRoutines: () => void }) {
+  const original = routine ? weeklyRoutineSource(state, routine, source?.weekday) : undefined
+  const [draft, setDraft] = useState<Routine>(original ?? routine ?? { id: crypto.randomUUID(), title: '', kind: 'class', weekdays: [1,2,3,4,5], start: '08:00', end: '08:40', location: '', items: [], enabled: true })
   const [items, setItems] = useState(draft.items.join('、'))
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [deleting, setDeleting] = useState(false)
   const [finished, setFinished] = useState(false)
+  const missing = Boolean(routine && !original) && !finished
   const [baseRevision, setBaseRevision] = useState(state.revision)
   const stale = baseRevision !== state.revision
   const reload = () => {
-    const latest = routine ? state.routines.find(item => item.id === routine.id) : undefined
+    const latest = routine ? weeklyRoutineSource(state, routine, source?.weekday) : undefined
     if (routine && !latest) { setError('这项安排已被移除，请关闭后重新添加'); return }
     if (latest) { setDraft(latest); setItems(latest.items.join('、')) }
     setBaseRevision(state.revision); setError(''); setDeleting(false)
   }
   const save = async (event: FormEvent) => {
-    event.preventDefault(); if (busy || stale) return
+    event.preventDefault(); if (busy || stale || missing) return
     setBusy(true); setError('')
     try { const saved = await act({ type: 'save-routine', routine: { ...draft, title: draft.title.trim(), items: splitItems(items) } }, baseRevision); setBaseRevision(saved.revision); onNotice('每周安排已保存'); setFinished(true) }
     catch (reason) { setError(explain(reason)) } finally { setBusy(false) }
   }
   const remove = async () => {
-    if (busy || stale) return
+    if (busy || stale || missing) return
     if (!deleting) { setDeleting(true); return }
     setBusy(true)
     try { const saved = await act({ type: 'delete-routine', id: draft.id }, baseRevision); setBaseRevision(saved.revision); onNotice('已移除这项每周安排'); setFinished(true) }
     catch (reason) { setError(explain(reason)) } finally { setBusy(false) }
   }
   return <PlannerDialog title={routine ? '编辑每周安排' : '添加每周安排'} onClose={onClose} busy={busy} closeRequested={finished}>
-    {stale && <div className="pl-stale" role="alert"><p>日程已有新修改，请先载入最新内容再保存</p><button className="pl-secondary" onClick={reload}>载入最新内容 · 替换草稿</button></div>}
-    <form className="pl-form" onSubmit={save}><fieldset disabled={busy || stale}>
+    {source && <p className="pl-muted pl-routine-scope" role="note">{source.date} 临时按周{['日','一','二','三','四','五','六'][source.weekday]}课表。这里修改来源的每周安排，影响下方选中的重复星期；今天及以后的相关调课日会同步，过去的记录保留。</p>}
+    {missing ? <div className="pl-stale" role="alert"><p>这项安排已被移除或改到了其他星期。这里保留原记录，可以前往每周安排编辑现在的课表。</p><button type="button" className="pl-secondary" onClick={onBrowseRoutines}>查看每周安排</button></div>
+      : stale && <div className="pl-stale" role="alert"><p>日程已有新修改，请先载入最新内容再保存</p><button className="pl-secondary" onClick={reload}>载入最新内容 · 替换草稿</button></div>}
+    <form className="pl-form" onSubmit={save}><fieldset disabled={busy || stale || missing}>
       <label>名称<input required maxLength={100} value={draft.title} placeholder="例如 物理课、晚自习、通勤" onChange={e => setDraft({ ...draft, title: e.target.value })} /></label>
       <label>这段时间用来<select value={draft.kind} onChange={e => setDraft({ ...draft, kind: e.target.value as Routine['kind'] })}><option value="class">课程或固定活动 · 占用时间</option><option value="available">空课或自习 · 可以安排任务</option><option value="break">吃饭、休息或通勤 · 留给自己</option></select></label>
       <div className="pl-form-pair"><label>开始<input required type="time" value={draft.start} onChange={e => setDraft({ ...draft, start: e.target.value })} /></label><label>结束<input required type="time" value={draft.end} onChange={e => setDraft({ ...draft, end: e.target.value })} /></label></div>
@@ -163,6 +169,7 @@ export function CreateTaskDialog({ selected, onClose, onRefresh, onNotice }: { s
   }}><fieldset disabled={busy}>
     <label>事情<input autoFocus required value={title} maxLength={160} placeholder="例如 交物理报告" onChange={e => setTitle(e.target.value)} /></label>
     <div className="pl-form-pair"><label>截止日期<input type="date" value={due} onChange={e => setDue(e.target.value)} /></label><label>截止时刻 · 可不填<input type="time" value={dueTime} onChange={e => setDueTime(e.target.value)} disabled={!due} /></label></div>
+    <div className="pl-deadline-shortcuts" role="group" aria-label="快捷选择截止日期">{deadlineShortcuts(new Date()).map(option => <button type="button" className="pl-secondary" key={option.date} aria-pressed={due === option.date} onClick={() => setDue(option.date)}>{option.label}</button>)}</div>
     <label>预计用时 · 分钟<input type="number" min="1" max="1440" value={estimate} placeholder="未确定可留空" onChange={e => setEstimate(e.target.value)} /></label>
     <p className="pl-muted">截止日期是交付时间，具体什么时候做可以稍后安排</p>
     {error && <p className="pl-error" role="alert">{error}</p>}<footer><button className="pl-primary" type="submit">记下</button></footer>

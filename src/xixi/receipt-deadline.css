@@ -1,0 +1,20 @@
+.xixi-receipt-deadline { margin-top:10px; padding-top:9px; border-top:1px solid var(--xixi-line) }
+.xixi-deadline-heading { display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; margin-bottom:6px; color:var(--xixi-muted); font-size:10px }
+.xixi-deadline-heading>span:first-child { color:var(--xixi-gold); letter-spacing:.08em }
+.xixi-receipt-deadline .xixi-deadline-task { margin:0 0 5px; font-size:11px }
+.xixi-deadline-shortcuts,.xixi-deadline-times { display:flex; flex-wrap:wrap; gap:5px }
+.p0 :is(.xixi-deadline-shortcuts,.xixi-deadline-times) button,.p0 .xixi-deadline-actions button[type=submit] { border:1px solid var(--xixi-line); border-radius:999px; padding:4px 10px; color:inherit; background:linear-gradient(135deg,#ffffff0b,#ffffff00); box-shadow:inset 0 1px #ffffff0b; font-size:10px; transition:background-color 160ms,border-color 160ms }
+.p0 :is(.xixi-deadline-shortcuts,.xixi-deadline-times) button:is([aria-pressed=true],[aria-expanded=true]),.p0 :is(.xixi-deadline-shortcuts,.xixi-deadline-times) button:enabled:hover,.p0 .xixi-deadline-actions button[type=submit]:enabled:hover { color:var(--xixi-gold); border-color:var(--xixi-gold); background-color:#ba9c6419 }
+.xixi-deadline-times { margin-top:7px }
+.p0 .xixi-receipt-deadline button:disabled { opacity:.5; cursor:default }
+.xixi-deadline-reveal { display:grid; grid-template-rows:0fr; opacity:0; transition:grid-template-rows 220ms ease,opacity 180ms ease }
+.xixi-deadline-reveal[data-open=true] { grid-template-rows:1fr; opacity:1 }
+.xixi-deadline-reveal>div { min-height:0; overflow:hidden }
+.xixi-deadline-reveal form { margin-top:9px }
+.xixi-deadline-fields { display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,1fr); gap:8px }
+.xixi-deadline-fields label { display:flex; flex-direction:column; gap:5px; min-width:0; color:var(--xixi-muted); font-size:10px }
+.p0 .xixi-deadline-fields input { box-sizing:border-box; min-width:0; width:100%; min-height:30px; margin:0; padding:5px 7px; border:1px solid var(--xixi-line); border-radius:8px; background:#ffffff07; color:inherit; font:inherit }
+.xixi-deadline-actions { display:flex; justify-content:flex-end; align-items:center; gap:12px; padding-block:9px 1px }
+.xixi-receipt-deadline :is(.xixi-deadline-status,.xixi-deadline-error) { margin:6px 0 0; font-size:10px; color:var(--xixi-muted) }
+.xixi-receipt-deadline .xixi-deadline-error { color:var(--xixi-gold) }
+@media(prefers-reduced-motion:reduce) { .xixi-deadline-reveal { transition:none } }

@@ -29,6 +29,93 @@ const plan = task => ({ taskId: task.id, date: DATE, start: '18:00', end: '18:35
 const update = (db, action) => db.updatePlanner(action, db.getPlanner().revision)
 const read = (date = DATE, days) => tool('read_planner', { date, ...(days ? { days } : {}) })
 
+function addSchoolDayWithDorm(db) {
+  // A normal evening window used to disappear behind the bounded lesson list.
+  for (let index = 0; index < 20; index++) {
+    const time = minutes => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`
+    update(db, { type: 'save-routine', routine: { id: `lesson-${index}`, title: `课程${index + 1}`, kind: 'class', weekdays: [5],
+      start: time(index * 45), end: time(index * 45 + 40), location: '教室508', items: Array.from({ length: 8 }, (_, i) => `材料${i}${'甲'.repeat(60)}`), enabled: true } })
+  }
+  update(db, { type: 'save-routine', routine: { id: 'dorm', title: '宿舍', kind: 'available', weekdays: [5],
+    start: '20:30', end: '22:30', location: '宿舍', items: [], enabled: true } })
+}
+
+test('named dorm availability survives a truncated school day and supports direct read→plan', async t => {
+  const f = fixture(t)
+  addSchoolDayWithDorm(f.db)
+  const sat = createTask(f.db, { title: 'SAT', estimateMin: 45 })
+  const google = createTask(f.db, { title: '注册Google账号并加入Classroom', estimateMin: 15 })
+  update(f.db, { type: 'save-block', block: { ...plan(sat), id: 'sat-plan', end: '19:00', locked: false } })
+  const checkDorm = windows => {
+    assert.equal(windows.truncated, false)
+    const dorm = windows.items.find(item => item.id === 'dorm')
+    assert.deepEqual(Object.fromEntries(['id', 'title', 'start', 'end', 'location'].map(key => [key, dorm[key]])), { id: 'dorm', title: '宿舍', start: '20:30', end: '22:30', location: '宿舍' })
+    assert.equal(dorm.remainingMinutes, 120)
+    assert.equal(dorm.occupied.total, 0)
+  }
+  f.responses.push(request => {
+    checkDorm(environment(request).planner.availabilityWindows)
+    return read()
+  }, request => {
+    const data = receipt(request), view = data.days[0]
+    assert.equal(view.routines.truncated, true)
+    assert.ok(!view.routines.items.some(item => item.id === 'dorm'), 'reproduces the former truncation')
+    checkDorm(view.availabilityWindows)
+    return tool('plan_tasks', { expectedRevision: data.revision, plans: [
+      { ...plan(sat), id: 'sat-plan', start: '20:30', end: '21:15' },
+      { ...plan(google), start: '21:15', end: '21:30' },
+    ] })
+  }, request => {
+    assert.equal(receipt(request).ok, true)
+    assert.ok(environment(request).planner.capacity.remaining.some(range => range.start === 1290 && range.end === 1350))
+    return reply('两件已经安排在宿舍时段了')
+  })
+  const result = await f.xixi.chat(input('SAT还要40多分钟，Google今晚做，把这两个记到宿舍时间'))
+  assert.equal(result.status, 'completed')
+  assert.equal(result.operations.length, 1)
+  assert.equal(f.db.getPlanner().blocks.length, 2)
+  assert.equal(f.db.getPlanner().blocks.find(block => block.id === 'sat-plan').start, '20:30')
+  assert.ok(f.requests.every(request => contextUnits(request.messages) + contextUnits(XIXI_TOOLS) < 14000))
+})
+
+test('availability names use fresh target-day overrides and respect occupied time', async t => {
+  const f = fixture(t), date = '2026-09-26'
+  addSchoolDayWithDorm(f.db)
+  update(f.db, { type: 'set-day-template', date, sourceWeekday: 5 })
+  const occupied = createTask(f.db, { due: date })
+  update(f.db, { type: 'save-block', block: { id: 'occupied-dorm', taskId: occupied.id, date, start: '20:30', end: '21:00', locked: true } })
+  f.responses.push(read(date), request => {
+    const view = receipt(request).days[0]
+    assert.equal(view.dayOverride.sourceWeekday, 5)
+    assert.equal(view.availabilityWindows.items.find(item => item.id === 'dorm').start, '20:30')
+    assert.ok(view.capacity.remaining.some(range => range.start === 1260 && range.end === 1350))
+    assert.ok(!view.capacity.remaining.some(range => range.start <= 1230 && range.end > 1230))
+    return reply('宿舍时段前半小时有安排，后面还有空')
+  })
+  await f.xixi.chat(input('看看周日宿舍时间', { date }))
+  const dorm = f.db.getPlanner().routines.find(item => item.id === 'dorm')
+  update(f.db, { type: 'save-routine', routine: { ...dorm, title: '晚间自选', location: '宿舍二楼', start: '21:00' } })
+  await f.xixi.chat(input('我刚改了宿舍时间，再看看', { date }))
+  const current = environment(f.requests.at(-1)).planner.availabilityWindows.items.find(item => item.id === 'dorm')
+  assert.equal(current.start, '21:00')
+  assert.equal(current.title, '晚间自选')
+  assert.equal(current.location, '宿舍二楼')
+})
+
+test('missing and disabled dorm windows are not inferred from an unnamed free evening', async t => {
+  const f = fixture(t)
+  await f.xixi.chat(input('宿舍时间能做什么'))
+  assert.ok(environment(f.requests[0]).planner.availabilityWindows.items.every(item => item.title !== '宿舍'))
+  addSchoolDayWithDorm(f.db)
+  const dorm = f.db.getPlanner().routines.find(item => item.id === 'dorm')
+  update(f.db, { type: 'save-routine', routine: { ...dorm, enabled: false } })
+  f.responses.push(read(), request => {
+    assert.ok(receipt(request).days[0].availabilityWindows.items.every(item => item.id !== 'dorm'))
+    return reply('这天没有已启用的宿舍时段')
+  })
+  await f.xixi.chat(input('再看看宿舍时间'))
+})
+
 test('selected date and real capacity enter context, then read→plan persists receipt and undo restores state', async t => {
   const f = fixture(t), task = createTask(f.db)
   const before = f.db.getPlanner()
@@ -64,6 +151,79 @@ test('selected date and real capacity enter context, then read→plan persists r
   assert.equal(f.db.getTask(task.id).startAt, undefined)
   f.db.undoOperation(result.operations[0].id)
   assert.deepEqual(f.db.getPlanner().blocks, before.blocks)
+})
+
+test('creating a timed meeting then shifting SAT and math saves the final calendar in one planner receipt', async t => {
+  const f = fixture(t)
+  const sat = createTask(f.db, { title: 'SAT 作业', estimateMin: 60 })
+  const math = createTask(f.db, { title: '数学作业', estimateMin: 30 })
+  update(f.db, { type: 'save-block', block: { ...plan(sat), id: 'sat-evening', end: '19:00', locked: false } })
+  update(f.db, { type: 'save-block', block: { ...plan(math), id: 'math-evening', start: '19:00', end: '19:30', locked: false } })
+  const before = f.db.getPlanner()
+  let meeting
+  f.responses.push(tool('create_tasks', { tasks: [{ title: '社团会议', startAt: DATE, estimateMin: 30 }] }), request => {
+    const created = receipt(request)
+    assert.equal(created.ok, true)
+    assert.equal(created.scheduling.changed, false)
+    assert.match(created.scheduling.notice, /没有新增或移动日历时段/)
+    meeting = f.db.listTasks().find(task => task.title === '社团会议')
+    assert.ok(meeting)
+    assert.deepEqual(f.db.getPlanner(), before, 'creating a task alone does not shift the calendar')
+    return read()
+  }, request => tool('plan_tasks', { expectedRevision: receipt(request).revision, plans: [
+    { taskId: meeting.id, date: DATE, start: '18:00', end: '18:30' },
+    { id: 'sat-evening', taskId: sat.id, date: DATE, start: '18:30', end: '19:30' },
+    { id: 'math-evening', taskId: math.id, date: DATE, start: '19:30', end: '20:00' },
+  ] }), request => {
+    const saved = receipt(request)
+    assert.equal(saved.ok, true)
+    assert.deepEqual(saved.savedPlans.map(({ taskId, start, end }) => ({ taskId, start, end })), [
+      { taskId: meeting.id, start: '18:00', end: '18:30' },
+      { taskId: sat.id, start: '18:30', end: '19:30' },
+      { taskId: math.id, start: '19:30', end: '20:00' },
+    ])
+    for (const block of saved.savedPlans) assert.deepEqual(f.db.getPlanner().blocks.find(item => item.id === block.id), block)
+    return reply('已经保存：会议18:00–18:30，SAT18:30–19:30，数学19:30–20:00。')
+  })
+  const result = await f.xixi.chat(input('今天晚上18:00–18:30有社团会议，其余顺延，数学留在晚自习内。直接改。'))
+  assert.equal(result.status, 'completed')
+  assert.equal(result.operations.length, 2)
+  assert.equal(f.db.getPlanner().blocks.length, 3)
+  assert.equal(f.db.getTask(sat.id).due, DATE)
+  assert.equal(f.db.getTask(math.id).due, DATE)
+  assert.equal(f.db.getTask(meeting.id).due, undefined, 'an appointment time is not invented as a deadline')
+  const plannerReceipt = result.operations.find(item => item.kind === 'planner')
+  assert.equal(plannerReceipt.planChanges.length, 3)
+  f.db.undoOperation(plannerReceipt.id)
+  assert.deepEqual(f.db.getPlanner().blocks, before.blocks)
+  assert.ok(f.db.getTask(meeting.id), 'undoing the schedule preserves the created meeting task')
+})
+
+test('an explicit activity window is not left in the inbox: create is followed by planning over the available evening window', async t => {
+  const f = fixture(t)
+  let activity
+  f.responses.push(
+    tool('create_tasks', { tasks: [{ title: '机器人社新生第一次活动', startAt: DATE }] }),
+    request => {
+      const created = receipt(request)
+      assert.equal(created.ok, true)
+      activity = f.db.listTasks().find(task => task.title === '机器人社新生第一次活动')
+      assert.ok(activity)
+      return read()
+    },
+    request => tool('plan_tasks', { expectedRevision: receipt(request).revision, plans: [{ taskId: activity.id, date: DATE, start: '18:00', end: '20:00' }] }),
+    request => {
+      const saved = receipt(request)
+      assert.equal(saved.ok, true)
+      assert.deepEqual(saved.savedPlans.map(({ taskId, start, end }) => ({ taskId, start, end })), [{ taskId: activity.id, start: '18:00', end: '20:00' }])
+      return reply('机器人社活动已安排在今晚18:00–20:00，晚自习窗口保留')
+    },
+  )
+  const result = await f.xixi.chat(input('今晚18:00–20:00，前来A422参与机器人社本学期新生第一次活动'))
+  assert.equal(result.status, 'completed')
+  assert.equal(f.db.getPlanner().blocks.length, 1)
+  assert.deepEqual(f.db.getPlanner().blocks[0], { id: f.db.getPlanner().blocks[0].id, taskId: activity.id, date: DATE, start: '18:00', end: '20:00', locked: false })
+  assert.equal(f.db.getPlanner().routines.find(routine => routine.id === 'default-evening-study').enabled, true)
 })
 
 for (const date of ['2026-09-19', '2026-09-20']) test(`weekend ${date} read→plan uses the default 09:00–22:00 window`, async t => {
@@ -172,16 +332,19 @@ test('removing an unlocked plan keeps the task and can be undone', async t => {
   assert.equal(f.db.getPlanner().blocks[0].id, 'old')
 })
 
-test('failed final reply retries without duplicate plans when tool ids and expectedRevision change', async t => {
+test('failed final reply acknowledges committed plans locally without a retryable mutation', async t => {
   const f = fixture(t), task = createTask(f.db)
   f.responses.push(read(), request => tool('plan_tasks', { expectedRevision: receipt(request).revision, plans: [plan(task)] }), new Error('offline'))
   const request = input()
-  assert.equal((await f.xixi.chat(request)).status, 'failed')
+  const first = await f.xixi.chat(request)
+  assert.equal(first.status, 'completed')
+  assert.match(first.messages.at(-1).content, /18:00–18:35/)
   f.responses.push(tool('plan_tasks', { expectedRevision: f.db.getPlanner().revision, plans: [plan(task)] }), request => {
     assert.equal(receipt(request).reused, true)
     return reply('安排保留着')
   })
   assert.equal((await f.xixi.chat(request)).status, 'completed')
+  assert.equal(f.requests.length, 3)
   assert.equal(f.db.getPlanner().blocks.length, 1)
   assert.equal(f.db.listOperations().length, 1)
 })

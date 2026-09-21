@@ -2,11 +2,13 @@ import type { Area, AreaId, Task, TaskDraft, TaskFilter } from '../domain/task'
 import { localApi } from '../xixi/api'
 import { ensureLocalMigration, notifyLocalDataChange } from './migration'
 
+export type TaskPatch = Omit<Partial<Task>, 'due'> & { due?: string | null }
+
 export interface TaskStore {
   listTasks(filter?: TaskFilter): Promise<Task[]>
   getTask(id: string): Promise<Task | null>
   createTask(draft: TaskDraft): Promise<Task>
-  updateTask(id: string, patch: Partial<Task>, expectedUpdatedAt?: string): Promise<Task>
+  updateTask(id: string, patch: TaskPatch, expectedUpdatedAt?: string): Promise<Task>
   reopenTask(id: string, expectedUpdatedAt: string): Promise<Task>
   deleteTask(id: string): Promise<void>
 }
@@ -30,7 +32,7 @@ export class LocalTaskStore implements TaskStore {
     notifyLocalDataChange()
     return task
   }
-  async updateTask(id: string, patch: Partial<Task>, expectedUpdatedAt?: string): Promise<Task> {
+  async updateTask(id: string, patch: TaskPatch, expectedUpdatedAt?: string): Promise<Task> {
     await ensureLocalMigration()
     const task = await localApi<Task>('/tasks/update', { id, patch, expectedUpdatedAt })
     notifyLocalDataChange()

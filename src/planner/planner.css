@@ -108,3 +108,6 @@
 .planner { color-scheme:dark }.planner[data-theme=light] { color-scheme:light }
 .planner[data-theme=light] .pl-dialog { color-scheme:light }.planner[data-theme=light] .pl-dialog .pl-weekday-picks button[aria-pressed=true] { color:#5e4b26; background:#c5a86755; border-color:#896f3799 }.planner[data-theme=light] .pl-dialog .pl-delete,.planner[data-theme=light] .pl-error { color:#943d32 }.planner[data-theme=light] .pl-warning { color:#77501c }.planner[data-theme=light] .pl-calendar-entry { color:#365d4c; background:#608c7220 }.planner[data-theme=light] .pl-calendar-entry[data-kind=deadline] { color:var(--pl-gold) }.planner[data-theme=light] .pl-day-task[data-done=true] strong { color:#37624c }.planner[data-theme=light] .pl-check[aria-pressed=true] { color:#315d43; background:#7a9c8740 }
 @media(max-width:850px) { .pl-calendar-summary-scroll { max-height:490px } }
+.pl-deadline-shortcuts { display:flex; gap:6px; flex-wrap:wrap; margin-top:-5px }
+.pl-deadline-shortcuts .pl-secondary { padding:4px 12px; border-radius:999px }
+.pl-deadline-shortcuts .pl-secondary[aria-pressed=true] { border-color:var(--pl-gold); color:var(--pl-gold); background:var(--pl-highlight) }

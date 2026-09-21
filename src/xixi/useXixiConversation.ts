@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { localApi } from './api'
 import type { ChatMessage, ChatResult, ConversationState, ConversationSummary, LocalStatus, Operation } from './types'
 import type { ResponsePhase } from '../prototype/responseEffects'
+import { mergeConversation } from './conversationTimeline'
 
 export type XixiContext = { page: 'home' | 'workbench' | 'calendar' | 'timetable'; taskId?: string; date?: string; timezone: string }
 type PendingMessage = { requestId: string; conversationId: string; text: string; context: XixiContext; createdAt?: string; seq?: number }
@@ -18,14 +19,6 @@ function pendingRequests(): PendingMessage[] {
 function restoredOutgoing(): OutgoingMessage[] {
   try { return pendingRequests().map(item => ({ ...item, delivery: 'failed' })) } catch { return [] }
 }
-function mergeConversation(current: ConversationState | null, next: ConversationState): ConversationState {
-  if (!current || current.conversationId !== next.conversationId) return next
-  const withdrawn = new Set(next.messages.filter(item => item.retractedAt && item.requestId).map(item => item.requestId))
-  const messages = [...new Map([...current.messages, ...next.messages].map(item => [item.id, item])).values()].filter(item => !(item.role === 'assistant' && withdrawn.has(item.requestId))).sort((a, b) => a.seq - b.seq)
-  const hasEarlier = (current.oldestSeq ?? Infinity) < (next.oldestSeq ?? Infinity)
-  return { ...next, messages, ...(hasEarlier ? { oldestSeq: current.oldestSeq, hasOlder: current.hasOlder } : {}) }
-}
-
 export function useXixiConversation(onTasksChanged: () => void, onNotice: (message: string) => void) {
   const [conversation, setConversation] = useState<ConversationState | null>(null)
   const [outgoing, setOutgoing] = useState<OutgoingMessage[]>(restoredOutgoing)
@@ -120,7 +113,7 @@ export function useXixiConversation(onTasksChanged: () => void, onNotice: (messa
     const content = text.trim()
     if (!content || busy.current || retractInFlight.current) return false
     if (!conversation) { setError('先连接本机服务，读取对话后再发给我'); return false }
-    if (!status?.configured) { setError('先在设置里连接 DeepSeek，写下的内容会留在这里'); return false }
+    if (!status?.configured) { setError('先在设置里连接 API 或本地模型，写下的内容会留在这里'); return false }
     let request: PendingMessage
     try {
       const pending = pendingRequests()

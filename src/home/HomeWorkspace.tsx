@@ -22,13 +22,14 @@ import { notifyLocalDataChange } from '../stores/migration'
 import { PlannerWorkspace } from '../planner/PlannerWorkspace'
 import type { PlannerPage } from '../planner/PlannerWorkspace'
 import type { ResponseEffectSettings, ResponsePhase } from '../prototype/responseEffects'
-import type { RenderProfile } from '../prototype/renderProfile'
+import type { RenderProfile, RenderScene } from '../prototype/renderProfile'
 import { usePreferences, notificationsAllowed } from '../xixi/preferences'
 import { CompanionPanel } from '../xixi/CompanionPanel'
 import { useXixiNotice } from '../xixi/useXixiNotice'
 import './home.css'
 import './scrollbars.css'
 import './theme.css'
+import '../ui/card-edges.css'
 
 type Props = {
   readCamera: () => SceneCamera | undefined
@@ -37,7 +38,7 @@ type Props = {
   sceneUnavailable: boolean
   onResponseEffect: (settings: ResponseEffectSettings) => void
   onResponsePhase: (phase: ResponsePhase) => void
-  onRenderProfile: (profile: RenderProfile) => void
+  onRenderProfile: (profile: RenderProfile, scene: RenderScene) => void
 }
 const DRAFT_KEY = 'astaria-home-draft'
 type WorkspacePage = 'home' | 'workbench' | 'settings' | 'companion' | PlannerPage
@@ -52,6 +53,8 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
   const preferences = usePreferences()
   const started = useRef(false)
   const [companionTarget, setCompanionTarget] = useState<CompanionTarget>({ tab: 'scenarios' })
+  const [companionLeaving, setCompanionLeaving] = useState(false)
+  const companionDestination = useRef<{ page: WorkspacePage; openChat: boolean; revealed: boolean } | null>(null)
   const [previewPhase, setPreviewPhase] = useState<ResponsePhase | null>(null)
   const previewTimers = useRef<Array<ReturnType<typeof setTimeout>>>([])
   useEffect(() => {
@@ -62,7 +65,7 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
   useEffect(() => { if (!notification) return; const timer = setTimeout(() => setNotification(''), 12000); return () => clearTimeout(timer) }, [notification])
   const chat = useXixiConversation(() => { data.retry(); notifyLocalDataChange() }, setNotification)
   useEffect(() => { onResponseEffect(preferences.value.effect) }, [preferences.value.effect, onResponseEffect])
-  useEffect(() => { onRenderProfile(preferences.value.render?.profile ?? 'full') }, [preferences.value.render?.profile, onRenderProfile])
+  useEffect(() => { onRenderProfile(preferences.value.render?.profile ?? 'full', page === 'home' ? 'home' : 'workspace') }, [preferences.value.render?.profile, page, onRenderProfile])
   useEffect(() => { onResponsePhase(previewPhase ?? chat.responsePhase) }, [previewPhase, chat.responsePhase, onResponsePhase])
   useEffect(() => () => { previewTimers.current.forEach(clearTimeout); onResponsePhase('idle') }, [onResponsePhase])
   useEffect(() => {
@@ -78,7 +81,7 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
   }
   const openCompanion = (target: CompanionTarget = { tab: 'scenarios' }) => {
     if (page !== 'companion') changePage('companion')
-    else setMenuOpen(false)
+    else { companionDestination.current = null; setCompanionLeaving(false); setMenuOpen(false) }
     setCompanionTarget(target)
   }
   useEffect(() => {
@@ -197,7 +200,7 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
     onViewChange(open ? 'interstellar' : 'panorama')
     setChatOpen(open)
   }
-  const changePage = (next: WorkspacePage, openChat = false) => {
+  const commitPage = (next: WorkspacePage, openChat = false) => {
     if (page === 'settings' && next !== 'settings') stopPreview()
     clearTimeout(menuTimer.current)
     if (next === page) brand.current?.focus({ preventScroll: true })
@@ -215,6 +218,34 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
       setInformationActive(false)
       onViewChange(openChat ? 'interstellar' : 'panorama')
     }
+  }
+  const changePage = (next: WorkspacePage, openChat = false) => {
+    if (companionLeaving && next === 'companion') {
+      companionDestination.current = null
+      setCompanionLeaving(false)
+    }
+    if (page === 'companion' && next !== 'companion') {
+      companionDestination.current = { page: next, openChat, revealed: false }
+      clearTimeout(menuTimer.current)
+      setMenuOpen(false)
+      setSelectedId(null)
+      setCompanionLeaving(true)
+      return
+    }
+    commitPage(next, openChat)
+  }
+  const revealCompanionDestination = () => {
+    const destination = companionDestination.current
+    if (destination && !destination.revealed) {
+      destination.revealed = true
+      commitPage(destination.page, destination.openChat)
+    }
+  }
+  const finishCompanionDeparture = () => {
+    const destination = companionDestination.current
+    companionDestination.current = null
+    setCompanionLeaving(false)
+    if (destination && !destination.revealed) commitPage(destination.page, destination.openChat)
   }
   useEffect(() => {
     const escape = (event: KeyboardEvent) => {
@@ -304,7 +335,7 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
   const radius = 19 + (15 - 19) * progress
   const chatVisible = progress > .35
 
-  return <div ref={root} className="home-workspace" data-spatial-ui data-theme={appearance.value.theme} data-chat-open={chatOpen} data-page={page} data-grid={preferences.value.grid} data-motion={preferences.value.effect.motion} data-effect-preview={previewPhase !== null}>
+  return <div ref={root} className="home-workspace" data-spatial-ui data-theme={appearance.value.theme} data-chat-open={chatOpen} data-page={page} data-grid={preferences.value.grid} data-card-edges={preferences.value.cardEdges ?? 'both'} data-motion={preferences.value.effect.motion} data-effect-preview={previewPhase !== null}>
     <nav ref={nav} className="home-nav" aria-label="ASTaria 导航" data-menu-open={menuOpen}
       onPointerEnter={event => { if (event.pointerType !== 'touch') { clearTimeout(menuTimer.current); menuOpenedByHover.current = !menuOpen; setMenuOpen(true) } }}
       onPointerLeave={() => { menuTimer.current = setTimeout(() => { if (!nav.current?.contains(document.activeElement)) setMenuOpen(false) }, 180) }}
@@ -419,7 +450,7 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
     <Workbench active={page === 'workbench'} appearance={appearance} data={data} now={now} onCapture={() => changePage('home', true)} onNotice={setNotification} chat={chat} onSettings={openSettings} />
     <PlannerWorkspace active={page === 'schedule'} tasks={data.tasks} tasksLoading={data.loading} tasksError={data.loadError} now={now} appearance={appearance} chat={chat} onSettings={openSettings} onNotice={setNotification} onRefresh={data.retry} />
     {settingsOpen && <LocalSettings initialTab={settingsTab} onClose={closeSettings} onSaved={chat.refreshStatus} onPreviewEffect={previewEffect} onStopPreview={stopPreview} previewPhase={previewPhase} />}
-    {page === 'companion' && <CompanionPanel readCamera={readCamera} initialTab={companionTarget.tab} initialScenarioId={companionTarget.targetId} onChanged={() => { data.retry(); notifyLocalDataChange(); void chat.refresh() }} onNotice={setNotification} />}
+    {(page === 'companion' || companionLeaving) && <CompanionPanel exiting={companionLeaving} onRevealDestination={revealCompanionDestination} onExited={finishCompanionDeparture} tasks={data.tasks} tasksLoading={data.loading} tasksError={data.loadError} initialTab={companionTarget.tab} initialScenarioId={companionTarget.targetId} onChanged={() => { data.retry(); notifyLocalDataChange(); void chat.refresh() }} onNotice={setNotification} />}
     {selectedId && <TaskDialog task={selectedTask} saving={data.saving} onClose={closeTask} onStatus={data.setStatus} />}
   </div>
 }

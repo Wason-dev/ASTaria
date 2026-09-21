@@ -15,6 +15,8 @@ const fixture = t => {
 }
 const task = (db, patch = {}) => db.createTask({ title: '物理报告', due: '2026-09-20', estimateMin: 60, ...patch })
 const update = (db, action) => db.updatePlanner(action, db.getPlanner().revision)
+const planMinutes = plans => plans.reduce((sum, plan) => sum +
+  Number(plan.end.slice(0, 2)) * 60 + Number(plan.end.slice(3)) - Number(plan.start.slice(0, 2)) * 60 - Number(plan.start.slice(3)), 0)
 
 test('preview stays isolated, application has exact receipts, repeated apply is idempotent and undo restores real planner', t => {
   const f = fixture(t), report = task(f.db), before = f.db.getPlanner()
@@ -95,6 +97,167 @@ test('empty explicit availability does not become an invented full-day window', 
   assert.equal(preview.plans.length, 0)
   assert.equal(preview.unscheduled.length, 1)
   assert.throws(() => f.companion.applyScenario(preview.id, { expectedVersion: 1 }), /没有可应用/)
+})
+
+test('decision preview keeps a baseline and follows today, split, and defer paths without touching planner', t => {
+  const f = fixture(t), report = task(f.db, { title: 'SAT 作业', estimateMin: 90 })
+  update(f.db, { type: 'save-block', block: { id: 'sat-old', taskId: report.id, date: DATE, start: '09:00', end: '10:00', locked: false } })
+  const before = f.db.getPlanner()
+  const today = f.companion.previewDecision({ date: DATE, taskId: report.id, strategy: 'today', recurrence: 'once' })
+  assert.deepEqual(today.decision, { taskId: report.id, title: 'SAT 作业', strategy: 'today', recurrence: 'once', todayMin: 30, effortMin: 90,
+    baseline: [{ id: 'sat-old', taskId: report.id, title: 'SAT 作业', date: DATE, start: '09:00', end: '10:00' }] })
+  assert.equal(today.days, 7)
+  assert.equal(planMinutes(today.plans), 90)
+  assert.ok(today.plans.every(plan => plan.date === DATE))
+  assert.equal(today.removedBlockIds.length, 1)
+  assert.equal(f.db.getPlanner().revision, before.revision)
+  const split = f.companion.previewDecision({ date: DATE, taskId: report.id, strategy: 'split', recurrence: 'weekly', todayMin: 30 })
+  assert.equal(split.decision.recurrence, 'weekly')
+  assert.equal(planMinutes(split.plans.filter(item => item.date === DATE)), 30)
+  assert.equal(planMinutes(split.plans.filter(item => item.date > DATE)), 60)
+  assert.ok(split.warnings.some(item => item.includes('7 天')))
+  const defer = f.companion.previewDecision({ date: DATE, taskId: report.id, strategy: 'defer', recurrence: 'once' })
+  assert.equal(defer.plans.filter(item => item.date === DATE).length, 0)
+  assert.equal(planMinutes(defer.plans), 90)
+  assert.deepEqual(f.db.getPlanner(), before)
+})
+
+test('decision handles unknown effort explicitly and applies atomically with undo', t => {
+  const f = fixture(t), unknown = task(f.db, { title: '工作量未知', estimateMin: undefined })
+  const noPlan = f.companion.previewDecision({ date: DATE, taskId: unknown.id, strategy: 'today', recurrence: 'once' })
+  assert.equal(noPlan.decision.effortMin, null)
+  assert.ok(noPlan.unscheduled.some(item => item.remainingMin === null))
+  update(f.db, { type: 'save-block', block: { id: 'unknown-old', taskId: unknown.id, date: DATE, start: '11:00', end: '12:00', locked: false } })
+  const preview = f.companion.previewDecision({ date: DATE, taskId: unknown.id, strategy: 'today', recurrence: 'once' })
+  assert.equal(preview.decision.effortMin, 60)
+  const before = f.db.getPlanner()
+  const applied = f.companion.applyScenario(preview.id, { expectedVersion: 1 })
+  assert.equal(applied.scenario.status, 'applied')
+  assert.ok(f.db.getPlanner().revision > before.revision)
+  f.db.undoOperation(applied.operation.id)
+  assert.deepEqual(f.db.getPlanner().blocks, before.blocks)
+})
+
+test('decision captures full committed effort before removal and explains today spillover', t => {
+  const f = fixture(t), report = task(f.db, { estimateMin: 30, due: '2026-09-22' })
+  update(f.db, { type: 'save-block', block: { id: 'longer-existing', taskId: report.id, date: DATE, start: '21:00', end: '22:00', locked: false } })
+  const retained = f.companion.previewDecision({ date: DATE, taskId: report.id, strategy: 'split', recurrence: 'once' })
+  assert.equal(retained.decision.effortMin, 60)
+  assert.equal(planMinutes(retained.plans), 60)
+  assert.ok(retained.warnings.some(item => item.includes('长于任务估时 30 分钟')))
+  f.advance(`${DATE}T21:00:00+08:00`)
+  const spill = f.companion.previewDecision({ date: DATE, taskId: report.id, strategy: 'today', recurrence: 'once' })
+  assert.equal(planMinutes(spill.plans.filter(plan => plan.date === DATE)), 40)
+  assert.equal(planMinutes(spill.plans.filter(plan => plan.date > DATE)), 20)
+  assert.ok(spill.warnings.some(item => item.includes('20 分钟需在随后几天补完')))
+})
+
+test('decision rejects historical, closed, empty, and invalid inputs', t => {
+  const f = fixture(t), report = task(f.db)
+  const valid = { date: DATE, taskId: report.id, strategy: 'today', recurrence: 'once' }
+  for (const patch of [{ strategy: 'always' }, { recurrence: 'daily' }, { todayMin: 0 }, { todayMin: 30.5 }, { date: '2026-02-30' }, { days: 365 }]) {
+    assert.throws(() => f.companion.previewDecision({ ...valid, ...patch }))
+  }
+  assert.throws(() => f.companion.previewDecision({ date: '2026-09-18', taskId: report.id, strategy: 'today', recurrence: 'once' }), /今天或未来/)
+  assert.throws(() => f.companion.previewDecision({ date: DATE, taskId: '', strategy: 'today', recurrence: 'once' }), /任务标识/)
+  f.db.updateTask(report.id, { status: 'done' })
+  assert.throws(() => f.companion.previewDecision({ date: DATE, taskId: report.id, strategy: 'today', recurrence: 'once' }), /完成或已放下/)
+})
+
+test('decision preserves hard deadlines and reports unsatisfied effort instead of pushing it beyond the deadline', t => {
+  const f = fixture(t), report = task(f.db, { due: `${DATE}T10:00:00+08:00`, estimateMin: 90 })
+  const today = f.companion.previewDecision({ date: DATE, taskId: report.id, strategy: 'today', recurrence: 'once' })
+  assert.equal(planMinutes(today.plans), 50)
+  assert.equal(today.unscheduled[0].remainingMin, 40)
+  assert.ok(today.plans.every(plan => new Date(`${plan.date}T${plan.end}:00+08:00`) <= new Date(report.due)))
+  const defer = f.companion.previewDecision({ date: DATE, taskId: report.id, strategy: 'defer', recurrence: 'weekly' })
+  assert.equal(defer.plans.length, 0)
+  assert.equal(defer.unscheduled[0].remainingMin, 90)
+  assert.match(defer.unscheduled[0].reason, /截止/)
+  assert.equal(f.db.getTask(report.id).due, report.due)
+})
+
+test('decision never invents availability and keeps unrelated work unchanged through apply and undo', t => {
+  const f = fixture(t), report = task(f.db), unrelated = task(f.db, { title: '保持原样', startAt: `${DATE}T12:00:00+08:00` })
+  update(f.db, { type: 'save-block', block: { id: 'unrelated', taskId: unrelated.id, date: DATE, start: '10:00', end: '11:00', locked: false } })
+  const before = f.db.getPlanner(), originalTask = f.db.getTask(unrelated.id)
+  const preview = f.companion.previewDecision({ date: DATE, taskId: report.id, strategy: 'today', recurrence: 'once' })
+  assert.ok(preview.plans.every(plan => plan.taskId === report.id))
+  assert.equal(preview.removedBlockIds.length, 0)
+  const { operation } = f.companion.applyScenario(preview.id, { expectedVersion: 1 })
+  assert.deepEqual(f.db.getPlanner().blocks.find(block => block.id === 'unrelated'), before.blocks[0])
+  assert.deepEqual(f.db.getTask(unrelated.id), originalTask)
+  f.db.undoOperation(operation.id)
+  assert.deepEqual(f.db.getPlanner().blocks, before.blocks)
+  for (const routine of f.db.getPlanner().routines.filter(item => item.kind === 'available')) update(f.db, { type: 'delete-routine', id: routine.id })
+  const empty = f.companion.previewDecision({ date: DATE, taskId: report.id, strategy: 'today', recurrence: 'once' })
+  assert.equal(empty.plans.length, 0)
+  assert.equal(empty.unscheduled[0].remainingMin, 60)
+  assert.throws(() => f.companion.applyScenario(empty.id, { expectedVersion: 1 }), /没有可应用/)
+})
+
+test('decision counts held time once, retains locked and started blocks, and moves only the selected week', t => {
+  const f = fixture(t), report = task(f.db, { estimateMin: 150, due: '2026-10-01' })
+  for (const block of [
+    { id: 'started', date: DATE, start: '07:30', end: '08:30' },
+    { id: 'locked', date: DATE, start: '10:00', end: '10:30', locked: true },
+    { id: 'outside-week', date: '2026-09-27', start: '10:00', end: '10:30' },
+    { id: 'movable', date: DATE, start: '12:00', end: '13:00' },
+  ]) update(f.db, { type: 'save-block', block: { locked: false, taskId: report.id, ...block } })
+  const preview = f.companion.previewDecision({ date: DATE, taskId: report.id, strategy: 'defer', recurrence: 'weekly' })
+  assert.deepEqual(preview.removedBlockIds, ['movable'])
+  assert.equal(preview.decision.effortMin, 150)
+  assert.equal(planMinutes(preview.plans), 60)
+  assert.ok(preview.decision.baseline.some(block => block.id === 'started'))
+  assert.ok(!preview.decision.baseline.some(block => block.id === 'outside-week'))
+  f.companion.applyScenario(preview.id, { expectedVersion: 1 })
+  assert.ok(['started', 'locked', 'outside-week'].every(id => f.db.getPlanner().blocks.some(block => block.id === id)))
+  assert.equal(planMinutes(f.db.getPlanner().blocks.filter(block => !['started', 'locked', 'outside-week'].includes(block.id))), 60)
+})
+
+test('decision preserves exact legacy startAt and ignores stale legacy fallback while replacing explicit blocks', t => {
+  const f = fixture(t), report = task(f.db, { startAt: `${DATE}T09:00:00+08:00` })
+  const exact = f.companion.previewDecision({ date: DATE, taskId: report.id, strategy: 'defer', recurrence: 'once' })
+  assert.equal(exact.plans.length, 0)
+  assert.equal(exact.removedBlockIds.length, 0)
+  assert.equal(exact.decision.baseline[0].start, '09:00')
+  assert.ok(exact.warnings.some(item => item.includes('精确开始时间')))
+  update(f.db, { type: 'save-block', block: { id: 'newer-plan', taskId: report.id, date: DATE, start: '10:00', end: '11:00', locked: false } })
+  const replacement = f.companion.previewDecision({ date: DATE, taskId: report.id, strategy: 'today', recurrence: 'once' })
+  assert.equal(replacement.plans[0].start, '09:10')
+  f.companion.applyScenario(replacement.id, { expectedVersion: 1 })
+  assert.equal(f.db.getPlanner().blocks[0].start, '09:10')
+  assert.equal(f.db.getTask(report.id).startAt, report.startAt)
+})
+
+test('decision rejects stale planner, task, buffer, and elapsed previews without partial writes', t => {
+  const f = fixture(t), report = task(f.db)
+  const preview = () => f.companion.previewDecision({ date: DATE, taskId: report.id, strategy: 'today', recurrence: 'once' })
+  let result = preview()
+  update(f.db, { type: 'check-item', date: DATE, key: '书', checked: true })
+  assert.throws(() => f.companion.applyScenario(result.id, { expectedVersion: 1 }), /时间表已有变化/)
+  result = preview()
+  task(f.db, { title: '新加入的确切时间', startAt: `${DATE}T09:00:00+08:00` })
+  assert.throws(() => f.companion.applyScenario(result.id, { expectedVersion: 1 }), /任务已有变化/)
+  result = preview()
+  f.db.setPreference('app', { scheduling: { bufferMin: 20 } })
+  assert.throws(() => f.companion.applyScenario(result.id, { expectedVersion: 1 }), /缓冲设置已有变化/)
+  result = preview()
+  f.advance(`${DATE}T14:00:00+08:00`)
+  assert.throws(() => f.companion.applyScenario(result.id, { expectedVersion: 1 }), /时间已有变化/)
+  assert.equal(f.db.getPlanner().blocks.length, 0)
+  assert.equal(f.db.listOperations().length, 0)
+})
+
+test('decision rolls back planner changes when saving the applied receipt fails', t => {
+  const f = fixture(t), report = task(f.db)
+  const preview = f.companion.previewDecision({ date: DATE, taskId: report.id, strategy: 'today', recurrence: 'once' })
+  const before = f.db.getPlanner()
+  const faulty = createCompanion({ db: { ...f.db, saveCompanionState: () => { throw new Error('simulated disk failure') } }, now: f.now })
+  assert.throws(() => faulty.applyScenario(preview.id, { expectedVersion: 1 }), /simulated disk failure/)
+  assert.deepEqual(f.db.getPlanner(), before)
+  assert.equal(f.db.listOperations().length, 0)
+  assert.equal(f.db.getCompanionState().scenarios.find(item => item.id === preview.id).status, 'preview')
 })
 
 test('past plans never count as finished work and zero-buffer preference remains zero', t => {

@@ -331,7 +331,7 @@ try {
   await click('.wb-xixi [data-delivery=sending] .xixi-message-retract')
   await wait('!!document.querySelector(".wb-xixi [data-retracted=true]")')
   await delay(1000)
-  await check('withdrawing in-flight message discards its delayed reply', '(()=>{const messages=[...document.querySelectorAll(".wb-xixi .xixi-message")],last=messages.at(-1);return last?.dataset.retracted==="true"&&last.textContent.includes("已撤回")&&!last.querySelector("button")&&!document.querySelector(".wb-xixi [data-delivery=sending]")})()')
+  await check('withdrawing in-flight message discards its delayed reply', '(()=>{const messages=[...document.querySelectorAll(".wb-xixi .xixi-message")],last=messages.at(-1);return last?.dataset.retracted==="true"&&last.textContent.includes("已撤回")&&!last.querySelector(".xixi-message-actions")&&!!last.querySelector(".xixi-undo")&&!document.querySelector(".wb-xixi [data-delivery=sending]")})()')
   assert.ok(conversations.get('qa-conversation').operations.some(operation => operation.requestId === withdrawnRequest && !operation.undoneAt), 'withdrawal keeps committed operation undo independent')
   checks.push('withdrawal leaves committed operation independently undoable')
   await check('focus withdrawal restores original wording without duplicates or late clearing', 'document.querySelector("#wb-xixi-input").value === "临时发错的一句话" && document.activeElement === document.querySelector("#wb-xixi-input")')

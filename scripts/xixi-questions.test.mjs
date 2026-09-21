@@ -63,3 +63,18 @@ test('facts can be saved before asking a missing detail, without inventing an es
   assert.equal(db.listTasks()[0].estimateMin, undefined)
   assert.ok(result.messages.at(-1).question)
 })
+
+test('concrete timetable wording cannot fall back to a new clarification question', async t => {
+  const db = createDatabase(':memory:'); t.after(() => db.close())
+  const requests = []
+  const xixi = createXixi({ db, complete: async request => {
+    requests.push(request)
+    return requests.length === 1
+      ? call('ask_user', { prompt: '哪种排法？', options: ['方案一', '方案二'] })
+      : reply('我会先读取周一课表，再按你给出的顺序处理')
+  } })
+  const result = await xixi.chat(input('每周一 12:45 是英语课，后面一节是 PHY2'))
+  assert.equal(result.status, 'completed')
+  assert.equal(result.messages.some(message => message.question), false)
+  assert.equal(requests.length, 2)
+})

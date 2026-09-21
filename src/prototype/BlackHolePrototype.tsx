@@ -1,8 +1,9 @@
+export { setDecisionEffect } from './decisionEffect'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { BlackHoleRenderer } from './BlackHoleRenderer'
 import { HomeWorkspace } from '../home/HomeWorkspace'
 import type { ResponseEffectSettings, ResponsePhase } from './responseEffects'
-import type { RenderProfile } from './renderProfile'
+import type { RenderProfile, RenderScene } from './renderProfile'
 import './prototype.css'
 
 declare global {
@@ -25,6 +26,7 @@ export default function BlackHolePrototype() {
   const responseSettings = useRef<ResponseEffectSettings | null>(null)
   const responsePhase = useRef<ResponsePhase>('idle')
   const renderProfile = useRef<RenderProfile>('full')
+  const renderScene = useRef<RenderScene>('home')
   const changeResponseEffect = useCallback((settings: ResponseEffectSettings) => {
     responseSettings.current = settings
     renderer.current?.setResponseEffect(settings)
@@ -33,9 +35,10 @@ export default function BlackHolePrototype() {
     responsePhase.current = phase
     renderer.current?.setResponsePhase(phase)
   }, [])
-  const changeRenderProfile = useCallback((profile: RenderProfile) => {
+  const changeRenderProfile = useCallback((profile: RenderProfile, scene: RenderScene) => {
     renderProfile.current = profile
-    renderer.current?.setRenderProfile(profile)
+    renderScene.current = scene
+    renderer.current?.setRenderProfile(profile, scene)
   }, [])
 
   useEffect(() => {
@@ -47,7 +50,7 @@ export default function BlackHolePrototype() {
       renderer.current = engine
       if (responseSettings.current) engine.setResponseEffect(responseSettings.current)
       engine.setResponsePhase(responsePhase.current)
-      engine.setRenderProfile(renderProfile.current)
+      engine.setRenderProfile(renderProfile.current, renderScene.current)
       window.__ASTARIA_P0__ = engine
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '无法初始化 WebGL')

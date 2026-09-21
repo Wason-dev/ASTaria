@@ -5,16 +5,16 @@ import type { RenderProfile } from '../prototype/renderProfile'
 
 export type Preferences = {
   version: 1; startupPage: 'home' | 'workbench' | 'schedule' | 'companion'; theme: 'dark' | 'light'; grid: boolean
-  glass: 'clear' | 'soft'; density: 'compact' | 'comfortable'; effect: ResponseEffectSettings
+  glass: 'clear' | 'soft'; density: 'compact' | 'comfortable'; cardEdges: 'both' | 'left' | 'none'; effect: ResponseEffectSettings
   render: { profile: RenderProfile }
-  assistant: { autonomy: 'act' | 'propose'; useMemory: boolean; useHistory: boolean }
+  assistant: { autonomy: 'act' | 'propose'; personality: 'low' | 'medium' | 'high'; useMemory: boolean; useHistory: boolean }
   notifications: { enabled: boolean; quietStart: string; quietEnd: string; opportunities: boolean }
   focus: { focusMin: number; restMin: number }; scheduling: { bufferMin: number }
 }
 export const DEFAULT_PREFERENCES: Preferences = {
-  version: 1, startupPage: 'home', theme: 'dark', grid: true, glass: 'clear', density: 'compact',
+  version: 1, startupPage: 'home', theme: 'dark', grid: true, glass: 'clear', density: 'compact', cardEdges: 'both',
   effect: { style: 'tide', intensity: 'gentle', motion: 'system' }, render: { profile: 'full' },
-  assistant: { autonomy: 'act', useMemory: true, useHistory: true },
+  assistant: { autonomy: 'act', personality: 'high', useMemory: true, useHistory: true },
   notifications: { enabled: true, quietStart: '23:00', quietEnd: '08:00', opportunities: true },
   focus: { focusMin: 35, restMin: 5 }, scheduling: { bufferMin: 10 },
 }

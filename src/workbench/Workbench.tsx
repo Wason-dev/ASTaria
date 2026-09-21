@@ -4,14 +4,14 @@ import type { Task, TaskStatus } from '../domain/task'
 import type { useSpatialTasks } from '../spatial/useSpatialTasks'
 import { agendaDate, deadlineLabel } from '../home/agenda'
 import { GlassSamplingContext, MeasuredGlassSurface } from '../home/GlassSurface'
-import { AppearanceControls } from './AppearanceControls'
 import type { Appearance, useAppearance } from './appearance'
-import { previewTasks, recommendationReason, taskArea, taskGroups } from './tasks'
+import { recommendationReason, taskArea, taskGroups } from './tasks'
 import { useFocusTimer } from './useFocusTimer'
 import { UpcomingDeadlines } from './UpcomingDeadlines'
-import { buildWorkbenchBriefing } from './briefing'
+import { buildWorkbenchBriefing, effectiveEstimate, estimateLabel } from './briefing'
+import type { ScheduledMinutes } from './briefing'
+import { usePlanner } from '../planner/usePlanner'
 import { XixiBriefing } from './XixiBriefing'
-import { DESIGN_PREVIEW } from './designPreview'
 import { WorkbenchIcon as Icon } from './WorkbenchIcon'
 import { XixiInput } from './XixiInput'
 import { useGlassHover } from './useGlassHover'
@@ -19,6 +19,8 @@ import { ConversationLog } from '../xixi/ConversationLog'
 import { restoreWithdrawnDraft } from '../xixi/draft'
 import { ConversationMenu } from '../xixi/ConversationMenu'
 import { TaskHandoff } from '../xixi/CompanionPanel'
+import type { Handoff } from '../xixi/companionTypes'
+import { TaskSteps } from './TaskSteps'
 import type { XixiConversation } from '../xixi/useXixiConversation'
 import './workbench.css'
 import './readability.css'
@@ -38,8 +40,6 @@ function Glass({ appearance, children, className = '' }: { appearance: Appearanc
 export function Workbench(props: Props & { appearance: ReturnType<typeof useAppearance> }) {
   const { appearance } = props
   const hover = useGlassHover(props.active)
-  const [customize, setCustomize] = useState(false)
-  const [preview, setPreview] = useState(false)
   const style = {
     '--wb-width': `${appearance.value.width}px`, '--wb-font': `${appearance.value.font}px`,
     '--wb-row': `${appearance.value.row}px`, '--wb-gap': `${appearance.value.gap}px`,
@@ -48,22 +48,34 @@ export function Workbench(props: Props & { appearance: ReturnType<typeof useAppe
     '--wb-columns': appearance.value.columns,
     '--wb-backdrop-blur': `${appearance.value.backgroundBlur}px`,
   } as CSSProperties
-  useEffect(() => { if (!props.active) setCustomize(false) }, [props.active])
   return <GlassSamplingContext.Provider value={props.active}><section className="workbench" {...hover} data-theme={appearance.value.theme} data-active={props.active} aria-label="工作台" inert={!props.active} aria-hidden={!props.active} style={style}>
     <div className="wb-background" aria-hidden="true" />
-    <WorkbenchContent key={preview ? 'preview' : 'real'} {...props} appearance={appearance.value} preview={preview} onPreview={() => setPreview(value => !value)} onCustomize={() => setCustomize(true)} />
-    {DESIGN_PREVIEW && customize && <AppearanceControls value={appearance.value} onChange={appearance.setValue} warning={appearance.warning} onClose={() => setCustomize(false)} />}
+    <WorkbenchContent {...props} appearance={appearance.value} />
   </section></GlassSamplingContext.Provider>
 }
 
-function WorkbenchContent({ active, data, now, onCapture, onNotice, appearance, preview, onPreview, onCustomize, chat, onSettings }: Props & {
-  appearance: Appearance; preview: boolean; onPreview: () => void; onCustomize: () => void
+function WorkbenchContent({ active, data, now, onCapture, onNotice, appearance, chat, onSettings }: Props & {
+  appearance: Appearance
 }) {
-  const timer = useFocusTimer(preview ? 'astaria-focus-preview-v1' : 'astaria-focus-v1')
-  const [examples, setExamples] = useState(() => DESIGN_PREVIEW ? previewTasks(now) : [])
-  const tasks = preview ? examples : data.tasks
+  const preview = false
+  const timer = useFocusTimer('astaria-focus-v1')
+  const planner = usePlanner(active)
+  const tasks = data.tasks
+  const scheduledMinutes = useMemo<ScheduledMinutes>(() => {
+    const totals: Record<string, number> = {}
+    for (const block of planner.state?.blocks ?? []) {
+      if (!block.taskId) continue
+      const [startHour, startMinute] = block.start.split(':').map(Number)
+      const [endHour, endMinute] = block.end.split(':').map(Number)
+      const start = startHour * 60 + startMinute
+      const end = endHour * 60 + endMinute
+      const minutes = end - start
+      if (Number.isFinite(minutes) && minutes > 0) totals[block.taskId] = (totals[block.taskId] ?? 0) + minutes
+    }
+    return totals
+  }, [planner.state])
   const groups = useMemo(() => taskGroups(tasks, now), [tasks, now])
-  const briefing = useMemo(() => buildWorkbenchBriefing(tasks, now, timer.durations.focusMin, timer.getSpentMs), [tasks, now, timer.durations.focusMin, timer.getSpentMs, timer.session])
+  const briefing = useMemo(() => buildWorkbenchBriefing(tasks, now, timer.durations.focusMin, timer.getSpentMs, scheduledMinutes), [tasks, now, timer.durations.focusMin, timer.getSpentMs, timer.session, scheduledMinutes])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [transitioning, setTransitioning] = useState(false)
   const [timingOpen, setTimingOpen] = useState(false)
@@ -71,6 +83,9 @@ function WorkbenchContent({ active, data, now, onCapture, onNotice, appearance, 
   const [assistance, setAssistance] = useState<{ taskId: string; text: string; revision: number } | null>(null)
   const heading = useRef<HTMLHeadingElement>(null)
   const deadlineHeading = useRef<HTMLHeadingElement>(null)
+  const [handoffRequest, setHandoffRequest] = useState<{ field: 'progress' | 'obstacle' | 'nextStep'; revision: number } | null>(null)
+  const [savedHandoff, setSavedHandoff] = useState<Handoff | null>(null)
+  const handoffOpener = useRef<HTMLElement | null>(null)
   const [deadlineReturnId, setDeadlineReturnId] = useState<string | null>(null)
   const taskOpener = useRef<HTMLElement | null>(null)
   const chooserScroll = useRef(0)
@@ -78,7 +93,6 @@ function WorkbenchContent({ active, data, now, onCapture, onNotice, appearance, 
   const [recentCompletion, setRecentCompletion] = useState<string | null>(null)
   const [reopeningId, setReopeningId] = useState<string | null>(null)
   const reopening = useRef(false)
-  const previewCompletionStatus = useRef(new Map<string, 'todo' | 'doing'>())
   const scroll = useRef<HTMLDivElement>(null)
   const transitionTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const selected = tasks.find(task => task.id === selectedId && !task.deletedAt && task.status !== 'dropped')
@@ -176,6 +190,8 @@ function WorkbenchContent({ active, data, now, onCapture, onNotice, appearance, 
     setError('')
     setAssistance(null)
     setTimingOpen(false)
+    setHandoffRequest(null)
+    setSavedHandoff(null)
     setTransitioning(true)
     selectionPending.current = id
     const finish = () => {
@@ -188,10 +204,7 @@ function WorkbenchContent({ active, data, now, onCapture, onNotice, appearance, 
     transitionTimer.current = setTimeout(finish, matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 150)
   }
   const updateStatus = async (task: Task, status: TaskStatus) => {
-    if (preview) {
-      if (status === 'done' && task.status !== 'done') previewCompletionStatus.current.set(task.id, task.status === 'doing' ? 'doing' : 'todo')
-      setExamples(items => items.map(item => item.id === task.id ? { ...item, status, doneAt: status === 'done' ? new Date().toISOString() : undefined } : item))
-    } else await data.setStatus(task.id, status)
+    await data.setStatus(task.id, status)
   }
   const start = async () => {
     if (!selected || busy) return
@@ -213,17 +226,25 @@ function WorkbenchContent({ active, data, now, onCapture, onNotice, appearance, 
       onNotice(`${preview ? '示例 · ' : ''}已完成「${selected.title}」`)
     } catch (reason) { setError(reason instanceof Error ? reason.message : '暂时未能保存，请重试') }
   }
-  const leaveHandoff = (finishedForToday = false) => {
+  const leaveHandoff = (field: 'progress' | 'obstacle' | 'nextStep' = 'progress') => {
+    startRevision.current += 1
     timer.pause()
-    const input = scroll.current?.querySelector<HTMLTextAreaElement>('.xc-handoff textarea')
-    input?.scrollIntoView({ block: 'center', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' })
-    input?.focus({ preventScroll: true })
-    if (finishedForToday) onNotice('今天先到这里，记下做到哪，下次接着来')
+    setTimingOpen(false)
+    handoffOpener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    setHandoffRequest({ field, revision: Date.now() })
   }
-  const askForHelp = () => {
+  const closeHandoff = () => {
+    setHandoffRequest(null)
+    requestAnimationFrame(() => {
+      if (!startContext.current.active) return
+      const opener = handoffOpener.current
+      if (opener?.isConnected && !opener.closest('[inert]')) opener.focus({ preventScroll: true })
+      else heading.current?.focus({ preventScroll: true })
+    })
+  }
+  const askForSteps = () => {
     if (!selected) return
-    timer.pause()
-    setAssistance({ taskId: selected.id, text: `我做「${selected.title}」时卡住了，帮我一起看看。卡在：`, revision: Date.now() })
+    setAssistance({ taskId: selected.id, text: `请把「${selected.title}」拆成可以逐项勾选的任务步骤，保存在当前事项中。作业要求：`, revision: Date.now() })
   }
   const reopen = async (task: Task) => {
     if (busy || reopening.current || task.status !== 'done') return
@@ -231,11 +252,7 @@ function WorkbenchContent({ active, data, now, onCapture, onNotice, appearance, 
     setReopeningId(task.id)
     setError('')
     try {
-      if (preview) {
-        const status = previewCompletionStatus.current.get(task.id) ?? 'todo'
-        setExamples(items => items.map(item => item.id === task.id ? { ...item, status, doneAt: undefined, updatedAt: new Date().toISOString() } : item))
-        previewCompletionStatus.current.delete(task.id)
-      } else await data.reopen(task.id, task.updatedAt)
+      await data.reopen(task.id, task.updatedAt)
       timer.pause()
       setRecentCompletion(current => current === task.id ? null : current)
       onNotice(`${preview ? '示例 · ' : ''}已撤回「${task.title}」的完成状态，专注记录已保留`)
@@ -255,7 +272,7 @@ function WorkbenchContent({ active, data, now, onCapture, onNotice, appearance, 
       {appearance.metadata && <span className="wb-task-meta">
         <span className="wb-meta-value" title={`课程或分类：${taskArea(task)}`}><Icon name="book" /><span>{taskArea(task)}</span></span>
         <span className="wb-meta-value" title={task.startAt && agendaDate(task.startAt) ? '安排时间' : '截止时间'}><Icon name="calendar" /><span>{task.startAt && agendaDate(task.startAt) ? `${shortTimestamp(task.startAt, now)}安排` : task.due ? `${deadlineLabel(task, now)}截止` : '待安排'}</span></span>
-        {task.estimateMin ? <span className="wb-meta-value" title="原预计用时"><Icon name="hourglass" /><span className="p0-sr-only">原预计</span>{task.estimateMin} 分钟</span> : null}
+        {effectiveEstimate(task, scheduledMinutes) !== undefined ? <span className="wb-meta-value" title={estimateLabel(task, scheduledMinutes) ?? '用时'}><Icon name="hourglass" /><span className="p0-sr-only">用时</span>{estimateLabel(task, scheduledMinutes)}</span> : null}
       </span>}
       {appearance.progress && timer.getSpentMs(task.id) > 0 && <span className="wb-task-spent wb-meta-value" title="累计专注"><Icon name="timer" /><span className="p0-sr-only">累计专注</span>{spentLabel(timer.getSpentMs(task.id))}</span>}
     </span>
@@ -263,10 +280,7 @@ function WorkbenchContent({ active, data, now, onCapture, onNotice, appearance, 
 
   return <div className="wb-scroll" data-focus={Boolean(selected && session)} ref={scroll}>
     <div className="wb-container">
-      <div className="wb-toolbar"><div className="wb-location">{selected && session && <button className="wb-back wb-icon-button" aria-label={selected.status === 'done' ? '选择下一项' : '重新选择'} data-tooltip={selected.status === 'done' ? '选择下一项' : '重新选择'} onClick={() => switchTo(null)} disabled={busy || transitioning}><Icon name="back" /><span className="wb-tooltip" role="tooltip">{selected.status === 'done' ? '选择下一项' : '重新选择'}{session.phase === 'running' ? ' · 离开会暂停计时' : ''}</span></button>}<span className="wb-eyebrow">工作台{preview && <span className="wb-preview-label">示例预览</span>}</span></div>{DESIGN_PREVIEW && <div>
-        <button className="wb-tool" onClick={() => { timer.pause(); onPreview() }}>{preview ? '返回我的事项' : '示例预览'}</button>
-        <button className="wb-tool wb-customize-trigger" onClick={onCustomize}><span aria-hidden="true">⌘</span> 自定义</button>
-      </div>}</div>
+      <div className="wb-toolbar"><div className="wb-location">{selected && session && <button className="wb-back wb-icon-button" aria-label={selected.status === 'done' ? '选择下一项' : '重新选择'} onClick={() => switchTo(null)} disabled={busy || transitioning}><Icon name="back" /></button>}<span className="wb-eyebrow">工作台</span></div></div>
       <div className="wb-stage" data-leaving={transitioning} inert={transitioning}>
       {selectedId === null ? <div className="wb-chooser wb-enter" key="chooser">
         <header className="wb-heading wb-overview-heading"><div><h2 ref={heading} tabIndex={-1}>想从哪开始？</h2><p>今天的重点，接下来的截止，都在这里</p></div>
@@ -275,7 +289,7 @@ function WorkbenchContent({ active, data, now, onCapture, onNotice, appearance, 
         <div className="wb-overview-layout">
         <Glass appearance={appearance} className="wb-briefing-panel"><div className="wb-briefing-content">
           {(preview || (!data.loading && !data.loadError)) && <XixiBriefing embedded tasks={tasks} briefing={briefing} appearance={appearance} preview={preview} disabled={busy || transitioning} focusMin={timer.durations.focusMin} restMin={timer.durations.restMin} onSelect={switchTo} onCapture={onCapture} />}
-          <UpcomingDeadlines embedded ref={deadlineHeading} revealTaskId={deadlineReturnId ?? undefined} appearance={appearance} tasks={tasks} now={now} disabled={busy || transitioning} loading={!preview && data.loading} error={preview ? '' : data.loadError} highlighted={false} onSelect={id => switchTo(id)} onRetry={data.retry} focusMin={timer.durations.focusMin} getSpentMs={timer.getSpentMs} />
+          <UpcomingDeadlines embedded ref={deadlineHeading} revealTaskId={deadlineReturnId ?? undefined} appearance={appearance} tasks={tasks} now={now} disabled={busy || transitioning} loading={!preview && data.loading} error={preview ? '' : data.loadError} highlighted={false} onSelect={id => switchTo(id)} onRetry={data.retry} focusMin={timer.durations.focusMin} getSpentMs={timer.getSpentMs} scheduledMinutes={scheduledMinutes} />
         </div></Glass>
         <div className="wb-task-sections">
         {!preview && data.loading ? <p role="status" className="wb-empty">正在读取你的事项</p> : !preview && data.loadError ? <div className="wb-empty" role="alert"><p>{data.loadError}</p><button className="wb-action" onClick={data.retry}>重新读取</button></div> : <>
@@ -294,28 +308,44 @@ function WorkbenchContent({ active, data, now, onCapture, onNotice, appearance, 
       </div> : selected && session ? <div className="wb-focus wb-enter" key={selectedId}>
         <div className="wb-focus-layout">
           <Glass appearance={appearance} className="wb-focus-main">
+            <div className="wb-focus-modes" data-mode={handoffRequest ? 'handoff' : 'focus'}>
+            <div className="wb-focus-view" data-view="focus" inert={Boolean(handoffRequest)} aria-hidden={Boolean(handoffRequest)}>
+            <div className="wb-focus-details">
             <span className="wb-eyebrow">{selected.status === 'done' ? '这一项，完成了' : '当前专注'}</span>
             <h2 ref={heading} tabIndex={-1}>{selected.title}</h2>
-            {appearance.metadata && <p className="wb-focus-meta">{taskArea(selected)}{selected.due && ` · ${deadlineLabel(selected, now)}截止`}{selected.estimateMin && ` · 预计 ${selected.estimateMin} 分钟`}</p>}
+            {appearance.metadata && <p className="wb-focus-meta">{taskArea(selected)}{selected.due && ` · ${deadlineLabel(selected, now)}截止`}{effectiveEstimate(selected, scheduledMinutes) !== undefined && ` · ${estimateLabel(selected, scheduledMinutes)}`}</p>}
             <p className="wb-focus-note">{selected.notes || '先做一个能够推进它的小步骤'}</p>
+            </div>
             {selected.status === 'done' ? <div className="wb-finished wb-enter"><span className="wb-finished-mark" aria-hidden="true">✓</span><p>专注了 {spentLabel(session.spentMs)}</p><div className="wb-clock-actions"><button className="wb-action" disabled={busy} onClick={() => switchTo(null)}>选择下一项</button><button type="button" className="wb-secondary wb-reopen wb-meta-value" title="撤回完成" aria-label="撤回完成" disabled={busy} onClick={() => void reopen(selected)}><Icon name="undo" /><span>{reopeningId === selected.id ? '正在撤回' : '撤回完成'}</span></button></div></div> : <>
               <div className="wb-clock-area">
                 <div className="wb-clock" role="timer" aria-live="off" aria-label={`${session.mode === 'focus' ? '专注' : '休息'}剩余 ${Math.ceil(session.remainingMs / 1000)} 秒`}>{clockLabel(session.remainingMs)}</div>
                 <p className="wb-clock-state" key={`${session.mode}-${session.phase}`} role="status">{clockState(session)}</p>
                 {appearance.progress && <div className="wb-progress" role="progressbar" aria-label="本轮进度" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(100 * session.elapsedMs / session.durationMs)}><span style={{ transform: `scaleX(${Math.min(1, session.elapsedMs / session.durationMs)})` }} /></div>}
                 <div className="wb-clock-actions">
-                  {session.phase === 'finished' ? session.mode === 'focus' ? <><button className="wb-action" onClick={timer.startRest}>休息 {timer.durations.restMin} 分钟</button><button className="wb-secondary" onClick={timer.nextFocus}>继续专注</button></> : <button className="wb-action" onClick={timer.nextFocus}>准备下一轮</button> : session.phase === 'running' ? <button className="wb-action" onClick={timer.pause}>暂停</button> : <button className="wb-action" disabled={busy} onClick={() => void start()}>{session.phase === 'paused' ? '继续' : '开始'}{session.mode === 'focus' ? '专注' : '休息'}</button>}
+                  <div className="wb-focus-primary-actions">
+                    {session.phase === 'finished' ? session.mode === 'focus' ? <button className="wb-action" onClick={timer.startRest}>休息 {timer.durations.restMin} 分钟</button> : <button className="wb-action" onClick={timer.nextFocus}>准备下一轮</button> : session.phase === 'running' ? <button className="wb-action" onClick={timer.pause}>暂停</button> : <button className="wb-action" disabled={busy} onClick={() => void start()}>{session.phase === 'paused' ? '继续' : '开始'}{session.mode === 'focus' ? '专注' : '休息'}</button>}
+                    <button type="button" className="wb-handoff-trigger" disabled={busy || preview} onClick={() => leaveHandoff()}>留个接力</button>
+                  </div>
+                  {session.phase === 'finished' && session.mode === 'focus' && <button className="wb-secondary" onClick={timer.nextFocus}>继续专注</button>}
                   <button className="wb-secondary" disabled={busy} onClick={() => void complete()}>{data.saving && !preview ? '保存中' : '完成事项'}</button>
                 </div>
               </div>
               <div className="wb-focus-bottom"><span className="wb-meta-value" title="累计专注"><Icon name="timer" /><span className="p0-sr-only">累计专注</span>{spentLabel(session.spentMs)}</span><button className="wb-inline-button wb-icon-button" aria-label="专注设置" data-tooltip="专注设置" aria-expanded={timingOpen} onClick={() => setTimingOpen(value => !value)}><Icon name="settings" /><span className="wb-tooltip" role="tooltip">专注设置</span></button></div>
               <DurationControls timer={timer} open={timingOpen} />
-              <div className="xc-focus-checkout" aria-label="专注收尾与帮助"><button type="button" disabled={busy || preview} onClick={() => leaveHandoff()}>留个接力</button><button type="button" disabled={busy || preview || chat.busy} onClick={askForHelp}>卡住了</button><button type="button" disabled={busy || preview} onClick={() => leaveHandoff(true)}>今天先到这</button></div>
             </>}
+            {savedHandoff?.taskId === selected.id && <button type="button" className="wb-handoff-summary" onClick={() => leaveHandoff('nextStep')} disabled={busy}><Icon name="check" /><span><small>已保存接力</small><span>{savedHandoff.nextStep ? `下一步：${savedHandoff.nextStep}` : savedHandoff.progress || '回来时，从这里接着做'}</span></span><Icon name="arrow" /></button>}
             {(error || timer.storageError) && <p className="wb-error" role="alert">{error || timer.storageError}</p>}
+            </div>
+            <div className="wb-focus-view wb-focus-handoff" data-view="handoff" inert={!handoffRequest} aria-hidden={!handoffRequest} onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeHandoff() } }}>
+              <header className="wb-handoff-heading"><span className="wb-eyebrow">接力现场</span><button type="button" className="wb-handoff-back" onClick={closeHandoff}><Icon name="back" />回到专注</button></header>
+              <h2>{selected.title}</h2>
+              <div className="wb-handoff-clock"><Icon name="timer" /><span>{clockLabel(session.remainingMs)}</span><small>{session.phase === 'paused' ? '已暂停' : '待继续'} · 累计 {spentLabel(session.spentMs)}</small></div>
+              <TaskHandoff key={selected.id} taskId={selected.id} embedded disabled={busy || transitioning || !active || !handoffRequest} focusRequest={handoffRequest} onLoaded={setSavedHandoff} onSaved={value => { setSavedHandoff(value); closeHandoff(); onNotice('接力已保存，下次从这里继续') }} />
+            </div>
+            </div>
           </Glass>
-          <Glass appearance={appearance} className="wb-focus-handoff">
-            <TaskHandoff taskId={selected.id} disabled={busy || transitioning || !active} preview={preview} />
+          <Glass appearance={appearance} className="wb-focus-steps">
+            <TaskSteps key={selected.id} task={selected} disabled={busy || transitioning || !active} onRequestSteps={askForSteps} />
           </Glass>
           <XixiContext key={selected.id} task={selected} now={now} active={active && !transitioning} preview={preview} appearance={appearance} chat={chat} onSettings={onSettings} assistance={assistance?.taskId === selected.id ? assistance : null} />
         </div>

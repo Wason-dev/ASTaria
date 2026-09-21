@@ -286,25 +286,29 @@
 @media(prefers-reduced-motion:reduce) {
   .xc-page[data-spatial=false] .xc-glass-content { animation:none }
 }
-/* Use desktop width for controls and comparison, without a nested scroller or
-   a fixed height that would hide real long plans. Spatial mode keeps its rail. */
-@media(min-width:1100px) {
-  :is(.p0,.app-shell) .xc-page[data-spatial=false] .xc-dialog { margin-bottom:8px }
+/* Keep scenario controls in the first horizontal glass panel. Long plans can
+   still extend the page; only the immersive spatial view retains a rail. */
+@media(min-width:900px) {
+  :is(.p0,.app-shell) .xc-page[data-spatial=false] .xc-dialog { margin-bottom:0 }
+  .xc-page[data-spatial=false] .xc-scroll { padding-bottom:0 }
   .xc-page[data-spatial=false] .xc-header { padding:0 0 14px }
-  .xc-page[data-spatial=false] .xc-scenario-layout { display:grid; grid-template-columns:270px minmax(0,1fr); gap:16px; align-items:start }
+  .xc-page[data-spatial=false] .xc-scenario-layout { display:grid; grid-template-columns:minmax(0,1fr); gap:14px }
+  .xc-page[data-spatial=false] .xc-scenario-start>.xc-glass-content { display:grid; grid-template-columns:minmax(0,1fr) 168px 176px; gap:20px; align-items:end }
+  .xc-page[data-spatial=false] .xc-scenario-choices { min-width:0 }
+  .xc-page[data-spatial=false] .xc-control-heading { margin-bottom:8px }
   .xc-page[data-spatial=false] .xc-lens { margin-top:0 }
-  .xc-page[data-spatial=false] .xc-modes { grid-template-columns:minmax(0,1fr); gap:7px }
-  :is(.p0,.app-shell) .xc-page[data-spatial=false] .xc-modes button { gap:3px; padding:10px 12px; border-radius:12px }
-  .xc-page[data-spatial=false] .xc-modes span { font-size:12px; line-height:1.5 }
-  .xc-page[data-spatial=false] .xc-scenario-start .xc-date-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:6px 10px; margin-top:16px; font-size:12px }
+  .xc-page[data-spatial=false] .xc-modes { grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px }
+  :is(.p0,.app-shell) .xc-page[data-spatial=false] .xc-modes button { gap:3px; padding:9px 11px; border-radius:12px; min-height:65px }
+  .xc-page[data-spatial=false] .xc-modes span { font-size:11px; line-height:1.45 }
+  .xc-page[data-spatial=false] .xc-scenario-start .xc-date-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:5px 8px; margin:0; font-size:11px }
   .xc-page[data-spatial=false] .xc-scenario-start .xc-date-row>label { grid-column:1/-1 }
   :is(.p0,.app-shell) .xc-page[data-spatial=false] .xc-scenario-start .xc-date-row>input { grid-row:2; grid-column:1/-1; width:100%; font-size:13px }
   .xc-page[data-spatial=false] .xc-scenario-start .xc-date-row>span { grid-row:3 }
   .xc-page[data-spatial=false] .xc-scenario-start .xc-date-row>button { grid-row:3; justify-self:end }
-  .xc-page[data-spatial=false] .xc-scenario-actions { align-items:stretch; flex-direction:column; gap:11px; margin:13px 0 0 }
-  .xc-page[data-spatial=false] .xc-scenario-actions p { font-size:12px; line-height:1.6 }
+  .xc-page[data-spatial=false] .xc-scenario-actions { align-items:stretch; flex-direction:column; gap:9px; margin:0 }
+  .xc-page[data-spatial=false] .xc-scenario-actions p { font-size:11px; line-height:1.6 }
   .xc-page[data-spatial=false] .xc-scenario-actions>.xc-primary { width:100%; font-size:13px; padding:9px 12px }
-  .xc-page[data-spatial=false] .xc-budget { flex-wrap:wrap; font-size:12px; gap:5px }
+  .xc-page[data-spatial=false] .xc-budget { flex-wrap:wrap; font-size:11px; gap:5px }
   :is(.p0,.app-shell) .xc-page[data-spatial=false] .xc-budget input { width:58px }
   .xc-page[data-spatial=false] .xc-lens { padding-top:0; border-top:0 }
   .xc-page[data-spatial=false] .xc-section-heading { margin-bottom:11px }
@@ -314,11 +318,22 @@
   .xc-page[data-spatial=false] .xc-day-metrics { margin:8px 0 10px }
   .xc-page[data-spatial=false] .xc-day-column { padding:11px 13px }
   .xc-page[data-spatial=false] .xc-day-column ol { margin-top:6px }
+  .xc-page[data-spatial=false] .xc-comparison:not(:has(.xc-day-column:nth-child(2))) .xc-day-column ol { columns:3 270px; column-gap:26px }
+  .xc-page[data-spatial=false] .xc-comparison:has(.xc-day-column:nth-child(2)) .xc-day-column ol { columns:2 230px; column-gap:20px }
+  .xc-page[data-spatial=false] .xc-day-column li { break-inside:avoid }
   .xc-page[data-spatial=false] .xc-day-column li { padding:6px 0; grid-template-columns:78px minmax(0,1fr); gap:8px }
   .xc-page[data-spatial=false] .xc-day-column .xc-empty { padding:25px 12px }
   .xc-page[data-spatial=false] .xc-apply-row { padding-top:11px; margin-top:10px }
   .xc-page[data-spatial=false] .xc-result-metrics { padding-top:10px }
   .xc-page[data-spatial=false] .xc-deadlines { margin:10px 0 }
+  .xc-page[data-spatial=false] .xc-scenario-result { display:grid; grid-template-columns:auto minmax(0,1fr); gap:10px 24px; align-items:center; padding-top:12px; margin-top:10px; border-top:1px solid var(--xc-line) }
+  .xc-page[data-spatial=false] .xc-result-metrics { grid-column:1; grid-row:1; padding:0; gap:12px }
+  .xc-page[data-spatial=false] .xc-apply-row { grid-column:2; grid-row:1; margin:0; padding:0; border:0 }
+  .xc-page[data-spatial=false] .xc-scenario-result>:is(.xc-warnings,.xc-unscheduled) { grid-column:1/-1; margin:0 }
+}
+@media(min-width:900px) and (max-width:1199px) {
+  .xc-page[data-spatial=false] .xc-scenario-start>.xc-glass-content { grid-template-columns:minmax(0,1fr) 156px 152px; gap:14px }
+  :is(.p0,.app-shell) .xc-page[data-spatial=false] .xc-modes button { padding:8px }
 }
 @media(max-width:700px) {
   :is(.p0,.app-shell) .xc-page .xc-dialog { width:calc(100% - 28px); min-height:0; margin-top:10px }

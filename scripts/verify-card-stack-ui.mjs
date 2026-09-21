@@ -13,12 +13,16 @@ const db = createDatabase(':memory:')
 const today = localDay(new Date())
 for(let i=0;i<6;i++)db.createTask({title:`待安排测试 ${i+1}：准备资料与实验记录`, estimateMin:30,inbox:false})
 for(let i=0;i<5;i++)db.createTask({title:`当天事项 ${i+1}`,due:today,estimateMin:30,inbox:false})
+const edit = action => db.updatePlanner(action, db.getPlanner().revision)
+edit({ type: 'save-routine', routine: { id: 'qa-thursday', title: '生物课', kind: 'class', weekdays: [4], start: '15:00', end: '16:25', location: '实验室', items: ['生物书', '笔记本'], enabled: true } })
+edit({ type: 'save-routine', routine: { id: 'qa-thursday-free', title: '上午空课', kind: 'available', weekdays: [4], start: '10:00', end: '12:00', location: '', items: [], enabled: true } })
+edit({ type: 'set-day-template', date: today, sourceWeekday: 4 })
 const service = createLocalService({ db, vault: { status: async () => true }, complete: async () => { throw Error('UI verification must not invoke the model') }, dataDirectory: '/isolated-companion-qa' })
 const version = await fetch(`${endpoint}/json/version`).then(response => response.json())
 const ws = new WebSocket(version.webSocketDebuggerUrl)
 await new Promise((resolve, reject) => { ws.onopen = resolve; ws.onerror = reject })
 let serial = 0, session, contextId
-const pending = new Map(), checks = [], errors = [], requests = []
+const pending = new Map(), checks = [], errors = [], requests = [], layouts = []
 const send = (method, params = {}, sid = session) => new Promise((resolve, reject) => { const id = ++serial; pending.set(id, { resolve, reject }); ws.send(JSON.stringify({ id, method, params, ...(sid ? { sessionId: sid } : {}) })) })
 const api = request => new Promise(resolve => {
   requests.push({ path: new URL(request.url).pathname, method: request.method })
@@ -66,6 +70,28 @@ try {
   await send('Page.navigate',{url:base});await wait('!!document.querySelector(".home-brand")')
   await click('.home-brand');await byText('#home-menu button','日程');await wait('!!document.querySelector(".pl-overview-unscheduled .task-stack-card")')
   const stack='.pl-overview-unscheduled .task-stack',active=stack+' .task-stack-card[data-active=true]'
+  for (const [width, height] of [[1440, 900], [1366, 768], [1280, 800], [390, 844]]) {
+    await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false }); await delay(450)
+    await evaluate('document.querySelector(".pl-scroll").scrollTop=0;true'); await delay(150)
+    const layout = await evaluate(`(() => {
+      const sections = [...document.querySelectorAll('.pl-overview-grid>section')]
+      const rect = element => { const r = element.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height } }
+      const overview = document.querySelector('.pl-overview'), notes = document.querySelector('.pl-overview-notes'), pending = document.querySelector('.pl-overview-unscheduled'), override = document.querySelector('.pl-day-template')
+      const nestedScroll = [overview, ...overview.querySelectorAll('*')].filter(e => ['auto','scroll'].includes(getComputedStyle(e).overflowY) && e.scrollHeight > e.clientHeight + 1).map(e => e.className)
+      return { overview: rect(overview), sections: sections.map(rect), notes: rect(notes), pending: rect(pending), override: rect(override), overrideText: override.textContent, nestedScroll, horizontalOverflow: document.documentElement.scrollWidth > innerWidth, verticalClip: sections.some(e => e.scrollHeight > e.clientHeight + 1) }
+    })()`)
+    layouts.push({ width, height, ...layout })
+    assert.equal(layout.sections.length, 4, `${width}: four briefing sections`)
+    assert.deepEqual(layout.nestedScroll, [], `${width}: briefing has no nested vertical scroll areas`)
+    assert.equal(layout.verticalClip, false, `${width}: briefing content is not clipped`)
+    assert.equal(layout.horizontalOverflow, false, `${width}: no horizontal page overflow`)
+    assert.ok(Math.abs(layout.notes.top - layout.pending.top) < 1 && layout.notes.right < layout.pending.left, `${width}: carry checklist and pending tasks sit side by side`)
+    assert.ok(layout.overrideText.includes('临时按周四课表') && layout.override.top >= layout.overview.top && layout.override.bottom <= layout.overview.bottom, `${width}: full temporary timetable notice is inside the briefing`)
+    if (width >= 1100) assert.ok(layout.sections.every(section => Math.abs(section.top - layout.sections[0].top) < 1), `${width}: all four sections share the top row`)
+    checks.push(`${width}×${height}: natural briefing, side-by-side preparation/pending, full override notice`)
+    await shot(`overview-${width}x${height}`)
+  }
+  await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false }); await delay(300)
   const activeText=()=>evaluate(`document.querySelector(${JSON.stringify(active)}).textContent`)
   const first=await activeText()
   await check('pending queue uses stacked cards without disclosure or vertical list','!document.querySelector(".pl-disclosure")&&document.querySelectorAll(".pl-overview-unscheduled .task-stack-card").length===1')
@@ -97,7 +123,7 @@ try {
   await shot('stack-month')
   await byText('.pl-segment button','周');await wait('!!document.querySelector(".pl-overview-unscheduled .task-stack")')
   await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:false});await delay(300)
-  await check('compact queue stays within its column without horizontal overflow',`(()=>{const e=document.querySelector('${stack}'),r=e.getBoundingClientRect(),p=e.closest('.pl-overview-notes').getBoundingClientRect();return r.left>=p.left&&r.right<=p.right+1&&document.documentElement.scrollWidth<=innerWidth})()`)
+  await check('compact queue stays within its column without horizontal overflow',`(()=>{const e=document.querySelector('${stack}'),r=e.getBoundingClientRect(),p=e.closest('.pl-overview-unscheduled').getBoundingClientRect();return r.left>=p.left&&r.right<=p.right+1&&document.documentElement.scrollWidth<=innerWidth})()`)
   await evaluate(`document.querySelector('${stack}').scrollIntoView({block:'nearest'});true`)
   const touchBefore=await activeText()
   const touchPoint=await evaluate(`(()=>{const r=document.querySelector('${active}').getBoundingClientRect();return{x:r.x+r.width/2,y:r.y+r.height/2}})()`)
@@ -122,6 +148,6 @@ try {
   await check('last card disables the next button',`document.querySelector('.home-agenda-undated .task-stack button[aria-label="未定日期：下一项"]').disabled`)
   await check('a fresh wheel gesture at the boundary can scroll the parent',`(()=>{const e=document.querySelector('.home-agenda-undated .task-stack'),event=new WheelEvent('wheel',{bubbles:true,cancelable:true,deltaY:90});e.dispatchEvent(event);return !event.defaultPrevented})()`)
   assert.deepEqual(errors,[])
-  await writeFile(`${output}/results.json`,JSON.stringify({checks,errors},null,2));console.log(`PASS ${checks.length} card-stack UI checks (${output})`)
+  await writeFile(`${output}/results.json`,JSON.stringify({checks,errors,layouts},null,2));console.log(`PASS ${checks.length} card-stack UI checks (${output})`)
 } catch(error) {await shot('failure').catch(()=>{});await writeFile(`${output}/failure.json`,JSON.stringify({message:error.message,checks,errors},null,2));throw error}
 finally {if(contextId)await send('Target.disposeBrowserContext',{browserContextId:contextId},null);ws.close();service.close()}

@@ -107,17 +107,18 @@ test('retract after task commit keeps business changes and explicit undo working
   const request = input()
   const pending = xixi.chat(request)
   await entered.promise
-  const operation = db.listOperations({ requestId: request.requestId })[0]
+  const operation = db.listOperations({ requestId: request.requestId }).find(operation => operation.kind !== 'planner')
   assert.equal(db.listTasks().length, 1)
   db.retractRequest(request)
   waiting.resolve(reply('这个回复不应该落库'))
   const result = await pending
   assert.equal(result.status, 'failed')
-  assert.equal(result.operations.length, 1)
+  assert.equal(result.operations.length, 2)
   assert.equal(db.listTasks().length, 1)
   assert.ok(db.listMessages('main').every(message => message.content !== '这个回复不应该落库'))
   db.undoOperation(operation.id)
   assert.equal(db.listTasks().length, 0)
+  assert.equal(db.getPlanner().blocks.length, 0)
 })
 
 test('retracted questions are hidden and HTTP fallback never reports unknown requests as success', async t => {

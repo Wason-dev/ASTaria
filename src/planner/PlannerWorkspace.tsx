@@ -39,7 +39,7 @@ export function PlannerWorkspace({ active, initialMode = 'week', tasks, tasksLoa
   const [selected, setSelected] = useState(() => localDay(now)), [anchor, setAnchor] = useState(() => now)
   const [mode, setMode] = useState<PlannerMode>(initialMode), [direction, setDirection] = useState(1)
   const view = mode === 'month' ? 'calendar' : 'timetable'
-  const [routine, setRoutine] = useState<Routine | 'new' | null>(null), [taskId, setTaskId] = useState<string | null>(null)
+  const [routine, setRoutine] = useState<{ value: Routine | 'new'; source?: { date: string; weekday: number } } | null>(null), [taskId, setTaskId] = useState<string | null>(null)
   const [creating, setCreating] = useState(false), [importing, setImporting] = useState(false), [routinesOpen, setRoutinesOpen] = useState(false)
   const [chatOpen, setChatOpen] = useState(false), [draft, setDraft] = useState(''), [actionError, setActionError] = useState('')
   const [chatPresent, setChatPresent] = useState(false)
@@ -127,7 +127,6 @@ export function PlannerWorkspace({ active, initialMode = 'week', tasks, tasksLoa
         <div className="pl-page-title"><h2 ref={heading} tabIndex={-1}>{title}</h2></div>
         <div className="pl-board-toolbar"><div className="pl-period"><button className="pl-icon-button" onClick={() => move(-1)} aria-label={mode === 'month' ? '上个月' : mode === 'week' ? '上一周' : '前一天'}><Icon name="left" /></button><strong aria-live="polite">{periodTitle}</strong><button className="pl-icon-button" onClick={() => move(1)} aria-label={mode === 'month' ? '下个月' : mode === 'week' ? '下一周' : '后一天'}><Icon name="right" /></button></div><div><button className="pl-secondary" onClick={() => select(localDay(now))}>今天</button><div className="pl-segment" role="group" aria-label="日程视图">{(['month','week','day'] as const).map(value => <button key={value} type="button" data-mode={value} aria-pressed={mode === value} onClick={() => changeMode(value)}>{value === 'month' ? '月' : value === 'week' ? '周' : '日'}</button>)}</div></div></div>
         <div className="pl-header-actions">
-          <button className="pl-icon-button" title={palette.theme === 'dark' ? '切换浅色' : '切换深色'} aria-label={palette.theme === 'dark' ? '切换浅色' : '切换深色'} onClick={() => appearance.setValue({ ...palette, theme: palette.theme === 'dark' ? 'light' : 'dark' })}><Icon name={palette.theme === 'dark' ? 'sun' : 'moon'} /></button>
           <button className="pl-secondary pl-header-edit" aria-label="每周安排" title="每周安排" onClick={() => setRoutinesOpen(true)}><Icon name="edit" /><span>每周安排</span></button>
           <button className="pl-secondary pl-header-add" aria-label="记录事项" title="记录事项" onClick={() => setCreating(true)}><Icon name="plus" /><span>记录事项</span></button>
           <button ref={chatTrigger} disabled={!state} className="pl-primary" aria-label="交给析熙" aria-expanded={chatOpen} onClick={() => chatOpen ? closeChat() : setChatOpen(true)}><Icon name="send" /><span className="pl-chat-action-label">交给析熙</span></button>
@@ -136,12 +135,15 @@ export function PlannerWorkspace({ active, initialMode = 'week', tasks, tasksLoa
       {(planner.error || tasksError) && <p className="pl-error" role="alert">{planner.error || tasksError}<button onClick={() => { void planner.refresh(); onRefresh() }}>重新读取</button></p>}
       {!state && <div className="pl-empty">{planner.loading ? '正在读取日程' : '日程暂不可用'}</div>}
       {state && <>
-        {view === 'timetable' && !state.timetableConfirmed && <div className="pl-setup"><span>核对课程和可用时间 · 默认含晚自习与周末 09:00–22:00，可在每周安排中调整</span><div><button onClick={() => { setImportDone(false); setImporting(true) }}>载入旧课表</button><button onClick={() => setRoutine('new')}>自己录入</button><button disabled={planner.saving} onClick={() => void safeAct({ type: 'import-routines', routines: [] }, '已确认每周安排')}>已核对完成</button></div></div>}
+        {view === 'timetable' && !state.timetableConfirmed && <div className="pl-setup"><span>核对课程和可用时间 · 默认含晚自习与周末 09:00–22:00，可在每周安排中调整</span><div><button onClick={() => { setImportDone(false); setImporting(true) }}>载入旧课表</button><button onClick={() => setRoutine({ value: 'new' })}>自己录入</button><button disabled={planner.saving} onClick={() => void safeAct({ type: 'import-routines', routines: [] }, '已确认每周安排')}>已核对完成</button></div></div>}
         {pane(<PlannerOverview view={view} selected={selected} anchor={anchor} now={now} state={state} tasks={tasks} saving={planner.saving} error={actionError}
           onMoveDay={amount => select(localDay(shiftDay(parseDay(selected), amount)))} onTask={setTaskId} onCreate={() => setCreating(true)} onAct={safeAct} />, `pl-overview ${view === 'calendar' ? 'pl-calendar-summary' : 'pl-day-panel'}`)}
         <div className="pl-layout" data-chat={chatPresent || chatOpen} data-chat-open={chatOpen}>
           {pane(<>
-          <div className="pl-board-scroll"><div key={mode} className="pl-mode-frame" data-mode={mode}>{mode === 'month' ? <CalendarBoard state={state} tasks={tasks} selected={selected} anchor={anchor} now={now} mode="month" direction={direction} onSelect={select} /> : <TimetableBoard state={state} tasks={tasks} selected={selected} anchor={anchor} now={now} mode={mode} direction={direction} onSelect={select} onRoutine={setRoutine} onTask={setTaskId} />}</div></div>
+          <div className="pl-board-scroll"><div key={mode} className="pl-mode-frame" data-mode={mode}>{mode === 'month' ? <CalendarBoard state={state} tasks={tasks} selected={selected} anchor={anchor} now={now} mode="month" direction={direction} onSelect={select} /> : <TimetableBoard state={state} tasks={tasks} selected={selected} anchor={anchor} now={now} mode={mode} direction={direction} onSelect={select} onRoutine={(item, date) => {
+            const override = state.dayOverrides?.[date]
+            setRoutine({ value: item, source: override ? { date, weekday: override.sourceWeekday } : undefined })
+          }} onTask={setTaskId} />}</div></div>
           <div className="pl-legend"><span><i data-kind="available" />可安排</span><span><i data-kind="plan" />计划</span><span>◇ 截止</span>{view === 'timetable' && <span><i data-kind="class" />固定占用</span>}<span className="pl-legend-note">{state.timetableConfirmed ? '按每周安排计算' : '仅统计已知时段'}</span></div></>, 'pl-board')}
           <dialog ref={chatColumn} className="pl-chat-column" aria-label="日程析熙" onKeyDown={event => {
             if (event.key === 'Escape' && !event.defaultPrevented && !event.nativeEvent.isComposing) {
@@ -153,10 +155,10 @@ export function PlannerWorkspace({ active, initialMode = 'week', tasks, tasksLoa
       </>}
       {tasksLoading && <span className="pl-loading" role="status">正在同步事项</span>}
     </div></div>
-    {routine && state && <RoutineDialog routine={routine === 'new' ? undefined : routine} state={state} act={act} onClose={() => setRoutine(null)} onNotice={onNotice} />}
+    {routine && state && <RoutineDialog routine={routine.value === 'new' ? undefined : routine.value} source={routine.source} state={state} act={act} onClose={() => setRoutine(null)} onNotice={onNotice} onBrowseRoutines={() => { setRoutine(null); setRoutinesOpen(true) }} />}
     {selectedTask && state && <TaskPlanDialog task={selectedTask} state={state} selected={selected} act={act} onClose={() => setTaskId(null)} onNotice={onNotice} onRefresh={onRefresh} />}
     {creating && <CreateTaskDialog selected={selected} onClose={() => setCreating(false)} onRefresh={onRefresh} onNotice={onNotice} />}
     {importing && <PlannerDialog title="载入旧课表" onClose={() => setImporting(false)} busy={planner.saving} closeRequested={importDone}><p>项目里保存着一份周一到周五的旧课表，载入后请核对课程、空课和时间</p><p className="pl-muted">午休会作为休息保留；已有晚自习和自行添加的安排都会保留</p><div className="pl-import-preview">{WEEKDAYS.map(day => <div key={day}><strong>{day}</strong><span>{weekSchedule(day).filter(slot => slot.kind !== 'free' && slot.kind !== 'blank' && slot.period !== '午休').map(slot => slot.subject).join(' · ')}</span></div>)}</div>{actionError && <p className="pl-error" role="alert">{actionError}</p>}<button className="pl-primary" disabled={planner.saving} onClick={() => void loadLegacy()}>载入并核对</button></PlannerDialog>}
-    {routinesOpen && state && <PlannerDialog title="每周安排" onClose={() => setRoutinesOpen(false)}><div className="pl-routine-list">{state.routines.map(item => <button key={item.id} className="pl-day-task" onClick={() => { setRoutinesOpen(false); setRoutine(item) }}><strong>{item.title}{!item.enabled ? ' · 已停用' : ''}</strong><small>{item.weekdays.map(day => `周${['日','一','二','三','四','五','六'][day]}`).join('、')}　{item.start}–{item.end}</small></button>)}</div><button className="pl-primary" onClick={() => { setRoutinesOpen(false); setRoutine('new') }}><Icon name="plus" />添加时段</button></PlannerDialog>}
+    {routinesOpen && state && <PlannerDialog title="每周安排" onClose={() => setRoutinesOpen(false)}><div className="pl-routine-list">{state.routines.map(item => <button key={item.id} className="pl-day-task" onClick={() => { setRoutinesOpen(false); setRoutine({ value: item }) }}><strong>{item.title}{!item.enabled ? ' · 已停用' : ''}</strong><small>{item.weekdays.map(day => `周${['日','一','二','三','四','五','六'][day]}`).join('、')}　{item.start}–{item.end}</small></button>)}</div><button className="pl-primary" onClick={() => { setRoutinesOpen(false); setRoutine({ value: 'new' }) }}><Icon name="plus" />添加时段</button></PlannerDialog>}
   </section></GlassSamplingContext.Provider>
 }

@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { validateModelSettings } from './modelSettings.mjs'
 import { ValidationError, knownKeys, identifier, text, object, choice, dateTime, day, clockTime, taskInput, questionOptions, validateMemory } from './validation.mjs'
 
 const columns = {
@@ -8,7 +9,7 @@ const columns = {
   task_completion_history: ['id', 'taskId', 'beforeStatus', 'completionDoneAt', 'completedAt', 'closedAt'], state: ['key', 'value'],
 }
 const documentTables = new Set(['areas', 'tasks', 'events', 'availability', 'assignments', 'memories', 'operations', 'turns', 'summaries'])
-const stateAllowed = key => ['activeConversation', 'deepseekModel', 'planner-v1', 'planner-v1-weekend-defaults-v1', 'companion-v1', 'preferences:app'].includes(key) || /^(task-undo-version:|generated-area:|deleted-conversation:|deleted-request:)/u.test(key)
+const stateAllowed = key => ['activeConversation', 'deepseekModel', 'planner-v1', 'planner-v1-weekend-defaults-v1', 'companion-v1', 'preferences:app', 'preferences:model-connection'].includes(key) || /^(task-undo-version:|generated-area:|deleted-conversation:|deleted-request:)/u.test(key)
 const fail = message => { throw new ValidationError(message) }
 const checksum = tables => createHash('sha256').update(JSON.stringify(tables)).digest('hex')
 const integer = (value, min = 0, max = Number.MAX_SAFE_INTEGER) => { if (!Number.isSafeInteger(value) || value < min || value > max) fail('备份数字无效'); return value }
@@ -90,7 +91,7 @@ function validateDocument(table, document) {
     knownKeys(document, ['conversationId', 'text', 'throughSeq', 'sourceMessageIds', 'updatedAt'])
     identifier(document.conversationId); text(document.text, '摘要', 16000, { empty: true }); integer(document.throughSeq); ids(document.sourceMessageIds); stamp(document.updatedAt)
   } else if (table === 'turns') {
-    knownKeys(document, ['requestId', 'conversationId', 'text', 'context', 'userMessageId', 'status', 'ownerPid', 'ownerToken', 'createdAt', 'updatedAt', 'error', 'result', 'retractedAt'])
+    knownKeys(document, ['requestId', 'conversationId', 'text', 'context', 'userMessageId', 'status', 'ownerPid', 'ownerToken', 'createdAt', 'updatedAt', 'error', 'result', 'progress', 'retractedAt'])
     identifier(document.requestId); identifier(document.conversationId); identifier(document.userMessageId); text(document.text, '请求', 16000)
     knownKeys(document.context, ['timezone', 'page', 'taskId', 'date']); text(document.context.timezone, '时区', 100)
     if (document.context.taskId !== undefined) identifier(document.context.taskId)
@@ -98,10 +99,12 @@ function validateDocument(table, document) {
     if (document.context.page !== undefined) text(document.context.page, '页面', 100)
     choice(document.status, ['completed', 'failed'], '请求状态'); stamp(document.createdAt); stamp(document.updatedAt); optionalStamp(document.retractedAt)
     if (document.error !== undefined) text(document.error, '请求错误', 2000)
-    if (document.result !== undefined) { knownKeys(document.result, ['requestId', 'conversationId', 'status', 'error']); identifier(document.result.requestId); identifier(document.result.conversationId); choice(document.result.status, ['completed', 'failed'], '请求结果'); if (document.result.error !== undefined) text(document.result.error, '请求错误', 2000) }
+    if (document.progress !== undefined) { object(document.progress); if (JSON.stringify(document.progress).length > 256000) fail('执行进度过大') }
+    if (document.result !== undefined) { knownKeys(document.result, ['requestId', 'conversationId', 'status', 'error', 'execution']); identifier(document.result.requestId); identifier(document.result.conversationId); choice(document.result.status, ['completed', 'failed'], '请求结果'); if (document.result.error !== undefined) text(document.result.error, '请求错误', 2000); if (document.result.execution !== undefined) { object(document.result.execution); if (JSON.stringify(document.result.execution).length > 256000) fail('执行结果过大') } }
   } else if (table === 'operations') {
-    knownKeys(document, ['id', 'requestId', 'summary', 'kind', 'changes', 'createdAt', 'readAt', 'undoneAt', 'undoable', 'requestedChanges', 'removedAssignments', 'memoryId', 'requestedActions', 'plannerBefore', 'plannerAfterRevision', 'planChanges'])
+    knownKeys(document, ['id', 'requestId', 'summary', 'kind', 'changes', 'createdAt', 'readAt', 'undoneAt', 'undoable', 'requestedChanges', 'removedAssignments', 'memoryId', 'requestedActions', 'plannerBefore', 'plannerAfterRevision', 'planChanges', 'parentOperationId'])
     identifier(document.requestId); text(document.summary, '操作摘要', 2000); stamp(document.createdAt); optionalStamp(document.readAt); optionalStamp(document.undoneAt)
+    if (document.parentOperationId !== undefined) identifier(document.parentOperationId)
     if (document.kind !== undefined) choice(document.kind, ['planner', 'forget', 'restored'], '操作类型')
     if (document.undoable !== undefined) bool(document.undoable)
     for (const change of array(document.changes, 50)) {
@@ -162,6 +165,7 @@ export function createBackupStore({ db, transaction, validate }) {
           else if (!['activeConversation', 'deepseekModel'].includes(row.key)) {
             const value = parse(row.value, '备份设置'); object(value)
             if (row.key === 'companion-v1') companion(value)
+            if (row.key === 'preferences:model-connection') validateModelSettings(value)
           }
         }
         if (table === 'conversations') { text(row.title, '对话名', 120); stamp(row.createdAt); stamp(row.updatedAt); choice(row.titleEdited, [0, 1], '对话标题状态') }

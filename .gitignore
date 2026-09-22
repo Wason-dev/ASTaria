@@ -6,3 +6,7 @@ dev-dist
 .DS_Store
 npm-debug.log*
 yarn-error.log*
+
+# DeepSeek Harness dispatch state: local audit chain and signing identity.
+# These files are machine-specific and must never enter the repository.
+.dsh-dispatch/

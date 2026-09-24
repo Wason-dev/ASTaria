@@ -131,17 +131,28 @@ export function createDatabase(filename) {
         db.prepare('DELETE FROM state WHERE key = ?').run(`task-undo-version:${id}`)
         recordTaskCompletion(previous, document)
         if (document.deletedAt) planner.removeTask(id)
+        else planner.syncRecurringTaskPlan(previous, document)
       }
       return changes
     })
     return putDocument(table, id, document, ignore)
   }
   function putDocument(table, id, document, ignore) {
+    if (table === 'tasks') assertOccurrenceUnique(document)
     const result = db.prepare(ignore
       ? `INSERT OR IGNORE INTO ${table} (id, document) VALUES (?, ?)`
       : `INSERT INTO ${table} (id, document) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET document = excluded.document`
     ).run(identifier(id), JSON.stringify(document))
     return result.changes
+  }
+  function assertOccurrenceUnique(task) {
+    if (!task.occurrence || task.deletedAt) return
+    const duplicate = db.prepare(`SELECT id FROM tasks WHERE id != ?
+      AND json_extract(document, '$.deletedAt') IS NULL
+      AND json_extract(document, '$.occurrence.seriesId') = ?
+      AND json_extract(document, '$.occurrence.date') = ? LIMIT 1`)
+      .get(task.id, task.occurrence.seriesId, task.occurrence.date)
+    if (duplicate) fail(`这个重复系列在${task.occurrence.date}已有实例，请修改原实例，不要在同一天重复生成`, 409)
   }
   function remove(table, id) {
     assertTable(table)
@@ -505,6 +516,15 @@ export function createDatabase(filename) {
     return db.prepare(`SELECT seq,document FROM messages WHERE conversationId = ?${before === undefined ? '' : ' AND seq < ?'}${forContext ? " AND json_extract(document,'$.excludeFromContext') = 0" : ''} ORDER BY seq DESC LIMIT ?`)
       .all(conversationId, ...(before === undefined ? [] : [before]), limit).reverse().map(decodeMessage)
   }
+  function hasSavedReasoning(conversationId, requestId) {
+    return Boolean(db.prepare(`SELECT 1 FROM messages WHERE json_extract(document, '$.requestId') = ?
+      AND conversationId = ? AND role = 'assistant'
+      AND COALESCE(json_extract(document, '$.retractedAt'), '') = ''
+      AND COALESCE(json_extract(document, '$.contextRetractedAt'), '') = ''
+      AND COALESCE(json_extract(document, '$.excludeFromContext'), 0) = 0
+      AND length(json_extract(document, '$.reasoningContent')) > 0 LIMIT 1`)
+      .get(identifier(requestId, '请求标识'), identifier(conversationId, '对话标识')))
+  }
   function appendMessage(input) {
     return transaction(() => appendMessageRecord(input))
   }
@@ -522,6 +542,7 @@ export function createDatabase(filename) {
     object(input, '消息')
     assertTurnWritable(input.requestId, input.sourceMessageIds)
     if (input.question !== undefined && (input.role !== 'assistant' || input.toolCalls?.length)) fail('快捷问题只能附在完整的析熙消息中')
+    if (input.reasoningContent != null && (input.role !== 'assistant' || typeof input.reasoningContent !== 'string' || input.reasoningContent.length > 2000000)) fail('模型思考内容格式不正确')
     let sourceMessageIds
     if (input.sourceMessageIds !== undefined) {
       if (!Array.isArray(input.sourceMessageIds) || input.sourceMessageIds.length > 10000) fail('消息来源列表不正确')
@@ -536,6 +557,10 @@ export function createDatabase(filename) {
       taskId: input.taskId === undefined ? undefined : identifier(input.taskId, '任务标识'),
       toolCallId: input.toolCallId === undefined ? undefined : identifier(input.toolCallId, '工具调用标识'),
       toolCalls: input.toolCalls === undefined ? undefined : jsonValue(input.toolCalls, '工具调用', 64000),
+      // DeepSeek thinking mode returns reasoning_content alongside the
+      // assistant message. Keep the exact transcript and replay later tool turns;
+      // the UI receives a separate, bounded view of model-returned reasoning.
+      reasoningContent: input.reasoningContent ?? undefined,
       question: input.question === undefined ? undefined : questionOptions(input.question),
       sourceMessageIds,
       createdAt: now(), excludeFromContext: Boolean(sourceMessageIds?.some(id => getMessage(id).excludeFromContext)),
@@ -618,6 +643,21 @@ export function createDatabase(filename) {
       return memory
     })
   }
+  function retireFreeTimeTask(taskId, at = new Date()) {
+    return transaction(() => {
+      const task = get('tasks', identifier(taskId))
+      if (!task || task.deletedAt) return
+      const instant = block => new Date(`${block.date}T${block.start}:00`).getTime()
+      const current = planner.getPlanner()
+      const removable = current.blocks.filter(block => block.taskId === taskId && !block.locked && instant(block) >= at.getTime())
+      for (const block of removable) planner.updatePlanner({ type: 'delete-block', id: block.id }, planner.getPlanner().revision)
+      const retained = planner.getPlanner().blocks.filter(block => block.taskId === taskId)
+      // Locked and already-running arrangements remain under the user's
+      // control. If none remain actionable, archive the internal backing task.
+      if (!retained.some(block => new Date(`${block.date}T${block.end}:00`).getTime() > at.getTime()) && ['todo', 'doing'].includes(task.status)) updateTask(taskId, { status: 'dropped', freeTimeGoalId: null })
+      else if (task.freeTimeGoalId) updateTask(taskId, { freeTimeGoalId: null })
+    })
+  }
   function excludeMessageSources(sourceId, { retractedAt, targetRequestId } = {}) {
       const messages = db.prepare('SELECT seq,document FROM messages').all().map(decodeMessage)
       const initialIds = new Set(Array.isArray(sourceId) ? sourceId : [sourceId])
@@ -648,7 +688,11 @@ export function createDatabase(filename) {
       const companionRow = db.prepare("SELECT value FROM state WHERE key = 'companion-v1'").get()
       if (companionRow) {
         const companion = JSON.parse(companionRow.value)
-        for (const key of ['handoffs', 'wishes', 'scenarios']) companion[key] = companion[key].filter(item => !sourceIds.has(item.source?.messageId))
+        const removedGoals = (companion.freeTimeGoals ?? []).filter(item => sourceIds.has(item.source?.messageId))
+        const removedGoalIds = new Set(removedGoals.map(item => item.id))
+        for (const goal of removedGoals) if (goal.taskId) retireFreeTimeTask(goal.taskId)
+        for (const key of ['handoffs', 'wishes', 'freeTimeGoals', 'scenarios']) companion[key] = (companion[key] ?? []).filter(item => !sourceIds.has(item.source?.messageId))
+        companion.freeTimeHistory = (companion.freeTimeHistory ?? []).filter(item => !removedGoalIds.has(item.goalId))
         db.prepare("UPDATE state SET value = ? WHERE key = 'companion-v1'").run(JSON.stringify(companion))
       }
       for (const summary of all('summaries')) {
@@ -710,6 +754,9 @@ export function createDatabase(filename) {
     return transaction(() => {
       assertTurnWritable(operation.requestId)
       const requestedChanges = clean(operation.changes)
+      const linksOccurrencePlan = operation.changes.some(change => change.table === 'tasks' && change.before?.occurrence &&
+        change.after?.occurrence && !change.after.deletedAt && change.before.occurrence.date !== change.after.occurrence.date)
+      const taskPlannerBefore = linksOccurrencePlan ? planner.getPlanner() : null
       const touched = new Set()
       const removedAssignments = []
       for (const change of operation.changes) {
@@ -736,12 +783,30 @@ export function createDatabase(filename) {
         }
       }
       if (!same(requestedChanges, operation.changes)) operation.requestedChanges = requestedChanges
+      if (taskPlannerBefore && planner.getPlanner().revision !== taskPlannerBefore.revision) {
+        operation.taskPlannerBefore = taskPlannerBefore
+        operation.taskPlannerAfterRevision = planner.getPlanner().revision
+      }
       if (removedAssignments.length) operation.removedAssignments = removedAssignments
       put('operations', operation.id, operation)
       return operation
     })
   }
   function undoOperation(id) {
+    return transaction(() => {
+      const operation = get('operations', id)
+      if (!operation) fail('找不到这项操作', 404)
+      // Older clients may still hold the former automatic-schedule receipt.
+      // Its undo always targets the same creation action as the merged receipt.
+      if (operation.parentOperationId) {
+        const parent = get('operations', operation.parentOperationId)
+        if (!parent || parent.kind === 'planner' || parent.requestId !== operation.requestId || parent.id === id) fail('无法确认这项安排的来源，请重新读取变更记录', 409)
+        return restoreOperation(parent.id)
+      }
+      return restoreOperation(id)
+    })
+  }
+  function restoreOperation(id) {
     return transaction(() => {
       const operation = get('operations', id)
       if (!operation) fail('找不到这项操作', 404)
@@ -761,7 +826,7 @@ export function createDatabase(filename) {
       // this transaction, retaining the planner's normal revision checks so
       // a later manual schedule edit can never be rolled back accidentally.
       for (const child of listOperations({ requestId: operation.requestId }).filter(item => item.parentOperationId === id && !item.undoneAt)) {
-        undoOperation(child.id)
+        restoreOperation(child.id)
       }
       const plannerState = planner.getPlanner()
       for (const change of operation.changes) {
@@ -778,6 +843,7 @@ export function createDatabase(filename) {
         else put(change.table, change.id, clean(change.before))
       }
       for (const assignment of operation.removedAssignments ?? []) put('assignments', assignment.id, fullAssignment(assignment))
+      if (operation.taskPlannerBefore) planner.restorePlanner(operation.taskPlannerBefore, operation.taskPlannerAfterRevision)
       const updated = { ...operation, undoneAt: now() }
       put('operations', id, updated)
       return updated
@@ -792,7 +858,7 @@ export function createDatabase(filename) {
     const limit = scenario ? 128 : 8
     if (!Array.isArray(input.actions) || !input.actions.length || input.actions.length > limit) fail(`单次操作需要 1–${limit} 项安排变更`)
     const requestedActions = jsonValue(input.actions, '安排变更', 100000)
-    for (const action of requestedActions) choice(action?.type, ['save-block', 'delete-block', 'save-details', 'set-day-template', 'remove-day-template', 'edit-weekday'], '析熙安排操作')
+    for (const action of requestedActions) choice(action?.type, ['save-block', 'delete-block', 'save-details', 'set-day-template', 'remove-day-template', 'edit-weekday', 'save-day-event', 'delete-day-event'], '析熙安排操作')
     return transaction(() => {
       assertTurnWritable(requestId)
       const parentOperationId = input.parentOperationId === undefined ? undefined : identifier(input.parentOperationId, '来源操作标识')
@@ -830,7 +896,16 @@ export function createDatabase(filename) {
     if (!Array.isArray(ids) || ids.length > 1000) fail('操作标识列表不正确')
     return transaction(() => {
       const timestamp = now()
+      const related = new Set(ids)
       for (const id of ids) {
+        const operation = get('operations', id)
+        if (!operation) continue
+        const parent = operation.parentOperationId ? get('operations', operation.parentOperationId) : operation
+        if (!parent || parent.kind === 'planner' || parent.requestId !== operation.requestId) continue
+        related.add(parent.id)
+        for (const child of listOperations({ requestId: parent.requestId }).filter(item => item.parentOperationId === parent.id)) related.add(child.id)
+      }
+      for (const id of related) {
         const operation = get('operations', id)
         if (operation) put('operations', id, { ...operation, readAt: timestamp })
       }
@@ -932,7 +1007,7 @@ export function createDatabase(filename) {
     })
   }
   const backup = createBackupStore({ db, transaction, validate: () => {
-    for (const task of all('tasks')) fullTask(task)
+    for (const task of all('tasks')) { fullTask(task); assertOccurrenceUnique(task) }
     for (const area of all('areas')) fullArea(area)
     for (const event of all('events')) fullEvent(event)
     for (const entry of all('availability')) fullAvailability(entry)
@@ -965,18 +1040,18 @@ export function createDatabase(filename) {
   }
 
   return {
-    close, transaction, getModel, setModel, correctMemory,
+    close, transaction, getModel, setModel, correctMemory, retireFreeTimeTask,
     exportData: backup.exportData, importData: backup.importData,
     getPreference: key => readState(`preferences:${identifier(key)}`),
     setPreference: (key, value) => writeState(`preferences:${identifier(key)}`, value, 64000),
-    getCompanionState: () => readState('companion-v1') ?? { handoffs: [], wishes: [], scenarios: [] },
+    getCompanionState: () => readState('companion-v1') ?? { handoffs: [], wishes: [], freeTimeGoals: [], scenarios: [] },
     saveCompanionState: value => writeState('companion-v1', value, 2_000_000),
     getPlanner: planner.getPlanner, updatePlanner: planner.updatePlanner,
     listTasks, getTask: id => get('tasks', id), createTask, updateTask, reopenTask, listTaskCompletionHistory, deleteTask: id => updateTask(id, { deletedAt: now() }),
     listAreas, createArea, renameArea, listEvents, createEvent, deleteEvent,
     getAvailability: date => get('availability', day(date)), saveAvailability,
     saveAssignment, listAssignments: () => all('assignments').sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
-    importLegacy, getActiveConversation, createConversation, listConversations, selectConversation, renameConversation, deleteConversation, ensureConversation, listMessages, appendMessage, getMessage, searchMessages,
+    importLegacy, getActiveConversation, createConversation, listConversations, selectConversation, renameConversation, deleteConversation, ensureConversation, listMessages, hasSavedReasoning, appendMessage, getMessage, searchMessages,
     assertTurnWritable, retractMessage, retractRequest,
     getSummary: conversationId => get('summaries', conversationId), saveSummary,
     listMemories, rememberMemory, forgetMemory,

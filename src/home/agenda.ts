@@ -1,4 +1,20 @@
 import type { Task } from '../domain/task.ts'
+import type { PlanBlock } from '../planner/types.ts'
+
+export type AgendaPlanIndex = ReadonlyMap<string, readonly PlanBlock[]>
+
+/** One shared projection for the month markers, day list and undated list. */
+export function agendaPlanIndex(blocks: readonly PlanBlock[]): AgendaPlanIndex {
+  const index = new Map<string, PlanBlock[]>()
+  for (const block of blocks) {
+    const rows = index.get(block.taskId) ?? []
+    rows.push(block)
+    index.set(block.taskId, rows)
+  }
+  for (const rows of index.values()) rows.sort((a, b) => a.date.localeCompare(b.date)
+    || a.start.localeCompare(b.start) || a.end.localeCompare(b.end) || a.id.localeCompare(b.id))
+  return index
+}
 
 export function localDay(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
@@ -26,18 +42,30 @@ function onDay(value: string | undefined, day: string) {
 }
 
 /** A deadline marks its deadline day, not every preceding day as scheduled work. */
-export function taskOnDay(task: Task, day: string, today: string): boolean {
+export function taskOnDay(task: Task, day: string, today: string, plans?: AgendaPlanIndex): boolean {
   if (!isOpenTask(task)) return false
-  return onDay(task.startAt, day) || onDay(task.due, day)
-    || (day === today && (task.status === 'doing' || (task.fuzzyWindow === 'today' && !agendaDate(task.startAt))))
+  const blocks = plans?.get(task.id)
+  const scheduled = blocks?.length ? blocks.some(block => block.date === day) : onDay(task.startAt, day)
+  return scheduled || onDay(task.due, day)
+    || (day === today && (task.status === 'doing' || (task.fuzzyWindow === 'today' && !blocks?.length && !agendaDate(task.startAt))))
 }
 
-export function agendaItems(tasks: readonly Task[], day: string, today: string): Task[] {
-  return tasks.filter(task => taskOnDay(task, day, today)).sort((a, b) =>
+export function agendaItems(tasks: readonly Task[], day: string, today: string, plans?: AgendaPlanIndex): Task[] {
+  const time = (task: Task) => {
+    const blocks = plans?.get(task.id)
+    const first = blocks?.find(block => block.date === day)
+    return (first ? agendaDate(`${first.date}T${first.start}:00`) : !blocks?.length ? agendaDate(task.startAt) : undefined)?.getTime()
+      ?? agendaDate(task.due)?.getTime() ?? Infinity
+  }
+  return tasks.filter(task => taskOnDay(task, day, today, plans)).sort((a, b) =>
     Number(b.status === 'doing') - Number(a.status === 'doing')
-    || (agendaDate(a.startAt)?.getTime() ?? agendaDate(a.due)?.getTime() ?? Infinity)
-      - (agendaDate(b.startAt)?.getTime() ?? agendaDate(b.due)?.getTime() ?? Infinity)
+    || time(a) - time(b)
     || a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))
+}
+
+export function isUndatedTask(task: Task, plans?: AgendaPlanIndex): boolean {
+  return isOpenTask(task) && !plans?.get(task.id)?.length && !agendaDate(task.startAt)
+    && !task.due && task.fuzzyWindow !== 'today' && task.status !== 'doing'
 }
 
 export function deadlineItems(tasks: readonly Task[]): Task[] {
@@ -70,9 +98,11 @@ export function shiftMonth(date: Date, months: number): Date {
 const timeFormat = new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
 const shortDateFormat = new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric' })
 
-export function dayTaskLabel(task: Task, day: string): string {
+export function dayTaskLabel(task: Task, day: string, plans?: AgendaPlanIndex): string {
   const labels: string[] = []
-  if (onDay(task.startAt, day)) labels.push(task.startAt?.length === 10 ? '安排' : `${timeFormat.format(agendaDate(task.startAt))} 开始`)
+  const blocks = plans?.get(task.id)
+  if (blocks?.length) labels.push(...new Set(blocks.filter(block => block.date === day).map(block => `${block.start}–${block.end}`)))
+  else if (onDay(task.startAt, day)) labels.push(task.startAt?.length === 10 ? '安排' : `${timeFormat.format(agendaDate(task.startAt))} 开始`)
   if (onDay(task.due, day)) labels.push(task.due?.length === 10 ? '截止' : `${timeFormat.format(agendaDate(task.due))} 截止`)
   return labels.join(' · ') || (task.status === 'doing' ? '进行中' : '今日')
 }

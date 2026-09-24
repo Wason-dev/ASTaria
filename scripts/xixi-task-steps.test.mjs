@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { createDatabase } from '../server/database.mjs'
-import { createXixi, contextUnits } from '../server/xixi.mjs'
+import { createXixi, contextUnits, HARD_INPUT_UNITS } from '../server/xixi.mjs'
 import { toggleTaskStep } from '../server/taskSteps.mjs'
 
 const call = (name, args) => ({ choices: [{ message: { content: null, tool_calls: [{ id: randomUUID(), type: 'function', function: { name, arguments: JSON.stringify(args) } }] } }] })
@@ -161,5 +161,6 @@ test('large step lists remain bounded in automatic context and paged reads keep 
   const full = outcomes(f.prompts.at(-1)).at(-1)
   assert.equal(full.steps.length, 1); assert.equal(full.steps[0].id, 'step-24')
   assert.equal(full.steps[0].detail, steps[24].detail); assert.equal(full.steps[0].detailTruncated, false)
-  for (const request of f.prompts) assert.ok(contextUnits(request.messages) + contextUnits(request.tools ?? []) <= 14000)
+  for (const request of f.prompts) assert.ok(contextUnits(request.messages) + contextUnits(request.tools ?? []) <= HARD_INPUT_UNITS)
+  assert.equal(JSON.stringify(environment(f.prompts[0])).includes(steps[24].detail), false, 'automatic context remains a bounded progress summary')
 })

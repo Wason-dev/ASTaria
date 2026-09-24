@@ -22,9 +22,10 @@ export const DECISION_EXIT_MS = DECISION_ENTER_MS
 // The homepage camera is halfway through its visible travel at about 480ms.
 // Hand navigation over here while the remaining optical motion settles.
 export const DECISION_REVEAL_MS = 480
-// Keep outgoing content during the next page's first entrance frames. Ending
-// both at REVEAL_MS creates an empty beat, especially with staggered calendars.
-export const DECISION_CONTENT_EXIT_MS = 720
+// The next workspace is prepared before handover. Finish the outgoing document
+// here so it cannot bleed through the destination's transparent glass. The
+// optical retreat continues independently until DECISION_EXIT_MS.
+export const DECISION_CONTENT_EXIT_MS = DECISION_REVEAL_MS
 
 export const DEFAULT_DECISION_EFFECT: DecisionEffectDetail = {
   active: false,

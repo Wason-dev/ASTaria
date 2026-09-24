@@ -174,13 +174,16 @@ for (const failure of ['conflict', 'stale-revision']) test(`explicit schedule cr
     return reply('这次安排还没有保存。')
   })
   const result = await f.run(input('明天17:15–18:00 PSEC社团活动'))
-  assert.equal(result.status, 'failed')
+  assert.equal(result.status, 'completed')
+  assert.equal(result.execution.status, 'failed')
+  assert.equal(result.execution.reply.mode, 'fallback')
+  assert.equal(f.requests.length, 3, 'a failed write can report failure without repeated forced retries')
   assert.equal(result.operations.length, 0)
   assert.deepEqual(f.db.listTasks(), originalTasks)
   assert.deepEqual(f.db.getPlanner(), expectedPlanner)
 })
 
-test('replaying explicit creation after its child schedule is undone never recreates the removed slot', async t => {
+test('replaying explicit creation after undoing its old child receipt never recreates the task or slot', async t => {
   const f = fixture(t), request = input('明天17:15–18:00 PSEC社团活动')
   const tasks = [{ title: ACTIVITY, schedule: SLOT }]
   f.responses.push(tools(read()), payload => tools(call('create_tasks', { expectedRevision: receipt(payload).revision, tasks })), reply('已保存。'))
@@ -190,14 +193,14 @@ test('replaying explicit creation after its child schedule is undone never recre
   f.db.undoOperation(child.id)
   f.db.finishTurn(request.requestId, { status: 'failed', error: 'simulated interrupted acknowledgement' })
   f.responses.push(() => tools(call('create_tasks', { expectedRevision: f.db.getPlanner().revision, tasks })), payload => {
-    assert.equal(receipt(payload).reused, true)
-    assert.match(receipt(payload).scheduling.notice, /已经被撤销/u)
+    assert.equal(receipt(payload).ok, false)
+    assert.match(receipt(payload).error, /已经被用户撤销/u)
     assert.equal(pending(payload).length, 0)
     return reply('保留已撤销时段的状态。')
   })
   const resumed = await f.run(request)
   assert.equal(resumed.status, 'completed')
-  assert.equal(f.db.listTasks().length, 1)
+  assert.equal(f.db.listTasks().length, 0)
   assert.equal(f.db.getPlanner().blocks.length, 0)
   assert.equal(resumed.operations.length, 2)
   assert.equal(resumed.execution.scheduleRequirements[0].status, 'cancelled')
@@ -212,7 +215,10 @@ test('an atomic schedule cannot redefine the named time range in the user reques
     return reply('尚未保存')
   })
   const result = await f.run(input('明天17:15–18:00 PSEC社团活动'))
-  assert.equal(result.status, 'failed')
+  assert.equal(result.status, 'completed')
+  assert.equal(result.execution.status, 'failed')
+  assert.equal(result.execution.reply.mode, 'fallback')
+  assert.equal(f.requests.length, 3, 'a failed write can report failure without repeated forced retries')
   assert.equal(f.db.listTasks().length, 0)
   assert.equal(f.db.getPlanner().blocks.length, 0)
 })
@@ -263,7 +269,7 @@ test('a planner write for an existing task cannot redefine the time explicitly r
   assert.equal(f.db.listTasks().length, 1)
 })
 
-test('undoing the child schedule before the final reply suppresses stale success and reports the cancellation', async t => {
+test('undoing the old child receipt before the final reply cancels the whole creation and suppresses stale success', async t => {
   const f = fixture(t)
   const staleReply = 'PSEC社团活动已安排明天17:15–18:00。'
   let childId
@@ -276,7 +282,7 @@ test('undoing the child schedule before the final reply suppresses stale success
   const result = await f.run(input('明天17:15–18:00 PSEC社团活动'))
   assert.equal(result.status, 'completed')
   assert.equal(f.requests.length, 3, 'an explicit cancellation must not trigger automatic rescheduling')
-  assert.equal(f.db.listTasks().length, 1)
+  assert.equal(f.db.listTasks().length, 0)
   assert.equal(f.db.getPlanner().blocks.length, 0)
   assert.ok(result.operations.find(operation => operation.id === childId).undoneAt)
   assert.equal(result.execution.scheduleRequirements[0].status, 'cancelled')

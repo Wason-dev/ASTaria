@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { createDatabase } from '../server/database.mjs'
-import { createXixi, contextUnits, XIXI_TOOLS } from '../server/xixi.mjs'
+import { createXixi, contextUnits, XIXI_TOOLS, HARD_INPUT_UNITS } from '../server/xixi.mjs'
 
 const reply = content => ({ choices: [{ message: { role: 'assistant', content } }] })
 const tool = (name, args) => ({ choices: [{ message: { content: null, tool_calls: [{ id: randomUUID(), type: 'function', function: { name, arguments: JSON.stringify(args) } }] } }] })
@@ -14,7 +14,7 @@ const facts = request => JSON.parse(request.messages.find(message => message.con
 
 test('a deadline answer retains the immediately preceding assignment, question and created task ID under a crowded context', async t => {
   const db = createDatabase(':memory:'); t.after(() => db.close())
-  for (let i = 0; i < 24; i++) db.createTask({ title: `更早截止的数学作业${i}`, due: '2026-09-20', estimateMin: 60 })
+  for (let i = 0; i < 100; i++) db.createTask({ title: `更早截止的数学作业${i}`, due: '2026-09-20', estimateMin: 60 })
   let count = 0, created
   const requests = []
   const xixi = createXixi({ db, now: () => new Date('2026-09-19T12:07:00Z'), complete: async request => {
@@ -40,8 +40,9 @@ test('a deadline answer retains the immediately preceding assignment, question a
   assert.equal(db.getTask(created.id).due, '2026-09-23T12:00:00+08:00')
   assert.ok(db.listTasks().filter(task => task.id !== created.id).every(task => task.due === '2026-09-20'))
   assert.equal((await xixi.chat(input('我说的就是刚刚那个作业啊'))).status, 'completed')
-  assert.ok(requests.every(request => contextUnits(request.messages) + contextUnits(request.tools ?? []) <= 14000))
-  assert.ok(facts(requests[2]).tasks.length < 24)
+  assert.ok(requests.every(request => contextUnits(request.messages) + contextUnits(request.tools ?? []) <= HARD_INPUT_UNITS))
+  assert.ok(facts(requests[2]).tasks.length < 100)
+  assert.equal(facts(requests[2]).moreTasksAvailable, true)
 })
 
 test('large historical tool payloads cannot evict a nearby question; raw originals remain intact', async t => {
@@ -60,7 +61,7 @@ test('large historical tool payloads cannot evict a nearby question; raw origina
   assert.doesNotMatch(JSON.stringify(received.messages), /unusedData/)
   assert.equal(db.getMessage(original.id).content, assignment)
   assert.ok(db.getMessage(receipt.id).content.includes('unusedData'))
-  assert.ok(contextUnits(received.messages) + contextUnits(XIXI_TOOLS) < 14000)
+  assert.ok(contextUnits(received.messages) + contextUnits(XIXI_TOOLS) < HARD_INPUT_UNITS)
 })
 
 test('recent-turn reservation still excludes withdrawn sources and separate conversations', async t => {
@@ -78,6 +79,7 @@ test('recent-turn reservation still excludes withdrawn sources and separate conv
 
 test('oversized adjacent originals keep both the subject and ending question with a retrieval reference', async t => {
   const db = createDatabase(':memory:'); t.after(() => db.close())
+  db.setPreference('model-connection', { provider: 'local' })
   for (let index = 0; index < 4; index++) {
     const requestId = randomUUID()
     db.appendMessage({ conversationId: 'assignment', requestId, role: 'user', content: `Agentic AI 作业${index}：${'具体细节'.repeat(1200)}` })
@@ -89,14 +91,22 @@ test('oversized adjacent originals keep both the subject and ending question wit
   assert.match(JSON.stringify(captured.messages), /Agentic AI 作业3|最后确认第3份作业截止时间/)
   assert.ok(captured.messages.some(message => message.role === 'assistant' && message.content.includes('最后确认第3份作业截止时间？')))
   assert.match(JSON.stringify(captured.messages), /search_history/)
-  assert.ok(contextUnits(captured.messages) + contextUnits(captured.tools ?? []) <= 14000)
+  assert.ok(contextUnits(captured.messages) + contextUnits(captured.tools ?? []) <= 24000)
+  assert.ok(captured.messages.some(message => message.content?.includes('原文较长') || message.content?.includes('较长内容已收起')))
 })
 
-test('an oversized current message explains how to recover rather than offering an endless retry', async t => {
+test('the maximum accepted current message fits the larger cloud budget and oversized input is rejected before dispatch', async t => {
   const db = createDatabase(':memory:'); t.after(() => db.close())
   let calls = 0
-  const xixi = createXixi({ db, complete: async () => { calls++; return reply('不应调用') } })
-  const result = await xixi.chat(input('字'.repeat(8000)))
-  assert.equal(result.status, 'failed'); assert.equal(calls, 0)
-  assert.match(result.error, /拆成较短的消息/)
+  const current = '字'.repeat(8000)
+  const xixi = createXixi({ db, complete: async request => {
+    calls++
+    assert.equal(request.messages.findLast(message => message.role === 'user').content, current)
+    assert.ok(contextUnits(request.messages) + contextUnits(request.tools ?? []) <= HARD_INPUT_UNITS)
+    return reply('完整收到')
+  } })
+  const result = await xixi.chat(input(current))
+  assert.equal(result.status, 'completed'); assert.equal(calls, 1)
+  await assert.rejects(xixi.chat(input('字'.repeat(8001))), /8000/)
+  assert.equal(calls, 1)
 })

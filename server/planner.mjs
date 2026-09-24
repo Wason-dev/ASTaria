@@ -9,7 +9,7 @@ const activeTask = task => task && !task.deletedAt && ['todo', 'doing'].includes
 // Completion records time already used; only a dropped/deleted task releases it.
 const occupiesTime = task => task && !task.deletedAt && task.status !== 'dropped'
 const overlaps = (a, b) => a.start < b.end && b.start < a.end
-const limits = { routines: 300, blocks: 3000, details: 5000, checked: 3660, dayOverrides: 3660 }
+const limits = { routines: 300, blocks: 3000, details: 5000, checked: 3660, dayOverrides: 3660, dayEvents: 3000 }
 
 export function defaultPlanner() {
   return {
@@ -18,7 +18,7 @@ export function defaultPlanner() {
       { id: 'default-evening-study', title: '晚自习', kind: 'available', weekdays: [1, 2, 3, 4, 5], start: '18:00', end: '20:00', location: '学校', items: [], enabled: true },
       { id: WEEKEND_DEFAULT_ROUTINE_ID, title: '周末可安排时间', kind: 'available', weekdays: [0, 6], start: '09:00', end: '22:00', location: '', items: [], enabled: true },
     ],
-    blocks: [], details: {}, checked: {}, dayOverrides: {},
+    blocks: [], details: {}, checked: {}, dayOverrides: {}, dayEvents: [],
   }
 }
 
@@ -35,6 +35,24 @@ function strings(value, label, count = 100, length = 160) {
 function timeRange(start, end) {
   clockTime(start, '开始时刻'); clockTime(end, '结束时刻')
   if (start >= end) fail('结束时刻应晚于开始时刻，请将跨天安排拆成两天')
+}
+export function dayEventValue(input) {
+  knownKeys(input, ['id', 'title', 'date', 'start', 'end', 'location', 'items'], '单日活动')
+  const date = day(input.date)
+  timeRange(input.start, input.end)
+  localInstant(date, input.start); localInstant(date, input.end)
+  return {
+    id: identifier(input.id), title: text(input.title, '活动名称', 160), date,
+    start: input.start, end: input.end, location: text(input.location, '地点', 160, { empty: true }),
+    items: strings(input.items, '携带物品'),
+  }
+}
+export function validateDayEvents(events) {
+  // Old planner records and operation receipts have no single-date events.
+  if (events === undefined) return
+  if (!Array.isArray(events) || events.length > limits.dayEvents) fail('单日活动数量无效或过多')
+  const values = events.map(dayEventValue)
+  if (new Set(values.map(event => event.id)).size !== values.length) fail('单日活动标识不可重复')
 }
 function routineValue(input) {
   knownKeys(input, ['id', 'title', 'kind', 'weekdays', 'start', 'end', 'location', 'items', 'enabled'], '固定安排')
@@ -84,7 +102,8 @@ function validateDayOverrides(overrides) {
   }
 }
 function routinesOn(state, date) {
-  return state.dayOverrides?.[date]?.routines ?? state.routines.filter(routine => routine.weekdays.includes(new Date(`${date}T12:00:00`).getDay()))
+  const routines = state.dayOverrides?.[date]?.routines ?? state.routines.filter(routine => routine.weekdays.includes(new Date(`${date}T12:00:00`).getDay()))
+  return [...routines, ...(state.dayEvents ?? []).filter(event => event.date === date).map(event => ({ ...event, kind: 'class', enabled: true }))]
 }
 function blockValue(input) {
   knownKeys(input, ['id', 'taskId', 'date', 'start', 'end', 'locked'], '任务安排')
@@ -191,9 +210,15 @@ export function createPlannerStore({ db, transaction, getTask, listTasks, now = 
     // A done block is still a record of occupied time. Dropped history remains
     // non-occupying, so restoring it does not introduce an active conflict.
     if (restoring && !occupiesTime(task)) return
+    if (task.occurrence) {
+      if (block.date !== task.occurrence.date) fail(`这次重复事项属于${task.occurrence.date}，不能挤到其他日期；明确改期请先更新该实例occurrenceDate，再修改原计划`, 409)
+      if (state.blocks.some(other => other.id !== block.id && other.taskId === task.id)) {
+        fail('这次重复事项只能保留当天一个完整时段；调整日程请沿用原计划ID', 409)
+      }
+    }
     const range = blockRange(block), deadline = dueLimit(task.due)
     if (deadline !== null && Number.isFinite(deadline) && range.end > deadline) fail('安排结束时间超过了任务截止时间', 409)
-    if (routinesOn(state, block.date).some(routine => fixedConflicts(routine, block))) fail('这个时间已有课程或休息安排', 409)
+    if (routinesOn(state, block.date).some(routine => fixedConflicts(routine, block))) fail('这个时间已有课程、休息或固定活动', 409)
     if (state.blocks.some(other => other.id !== block.id && occupiesTime(getTask(other.taskId)) && overlaps(blockRange(other), range))) fail('这个时间已有其他任务安排', 409)
     const plannedTasks = new Set(state.blocks.filter(other => other.id !== block.id).map(other => other.taskId))
     plannedTasks.add(block.taskId)
@@ -227,11 +252,12 @@ export function createPlannerStore({ db, transaction, getTask, listTasks, now = 
   }
   function applyPlannerAction(action, expectedRevision, deferBlockValidation = false) {
     if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0) fail('安排版本不正确')
-    choice(action?.type, ['save-routine', 'delete-routine', 'import-routines', 'edit-weekday', 'set-day-template', 'remove-day-template', 'save-block', 'delete-block', 'save-details', 'check-item'], '安排操作')
+    choice(action?.type, ['save-routine', 'delete-routine', 'import-routines', 'edit-weekday', 'set-day-template', 'remove-day-template', 'save-day-event', 'delete-day-event', 'save-block', 'delete-block', 'save-details', 'check-item'], '安排操作')
     knownKeys(action, ['type', ...({
       'save-routine': ['routine'], 'delete-routine': ['id'], 'import-routines': ['routines'],
       'edit-weekday': ['weekday', 'replacements', 'syncDates'],
       'set-day-template': ['date', 'sourceWeekday'], 'remove-day-template': ['date'],
+      'save-day-event': ['event'], 'delete-day-event': ['id'],
       'save-block': ['block'], 'delete-block': ['id'], 'save-details': ['taskId', 'details'], 'check-item': ['date', 'key', 'checked'],
     }[action?.type] ?? [])], '安排操作')
     return transaction(() => {
@@ -324,6 +350,20 @@ export function createPlannerStore({ db, transaction, getTask, listTasks, now = 
           delete state.dayOverrides[date]
           break
         }
+        case 'save-day-event': {
+          const event = dayEventValue(action.event)
+          const events = state.dayEvents ?? [], index = events.findIndex(item => item.id === event.id)
+          // A reported fixed event is a fact, even outside known availability
+          // or over an existing task. Keep tasks/locks and expose the conflict.
+          state.dayEvents = index < 0 ? [...events, event] : events.map((item, position) => position === index ? event : item)
+          break
+        }
+        case 'delete-day-event': {
+          const id = identifier(action.id), events = state.dayEvents ?? []
+          if (!events.some(event => event.id === id)) fail('找不到这条单日活动', 404)
+          state.dayEvents = events.filter(event => event.id !== id)
+          break
+        }
         case 'save-block': {
           const block = blockValue(action.block)
           const index = state.blocks.findIndex(item => item.id === block.id), previous = state.blocks[index]
@@ -398,12 +438,37 @@ export function createPlannerStore({ db, transaction, getTask, listTasks, now = 
       save(state)
     })
   }
+  // Date edits and their corresponding placement share one transaction. An
+  // estimate is metadata, not permission to resize an existing calendar slot.
+  function syncRecurringTaskPlan(before, after) {
+    if (!before?.occurrence || !after.occurrence || after.deletedAt ||
+      before.occurrence.date === after.occurrence.date) return
+    const state = getPlanner(), blocks = state.blocks.filter(block => block.taskId === after.id)
+    if (!blocks.length) return
+    if (blocks.length !== 1) fail('这次重复事项的原安排不唯一，请先整理原计划再改期', 409)
+    const original = blocks[0]
+    if (original.locked) fail('这次重复事项的安排已锁定，请先解锁再改期', 409)
+    const block = { ...original, date: after.occurrence.date }
+    const windows = routinesOn(state, block.date).filter(routine => routine.enabled && routine.kind === 'available')
+      .sort((a, b) => a.start.localeCompare(b.start)).reduce((ranges, routine) => {
+        const previous = ranges.at(-1)
+        if (previous && routine.start <= previous.end) previous.end = previous.end > routine.end ? previous.end : routine.end
+        else ranges.push({ start: routine.start, end: routine.end })
+        return ranges
+      }, [])
+    if (!windows.some(window => window.start <= block.start && window.end >= block.end)) {
+      fail('目标日期没有可用的完整时段容纳这次重复事项，任务与原计划均保持不变；请先调整可用时间', 409)
+    }
+    validateBlock(block, state)
+    return updatePlanner({ type: 'save-block', block }, state.revision)
+  }
   // Only durable operation snapshots call this, never arbitrary browser input.
   function restorePlanner(snapshot, expectedRevision) {
     return transaction(() => {
       const current = getPlanner()
       if (current.revision !== expectedRevision) fail('安排后来有新的修改，无法直接撤销', 409)
       validateDayOverrides(snapshot.dayOverrides)
+      validateDayEvents(snapshot.dayEvents)
       for (const taskId of new Set([...snapshot.blocks.map(block => block.taskId), ...Object.keys(snapshot.details)])) requireTask(taskId)
       const currentBlocks = new Map(current.blocks.map(block => [block.id, block]))
       for (const block of snapshot.blocks) {
@@ -428,23 +493,33 @@ export function createPlannerStore({ db, transaction, getTask, listTasks, now = 
     })
   }
   function validateState(state) {
-    knownKeys(state, ['revision', 'timetableConfirmed', 'routines', 'blocks', 'details', 'checked', 'dayOverrides'], '备份日程')
+    knownKeys(state, ['revision', 'timetableConfirmed', 'routines', 'blocks', 'details', 'checked', 'dayOverrides', 'dayEvents'], '备份日程')
     if (!Number.isSafeInteger(state.revision) || state.revision < 0) fail('备份日程版本无效')
     boolean(state.timetableConfirmed, '课表确认')
     if (!Array.isArray(state.routines) || state.routines.length > limits.routines || !Array.isArray(state.blocks) || state.blocks.length > limits.blocks) fail('备份日程数量无效')
     if (new Set(state.routines.map(item => item?.id)).size !== state.routines.length || new Set(state.blocks.map(item => item?.id)).size !== state.blocks.length) fail('备份日程标识重复')
     for (const routine of state.routines) routineValue(routine)
-    for (const block of state.blocks) { blockValue(block); if (!getTask(block.taskId)) fail('备份日程关联事项缺失') }
+    const occurrenceTasks = new Set()
+    for (const block of state.blocks) {
+      blockValue(block)
+      const task = getTask(block.taskId)
+      if (!task) fail('备份日程关联事项缺失')
+      if (task.occurrence) {
+        if (block.date !== task.occurrence.date || occurrenceTasks.has(task.id)) fail('备份中的重复实例与其单日唯一安排不一致')
+        occurrenceTasks.add(task.id)
+      }
+    }
     if (!state.details || typeof state.details !== 'object' || Array.isArray(state.details) || Object.keys(state.details).length > limits.details) fail('备份准备信息无效')
     for (const [taskId, details] of Object.entries(state.details)) { identifier(taskId); detailsValue(details); if (!getTask(taskId)) fail('备份准备信息关联事项缺失') }
     if (!state.checked || typeof state.checked !== 'object' || Array.isArray(state.checked) || Object.keys(state.checked).length > limits.checked) fail('备份携带记录无效')
     for (const [date, items] of Object.entries(state.checked)) { day(date); strings(items, '携带记录') }
     validateDayOverrides(state.dayOverrides)
+    validateDayEvents(state.dayEvents)
     if (JSON.stringify(state).length > 2_000_000) fail('安排内容过多，请先整理历史记录', 413)
   }
   function validateStoredState() {
     const stored = read.get(STATE_KEY)
     if (stored) validateState(JSON.parse(stored.value))
   }
-  return { getPlanner, updatePlanner, updatePlannerBatch, removeTask, restorePlanner, validateStoredState }
+  return { getPlanner, updatePlanner, updatePlannerBatch, removeTask, syncRecurringTaskPlan, restorePlanner, validateStoredState }
 }

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
-import { localEndpoint } from './modelSettings.mjs'
+import { localEndpoint, DEFAULT_REASONING_EFFORT, REASONING_EFFORTS } from './modelSettings.mjs'
 import { choice, knownKeys } from './validation.mjs'
+import { readCompletionStream } from './completionStream.mjs'
 const ENDPOINT = 'https://api.deepseek.com/chat/completions'
 export const MODEL = 'deepseek-flash'
 export const MODELS = [
@@ -9,7 +10,7 @@ export const MODELS = [
 ]
 export class ProviderError extends Error {}
 
-async function readJSON(response, label) {
+async function readJSON(response, label, maxBytes = 512 * 1024) {
   try {
     const reader = response.body.getReader(), chunks = []
     let size = 0
@@ -17,7 +18,7 @@ async function readJSON(response, label) {
       const { value, done } = await reader.read()
       if (done) break
       size += value.length
-      if (size > 512 * 1024) { await reader.cancel(); throw new Error('RESPONSE_LIMIT') }
+      if (size > maxBytes) { await reader.cancel(); throw new Error('RESPONSE_LIMIT') }
       chunks.push(value)
     }
     return JSON.parse(Buffer.concat(chunks).toString('utf8'))
@@ -25,21 +26,40 @@ async function readJSON(response, label) {
 }
 
 export function createCompletion(keychain, fetcher = fetch, getModel = () => MODEL, getSettings) {
-  return async payload => {
+  return async (payload, { onDelta } = {}) => {
     const settings = getSettings?.()
     const local = settings?.provider === 'local'
     const label = local ? '本地模型' : 'DeepSeek'
     const model = local ? settings.local.model : getModel()
     if (!model || (!local && !MODELS.some(option => option.id === model))) throw new ProviderError('请在设置中选择有效模型')
     const endpoint = local ? `${localEndpoint(settings.local.baseUrl)}/chat/completions` : ENDPOINT
+    const reasoningEffort = settings?.reasoningEffort ?? DEFAULT_REASONING_EFFORT
+    if (!local && !REASONING_EFFORTS.includes(reasoningEffort)) throw new ProviderError('请在设置中选择有效的思考深度')
+    const thinkingEnabled = !local && reasoningEffort !== 'off'
+    // max_tokens includes reasoning. A short-answer budget of 1800 would cut
+    // thinking off before it can emit the tools. Use the documented provider
+    // default (64K / 128K for Max) for thinking, retain local/off budgets.
+    const streaming = (settings?.streamResponses ?? true) && typeof onDelta === 'function'
+    const body = { ...payload, model, stream: streaming }
+    if (!local) {
+      body.thinking = { type: thinkingEnabled ? 'enabled' : 'disabled' }
+      body.reasoning_effort = thinkingEnabled ? reasoningEffort : 'none'
+      if (thinkingEnabled) delete body.max_tokens
+      body.messages = payload.messages.map(message => message.role === 'assistant'
+        ? { ...message, ...(thinkingEnabled ? { reasoning_content: message.reasoning_content ?? '' } : {}) }
+        : message)
+    }
     const headers = { 'Content-Type': 'application/json' }
     if (!local) headers.Authorization = `Bearer ${await keychain.read()}`
     let response
     try {
       response = await fetcher(endpoint, {
-        method: 'POST', redirect: 'error', signal: AbortSignal.timeout(local ? 180_000 : 75_000),
+        method: 'POST', redirect: 'error', signal: AbortSignal.timeout(thinkingEnabled ? 300_000 : local ? 180_000 : 75_000),
         headers,
-        body: JSON.stringify({ ...payload, model, ...(!local ? { thinking: { type: 'disabled' } } : {}), stream: false }),
+        // DeepSeek's OpenAI-compatible API exposes both the thinking toggle and
+        // effort control. Keep these fields off local providers because Ollama
+        // and LM Studio use different controls. `max` is the app default.
+        body: JSON.stringify(body),
       })
     } catch { throw new ProviderError(local ? '无法连接本地模型，请确认服务已启动、模型已加载；对话已保留，可以重试' : '连接 DeepSeek 暂时失败，对话已保留，可以重试') }
     if (!response.ok) {
@@ -47,8 +67,16 @@ export function createCompletion(keychain, fetcher = fetch, getModel = () => MOD
       throw new ProviderError(local ? '本地模型未接受请求，请检查模型名称、上下文容量和工具调用支持' : response.status === 401 ? 'API Key 未通过验证，请在设置中重新录入' : response.status === 429 ? 'DeepSeek 暂时限流或额度不足，请稍后重试' : 'DeepSeek 暂时无法回复，请稍后重试')
     }
     // Bound upstream data, never reflecting provider response bodies into errors.
-    const result = await readJSON(response, label)
+    const maxBytes = thinkingEnabled ? 4 * 1024 * 1024 : 512 * 1024
+    let result
+    if (streaming && response.headers.get('content-type')?.includes('text/event-stream')) {
+      try { result = await readCompletionStream(response, { maxBytes, onDelta }) }
+      catch { throw new ProviderError(`${label}的流式回复中断，未执行其中不完整的工具调用；已保存进度保留，可以重试`) }
+    } else result = await readJSON(response, label, maxBytes)
     if (!result?.choices?.[0]?.message) throw new ProviderError(`${label}暂未返回完整回复，请重试`)
+    if (['length', 'aborted', 'insufficient_system_resource', 'content_filter'].includes(result.choices[0].finish_reason)) {
+      throw new ProviderError(`${label}的这一轮输出未完成，未执行其中不完整的工具调用；已保存的进度保留，可以重试`)
+    }
     return result
   }
 }

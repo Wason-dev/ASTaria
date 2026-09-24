@@ -62,6 +62,8 @@ test('compact duration labels stay readable and carry rounded minutes into the n
   assert.equal(compactMinutesLabel(27), '27m')
   assert.equal(compactMinutesLabel(59.99), '1h')
   assert.equal(minutesLabel(59.99), '1 小时')
+  assert.equal(minutesLabel(129.228916666666692), '2 小时 10 分钟')
+  assert.equal(minutesLabel(129.505783333333284), '2 小时 10 分钟')
   for (const invalid of [NaN, Infinity, -Infinity, -20]) {
     assert.equal(compactMinutesLabel(invalid), '0m')
     assert.equal(minutesLabel(invalid), '0 分钟')

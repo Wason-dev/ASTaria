@@ -44,7 +44,16 @@ export function XixiWatch({ notices, tasks, disabled, onSelect, compact = false 
 }
 
 function Notice({ notice, tasks, disabled, onSelect, compact }: { notice: BriefingNotice; tasks: Task[]; disabled: boolean; onSelect: (id: string) => void; compact: boolean }) {
+  const [expanded, setExpanded] = useState(false)
+  const detailsId = useId()
+  const trigger = useRef<HTMLButtonElement>(null)
   const related = tasks.filter(task => notice.taskIds.includes(task.id))
+  if (notice.id === 'missing-deadlines') return <div className="wb-watch-item wb-watch-collapsible">
+    <button type="button" ref={trigger} className="wb-watch-toggle" aria-expanded={expanded} aria-controls={detailsId} disabled={disabled} onClick={() => setExpanded(value => !value)}><span>{notice.title}</span><Icon name="chevron" /></button>
+    <div className="wb-insight-reveal" id={detailsId} data-open={expanded} inert={!expanded} aria-hidden={!expanded} onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); setExpanded(false); trigger.current?.focus() } }}><div><div className="wb-watch-details"><p>{notice.body}</p>
+      {related.length > 0 && <ul className="wb-watch-related" aria-label="没有明确截止的事项">{related.map(task => <li key={task.id}><button disabled={disabled} data-focus-origin={`notice-${notice.id}-${task.id}`} onClick={() => onSelect(task.id)}><span>{task.title}</span><span aria-hidden="true">↗</span></button></li>)}</ul>}
+    </div></div></div>
+  </div>
   return <div className="wb-watch-item"><h4 title={notice.body}>{compact && <Icon name="info" />} {notice.title}</h4><p className={compact ? 'p0-sr-only' : undefined}>{notice.body}</p>
     {related.length > 0 && <ul className="wb-watch-related" aria-label="相关事项">{related.map(task => <li key={task.id}><button disabled={disabled} data-focus-origin={`notice-${notice.id}-${task.id}`} onClick={() => onSelect(task.id)}><span>{task.title}</span><span aria-hidden="true">↗</span></button></li>)}</ul>}
   </div>

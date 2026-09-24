@@ -38,10 +38,7 @@
 .wb-heading h2:focus,.wb-focus-main h2:focus { outline: none }
 .wb-heading p { margin: 0; color: var(--wb-muted); font-size: var(--wb-font) }
 .wb-overview-heading { display: flex; align-items: end; justify-content: space-between; gap: 24px; margin-bottom: 22px }
-.wb-today-metrics { display: flex; align-items: center; gap: 24px; margin: 0 0 3px; flex: none }
-.wb-today-metrics > div { display: flex; flex-direction: column-reverse; gap: 3px; padding-left: 18px; border-left: 1px solid var(--wb-line) }
-.wb-today-metrics dt { font-size: 10px; color: var(--wb-muted); white-space: nowrap }
-.wb-today-metrics dd { margin: 0; color: #48515a; font-size: calc(var(--wb-font) + 7px); font-weight: 350; line-height: 1.2; font-variant-numeric: tabular-nums }
+.wb-today-metrics { --metrics-muted:var(--wb-muted); --metrics-line:var(--wb-line); --metrics-ink:#48515a }
 .wb-brief.wb-glass { padding: 16px 22px 18px; margin-bottom: 28px; box-shadow: 0 6px 25px rgb(37 45 57 / calc(var(--wb-shadow) * .65)) }
 .wb-brief::after { content: ''; position: absolute; inset: 0 24px auto; height: 1px; background: linear-gradient(90deg, transparent, #b5a17845, #ffffff60, transparent); pointer-events: none }
 .wb-brief-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px }
@@ -272,8 +269,6 @@
 .p0 .wb-customize footer button { padding: 6px 10px; font-size: 11px; border-radius: 999px; background: #fff6 }
 @media (max-width: 760px) {
   .wb-overview-heading { align-items: start; gap: 16px }
-  .wb-today-metrics { gap: 12px }
-  .wb-today-metrics > div { padding-left: 10px }
   .wb-brief-main { grid-template-columns: minmax(0,1fr) 155px; gap: 18px }
   .wb-brief-rhythm { padding-left: 16px }
   .wb-watch { padding-left: 0 }
@@ -291,11 +286,6 @@
 }
 @media (max-width: 600px) {
   .wb-overview-heading { flex-direction: column; gap: 16px }
-  .wb-today-metrics { gap: 20px; width: 100% }
-  .wb-today-metrics > div { flex-direction: row; align-items: baseline; gap: 8px; padding-left: 14px }
-  .wb-today-metrics > div:first-child { border-left: 0; padding-left: 0 }
-  .wb-today-metrics dt { font-size: 9px }
-  .wb-today-metrics dd { font-size: 16px }
   .wb-brief.wb-glass { padding: 15px 17px 17px }
   .wb-brief-main { grid-template-columns: minmax(0,1fr); gap: 16px }
   .wb-brief-rhythm { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; border-left: 0; border-top: 1px solid #99886825; padding: 10px 0 0 }
@@ -352,3 +342,25 @@
   .workbench[data-active] :is(.home-glass-surface,.wb-toolbar,.wb-glass-content,.wb-task-body,.wb-heading,.wb-section-heading) { animation: none }
   .workbench[data-active] .home-glass-surface::after { animation: none }
 }
+.wb-completed-heading { align-items: center }
+.wb-completed-navigation { display: flex; align-items: center; gap: 10px; color: var(--wb-muted); font-size: 10px }
+.wb-completed-switch,.wb-completed-clear { display: inline-flex; align-items: center; gap: 5px; border: 0; padding: 3px 0; background: transparent; color: #72684f; font-size: 10px; cursor: pointer; transition: color 180ms, opacity 180ms }
+.wb-completed-switch:hover,.wb-completed-clear:hover { color: #9b7d42 }
+.wb-completed-switch .wb-icon { width: 11px; height: 11px }
+.wb-completed-content[data-leaving=true] { animation: wb-content-out 130ms both }
+.wb-completed-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin: 0 0 10px; font-size: 10px; color: var(--wb-muted) }
+.wb-completed-filters label { display: inline-flex; align-items: center; gap: 4px }
+.wb-completed-filters input { min-width: 0; border: 1px solid var(--wb-line); border-radius: 7px; padding: 5px 7px; background: #ffffff35; color: var(--wb-text); font: inherit }
+.wb-completed-search { flex: 1 1 130px }
+.wb-completed-search input { width: 100% }
+.wb-completed-note { margin: 8px 2px 0; color: var(--wb-muted); font-size: 10px }
+.wb-completed-pagination { display: flex; align-items: center; justify-content: flex-end; gap: 9px; margin-top: 9px; color: var(--wb-muted); font-size: 10px }
+.wb-completed-pagination button { display: inline-flex; border: 0; border-radius: 50%; padding: 4px; background: transparent; color: inherit; cursor: pointer }
+.wb-completed-pagination button:first-of-type .wb-icon { transform: rotate(90deg) }
+.wb-completed-pagination button:last-of-type .wb-icon { transform: rotate(-90deg) }
+.wb-completed-pagination button:disabled { opacity: .35; cursor: default }
+.wb-watch-toggle { display: flex; align-items: center; justify-content: space-between; width: 100%; border: 0; padding: 0; background: transparent; color: #4b535b; text-align: left; font: inherit; cursor: pointer }
+.wb-watch-toggle .wb-icon { width: 12px; height: 12px; transition: transform 180ms }
+.wb-watch-toggle[aria-expanded=true] .wb-icon { transform: rotate(180deg) }
+.wb-watch-details { padding-top: 7px }
+@media (max-width: 600px) { .wb-completed-filters { align-items: stretch } .wb-completed-search { flex-basis: 100% } .wb-completed-filters label { flex: 1 } .wb-completed-filters input { width: 100% } }

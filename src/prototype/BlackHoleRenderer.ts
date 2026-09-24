@@ -11,10 +11,12 @@ import type { DecisionEffectDetail } from './decisionEffect'
 import type { ResponseEffectSettings, ResponsePhase } from './responseEffects'
 import { nextRenderDeadline, normalizeRenderProfile, renderFrameIsDue, resolveRenderProfile } from './renderProfile'
 import type { RenderProfile, RenderScene } from './renderProfile'
+import { STRING_FLIGHT_EVENT, STRING_FLIGHT_START_RADIUS, getStringFlight, getStringFlightMode, getStringFlightEdgeFrame, getStringFlightEdgePull, publishStringFlightProjection, resolveStringFlightCamera } from './stringFlight'
 export type { ResponseEffectSettings, ResponsePhase } from './responseEffects'
 export type { RenderProfile } from './renderProfile'
 export type { DecisionEffectDetail } from './decisionEffect'
 export { setDecisionEffect, beginDecisionExit, DECISION_EXIT_MS } from './decisionEffect'
+export { setStringFlight, getStringFlight, getStringFlightMode } from './stringFlight'
 
 export type Quality = AdaptiveQuality
 export type QualityMode = Quality | 'auto'
@@ -51,6 +53,8 @@ export interface RenderStats {
   renderScene: RenderScene
   targetFps: number
   decisionEffect: ReturnType<DecisionEffectController['getSnapshot']>
+  stringFlightProgress: number
+  cameraRadius: number
 }
 
 interface CameraSpring {
@@ -229,6 +233,8 @@ export class BlackHoleRenderer {
   private readonly adaptiveQuality = new AdaptiveQualityController()
   private readonly responseEffect = new ResponseEffectController()
   private readonly decisionEffect = new DecisionEffectController()
+  private stringFlightProgress = getStringFlight()
+  private stringFlightMode = getStringFlightMode()
   private readonly responseWeights = new THREE.Vector3(1, 0, 0)
   private cssWidth = 0
   private cssHeight = 0
@@ -293,6 +299,9 @@ export class BlackHoleRenderer {
         uCriticalImpact: { value: geodesics.criticalImpact },
         uMaxImpact: { value: geodesics.maxImpact },
         uCameraRadius: { value: geodesics.cameraRadius },
+        uFlightCameraRadius: { value: STRING_FLIGHT_START_RADIUS },
+        uFlightEdgeFocus: { value: 0 },
+        uFlightEdgePull: { value: new THREE.Vector3(0, 0, .1) },
         uResponseStrength: { value: 0 },
         uResponseReply: { value: 0 },
         uResponseTime: { value: 0 },
@@ -323,6 +332,7 @@ export class BlackHoleRenderer {
     host.addEventListener('pointerleave', this.handlePointerLeave)
     window.addEventListener(DECISION_EFFECT_EVENT, this.handleDecisionEffect)
     window.addEventListener(DECISION_EXIT_EVENT, this.handleDecisionExit)
+    window.addEventListener(STRING_FLIGHT_EVENT, this.handleStringFlight)
     this.decisionEffect.setDetail(getDecisionEffect())
     document.addEventListener('visibilitychange', this.handleVisibility)
     this.motionQuery.addEventListener('change', this.handleMotion)
@@ -494,6 +504,8 @@ export class BlackHoleRenderer {
       renderScene: this.renderScene,
       targetFps: this.targetFps,
       decisionEffect: this.decisionEffect.getSnapshot(this.decisionMotionIsReduced()),
+      stringFlightProgress: this.stringFlightProgress,
+      cameraRadius: this.material.uniforms.uFlightCameraRadius.value,
     }
   }
 
@@ -513,6 +525,7 @@ export class BlackHoleRenderer {
     this.host.removeEventListener('pointerleave', this.handlePointerLeave)
     window.removeEventListener(DECISION_EFFECT_EVENT, this.handleDecisionEffect)
     window.removeEventListener(DECISION_EXIT_EVENT, this.handleDecisionExit)
+    window.removeEventListener(STRING_FLIGHT_EVENT, this.handleStringFlight)
     this.renderer.domElement.removeEventListener('webglcontextlost', this.handleContextLost)
     this.renderer.domElement.removeEventListener('webglcontextrestored', this.handleContextRestored)
     this.geometry.dispose()
@@ -536,6 +549,7 @@ export class BlackHoleRenderer {
 
   private ambientIsRunning() {
     return !this.disposed && !this.contextLost && !this.visibilityPaused && !this.paused && !this.reducedMotion
+      && (this.stringFlightProgress < 1 || this.stringFlightMode === 'edge')
       && !(this.decisionEffect.getSnapshot().active && this.decisionMotionIsReduced())
   }
 
@@ -614,9 +628,13 @@ export class BlackHoleRenderer {
   }
 
   private requestFrame() {
-    if (!this.raf && !this.disposed && !this.contextLost && !this.visibilityPaused) {
+    if (!this.raf && !this.disposed && !this.contextLost && !this.visibilityPaused && !this.stringFlightIsCovered()) {
       this.raf = requestAnimationFrame(this.frame)
     }
+  }
+
+  private stringFlightIsCovered() {
+    return this.stringFlightProgress >= 1 && this.stringFlightMode === 'center'
   }
 
   private syncResponseEffect(delta: number) {
@@ -661,6 +679,30 @@ export class BlackHoleRenderer {
       uniforms.uRoll.value = THREE.MathUtils.degToRad(THREE.MathUtils.lerp(this.cameraMotion.roll.value, 5, amount))
       uniforms.uInclination.value = THREE.MathUtils.degToRad(this.cameraMotion.inclination.value + state.inclinationOffset)
     }
+    // Overlay the scrubbed flight after the ordinary/decision camera. Exact
+    // zero restores that path without changing any camera spring or target.
+    uniforms.uFlightCameraRadius.value = STRING_FLIGHT_START_RADIUS
+    uniforms.uFlightEdgeFocus.value = this.stringFlightMode === 'edge'
+      ? THREE.MathUtils.smoothstep(this.stringFlightProgress, .4, .96) : 0
+    const pull = getStringFlightEdgePull()
+    uniforms.uFlightEdgePull.value.set(pull.angle,
+      this.stringFlightMode === 'edge' && this.stringFlightProgress > 0 && !this.reducedMotion ? pull.displacement : 0,
+      pull.spread)
+    if (this.stringFlightProgress > 0) {
+      const camera = resolveStringFlightCamera({
+        zoom: uniforms.uZoom.value,
+        roll: THREE.MathUtils.radToDeg(uniforms.uRoll.value),
+        inclination: THREE.MathUtils.radToDeg(uniforms.uInclination.value),
+        centerX: this.cameraCenter.x,
+        centerY: this.cameraCenter.y,
+      }, this.stringFlightProgress, this.stringFlightMode, this.cssWidth / this.cssHeight, getStringFlightEdgeFrame())
+      this.cameraCenter.set(camera.centerX, camera.centerY)
+      uniforms.uZoom.value = camera.zoom
+      uniforms.uRoll.value = THREE.MathUtils.degToRad(camera.roll)
+      uniforms.uInclination.value = THREE.MathUtils.degToRad(camera.inclination)
+      uniforms.uFlightCameraRadius.value = camera.radius
+      if (this.stringFlightMode === 'edge') publishStringFlightProjection(camera, this.cssWidth, this.cssHeight)
+    }
   }
 
   private cancelFrame() {
@@ -673,7 +715,7 @@ export class BlackHoleRenderer {
 
   private frame = (now: number) => {
     this.raf = 0
-    if (this.disposed || this.contextLost || this.visibilityPaused) return
+    if (this.disposed || this.contextLost || this.visibilityPaused || this.stringFlightIsCovered()) return
     if (!renderFrameIsDue(this.nextFrameAt, now)) {
       this.requestFrame()
       return
@@ -723,7 +765,11 @@ export class BlackHoleRenderer {
     this.renderer.info.reset()
     this.renderer.setRenderTarget(this.sceneTarget)
     this.renderer.render(this.scene, this.camera)
-    this.bloom.render(this.sceneTarget.texture, this.night, this.pointer, this.pointerStrength)
+    // The edge surface already follows the shared pull. Fade the homepage's
+    // separate cursor lens away before the overlay becomes visible.
+    const pointerWeight = this.stringFlightMode === 'edge'
+      ? 1 - THREE.MathUtils.smoothstep(this.stringFlightProgress, .05, .5) : 1
+    this.bloom.render(this.sceneTarget.texture, this.night, this.pointer, this.pointerStrength * pointerWeight)
     this.renderedFrames++
     this.nextFrameAt = nextRenderDeadline(this.nextFrameAt, now, this.targetFps)
     if (ambient || this.springIsRunning() || this.cameraIsRunning() || this.pointerIsRunning()
@@ -835,6 +881,26 @@ export class BlackHoleRenderer {
 
   private handleDecisionExit = () => {
     this.beginDecisionExit()
+  }
+
+  private handleStringFlight = () => {
+    const wasCovered = this.stringFlightIsCovered()
+    this.stringFlightProgress = getStringFlight()
+    this.stringFlightMode = getStringFlightMode()
+    if (wasCovered !== this.stringFlightIsCovered()) {
+      // Only a centered passage is covered. An edge arrival keeps the same
+      // disk and its ambient clock alive behind the task overlay.
+      this.cancelFrame()
+      this.resetMeasurements()
+      this.syncStatsTimer()
+      this.syncDecisionEffect(0)
+      this.publishStats()
+    }
+    // External progress owns the clock. A changed value needs one real GPU
+    // frame (including the edge endpoint), even when ambient animation is paused or
+    // reduced motion is on. Resetting the clock above prevents hidden catch-up.
+    // Hidden/context-lost renderers retain it for their normal resume path.
+    this.requestFrame()
   }
 
   private handleResize = () => {

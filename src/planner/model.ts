@@ -97,6 +97,7 @@ const knownTask = (task: Task) => !task.deletedAt && task.status !== 'dropped'
 
 /** Resolve to the live weekly row, never save a clipped slot or a detached snapshot. */
 export function weeklyRoutineSource(state: PlannerState, routine: Routine, sourceWeekday?: number): Routine | undefined {
+  if (routine.sourceDate) return undefined
   return state.routines.find(item => item.id === routine.id && (sourceWeekday === undefined || item.weekdays.includes(sourceWeekday)))
 }
 
@@ -111,6 +112,14 @@ export function routinesForDay(state: PlannerState, date: string): Routine[] {
     const interval = explicitInterval(date, routine.start, routine.end)
     const range = interval && clipRange(interval, date)
     if (range) result.push({ ...routine, weekdays: [...routine.weekdays], items: [...routine.items], start: timeOf(range.start), end: timeOf(range.end) })
+  }
+  // Events are independent of weekday snapshots and can occupy any real time.
+  // sourceDate keeps this display row from ever becoming a weekly edit target.
+  for (const event of state.dayEvents ?? []) {
+    if (event.date !== date) continue
+    const interval = explicitInterval(date, event.start, event.end), range = interval && clipRange(interval, date)
+    if (range) result.push({ id: event.id, title: event.title, kind: 'class', weekdays: [bounds.start.getDay()],
+      start: timeOf(range.start), end: timeOf(range.end), location: event.location, items: [...event.items], enabled: true, sourceDate: date })
   }
   return result.sort((a, b) => minuteOf(a.start) - minuteOf(b.start) || minuteOf(a.end) - minuteOf(b.end) || a.id.localeCompare(b.id))
 }
@@ -180,6 +189,8 @@ export function blocksForDay(state: PlannerState, tasks: readonly Task[], date: 
 
 export function dayCapacity(state: PlannerState, tasks: readonly Task[], date: string, now: Date): DayCapacity {
   const routines = routinesForDay(state, date)
+  const fixedRows = routines.filter(item => item.kind !== 'available')
+  const eventRows = fixedRows.filter(row => row.sourceDate)
   const ranges = (kind: 'available' | 'fixed') => routines.filter(item => kind === 'available' ? item.kind === 'available' : item.kind !== 'available')
     .map(item => ({ start: minuteOf(item.start), end: minuteOf(item.end) }))
   const fixed = mergeRanges(ranges('fixed'))
@@ -194,9 +205,20 @@ export function dayCapacity(state: PlannerState, tasks: readonly Task[], date: s
   const conflicts = new Set<string>()
   for (const item of planned) {
     if (fixed.some(range => overlap(range, item.range))) conflicts.add(item.block.id)
+    for (const event of eventRows) {
+      if (overlap({ start: minuteOf(event.start), end: minuteOf(event.end) }, item.range)) conflicts.add(event.id)
+    }
     const due = taskMap.get(item.block.taskId)?.due
     const deadline = due?.length === 10 ? dayBounds(due)?.end : agendaDate(due)
     if (deadline && item.originalEnd > deadline) conflicts.add(item.block.id)
+  }
+  for (let index = 0; eventRows.length && index < fixedRows.length; index++) {
+    for (let other = index + 1; other < fixedRows.length; other++) {
+      const first = fixedRows[index], second = fixedRows[other]
+      if ((first.sourceDate || second.sourceDate) && overlap(
+        { start: minuteOf(first.start), end: minuteOf(first.end) }, { start: minuteOf(second.start), end: minuteOf(second.end) },
+      )) { conflicts.add(first.id); conflicts.add(second.id) }
+    }
   }
   for (let index = 0; index < planned.length; index++) {
     for (let other = index + 1; other < planned.length && planned[other].range.start < planned[index].range.end; other++) {

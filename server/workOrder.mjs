@@ -73,10 +73,13 @@ export function createWorkOrder(input, previous = null, clock = () => new Date()
           if (date !== range.date) { date = range.date; end = 0 }
           total += Math.max(0, range.end - Math.max(end, range.start)); end = Math.max(end, range.end)
         }
-        const verified = requirement.slot
+        // Verify the request's allocation below, not the latest editable
+        // estimate: a shortcut edit must not invalidate an already saved slot.
+        const occurrenceValid = !task?.occurrence || (eligible.length === 1 && eligible[0].date === task.occurrence.date)
+        const verified = occurrenceValid && (requirement.slot
           ? eligible.some(block => block.date === requirement.slot.date && block.start === requirement.slot.start && block.end === requirement.slot.end)
           : total >= requirement.minutes && (!requirement.slots?.length ||
-            requirement.slots.every(slot => eligible.some(block => block.date === slot.date && block.start === slot.start && block.end === slot.end)))
+            requirement.slots.every(slot => eligible.some(block => block.date === slot.date && block.start === slot.start && block.end === slot.end))))
         requirement.status = verified ? 'verified' : 'pending'
       }
       save()
@@ -103,12 +106,40 @@ export function createWorkOrder(input, previous = null, clock = () => new Date()
       for (const item of order.scheduleRequirements ?? []) if (item.taskId === taskId) item.status = 'cancelled'
       save()
     },
+    expectEvents(events) {
+      order.eventRequirements ??= []
+      for (const { id, title, date, start, end } of events) {
+        const existing = order.eventRequirements.find(item => item.id === id)
+        // An undo is final for this request; replaying an earlier receipt must
+        // not revive a cancelled event or invite the model to create it again.
+        if (existing?.status === 'cancelled') continue
+        const requirement = { id, title, date, start, end,
+          reason: `${title}：${date} ${start}–${end} 已保存的活动与当前日历不一致`, status: 'pending' }
+        if (existing) Object.assign(existing, requirement)
+        else order.eventRequirements.push(requirement)
+      }
+      save()
+    },
+    checkEvents(events) {
+      const byId = new Map(events.map(event => [event.id, event]))
+      for (const requirement of order.eventRequirements ?? []) {
+        if (requirement.status === 'cancelled') continue
+        const current = byId.get(requirement.id)
+        requirement.status = current && ['id', 'title', 'date', 'start', 'end'].every(key => current[key] === requirement[key])
+          ? 'verified' : 'pending'
+      }
+      save()
+    },
+    cancelEvent(id) {
+      for (const item of order.eventRequirements ?? []) if (item.id === id) item.status = 'cancelled'
+      save()
+    },
     interrupt(reason) { order.interrupted = String(reason).slice(0, 240); save() },
     resume() { order.reply = { mode: 'pending' }; order.status = 'running'; save() },
     clearInterruption() { delete order.interrupted; save() },
     awaiting(reason) { order.status = 'awaiting_user'; order.pending = String(reason).slice(0, 240); save() },
     verify() {
-      if (order.failures.length || order.pending || order.interrupted || order.steps.some(step => step.status === 'running') || order.scheduleRequirements?.some(item => item.status === 'pending')) order.status = order.commits.length ? 'partial' : 'failed'
+      if (order.failures.length || order.pending || order.interrupted || order.steps.some(step => step.status === 'running') || order.scheduleRequirements?.some(item => item.status === 'pending') || order.eventRequirements?.some(item => item.status === 'pending')) order.status = order.commits.length ? 'partial' : 'failed'
       else if (order.commits.length) order.status = 'verified'
       else order.status = 'completed'
       save(); return order.status

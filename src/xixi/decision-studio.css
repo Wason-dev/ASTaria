@@ -160,6 +160,7 @@
 .xc-page :is(.xc-header,.xc-page-background) { transition:opacity var(--decision-exit-duration,1800ms) cubic-bezier(.4,0,.2,1) }
 .xc-page[data-exiting=true] :is(.xc-header,.xc-page-background) { opacity:0; transition-duration:var(--decision-reveal-duration,480ms) }
 .xc-page[data-exiting=true] { pointer-events:none }
+.xc-page[data-covered=true] { visibility:hidden; pointer-events:none }
 .xc-page[data-motion=reduced] :is(.xc-scroll,.xc-header,.xc-page-background,.home-glass-measure) { transition:none }
 @media(prefers-reduced-motion:reduce) {
   .xc-page :is(.xc-scroll,.xc-header,.xc-page-background,.home-glass-measure) { transition:none }

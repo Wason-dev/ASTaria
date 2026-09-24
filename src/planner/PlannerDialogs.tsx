@@ -7,14 +7,14 @@ import { taskStore } from '../stores/taskStore'
 import { deadlineShortcuts } from '../xixi/deadlineShortcuts'
 import { PlannerIcon as Icon } from './PlannerIcon'
 import { weeklyRoutineSource } from './model'
-import type { PlanBlock, PlannerAction, PlannerState, Routine, TaskPreparation } from './types'
+import type { DayEvent, PlanBlock, PlannerAction, PlannerState, Routine, TaskPreparation } from './types'
 
 type Act = (action: PlannerAction, expectedRevision?: number) => Promise<PlannerState>
 export const EMPTY_DETAILS: TaskPreparation = { items: [], preparation: '', needsSubmission: false, submittedAt: null }
 const splitItems = (text: string) => [...new Set(text.split(/[，,、\n]/u).map(item => item.trim()).filter(Boolean))]
 const explain = (reason: unknown) => reason instanceof Error ? reason.message : '暂时无法保存，请重试'
 
-export function PlannerDialog({ title, onClose, busy = false, closeRequested = false, children }: { title: string; onClose: () => void; busy?: boolean; closeRequested?: boolean; children: ReactNode }) {
+export function PlannerDialog({ title, onClose, busy = false, closeRequested = false, className = '', children }: { title: string; onClose: () => void; busy?: boolean; closeRequested?: boolean; className?: string; children: ReactNode }) {
   const sampling = useContext(GlassSamplingContext)
   const element = useRef<HTMLDialogElement>(null)
   const opener = useRef<HTMLElement | null>(null)
@@ -43,16 +43,16 @@ export function PlannerDialog({ title, onClose, busy = false, closeRequested = f
     timer.current = setTimeout(onClose, matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 180)
   }
   useEffect(() => { if (closeRequested && !busy && !closing) close() }, [closeRequested, busy, closing])
-  return <GlassSamplingContext.Provider value={sampling && !closing}><dialog className="pl-dialog" ref={element} data-closing={closing} data-scrolling={scrolling} aria-label={title} onCancel={event => { event.preventDefault(); close() }} onKeyDown={event => event.stopPropagation()}>
+  return <GlassSamplingContext.Provider value={sampling && !closing}><dialog className={`pl-dialog${className ? ` ${className}` : ''}`} ref={element} data-closing={closing} data-scrolling={scrolling} aria-label={title} onCancel={event => { event.preventDefault(); close() }} onKeyDown={event => event.stopPropagation()}>
     <MeasuredGlassSurface radius={22} material={{ transmission: 20, blur: 6, rim: 40, shadow: 30 }} />
     <header className="pl-dialog-header"><h2>{title}</h2><button type="button" className="pl-icon-button" onClick={close} disabled={busy} aria-label={`关闭${title}`}><Icon name="close" /></button></header>
     <div className="pl-dialog-body">{children}</div>
   </dialog></GlassSamplingContext.Provider>
 }
 
-export function RoutineDialog({ routine, source, state, act, onClose, onNotice, onBrowseRoutines }: { routine?: Routine; source?: { date: string; weekday: number }; state: PlannerState; act: Act; onClose: () => void; onNotice: (text: string) => void; onBrowseRoutines: () => void }) {
+export function RoutineDialog({ routine, source, initialWeekday, state, act, onClose, onNotice, onBrowseRoutines }: { routine?: Routine; source?: { date: string; weekday: number }; initialWeekday?: number; state: PlannerState; act: Act; onClose: () => void; onNotice: (text: string) => void; onBrowseRoutines: () => void }) {
   const original = routine ? weeklyRoutineSource(state, routine, source?.weekday) : undefined
-  const [draft, setDraft] = useState<Routine>(original ?? routine ?? { id: crypto.randomUUID(), title: '', kind: 'class', weekdays: [1,2,3,4,5], start: '08:00', end: '08:40', location: '', items: [], enabled: true })
+  const [draft, setDraft] = useState<Routine>(original ?? routine ?? { id: crypto.randomUUID(), title: '', kind: 'class', weekdays: initialWeekday !== undefined && Number.isInteger(initialWeekday) && initialWeekday >= 0 && initialWeekday <= 6 ? [initialWeekday] : [1,2,3,4,5], start: '08:00', end: '08:40', location: '', items: [], enabled: true })
   const [items, setItems] = useState(draft.items.join('、'))
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [deleting, setDeleting] = useState(false)
   const [finished, setFinished] = useState(false)
@@ -97,29 +97,97 @@ export function RoutineDialog({ routine, source, state, act, onClose, onNotice, 
   </PlannerDialog>
 }
 
-export function TaskPlanDialog({ task, state, selected, act, onClose, onNotice, onRefresh }: { task: Task; state: PlannerState; selected: string; act: Act; onClose: () => void; onNotice: (text: string) => void; onRefresh: () => void }) {
+export function DayEventDialog({ event, state, act, onClose, onNotice }: { event: DayEvent; state: PlannerState; act: Act; onClose: () => void; onNotice: (text: string) => void }) {
+  const original = state.dayEvents?.find(item => item.id === event.id)
+  const [draft, setDraft] = useState<DayEvent>(original ?? event)
+  const [items, setItems] = useState(draft.items.join('、'))
+  const [busy, setBusy] = useState(false), [error, setError] = useState(''), [deleting, setDeleting] = useState(false)
+  const [finished, setFinished] = useState(false), [baseRevision, setBaseRevision] = useState(state.revision)
+  const missing = !original && !finished
+  const stale = baseRevision !== state.revision
+  const reload = () => {
+    if (!original) { setError('这项单日活动已被移除'); return }
+    setDraft(original); setItems(original.items.join('、')); setBaseRevision(state.revision); setError(''); setDeleting(false)
+  }
+  const save = async (form: FormEvent) => {
+    form.preventDefault(); if (busy || stale || missing) return
+    setBusy(true); setError('')
+    try {
+      const saved = await act({ type: 'save-day-event', event: { ...draft, title: draft.title.trim(), items: splitItems(items) } }, baseRevision)
+      setBaseRevision(saved.revision); onNotice('单日活动已保存'); setFinished(true)
+    } catch (reason) { setError(explain(reason)) } finally { setBusy(false) }
+  }
+  const remove = async () => {
+    if (busy || stale || missing) return
+    if (!deleting) { setDeleting(true); return }
+    setBusy(true); setError('')
+    try {
+      const saved = await act({ type: 'delete-day-event', id: draft.id }, baseRevision)
+      setBaseRevision(saved.revision); onNotice('已移除这项单日活动'); setFinished(true)
+    } catch (reason) { setError(explain(reason)) } finally { setBusy(false) }
+  }
+  return <PlannerDialog title="编辑单日活动" onClose={onClose} busy={busy} closeRequested={finished}>
+    <p className="pl-muted">这项活动只安排在所选日期，并占用这段时间。</p>
+    {missing ? <p className="pl-stale" role="alert">这项单日活动已被移除，请关闭后查看最新日程。</p>
+      : stale && <div className="pl-stale" role="alert"><p>日程已有新修改，请先载入最新内容再保存</p><button type="button" className="pl-secondary" onClick={reload}>载入最新内容 · 替换草稿</button></div>}
+    <form className="pl-form" onSubmit={save}><fieldset disabled={busy || stale || missing}>
+      <label>名称<input required maxLength={100} value={draft.title} onChange={e => setDraft({ ...draft, title: e.target.value })} /></label>
+      <label>日期<input required type="date" value={draft.date} onChange={e => setDraft({ ...draft, date: e.target.value })} /></label>
+      <div className="pl-form-pair"><label>开始<input required type="time" value={draft.start} onChange={e => setDraft({ ...draft, start: e.target.value })} /></label><label>结束<input required type="time" value={draft.end} onChange={e => setDraft({ ...draft, end: e.target.value })} /></label></div>
+      <label>地点<input maxLength={100} value={draft.location} placeholder="可留空" onChange={e => setDraft({ ...draft, location: e.target.value })} /></label>
+      <label>需要携带<input maxLength={500} value={items} placeholder="例如 电脑、充电器，用顿号分隔" onChange={e => setItems(e.target.value)} /></label>
+      {error && <p className="pl-error" role="alert">{error}</p>}
+      <footer><button className="pl-delete" type="button" onClick={() => void remove()}>{deleting ? '确认移除' : '移除'}</button><button className="pl-primary" type="submit">{busy ? '保存中' : '保存活动'}</button></footer>
+    </fieldset></form>
+  </PlannerDialog>
+}
+
+export function TaskPlanDialog({ task, state, selected, initialBlockId, act, onClose, onNotice, onRefresh }: { task: Task; state: PlannerState; selected: string; initialBlockId?: string; act: Act; onClose: () => void; onNotice: (text: string) => void; onRefresh: () => void }) {
   const details = state.details[task.id] ?? EMPTY_DETAILS
   const [items, setItems] = useState(details.items.join('、')), [preparation, setPreparation] = useState(details.preparation)
   const [needsSubmission, setNeedsSubmission] = useState(details.needsSubmission)
-  const existing = state.blocks.filter(block => block.taskId === task.id)
-  const [editing, setEditing] = useState<PlanBlock>({ id: crypto.randomUUID(), taskId: task.id, date: selected, start: '18:00', end: '18:35', locked: false })
+  const existing = state.blocks.filter(block => block.taskId === task.id).sort((a, b) => a.date.localeCompare(b.date) || a.start.localeCompare(b.start))
+  const newBlock = (date = selected): PlanBlock => ({ id: crypto.randomUUID(), taskId: task.id, date, start: '18:00', end: '18:35', locked: false })
+  const chooseBlock = (blocks: PlanBlock[], id?: string) => blocks.find(block => block.id === id) ?? blocks.find(block => block.date === selected) ?? blocks[0] ?? newBlock()
+  const [editing, setEditing] = useState<PlanBlock>(() => chooseBlock(existing, initialBlockId))
+  const currentBlock = existing.find(block => block.id === editing.id)
+  const locked = Boolean(currentBlock?.locked)
+  const canPlan = task.status !== 'done' && task.status !== 'dropped'
   const [busy, setBusy] = useState(false), [error, setError] = useState('')
   const [removing, setRemoving] = useState<string | null>(null)
+  const [removingTask, setRemovingTask] = useState(false)
+  const [finished, setFinished] = useState(false)
+  useEffect(() => { setRemovingTask(false) }, [task.updatedAt, state.revision])
   const [baseRevision, setBaseRevision] = useState(state.revision)
   const stale = baseRevision !== state.revision
   const reload = () => {
     setItems(details.items.join('、')); setPreparation(details.preparation); setNeedsSubmission(details.needsSubmission)
-    setEditing(existing.find(block => block.id === editing.id) ?? { id: crypto.randomUUID(), taskId: task.id, date: selected, start: '18:00', end: '18:35', locked: false })
-    setBaseRevision(state.revision); setRemoving(null); setError('')
+    setEditing(chooseBlock(existing, editing.id))
+    setBaseRevision(state.revision); setRemoving(null); setRemovingTask(false); setError('')
   }
   const execute = async (action: PlannerAction, message: string) => {
     if (busy || stale) return
     setBusy(true); setError('')
-    try { const saved = await act(action, baseRevision); setBaseRevision(saved.revision); onNotice(message) }
+    try {
+      const saved = await act(action, baseRevision)
+      setBaseRevision(saved.revision); setRemoving(null)
+      if (action.type === 'save-block' && action.block.id === editing.id) setEditing(saved.blocks.find(block => block.id === editing.id) ?? action.block)
+      if (action.type === 'delete-block' && action.id === editing.id) setEditing(chooseBlock(saved.blocks.filter(block => block.taskId === task.id).sort((a, b) => a.date.localeCompare(b.date) || a.start.localeCompare(b.start))))
+      onNotice(message)
+    }
     catch (reason) { setError(explain(reason)) } finally { setBusy(false) }
   }
   const originalDate = agendaDate(task.startAt)
-  return <PlannerDialog title="事项与安排" onClose={onClose} busy={busy}>
+  const removeTask = async () => {
+    if (busy || stale) return
+    if (!removingTask) { setRemovingTask(true); return }
+    setBusy(true); setError('')
+    try {
+      await taskStore.updateTask(task.id, { deletedAt: new Date().toISOString() }, task.updatedAt)
+      onRefresh(); onNotice('事项已删除'); setFinished(true)
+    } catch (reason) { setError(explain(reason)); setRemovingTask(false) } finally { setBusy(false) }
+  }
+  return <PlannerDialog title="事项与安排" onClose={onClose} busy={busy} closeRequested={finished}>
     <p className="pl-dialog-task-title">{task.title}</p>
     <p className="pl-muted">{task.due ? `截止 ${task.due.length === 10 ? task.due : new Date(task.due).toLocaleString('zh-CN', { hour12: false })}` : '尚未设置截止日期'} · {task.estimateMin ? `预计 ${task.estimateMin} 分钟` : '用时待估'}</p>
     {stale && <div className="pl-stale" role="alert"><p>日程已有新修改，当前草稿尚未覆盖它</p><button className="pl-secondary" onClick={reload}>载入最新内容 · 替换草稿</button></div>}
@@ -132,26 +200,35 @@ export function TaskPlanDialog({ task, state, selected, act, onClose, onNotice, 
       <footer><button className="pl-secondary" type="submit">保存准备信息</button></footer>
     </fieldset></form>
     {details.needsSubmission && <div className="pl-submission"><span>{details.submittedAt ? '已确认提交' : task.status === 'done' ? '已经做完，提交待确认' : '做完后记得确认提交'}</span><button className="pl-secondary" disabled={busy || stale} onClick={() => void execute({ type: 'save-details', taskId: task.id, details: { ...details, submittedAt: details.submittedAt ? null : new Date().toISOString() } }, details.submittedAt ? '已撤回提交确认' : '已确认提交')}><Icon name={details.submittedAt ? 'undo' : 'check'} />{details.submittedAt ? '撤回' : '已提交'}</button></div>}
-    <section className="pl-existing-plans"><h3><Icon name="clock" /> 安排时间</h3>
+    <section className="pl-existing-plans"><div className="pl-plans-heading"><h3><Icon name="clock" /> 安排时间</h3>{canPlan && existing.length > 0 && <button className="pl-secondary" type="button" disabled={busy || stale} onClick={() => { setEditing(newBlock(editing.date)); setRemoving(null); setError('') }}>添加另一时段</button>}</div>
       {existing.length === 0 && originalDate && task.startAt?.includes('T') && <p className="pl-muted">原计划 {localDay(originalDate)} {originalDate.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })} · 新增具体时段后以新安排为准</p>}
-      {existing.map(block => <div className="pl-plan-row" key={block.id}><span>{block.date}　{block.start}–{block.end}{block.locked && <Icon name="lock" />}</span><div>{block.locked ? <button className="pl-secondary" disabled={busy || stale} onClick={() => void execute({ type: 'save-block', block: { ...block, locked: false } }, '已解锁时段')}>解锁</button> : <>{task.status !== 'done' && task.status !== 'dropped' && <button className="pl-icon-button" disabled={busy || stale} title="编辑时段" aria-label={`编辑 ${block.date} ${block.start} 时段`} onClick={() => setEditing(block)}><Icon name="edit" /></button>}<button className="pl-icon-button" disabled={busy || stale} title={removing === block.id ? '确认移除' : '移除时段'} aria-label={removing === block.id ? '确认移除时段' : `移除 ${block.date} ${block.start} 时段`} onClick={() => { if (removing !== block.id) { setRemoving(block.id); return } void execute({ type: 'delete-block', id: block.id }, '已移除时段') }}><Icon name={removing === block.id ? 'check' : 'close'} /></button></>}</div></div>)}
+      {existing.map(block => {
+        const chosen = block.id === editing.id
+        const label = <><span>{block.date}　{block.start}–{block.end}{block.locked && <Icon name="lock" />}</span>{chosen && canPlan && <small>当前时段</small>}</>
+        return <div className="pl-plan-row" key={block.id} data-selected={chosen && canPlan}>
+          {canPlan && (existing.length > 1 || !currentBlock) ? <button className="pl-plan-select" type="button" disabled={busy || stale} aria-pressed={chosen} aria-label={`选择 ${block.date} ${block.start}–${block.end} 时段`} onClick={() => { setEditing(block); setRemoving(null); setError('') }}>{label}</button> : <div className="pl-plan-label">{label}</div>}
+          <div className="pl-plan-actions">{block.locked ? <button className="pl-secondary" disabled={busy || stale} onClick={() => void execute({ type: 'save-block', block: { ...block, locked: false } }, '已解锁时段')}>解锁</button> : <button className="pl-icon-button" disabled={busy || stale} title={removing === block.id ? '确认移除' : '移除时段'} aria-label={removing === block.id ? '确认移除时段' : `移除 ${block.date} ${block.start} 时段`} onClick={() => { if (removing !== block.id) { setRemoving(block.id); return } void execute({ type: 'delete-block', id: block.id }, '已移除时段') }}><Icon name={removing === block.id ? 'check' : 'close'} /></button>}</div>
+        </div>
+      })}
+      {canPlan && locked && <p className="pl-muted" role="note">这段时间已锁定，解锁后可以修改。</p>}
     </section>
-    {task.status !== 'done' && task.status !== 'dropped' && <form className="pl-form" onSubmit={async event => {
-      event.preventDefault(); if (busy || stale) return
-      setBusy(true); setError('')
-      try { const saved = await act({ type: 'save-block', block: editing }, baseRevision); setBaseRevision(saved.revision); onNotice('计划已写入日历'); setEditing({ ...editing, id: crypto.randomUUID() }) }
-      catch (reason) { setError(explain(reason)) } finally { setBusy(false) }
-    }}><fieldset disabled={busy || stale}>
+    {canPlan && <form className="pl-form pl-plan-form" onSubmit={event => {
+      event.preventDefault(); if (locked) return
+      void execute({ type: 'save-block', block: editing }, '计划已写入日历')
+    }}><fieldset disabled={busy || stale || locked}>
       <label>日期<input type="date" required value={editing.date} onChange={e => setEditing({ ...editing, date: e.target.value })} /></label>
       <div className="pl-form-pair"><label>开始<input type="time" required value={editing.start} onChange={e => setEditing({ ...editing, start: e.target.value })} /></label><label>结束<input type="time" required value={editing.end} onChange={e => setEditing({ ...editing, end: e.target.value })} /></label></div>
       <label className="pl-checkbox"><input type="checkbox" checked={editing.locked} onChange={e => setEditing({ ...editing, locked: e.target.checked })} />锁定这段时间</label>
-      <footer>{existing.some(b => b.id === editing.id) && <button className="pl-secondary" type="button" onClick={() => setEditing({ ...editing, id: crypto.randomUUID() })}>改为新增</button>}<button className="pl-primary" type="submit">{existing.some(b => b.id === editing.id) ? '更新时段' : '添加时段'}</button></footer>
+      <footer><button className="pl-primary" type="submit">{currentBlock ? '更新时段' : '添加时段'}</button></footer>
     </fieldset></form>}
-    <div className="pl-task-status-actions"><span>{task.status === 'done' ? '任务已完成' : task.status === 'doing' ? '任务进行中' : '任务待办'}</span><button className="pl-secondary" disabled={busy} onClick={async () => {
+    {removingTask ? <section className="pl-task-delete-confirm" aria-label="确认删除事项">
+      <p>删除「{task.title}」？</p><p className="pl-muted">事项、截止提醒和全部关联时段会一起移除{existing.some(block => block.locked) ? '，包括已锁定的时段' : ''}</p>
+      <div className="pl-task-status-buttons"><button className="pl-secondary" type="button" disabled={busy} onClick={() => setRemovingTask(false)}>保留事项</button><button className="pl-secondary pl-delete" type="button" disabled={busy || stale} onClick={() => void removeTask()}>确认删除事项</button></div>
+    </section> : <div className="pl-task-status-actions"><span>{task.status === 'done' ? '任务已完成' : task.status === 'doing' ? '任务进行中' : '任务待办'}</span><div className="pl-task-status-buttons"><button className="pl-delete" type="button" disabled={busy || stale} onClick={() => void removeTask()}>删除事项</button><button className="pl-secondary" disabled={busy} onClick={async () => {
       setBusy(true); setError('')
       try { if (task.status === 'done') await taskStore.reopenTask(task.id, task.updatedAt); else await taskStore.updateTask(task.id, { status: 'done' }, task.updatedAt); onRefresh(); onNotice(task.status === 'done' ? '已撤回完成，恢复原状态' : '任务已完成') }
       catch (reason) { setError(explain(reason)) } finally { setBusy(false) }
-    }}><Icon name={task.status === 'done' ? 'undo' : 'check'} />{task.status === 'done' ? '撤回完成' : '标记完成'}</button></div>
+    }}><Icon name={task.status === 'done' ? 'undo' : 'check'} />{task.status === 'done' ? '撤回完成' : '标记完成'}</button></div></div>}
   </PlannerDialog>
 }
 

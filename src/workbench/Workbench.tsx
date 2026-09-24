@@ -4,14 +4,16 @@ import type { Task, TaskStatus } from '../domain/task'
 import type { useSpatialTasks } from '../spatial/useSpatialTasks'
 import { agendaDate, deadlineLabel } from '../home/agenda'
 import { GlassSamplingContext, MeasuredGlassSurface } from '../home/GlassSurface'
+import { WorkspaceHeading } from '../ui/WorkspaceHeading'
 import type { Appearance, useAppearance } from './appearance'
-import { recommendationReason, taskArea, taskGroups } from './tasks'
+import { recommendationReason, scheduleDisplay, scheduleStatusLabel, taskArea, taskGroups, taskSchedule } from './tasks'
 import { useFocusTimer } from './useFocusTimer'
 import { UpcomingDeadlines } from './UpcomingDeadlines'
 import { buildWorkbenchBriefing, effectiveEstimate, estimateLabel } from './briefing'
 import type { ScheduledMinutes } from './briefing'
 import { usePlanner } from '../planner/usePlanner'
 import { XixiBriefing } from './XixiBriefing'
+import { CompletedTasks } from './CompletedTasks'
 import { WorkbenchIcon as Icon } from './WorkbenchIcon'
 import { XixiInput } from './XixiInput'
 import { useGlassHover } from './useGlassHover'
@@ -61,6 +63,10 @@ function WorkbenchContent({ active, data, now, onCapture, onNotice, appearance, 
   const timer = useFocusTimer('astaria-focus-v1')
   const planner = usePlanner(active)
   const tasks = data.tasks
+  const scheduleLoading = planner.state === null && !planner.error
+  const workspaceLoading = data.loading || scheduleLoading
+  const workspaceError = data.loadError || planner.error
+  const retryWorkspace = () => { data.retry(); void planner.refresh() }
   const scheduledMinutes = useMemo<ScheduledMinutes>(() => {
     const totals: Record<string, number> = {}
     for (const block of planner.state?.blocks ?? []) {
@@ -74,8 +80,9 @@ function WorkbenchContent({ active, data, now, onCapture, onNotice, appearance, 
     }
     return totals
   }, [planner.state])
-  const groups = useMemo(() => taskGroups(tasks, now), [tasks, now])
-  const briefing = useMemo(() => buildWorkbenchBriefing(tasks, now, timer.durations.focusMin, timer.getSpentMs, scheduledMinutes), [tasks, now, timer.durations.focusMin, timer.getSpentMs, timer.session, scheduledMinutes])
+  const scheduleBlocks = planner.state?.blocks
+  const groups = useMemo(() => taskGroups(tasks, now, scheduleBlocks), [tasks, now, scheduleBlocks])
+  const briefing = useMemo(() => buildWorkbenchBriefing(tasks, now, timer.durations.focusMin, timer.getSpentMs, scheduledMinutes, scheduleBlocks), [tasks, now, timer.durations.focusMin, timer.getSpentMs, timer.session, scheduledMinutes, scheduleBlocks])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [transitioning, setTransitioning] = useState(false)
   const [timingOpen, setTimingOpen] = useState(false)
@@ -97,7 +104,7 @@ function WorkbenchContent({ active, data, now, onCapture, onNotice, appearance, 
   const transitionTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const selected = tasks.find(task => task.id === selectedId && !task.deletedAt && task.status !== 'dropped')
   const session = timer.session?.taskId === selectedId ? timer.session : null
-  const busy = Boolean(reopeningId) || (!preview && (data.saving || data.loading || Boolean(data.loadError)))
+  const busy = Boolean(reopeningId) || (!preview && (data.saving || workspaceLoading || Boolean(workspaceError)))
   const selectionPending = useRef<string | null>(null)
   const startContext = useRef({ active, selectedId, mounted: true })
   const startRevision = useRef(0)
@@ -264,42 +271,42 @@ function WorkbenchContent({ active, data, now, onCapture, onNotice, appearance, 
     } catch (reason) { setError(reason instanceof Error ? reason.message : '完成状态尚未撤回，请重试') }
     finally { reopening.current = false; setReopeningId(null) }
   }
-  const renderTask = (task: Task, recommended = false) => <button key={task.id} className="wb-task wb-glass" data-task-id={task.id} data-recommended={recommended} onClick={() => switchTo(task.id)} disabled={busy || transitioning}>
+  const renderTask = (task: Task, recommended = false) => { const schedule = taskSchedule(task, now, scheduleBlocks); return <button key={task.id} className="wb-task wb-glass" data-task-id={task.id} data-recommended={recommended} onClick={() => switchTo(task.id)} disabled={busy || transitioning}>
     <MeasuredGlassSurface radius={appearance.radius} material={appearance} />
     <span className="wb-task-body">
       <span className="wb-task-top"><strong>{task.title}</strong>{recommended ? <span className="wb-recommendation" role="img" aria-label="析熙推荐 · 本地建议" title="析熙推荐 · 本地建议"><Icon name="xixi" /></span> : <Icon name="arrow" className="wb-task-arrow" />}</span>
-      <span className="wb-task-detail"><span>{task.notes || (recommended ? recommendationReason(task, now) : '从这一项开始')}</span></span>
+      <span className="wb-task-detail"><span>{schedule ? (scheduleStatusLabel(schedule, now) ?? task.notes ?? (recommended ? recommendationReason(task, now) : '从这一项开始')) : (task.notes || (recommended ? recommendationReason(task, now) : '从这一项开始'))}</span></span>
       {appearance.metadata && <span className="wb-task-meta">
         <span className="wb-meta-value" title={`课程或分类：${taskArea(task)}`}><Icon name="book" /><span>{taskArea(task)}</span></span>
-        <span className="wb-meta-value" title={task.startAt && agendaDate(task.startAt) ? '安排时间' : '截止时间'}><Icon name="calendar" /><span>{task.startAt && agendaDate(task.startAt) ? `${shortTimestamp(task.startAt, now)}安排` : task.due ? `${deadlineLabel(task, now)}截止` : '待安排'}</span></span>
+        <span className="wb-meta-value" title={schedule ? '日历安排' : task.startAt && agendaDate(task.startAt) ? '安排日期' : '截止时间'}><Icon name="calendar" /><span>{schedule ? scheduleDisplay(schedule, now) : task.startAt && agendaDate(task.startAt) ? `${shortTimestamp(task.startAt, now)}安排` : task.due ? `${deadlineLabel(task, now)}截止` : '待安排'}</span></span>
         {effectiveEstimate(task, scheduledMinutes) !== undefined ? <span className="wb-meta-value" title={estimateLabel(task, scheduledMinutes) ?? '用时'}><Icon name="hourglass" /><span className="p0-sr-only">用时</span>{estimateLabel(task, scheduledMinutes)}</span> : null}
       </span>}
       {appearance.progress && timer.getSpentMs(task.id) > 0 && <span className="wb-task-spent wb-meta-value" title="累计专注"><Icon name="timer" /><span className="p0-sr-only">累计专注</span>{spentLabel(timer.getSpentMs(task.id))}</span>}
     </span>
-  </button>
+  </button> }
 
-  return <div className="wb-scroll" data-focus={Boolean(selected && session)} ref={scroll}>
-    <div className="wb-container">
-      <div className="wb-toolbar"><div className="wb-location">{selected && session && <button className="wb-back wb-icon-button" aria-label={selected.status === 'done' ? '选择下一项' : '重新选择'} onClick={() => switchTo(null)} disabled={busy || transitioning}><Icon name="back" /></button>}<span className="wb-eyebrow">工作台</span></div></div>
+  return <div className="wb-scroll workspace-page-viewport" data-focus={Boolean(selected && session)} ref={scroll}>
+    <div className="wb-container workspace-page-container">
+      {selected && session && <div className="wb-toolbar"><div className="wb-location"><button className="wb-back wb-icon-button" aria-label={selected.status === 'done' ? '选择下一项' : '重新选择'} onClick={() => switchTo(null)} disabled={busy || transitioning}><Icon name="back" /></button><span className="wb-eyebrow">工作台</span></div></div>}
       <div className="wb-stage" data-leaving={transitioning} inert={transitioning}>
       {selectedId === null ? <div className="wb-chooser wb-enter" key="chooser">
-        <header className="wb-heading wb-overview-heading"><div><h2 ref={heading} tabIndex={-1}>想从哪开始？</h2><p>今天的重点，接下来的截止，都在这里</p></div>
-          <dl className="wb-today-metrics"><div><dt>可开始</dt><dd>{!preview && (data.loading || data.loadError) ? '—' : briefing.availableCount}</dd></div><div><dt>24h 内截止</dt><dd>{!preview && (data.loading || data.loadError) ? '—' : briefing.dueSoonCount}</dd></div><div><dt>今日完成</dt><dd>{!preview && (data.loading || data.loadError) ? '—' : briefing.completedTodayCount}</dd></div></dl>
-        </header>
+        <WorkspaceHeading className="wb-heading wb-overview-heading" title="工作台" description="今天的重点，接下来的截止，都在这里" headingRef={heading}>
+          <dl className="workspace-metrics wb-today-metrics"><div><dt>可开始</dt><dd>{!preview && (workspaceLoading || workspaceError) ? '—' : briefing.availableCount}</dd></div><div><dt>24h 内截止</dt><dd>{!preview && (data.loading || data.loadError) ? '—' : briefing.dueSoonCount}</dd></div><div><dt>今日完成</dt><dd>{!preview && (data.loading || data.loadError) ? '—' : briefing.completedTodayCount}</dd></div></dl>
+        </WorkspaceHeading>
         <div className="wb-overview-layout">
         <Glass appearance={appearance} className="wb-briefing-panel"><div className="wb-briefing-content">
-          {(preview || (!data.loading && !data.loadError)) && <XixiBriefing embedded tasks={tasks} briefing={briefing} appearance={appearance} preview={preview} disabled={busy || transitioning} focusMin={timer.durations.focusMin} restMin={timer.durations.restMin} onSelect={switchTo} onCapture={onCapture} />}
-          <UpcomingDeadlines embedded ref={deadlineHeading} revealTaskId={deadlineReturnId ?? undefined} appearance={appearance} tasks={tasks} now={now} disabled={busy || transitioning} loading={!preview && data.loading} error={preview ? '' : data.loadError} highlighted={false} onSelect={id => switchTo(id)} onRetry={data.retry} focusMin={timer.durations.focusMin} getSpentMs={timer.getSpentMs} scheduledMinutes={scheduledMinutes} />
+          {(preview || (!workspaceLoading && !workspaceError)) && <XixiBriefing embedded tasks={tasks} briefing={briefing} appearance={appearance} preview={preview} disabled={busy || transitioning} focusMin={timer.durations.focusMin} restMin={timer.durations.restMin} onSelect={switchTo} onCapture={onCapture} />}
+          <UpcomingDeadlines embedded ref={deadlineHeading} revealTaskId={deadlineReturnId ?? undefined} appearance={appearance} tasks={tasks} now={now} disabled={busy || transitioning} loading={!preview && workspaceLoading} error={preview ? '' : workspaceError} highlighted={false} onSelect={id => switchTo(id)} onRetry={retryWorkspace} focusMin={timer.durations.focusMin} getSpentMs={timer.getSpentMs} scheduledMinutes={scheduledMinutes} />
         </div></Glass>
         <div className="wb-task-sections">
-        {!preview && data.loading ? <p role="status" className="wb-empty">正在读取你的事项</p> : !preview && data.loadError ? <div className="wb-empty" role="alert"><p>{data.loadError}</p><button className="wb-action" onClick={data.retry}>重新读取</button></div> : <>
+        {!preview && workspaceLoading ? <p role="status" className="wb-empty">正在读取事项与日历安排</p> : !preview && workspaceError ? <div className="wb-empty" role="alert"><p>{workspaceError}</p><button className="wb-action" onClick={retryWorkspace}>重新读取</button></div> : <>
           <section className="wb-available" aria-labelledby="wb-available-heading"><header className="wb-section-heading"><h3 id="wb-available-heading">现在可以开始 <span>{groups.available.length}</span></h3></header>
           <div className="wb-task-grid">{groups.available.map((task, index) => renderTask(task, index === 0))}</div>
-          {groups.available.length === 0 && <Glass appearance={appearance} className="wb-empty"><p>{groups.later.length ? '今天没有安排，想提前开始也可以' : '暂时没有待做的事项'}</p><button className="wb-action" onClick={onCapture}>交给析熙</button></Glass>}
-          {groups.available.length > 0 && <p className="wb-rule-note">推荐暂按截止时间、进行状态与优先级排序</p>}
+          {groups.available.length === 0 && <Glass appearance={appearance} className="wb-empty"><p>{groups.later.length ? '当前没有临近的安排，事项保留在稍后安排中' : '暂时没有待做的事项'}</p><button className="wb-action" onClick={onCapture}>交给析熙</button></Glass>}
+          {groups.available.length > 0 && <p className="wb-rule-note">已排事项提前 20 分钟出现，原安排结束后仍可继续</p>}
           </section>
-          <section className="wb-later" aria-labelledby="wb-later-heading"><header className="wb-section-heading"><h3 id="wb-later-heading">稍后安排 <span>{groups.later.length}</span></h3><span>提前开始也可以</span></header><div className="wb-task-grid">{groups.later.map(task => renderTask(task))}</div>{groups.later.length === 0 && <p className="wb-section-empty">后面的时间，暂时留白</p>}</section>
-          {appearance.completed && <section className="wb-completed" aria-labelledby="wb-completed-heading"><header className="wb-section-heading"><h3 id="wb-completed-heading">已完成 <span>{groups.completed.length}</span></h3><span>每一步都留在这里</span></header><div>{groups.completed.map(task => <div className="wb-completed-row" data-task-id={task.id} data-completed-id={task.id} data-recent={task.id === recentCompletion} key={task.id}><span className="wb-completed-mark" aria-hidden="true">✓</span><span>{task.title}</span><small>{task.doneAt && <time dateTime={task.doneAt}>{shortTimestamp(task.doneAt, now)}</time>}{timer.getSpentMs(task.id) > 0 && <span>专注 {spentLabel(timer.getSpentMs(task.id))}</span>}{!task.doneAt && timer.getSpentMs(task.id) === 0 && '已完成'}</small><button type="button" className="wb-icon-button wb-reopen" title="撤回完成" aria-label={`撤回完成：${task.title}`} disabled={busy || transitioning} onClick={() => void reopen(task)}><Icon name="undo" /><span className="wb-tooltip" role="tooltip">{reopeningId === task.id ? '正在撤回' : '撤回完成'}</span></button></div>)}</div>{groups.completed.length === 0 && <p className="wb-section-empty">完成的事项会留在这里</p>}</section>}
+          <section className="wb-later" aria-labelledby="wb-later-heading"><header className="wb-section-heading"><h3 id="wb-later-heading">稍后安排 <span>{groups.later.length}</span></h3><span>临近安排时进入上方</span></header><div className="wb-task-grid">{groups.later.map(task => renderTask(task))}</div>{groups.later.length === 0 && <p className="wb-section-empty">后面的时间，暂时留白</p>}</section>
+          {appearance.completed && <CompletedTasks tasks={groups.completed} now={now} disabled={busy || transitioning} recentCompletion={recentCompletion} reopeningId={reopeningId} getSpentMs={timer.getSpentMs} onReopen={task => void reopen(task)} />}
         </>}
         </div></div>
         {error && <p className="wb-error" role="alert">{error}</p>}

@@ -9,28 +9,31 @@ import { readCurrentTime, directTimeRequest, clockMessage } from './current-time
 import { dayCapacity, carryItems, blocksForDay, routinesForDay, minuteOf } from '../src/planner/model.ts'
 import { localDay } from '../src/home/agenda.ts'
 import { createCompanion } from './companion.mjs'
+import { createFreeTime } from './freeTime.mjs'
+import { createRouteAnalysis } from './routeAnalysis.mjs'
 import { normalizeAssistantProtocol } from './provider-protocol.mjs'
 import { prepareTaskSteps } from './taskSteps.mjs'
 import { taskSteps } from '../src/domain/taskSteps.ts'
 import { createWorkOrder } from './workOrder.mjs'
 import { contextUnits, fitContext } from './contextBudget.mjs'
+import { resolveContextBudget } from './modelSettings.mjs'
 export { contextUnits } from './contextBudget.mjs'
 import { DEFAULT_INITIAL_MINUTES, initialTaskSchedule, onlyRecordRequested } from './autoSchedule.mjs'
+import { expandRecurringTaskDrafts } from './taskRecurrence.mjs'
+import { TASK_RECEIPT_CAPABILITIES } from '../src/domain/receiptCapabilities.ts'
+import { ASTARIA_PRODUCT_GUIDE, applicationSettings, compactProductGuide } from './productGuide.mjs'
 
 const PERSONA = readFileSync(new URL('./prompts/persona.md', import.meta.url), 'utf8')
 const WORKING = readFileSync(new URL('./prompts/working.md', import.meta.url), 'utf8')
 // Reserve room for the fresh clock and source index appended at dispatch.
 // The step tools add schema and focused progress to the payload. Reserve that
 // space without evicting the adjacent conversation or a useful summary.
-const MAX_INPUT_UNITS = 9_500
-const HARD_INPUT_UNITS = 14_000
-const MAX_ROUNDS = 6
-const MAX_CALLS = 12
+export const HARD_INPUT_UNITS = 48_000
+export const MAX_ROUNDS = 24
+const MAX_CALLS = 64
 const objectSchema = properties => ({ type: 'object', properties, additionalProperties: false })
-// Keep the function schema small enough to leave room for the live planner
-// snapshot and recent conversation. Detailed behavioral rules live in
-// working.md; these field labels only need to identify the value.
-const str = description => ({ type: 'string', description: String(description).slice(0, 8) })
+// Parameter semantics are part of the interface, not expendable decoration.
+const str = description => ({ type: 'string', description: String(description) })
 const weekdaySchema = { type: 'integer', minimum: 0, maximum: 6, description: '0日…6六' }
 const plannerEvidence = str('用户原话；可引用相邻确认')
 const taskCreationScheduling = { changed: false, required: true,
@@ -38,14 +41,11 @@ const taskCreationScheduling = { changed: false, required: true,
 const taskSchedulingReceipt = tasks => ({ ...taskCreationScheduling, taskIds: tasks.map(task => task.id),
   requirements: tasks.map(task => ({ taskId: task.id, title: task.title, ...(task.startAt ? { date: task.startAt.slice(0, 10) } : {}) })) })
 const explicitTimeRange = text => /(?<!\d)(?:[01]?\d|2[0-3])\s*[:：]?\s*[0-5]\d\s*(?:[-–—至到]\s*)(?:[01]?\d|2[0-3])\s*[:：]?\s*[0-5]\d(?!\d)/u.test(text)
-const concreteScheduleIntent = text => (explicitTimeRange(text) ||
-  /(?:\b\d{3,4}\b|课表|上课|后面一节|顺延|连堂|整体(?:往前|往后)?挪|每周[一二三四五六日天])/u.test(text)) &&
-  /(?:课|英语|数学|物理|PHY|L&L|午休|空课|课程|顺延|连堂|挪)/iu.test(text)
 const taskProperties = {
   title: str('任务名称，最多160字符'), notes: str('背景、步骤，以及哪些字段是估计'),
-  due: str('DDL，YYYY-MM-DD 或带明确时区的ISO时间'),
+  due: str('DDL，YYYY-MM-DD 或带明确时区的ISO时间；未知省略，创建后用户可在回执按钮补日期/时刻'),
   startAt: str('计划日期意向，仅YYYY-MM-DD；精确时段用read_planner→plan_tasks'),
-  estimateMin: { type: 'integer', minimum: 1, maximum: 1440 },
+  estimateMin: { type: 'integer', minimum: 1, maximum: 1440, description: '预估分钟数；未知省略，由自动排期先预留30分钟，用户可在回执快捷修改' },
   importance: { type: 'integer', enum: [1, 2, 3] },
   energy: { type: 'string', enum: ['deep', 'light'] },
   area: { type: ['string', 'null'], description: '分类ID，使用当前环境areas字典中的id；未确定分类用null' },
@@ -55,23 +55,36 @@ const patchProperties = { ...taskProperties,
   due: { ...taskProperties.due, type: ['string', 'null'] },
   startAt: { ...taskProperties.startAt, type: ['string', 'null'] },
   estimateMin: { ...taskProperties.estimateMin, type: ['integer', 'null'] },
+  occurrenceDate: { type: 'string', description: '明确改某次重复任务日期，YYYY-MM-DD；已有日程会沿用原计划ID和开始时刻同步改期，冲突则整次修改不保存' },
 }
 const creationProperties = { ...taskProperties, scheduleWindow: str('指定已知可用窗口名称，例如宿舍；省略自动选空档'),
+  scheduleDate: str('必须在哪一天做，YYYY-MM-DD；今晚/明晚等明确当天要求用此字段，不当作DDL。当天放不下则保留事项并返回未排，不挪到次日'),
+  repeat: { ...objectSchema({ from: str('起始YYYY-MM-DD'), to: str('截至YYYY-MM-DD'),
+    weekdays: { type: 'array', minItems: 1, maxItems: 7, uniqueItems: true, items: weekdaySchema, description: '包含的星期；0周日…6周六' },
+    preferredWindow: str('优先窗口名'), allowFallback: { type: 'boolean', description: '优先窗口无完整空档时允许同日其他空档' },
+    placement: { type: 'string', enum: ['start', 'end'], description: '窗口前段/最后完整时段；默认start' },
+  }), required: ['from', 'to', 'weekdays', 'allowFallback'],
+    description: '每天一次用单模板repeat展开；estimateMin为每次时长，只排各自日期完整一段，不混用startAt/schedule' },
   schedule: { ...objectSchema({ date: str('YYYY-MM-DD'), start: str('开始 HH:mm'), end: str('结束 HH:mm') }), required: ['date', 'start', 'end'],
     description: '用户指定的日历时段；先read_planner，传expectedRevision，创建和此时段一起保存' } }
 const tool = (name, description, properties, required = []) => ({
-  type: 'function', function: { name, description: String(description).slice(0, 24), parameters: { ...objectSchema(properties), required } },
+  type: 'function', function: { name, description, parameters: { ...objectSchema(properties), required } },
 })
 export const XIXI_TOOLS = [
+  tool('read_product_guide', '读取ASTaria已实现功能、页面入口和操作边界；资料已足够时直接执行用户任务', {
+    section: { type: 'string', enum: ['home', 'workbench', 'schedule', 'free-time', 'strings', 'settings', 'records', 'boundaries'] },
+  }, ['section']),
   tool('read_current_time', '读取调用当刻本机系统时钟，返回用户时区的日期与 HH:mm。询问现在、核对钟点或用户指出时间不一致时，读取后采用最新读数', {}),
-  tool('ask_user', '仅澄清执行必需但尚未知的信息，给2–4个快捷选项。明确请求直接执行，已知课表先读取。单独调用后等待回答。选项必须是互斥且完整的最终方案；prompt不要另列“一是/二是”或其他会与选项编号冲突的方案', {
+  tool('ask_user', '需要用户补充必需信息，或已知约束冲突且尚未决定取舍时，立即用一个具体问题询问，给2–4个快捷选项。事实可查先读取，可行的明确请求直接执行；不重复确认已给出的选择。已确定的内容可先保存。单独调用后等待回答，不继续推演同一冲突。选项互斥、可成立，不编造空档；prompt不要另列会与选项编号冲突的方案', {
     prompt: str('自然、温柔的提问，可先简短交代已完成的操作；最多1000字；不要在正文另列带编号方案'),
     options: { type: 'array', minItems: 2, maxItems: 4, items: { type: 'string', maxLength: 80 }, description: '具体易选的回答，互不重复；建议安排使用提议语气' },
   }, ['prompt', 'options']),
-  tool('read_tasks', '读取最新任务与日期，返回ID及updatedAt供更新使用', {
+  tool('read_tasks', '读取最新任务与日期，返回ID及updatedAt供更新使用；nextOffset继续读取，指定taskId读取完整备注', {
     query: str('标题或备注关键词'), taskId: str('指定任务ID'),
     status: { type: 'string', enum: ['todo', 'doing', 'done', 'dropped'] },
     from: str('开始日期 YYYY-MM-DD'), to: str('结束日期 YYYY-MM-DD'),
+    offset: { type: 'integer', minimum: 0, description: '续页起点，默认0' },
+    limit: { type: 'integer', minimum: 1, maximum: 40, description: '每页数量，默认20' },
   }),
   tool('read_task_steps', '读取任务步骤与勾选进度，每页最多8项；offset续页，stepId读取单步完整说明。改已有步骤先读', {
     taskId: str('任务ID'), offset: { type: 'integer', minimum: 0, maximum: 100 }, stepId: str('可选：读取此步骤全文'),
@@ -80,8 +93,11 @@ export const XIXI_TOOLS = [
     taskId: str('当前任务ID'), expectedUpdatedAt: str('最新任务updatedAt'),
     steps: { type: 'array', minItems: 1, maxItems: 30, items: { ...objectSchema({ id: str('修改已有步骤时用原id'), title: str('具体动作，最多160字'), detail: str('完成标准、材料或提交物，最多600字') }), required: ['title'] } },
   }, ['taskId', 'expectedUpdatedAt', 'steps']),
-  tool('read_planner', '读取指定日期起最多7天的真实课程、明确空闲、任务计划、携带准备和版本。安排前先读取目标日期，未知空档保留待确认', {
+  tool('read_planner', '读取最多7天真实课程、空闲与任务计划。各天常规课表独立返回；truncated时用该集合readMore参数继续读取，section详细页每次1天', {
     date: str('起始日期 YYYY-MM-DD'), days: { type: 'integer', minimum: 1, maximum: 7, description: '读取天数，默认1' },
+    section: { type: 'string', enum: ['overview', 'routines', 'blocks', 'tasks', 'carry', 'capacity', 'availabilityWindows'], description: '默认overview；按集合名称读取详细页' },
+    offset: { type: 'integer', minimum: 0, description: '详细页起点，默认0' },
+    limit: { type: 'integer', minimum: 1, maximum: 64, description: '详细页数量，默认32' },
   }, ['date']),
   tool('read_weekly_timetable', '读取某周模板的课时ID与钟点；修改前先读', { weekday: weekdaySchema }, ['weekday']),
   tool('edit_weekly_timetable', '批量修正周模板；先读。具体时刻/顺序须提交全部受影响课时，连堂含两节；未提到的保留', {
@@ -99,6 +115,17 @@ export const XIXI_TOOLS = [
   tool('restore_day_timetable', '取消单日调课，先read_planner读目标日', {
     date: str('YYYY-MM-DD'), expectedRevision: { type: 'integer', minimum: 0 }, evidence: plannerEvidence,
   }, ['date', 'expectedRevision', 'evidence']),
+  tool('save_day_events', '保存单日固定活动、会议或临时课程，支持任意明确钟点，不要求落在可用窗口内。先read_planner；保留周模板与任务，真实重叠返回conflicts。修改传已有id，多项一次保存', {
+    expectedRevision: { type: 'integer', minimum: 0 }, evidence: plannerEvidence,
+    events: { type: 'array', minItems: 1, maxItems: 8, items: { ...objectSchema({
+      id: str('已有单日活动ID，新增省略'), title: str('活动名称；只说有课可记为课程，无需猜具体科目'),
+      date: str('YYYY-MM-DD'), start: str('开始 HH:mm'), end: str('结束 HH:mm'),
+      location: str('已知地点，可留空'), items: { type: 'array', maxItems: 100, items: str('明确携带物品') },
+    }), required: ['title', 'date', 'start', 'end'] } },
+  }, ['expectedRevision', 'evidence', 'events']),
+  tool('remove_day_event', '移除已读取的单日活动，保留周模板和其他任务', {
+    id: str('单日活动ID'), expectedRevision: { type: 'integer', minimum: 0 }, evidence: plannerEvidence,
+  }, ['id', 'expectedRevision', 'evidence']),
   tool('plan_tasks', '在已读取的可用窗口保存1–8段日历时段；顺延时新增与原id移动同批提交，保留锁定与DDL。明确选择直接保存后再回复', {
     expectedRevision: { type: 'integer', minimum: 0 },
     plans: { type: 'array', minItems: 1, maxItems: 8, items: { ...objectSchema({
@@ -110,6 +137,22 @@ export const XIXI_TOOLS = [
   }, ['id', 'expectedRevision']),
   tool('read_companion', '读取接力、牵挂、方案及真实空档机会', {
     date: str('起始日期 YYYY-MM-DD'), days: { type: 'integer', minimum: 1, maximum: 7 },
+  }),
+  tool('read_free_time', '读取余时长期目标、实际学习安排和完成反馈。目标按页读取，日历日期不会被压缩成空列表', {
+    date: str('起始日期 YYYY-MM-DD'), offset: { type: 'integer', minimum: 0 }, limit: { type: 'integer', minimum: 1, maximum: 20 },
+  }),
+  tool('save_free_time_goal', '保存或修改余时长期学习目标并自动安排真实空档；原目标传id和版本，暂停不新增。单次偏好默认20–40分钟，长期只保留一个目标', {
+    id: str('已有目标ID，新增省略'), title: str('长期目标名称'), evidence: str('用户原话依据'),
+    priority: { type: 'string', enum: ['high', 'normal', 'low'] }, minPerWeek: { type: 'integer', minimum: 0, maximum: 14 },
+    sessionMin: { type: 'integer', minimum: 5, maximum: 720 }, sessionMax: { type: 'integer', minimum: 5, maximum: 720 },
+    targetDate: str('阶段目标日期 YYYY-MM-DD'), targetNote: str('阶段重点、复习情况或学习反馈'),
+    status: { type: 'string', enum: ['active', 'paused', 'deleted'] }, expectedVersion: { type: 'integer', minimum: 0 },
+  }, ['title', 'evidence']),
+  tool('complete_free_time_session', '记录余时某一次学习完成与反馈，不结束整个长期目标；先read_free_time确认真实时段', {
+    sessionId: str('read_free_time返回的学习时段ID'), feedback: { type: 'string', enum: ['smooth', 'stuck', 'continue'] }, nextStep: str('下次接着做什么，可为空'),
+  }, ['sessionId']),
+  tool('schedule_free_time', '根据余时目标优先级、阶段日期和最低频率，安排未来7天学习并保留休息；每目标一个长期事项，已排不重复，返回实际时段与缺口', {
+    date: str('从今天或未来日期开始 YYYY-MM-DD'),
   }),
   tool('save_handoff', '按本轮原话保存接力，先读取版本', {
     taskId: str('任务ID'), progress: str('已做到哪里'), obstacle: str('卡点，可为空'), nextStep: str('下一步，可为空'),
@@ -124,7 +167,11 @@ export const XIXI_TOOLS = [
     id: str('牵挂ID'), status: { type: 'string', enum: ['active', 'paused', 'deleted'] },
     expectedVersion: { type: 'integer', minimum: 1 }, evidence: str('本轮用户要求的原话'),
   }, ['id', 'status', 'expectedVersion', 'evidence']),
-  tool('preview_scenario', '推演草案供界面比较应用；rest首日休息，light短段留余量，DDL保持', {
+  tool('preview_route', '让析熙根据具体选择生成当前与候选路线；只保存核验后的比较草案，不改日历。用户在平行宇宙采用后才执行', {
+    taskId: str('要比较的现有单次任务ID，余时目标在余时管理'), date: str('从今天或未来日期开始 YYYY-MM-DD'),
+    question: str('用户具体想尝试的改变及约束，继承最近对话'), recurrence: { type: 'string', enum: ['once', 'weekly'] },
+  }, ['taskId', 'date', 'question']),
+  tool('preview_scenario', '旧版规则排程草案；不提供模型判断。比较具体选择优先preview_route；rest首日休息，light短段留余量', {
     date: str('起始日期 YYYY-MM-DD'), days: { type: 'integer', minimum: 1, maximum: 7 },
     mode: { type: 'string', enum: ['rebalance', 'rest', 'light'] },
     taskIds: { type: 'array', maxItems: 64, items: str('指定任务ID，省略为未完成任务') },
@@ -139,7 +186,7 @@ export const XIXI_TOOLS = [
     query: str('精确关键词'), taskId: str('限定任务'),
     messageIds: { type: 'array', minItems: 1, maxItems: 3, items: str('消息ID，读取出处原文') },
   }),
-  tool('create_tasks', '创建事项并自动安排真实空档；按回执报告，具体钟点继续read_planner→plan_tasks', {
+  tool('create_tasks', '创建需要完成的作业/待办并自动安排真实空档。指定时段先read_planner并携带schedule；固定活动/临时课程用save_day_events', {
     tasks: { type: 'array', minItems: 1, maxItems: 8, items: { ...objectSchema(creationProperties), required: ['title'] } },
     expectedRevision: { type: 'integer', minimum: 0, description: '提供schedule时必填，来自read_planner' },
   }, ['tasks']),
@@ -185,7 +232,18 @@ function requireDateIntent(draft) {
 }
 function taskView(task) {
   if (!task) return null
-  return Object.fromEntries(['id', 'title', 'due', 'startAt', 'estimateMin', 'status', 'importance', 'updatedAt'].filter(key => task[key] !== undefined).map(key => [key, task[key]]))
+  return Object.fromEntries(['id', 'title', 'due', 'startAt', 'estimateMin', 'occurrence', 'freeTimeGoalId', 'status', 'importance', 'updatedAt'].filter(key => task[key] !== undefined).map(key => [key, task[key]]))
+}
+function recurringScheduling(tasks, plans) {
+  const occurrences = tasks.filter(task => task.occurrence)
+  if (!occurrences.length) return {}
+  const requestedDates = [...new Set(occurrences.map(task => task.occurrence.date))].sort()
+  const scheduledDates = requestedDates.filter(date => occurrences.filter(task => task.occurrence.date === date).every(task => {
+    const matching = plans.filter(plan => plan.taskId === task.id)
+    return matching.length === 1 && matching[0].date === date && minuteOf(matching[0].end) - minuteOf(matching[0].start) === task.estimateMin
+  }))
+  return { recurrence: { requestedDates, scheduledDates, unscheduledDates: requestedDates.filter(date => !scheduledDates.includes(date)) },
+    requirements: occurrences.map(task => ({ taskId: task.id, date: task.occurrence.date })) }
 }
 function stepProgress(task) {
   const steps = taskSteps(task)
@@ -234,19 +292,22 @@ function providerMessages(messages) {
     const next = { role: message.role, content: message.question
       ? `${message.content}\n可选回答：${message.question.options.map((option, index) => `${index + 1}. ${option}`).join('；')}\n也可以自由回答`
       : message.content || null }
+    if (message.reasoningContent !== undefined) next.reasoning_content = message.reasoningContent
     if (message.contextReceipt) next.content = `${next.content ?? ''}${message.contextReceipt}`
     if (message.toolCalls?.length) next.tool_calls = message.toolCalls
     return next
   })
 }
 function currentMessagesForContext(messages) {
-  // Keep the user's original words plus the latest complete tool round. Earlier
-  // actions remain in the current factual snapshot and durable operation receipt.
-  const first = messages.find(message => message.role === 'user')
-  const latest = messages.findLastIndex(message => message.role === 'assistant' && message.toolCalls?.length)
-  return latest < 0 ? messages : [first, ...messages.slice(latest)].filter(Boolean)
+  // Reads form a working set: reading tasks must not erase the planner that
+  // was just read. Fit the dispatch once, preserving native call/result pairs.
+  return messages
 }
 function visibleHistory(messages, operations) {
+  // Thinking tool exchanges are a protocol transcript. Preserve every native
+  // assistant/result pair and the exact reasoning field while the turn is in
+  // recent context; older turns can leave together through normal summarizing.
+  if (messages.some(message => message.reasoningContent !== undefined)) return messages.map(message => ({ ...message }))
   // Completed tool rounds can be far larger than the conversation itself.
   // Preserve the user's words and the final reply/question, with a small factual
   // receipt instead of replaying old native tool calls and their entire payloads.
@@ -265,6 +326,33 @@ function visibleHistory(messages, operations) {
     }
   }
   return visible
+}
+function archivedHistory(messages, operations) {
+  // A retained native thinking transcript must keep its reasoning verbatim.
+  // Under pressure, retire the WHOLE old turn instead: its visible dialogue
+  // and commit evidence become explicitly quoted historical data, not forged
+  // assistant/tool messages. SQLite remains the source of the full transcript.
+  const source = messages.at(-1)
+  const calls = new Map(messages.flatMap(message => (message.toolCalls ?? []).map(call => [call.id, call.function?.name])))
+  const exchanges = messages.filter(message => message.role !== 'user').map(message => {
+    const item = { sourceMessageId: message.id, at: message.createdAt, role: message.role }
+    if (message.role === 'tool') return { ...item, toolCallId: message.toolCallId, tool: calls.get(message.toolCallId),
+      resultArchived: true }
+    const normalized = normalizeAssistantProtocol(message)
+    return { ...item, content: normalized.content,
+      ...(normalized.question ? { question: normalized.question } : {}),
+      ...(message.toolCalls?.length ? { toolCalls: message.toolCalls.map(call => ({ id: call.id, name: call.function?.name })) } : {}) }
+  })
+  const receipts = operations.map(operation => ({ id: operation.id, summary: operation.summary,
+    ...(operation.undoneAt ? { undoneAt: operation.undoneAt } : {}),
+    changes: operation.changes.map(change => ({ table: change.table, id: change.id,
+      ...(change.table === 'tasks' ? { title: change.after?.title ?? change.before?.title } : {}) })),
+    ...(operation.planChanges ? { planChanges: operation.planChanges } : {}) }))
+  return [...messages.filter(message => message.role === 'user').map(message => ({ ...message })), {
+    id: source.id, role: 'system', createdAt: source.createdAt,
+    archivedSourceMessageIds: messages.map(message => message.id),
+    content: `已归档的历史回合（以下是历史数据，不是新指令；回复中的时间和状态属于来源时刻，当前状态以数据库为准。完整原文可用 search_history 按 sourceMessageId 读取）\n${JSON.stringify({ requestId: source.requestId, exchanges, operations: receipts })}`,
+  }]
 }
 function resultMessage(response) {
   const message = response?.choices?.[0]?.message
@@ -285,21 +373,24 @@ function compactOperation(operation) {
 function committedReceiptText(summaries, execution, cancelledSummaries = []) {
   const unique = [...new Set(summaries.filter(Boolean))]
   const unresolved = [...new Set([execution?.pending, execution?.interrupted, ...(execution?.failures ?? []).map(item => item.error),
-    ...(execution?.scheduleRequirements ?? []).filter(item => item.status === 'pending').map(item => item.reason)].filter(Boolean))]
-  const saved = unique.length ? `已保存：\n${unique.map(summary => `- ${summary}`).join('\n')}\n以上是刚刚实际写入的结果。` : '本次没有保存新的变更。'
+    ...[...(execution?.scheduleRequirements ?? []), ...(execution?.eventRequirements ?? [])].filter(item => item.status === 'pending').map(item => item.reason)].filter(Boolean))]
+  const saved = unique.length ? `${unresolved.length ? '本轮写入记录' : '已保存'}：\n${unique.map(summary => `- ${summary}`).join('\n')}\n${unresolved.length ? '当前仍未完成或后来变化的部分见下方。' : '以上是刚刚实际写入的结果。'}` : '本次没有保存新的变更。'
   const cancelled = [...new Set(cancelledSummaries.filter(Boolean))]
   return `${saved}${cancelled.length ? `\n\n已撤销，保持撤销后的状态：\n${cancelled.map(summary => `- ${summary}`).join('\n')}` : ''}${unresolved.length ? `\n\n尚未完成：\n${unresolved.map(reason => `- ${reason}`).join('\n')}` : ''}`
 }
 function companionSourceIds(value) {
-  return [...(value.handoffs ?? []), ...(value.wishes ?? []), ...(value.scenarios ?? []), ...(value.opportunities ?? []),
-    value.handoff, value.wish, value.scenario].filter(Boolean).flatMap(item => item.source?.messageId ? [item.source.messageId] : [])
+  return [...(value.handoffs ?? []), ...(value.wishes ?? []), ...(value.freeTimeGoals ?? []), ...(value.goals ?? []), ...(value.scenarios ?? []), ...(value.opportunities ?? []),
+    value.handoff, value.wish, value.goal, value.scenario].filter(Boolean).flatMap(item => item.source?.messageId ? [item.source.messageId] : [])
 }
 const compactSource = source => ({ kind: source.kind, ...(source.messageId ? { messageId: source.messageId } : {}),
   ...(source.evidence ? { evidence: clipped(source.evidence, 120), truncated: source.evidence.length > 120 } : {}) })
 
 export function createXixi({ db, complete, now = () => new Date() }) {
   const companion = createCompanion({ db, now })
+  const freeTime = createFreeTime({ db, now })
+  const routeAnalysis = createRouteAnalysis({ db, companion, complete, now })
   const preferences = () => db.getPreference('app') ?? {}
+  const contextBudget = () => resolveContextBudget(db.getPreference('model-connection') ?? {})
   const locks = new Map()
   const clock = () => { const value = now(); return value instanceof Date ? value : new Date(value) }
   const timestamp = () => clock().toISOString()
@@ -317,6 +408,25 @@ export function createXixi({ db, complete, now = () => new Date() }) {
       items.push(item)
     }
     return { items, total: rows.length, truncated: items.length < rows.length }
+  }
+  function rowPage(rows, { offset = 0, limit = 32, units = 6000, map = value => value, readMore }) {
+    const items = []
+    let used = 0
+    for (const row of rows.slice(offset, offset + limit)) {
+      const item = map(row), size = contextUnits(item)
+      // A single complete row must remain retrievable even when its notes or
+      // preparation list exceed the usual page budget.
+      if (items.length && used + size > units) break
+      items.push(item); used += size
+    }
+    const nextOffset = offset + items.length < rows.length ? offset + items.length : null
+    return { items, total: rows.length, offset, nextOffset, truncated: nextOffset !== null,
+      ...(nextOffset !== null ? { readMore: { ...readMore, offset: nextOffset, limit } } : {}) }
+  }
+  function readPageOptions(args, defaultLimit, maxLimit) {
+    const offset = args.offset ?? 0, limit = args.limit ?? defaultLimit
+    if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isInteger(limit) || limit < 1 || limit > maxLimit) throw new ValidationError('分页起点和数量无效')
+    return { offset, limit }
   }
   function compactCapacity(capacity, limit = 16) {
     return { ...capacity, available: capacity.available.slice(0, limit), free: capacity.free.slice(0, limit),
@@ -369,13 +479,55 @@ export function createXixi({ db, complete, now = () => new Date() }) {
     }
     throw new ValidationError('调课依据需为当前或相邻确认中的一段用户原话；请从已有对话引用，分开的句子不要拼接，无需让用户重复确认')
   }
-  function plannerDayView(state, tasks, date, at, units = 2200, selectedTaskId) {
+  function plannerDayView(state, tasks, date, at, units = 2200, selectedTaskId, detail) {
     const blocks = blocksForDay(state, tasks, date)
     const selectedIds = new Set(blocks.map(block => block.taskId))
     const datedTasks = tasks.filter(task => !task.deletedAt && task.status !== 'dropped' &&
       (task.id === selectedTaskId || selectedIds.has(task.id) || (task.due && localDay(new Date(task.due.length === 10 ? `${task.due}T00:00:00` : task.due)) === date)))
     const byId = new Map(tasks.map(task => [task.id, task]))
     const cap = dayCapacity(state, tasks, date, at)
+    const routineRows = routinesForDay(state, date)
+    const collections = {
+      routines: routineRows.map(({ id, title, kind, start, end, location, items, sourceDate }) => ({ id, title, kind, start, end, location, items, ...(sourceDate ? { sourceDate, editTool: 'save_day_events' } : {}) })),
+      blocks: blocks.map(block => ({ ...block, title: byId.get(block.taskId)?.title, derivedFromStartAt: !state.blocks.some(item => item.id === block.id) })),
+      tasks: datedTasks.map(task => ({ ...taskView(task), ...(task.notes ? { notes: task.notes } : {}),
+        ...(state.details[task.id] ? { preparation: state.details[task.id] } : {}) })),
+      carry: carryItems(state, tasks, date),
+    }
+    const override = state.dayOverrides?.[date] ? { sourceWeekday: state.dayOverrides[date].sourceWeekday, onlyThisDate: true, templateChanged: snapshotChanged(state, state.dayOverrides[date]), readSource: 'read_weekly_timetable' } : null
+    if (detail?.section && detail.section !== 'overview') {
+      const { section, offset, limit } = detail
+      const readMore = { tool: 'read_planner', date, section }
+      if (section === 'capacity') return { date, section, capacity: Object.fromEntries(Object.entries(cap).map(([key, value]) =>
+        [key, Array.isArray(value) ? rowPage(value, { offset, limit, readMore }) : value])) }
+      if (section === 'availabilityWindows') {
+        // Details are sourced from complete capacity and schedule rows rather
+        // than repeatedly calling the abbreviated environment preview.
+        const rows = routineRows.filter(routine => routine.kind === 'available').map(window => {
+          const within = ranges => ranges.map(range => ({ start: Math.max(range.start, minuteOf(window.start)), end: Math.min(range.end, minuteOf(window.end)) })).filter(range => range.end > range.start)
+          return { ...window, free: within(cap.free), remaining: within(cap.remaining),
+            occupied: [...collections.routines.filter(row => row.kind !== 'available'), ...collections.blocks]
+              .filter(row => row.start < window.end && window.start < row.end) }
+        })
+        return { date, section, availabilityWindows: rowPage(rows, { offset, limit, readMore }) }
+      }
+      return { date, section, [section]: rowPage(collections[section], { offset, limit, readMore }) }
+    }
+    if (detail) {
+      const page = (section, limit, budget, map) => rowPage(collections[section], { limit, units: budget, map,
+        readMore: { tool: 'read_planner', date, section } })
+      return { date, capacity: compactCapacity(cap, 64),
+        ...(cap.available.length > 64 || cap.free.length > 64 || cap.remaining.length > 64 || cap.conflicts.length > 16
+          ? { capacityReadMore: { tool: 'read_planner', date, section: 'capacity', offset: 0 } } : {}),
+        availabilityWindows: { ...availabilityWindows(state, tasks, date, at, 1800), readMore: { tool: 'read_planner', date, section: 'availabilityWindows', offset: 0 } },
+        dayOverride: override,
+        routines: page('routines', 32, 2200, ({ items, ...row }) => ({ ...row, items: items.slice(0, 8),
+          ...(items.length > 8 ? { itemsTruncated: true, readMore: { tool: 'read_planner', date, section: 'routines', offset: collections.routines.findIndex(item => item.id === row.id), limit: 1 } } : {}) })),
+        blocks: page('blocks', 32, 2200), tasks: page('tasks', 24, 1600, ({ notes, preparation, ...row }) => ({ ...row,
+          ...(notes || preparation ? { readMore: { tool: 'read_planner', date, section: 'tasks', offset: collections.tasks.findIndex(item => item.id === row.id), limit: 1 } } : {}) })),
+        carry: page('carry', 24, 1200),
+      }
+    }
     return {
       date, capacity: compactCapacity(cap, 12),
       availabilityWindows: availabilityWindows(state, tasks, date, at, Math.max(360, Math.floor(units * .32))),
@@ -392,11 +544,15 @@ export function createXixi({ db, complete, now = () => new Date() }) {
   function readPlanner(input, args) {
     const first = day(args.date), count = args.days ?? 1
     if (!Number.isInteger(count) || count < 1 || count > 7) throw new ValidationError('每次读取1至7天安排')
+    const section = args.section ?? 'overview', page = readPageOptions(args, 32, 64)
+    if (!['overview', 'routines', 'blocks', 'tasks', 'carry', 'capacity', 'availabilityWindows'].includes(section)) throw new ValidationError('未知安排读取分区')
+    if (section !== 'overview' && count !== 1) throw new ValidationError('详细分页每次读取一天，请使用要继续查看的date')
+    if (section === 'overview' && (args.offset !== undefined || args.limit !== undefined)) throw new ValidationError('请指定section再读取详细分页')
     const state = db.getPlanner(), tasks = db.listTasks(), at = clock(), days = []
     const start = new Date(`${first}T12:00:00`)
     for (let offset = 0; offset < count; offset++) {
       const date = localDay(new Date(start.getFullYear(), start.getMonth(), start.getDate() + offset))
-      days.push(plannerDayView(state, tasks, date, at, Math.floor(2800 / count), input.context.taskId))
+      days.push(plannerDayView(state, tasks, date, at, 6000, input.context.taskId, { section, ...page }))
     }
     return { type: 'planner_read', revision: state.revision, timezone: plannerTimezone(), userTimezone: input.context.timezone,
       timezoneMatches: timezoneMatches(input.context.timezone), capturedAt: at.toISOString(), timetableConfirmed: state.timetableConfirmed,
@@ -417,14 +573,49 @@ export function createXixi({ db, complete, now = () => new Date() }) {
     }
     if (!readDates.size || dates.some(date => !readDates.has(date))) throw new ValidationError('先用 read_planner 读取这些日期的最新安排，再继续操作', 409)
   }
+  function eventConflicts(state, events) {
+    const tasks = db.listTasks(), byId = new Map(tasks.map(task => [task.id, task]))
+    return [...new Set(events.map(event => event.date))].map(date => {
+      const ids = new Set(dayCapacity(state, tasks, date, clock()).conflicts)
+      const rows = [...routinesForDay(state, date), ...blocksForDay(state, tasks, date).map(block => ({ ...block, title: byId.get(block.taskId)?.title }))]
+        .filter(item => ids.has(item.id)).map(({ id, title, start, end, taskId, sourceDate, locked }) => ({ id, title, start, end, taskId, sourceDate, locked }))
+      return { date, items: rows.slice(0, 32), total: rows.length, truncated: rows.length > 32,
+        ...(rows.length > 32 ? { readMore: { tool: 'read_planner', date, section: 'capacity' } } : {}) }
+    })
+  }
   function applyPlannerTool(name, args, input, id, parentOperationId) {
     const state = db.getPlanner()
     let actions, summary, evidenceSourceIds = []
     if (state.revision !== args.expectedRevision) throw new ValidationError('安排已在其他窗口更新，请先重新读取', 409)
-    if (['plan_tasks', 'remove_plan', 'set_day_timetable', 'restore_day_timetable', 'edit_weekly_timetable'].includes(name) && !timezoneMatches(input.context.timezone)) {
+    if (['plan_tasks', 'remove_plan', 'save_day_events', 'remove_day_event', 'set_day_timetable', 'restore_day_timetable', 'edit_weekly_timetable'].includes(name) && !timezoneMatches(input.context.timezone)) {
       throw new ValidationError(`日程使用本机时区 ${plannerTimezone()}，与当前页面时区不同；统一时区后我再安排`, 409)
     }
-    if (name === 'set_day_timetable' || name === 'restore_day_timetable') {
+    if (name === 'save_day_events' || name === 'remove_day_event') {
+      evidenceSourceIds = plannerEvidenceSources(input, args.evidence)
+      if (name === 'save_day_events') {
+        if (!Array.isArray(args.events) || !args.events.length || args.events.length > 8) throw new ValidationError('每次保存1至8项单日活动')
+        const events = args.events.map((event, index) => {
+          knownKeys(event, ['id', 'title', 'date', 'start', 'end', 'location', 'items'])
+          const previous = event.id === undefined ? null : state.dayEvents?.find(item => item.id === identifier(event.id))
+          if (event.id !== undefined && !previous) throw new ValidationError('找不到这项单日活动，请重新读取', 404)
+          const value = { id: previous?.id ?? stableId(id, index), title: inputText(event.title, '活动名称', 160),
+            date: day(event.date), start: clockTime(event.start), end: clockTime(event.end),
+            location: event.location ?? previous?.location ?? '', items: event.items ?? previous?.items ?? [] }
+          if (value.date < localDay(clock())) throw new ValidationError('活动日期已经过去，请核对日期', 409)
+          requirePlannerRead(input, args.expectedRevision, [value.date, ...(previous ? [previous.date] : [])])
+          return value
+        })
+        if (new Set(events.map(event => event.id)).size !== events.length) throw new ValidationError('同一批次不能重复修改同一活动')
+        actions = events.map(event => ({ type: 'save-day-event', event }))
+        summary = `保存 ${events.length} 项单日活动：${events.map(event => `${event.title} ${event.date} ${event.start}–${event.end}`).join('、')}`
+      } else {
+        const event = state.dayEvents?.find(item => item.id === identifier(args.id))
+        if (!event) throw new ValidationError('找不到这项单日活动', 404)
+        requirePlannerRead(input, args.expectedRevision, [event.date])
+        actions = [{ type: 'delete-day-event', id: event.id }]
+        summary = `移除单日活动：${event.title} ${event.date} ${event.start}–${event.end}`
+      }
+    } else if (name === 'set_day_timetable' || name === 'restore_day_timetable') {
       const date = day(args.date)
       evidenceSourceIds = plannerEvidenceSources(input, args.evidence)
       if (date < localDay(clock())) throw new ValidationError('调课日期已经过去，请确认要调整的日期', 409)
@@ -463,7 +654,7 @@ export function createXixi({ db, complete, now = () => new Date() }) {
         if (new Date(`${plan.date}T${plan.start}:00`).getTime() < at.getTime()) throw new ValidationError('这段时间已经过去，请从当前时刻之后安排', 409)
         const capacity = dayCapacity(state, tasks, plan.date, at)
         const start = minuteOf(plan.start), end = minuteOf(plan.end)
-        if (!capacity.available.some(range => range.start <= start && range.end >= end)) throw new ValidationError('这段时间没有明确的可用空档，请先确认课表或空课', 409)
+        if (!capacity.available.some(range => range.start <= start && range.end >= end)) throw new ValidationError('任务只能排进已知可用窗口。若这是用户给定钟点的固定活动或临时课程，请使用 save_day_events 记录真实占用；不必修改周模板或重复读取相同课表', 409)
       }
       actions = plans.map(block => ({ type: 'save-block', block }))
       summary = `安排 ${plans.length} 段任务时间：${plans.map(plan => `${plan.date} ${plan.start}–${plan.end}`).join('、')}`
@@ -490,6 +681,10 @@ export function createXixi({ db, complete, now = () => new Date() }) {
     const updated = db.getPlanner()
     return { ok: true, revision: updated.revision, operation: operationForContext(operation), evidenceSourceIds,
       ...(name === 'plan_tasks' ? { savedPlans: operation.planChanges.map(change => change.after).filter(Boolean), notice: '这些是已实际保存的日历时段，按 savedPlans 报告执行结果。' } : {}),
+      ...(name === 'remove_day_event' ? { removedEventIds: actions.map(action => action.id) } : {}),
+      ...(name === 'save_day_events' ? { savedEvents: actions.map(action => updated.dayEvents.find(event => event.id === action.event.id)),
+        conflicts: eventConflicts(updated, actions.map(action => action.event)),
+        notice: '活动已按savedEvents精确保存，仅当天生效。conflicts是仍存在的重叠，不代表活动未保存。原任务与周模板保留；需要挪任务时按用户授权继续plan_tasks，不能声称冲突已消除。' } : {}),
       ...(name === 'edit_weekly_timetable' ? { weekly: readWeekly({ weekday: args.weekday }), syncedDays: args.syncDates.map(date => ({ date, templateChanged: false, conflicts: dayCapacity(updated, db.listTasks(), date, clock()).conflicts.slice(0, 8) })), readDetails: 'read_planner' } : {}),
       ...(['set_day_timetable', 'restore_day_timetable'].includes(name) ? {
         day: plannerDayView(updated, db.listTasks(), args.date, clock()),
@@ -497,7 +692,7 @@ export function createXixi({ db, complete, now = () => new Date() }) {
       } : {}) }
   }
 
-  function completeWithClock(payload, timezone) {
+  function completeWithClock(payload, timezone, onDelta) {
     // Read at dispatch, after any summary wait/tool work. Retries and every
     // following provider round receive a new sample from the local clock.
     const current = currentTime(timezone)
@@ -512,7 +707,8 @@ export function createXixi({ db, complete, now = () => new Date() }) {
         now: current.capturedAt, timezone: current.timezone, localTime: current.displayTime, currentTime: current })}` }
     })
     messages.splice(1, 0, clockMessage(current))
-    return complete({ ...payload, messages: fitContext(messages, payload.tools ?? [], HARD_INPUT_UNITS) })
+    const budget = contextBudget()
+    return complete({ ...payload, messages: budget.enabled ? fitContext(messages, payload.tools ?? [], budget.hard) : messages }, { onDelta })
   }
 
   function operationForContext(operation) {
@@ -569,10 +765,11 @@ export function createXixi({ db, complete, now = () => new Date() }) {
 
   async function makeContext(input, { summarize = false, currentUser } = {}) {
     const { conversationId, context, requestId } = input
+    const budget = contextBudget()
     let messages = db.listMessages(conversationId, { limit: 160, forContext: true })
     const useHistory = preferences().assistant?.useHistory !== false
     const useMemory = preferences().assistant?.useMemory !== false
-    const summary = useHistory ? (summarize ? await maybeSummarize(conversationId, messages, requestId, context.timezone) : db.getSummary(conversationId)) : null
+    const summary = useHistory ? (summarize && budget.enabled ? await maybeSummarize(conversationId, messages, requestId, context.timezone) : db.getSummary(conversationId)) : null
     // Retractions can land while the summary request is in flight.
     if (summarize) messages = db.listMessages(conversationId, { limit: 160, forContext: true })
     if (!useHistory) messages = messages.filter(message => message.requestId === requestId)
@@ -584,18 +781,18 @@ export function createXixi({ db, complete, now = () => new Date() }) {
     const facts = []
     for (const task of relevant) {
       const item = taskView(task)
-      if (facts.length >= 24 || contextUnits(facts) + contextUnits(item) > 1500) break
+      if (budget.enabled && (facts.length >= 80 || contextUnits(facts) + contextUnits(item) > 6000)) break
       facts.push(item)
     }
-    const memories = useMemory ? memoriesFor(context).slice(0, 12).map(memoryView) : []
-    while (contextUnits(memories) > 1100) memories.pop()
+    const memories = useMemory ? (budget.enabled ? memoriesFor(context).slice(0, 12) : memoriesFor(context)).map(memoryView) : []
+    while (budget.enabled && contextUnits(memories) > 1100) memories.pop()
     const selected = context.taskId ? allTasks.find(task => task.id === context.taskId && !task.deletedAt) : undefined
     const selectedTask = selected ? { ...taskView(selected), notes: clipped(selected.notes, 1000),
       area: selected.area, energy: selected.energy, context: selected.context, fuzzyWindow: selected.fuzzyWindow, steps: stepProgress(selected) } : null
     const areas = []
     for (const area of db.listAreas().sort((a, b) => Number(b.id === selected?.area) - Number(a.id === selected?.area))) {
       const entry = { id: area.id, name: area.name, defaultEnergy: area.defaultEnergy }
-      if (contextUnits(areas) + contextUnits(entry) > 800) break
+      if (budget.enabled && contextUnits(areas) + contextUnits(entry) > 800) break
       areas.push(entry)
     }
     const planner = db.getPlanner(), selectedDate = selectedPlannerDate(input)
@@ -608,23 +805,33 @@ export function createXixi({ db, complete, now = () => new Date() }) {
     const opportunities = companionState?.opportunities.slice(0, 2).map(item => ({ id: item.id, kind: item.kind, date: item.date,
       title: clipped(item.title, 160), reason: clipped(item.reason, 160), start: item.start, end: item.end,
       source: { kind: item.source.kind, messageId: item.source.messageId } })) ?? []
+    const liveTime = currentTime(context.timezone)
+    const todayDate = liveTime.localDate
     const plannerContext = { revision: planner.revision, timezone: plannerTimezone(), timezoneMatches: timezoneMatches(context.timezone),
       timetableConfirmed: planner.timetableConfirmed, date: selectedDate, capacity: compactCapacity(capacity, 8),
       availabilityWindows: availabilityWindows(planner, allTasks, selectedDate, clock(), context.taskId ? 500 : 850),
-      nextSchedule: nextSchedule(planner, allTasks, selectedDate, currentTime(context.timezone), context.taskId ? 280 : 500),
+      nextSchedule: nextSchedule(planner, allTasks, selectedDate, liveTime, 900),
       readMore: 'read_planner' }
+    const todayContext = { date: todayDate, revision: planner.revision,
+      capacity: compactCapacity(dayCapacity(planner, allTasks, todayDate, clock()), 24),
+      availabilityWindows: availabilityWindows(planner, allTasks, todayDate, clock(), 2400),
+      nextSchedule: nextSchedule(planner, allTasks, todayDate, liveTime, 1500) }
     const assistantPreferences = preferences().assistant ?? {}
     const personality = personalityLevel(assistantPreferences.personality)
     const base = [
-      { role: 'system', content: `${PERSONA}\n\n${personalityPrompt(personality)}\n\n${WORKING}` },
+      { role: 'system', content: `${PERSONA}\n\n${WORKING}\n\n${personalityPrompt(personality)}` },
       { role: 'system', content: `${environmentPrefix}${JSON.stringify({
         page: context.page ?? 'home', taskId: context.taskId ?? null, selectedDate,
-        planner: plannerContext,
+        planner: plannerContext, today: todayContext,
         tasks: facts, selectedTask, areas, taskCount: allTasks.length, moreTasksAvailable: facts.length < allTasks.length,
         companion: companionState ? { handoff,
+          freeTimeGoals: (companionState.freeTimeGoals ?? []).slice(0, 8).map(goal => ({ id: goal.id, title: goal.title, priority: goal.priority, minPerWeek: goal.minPerWeek, status: goal.status, targetDate: goal.targetDate, version: goal.version })),
+          freeTimeGoalCount: companionState.freeTimeGoals?.length ?? 0, freeTimeReadMore: 'read_free_time',
           wishCount: companionState.wishes.length, previewCount: companionState.scenarios.filter(item => item.status === 'preview').length,
           opportunities, readMore: 'read_companion' } : { memoryDisabled: true },
         assistantPreferences: { ...assistantPreferences, personality },
+        uiCapabilities: { taskCreationReceipt: TASK_RECEIPT_CAPABILITIES },
+        productGuide: ASTARIA_PRODUCT_GUIDE, applicationSettings: applicationSettings(db),
         memories, summary: summary ? { text: clipped(summary.text, 6000), throughSeq: summary.throughSeq,
           sourceMessageIds: summary.sourceMessageIds.slice(-30), sourceCount: summary.sourceMessageIds.length } : null,
         previousOperationsThisRequest: db.listOperations({ requestId }).map(operationForContext),
@@ -634,34 +841,62 @@ export function createXixi({ db, complete, now = () => new Date() }) {
     // A forget action can retire the current turn's earlier, memory-derived
     // content. The current explicit request is still needed to finish replying.
     if (!current.some(message => message.role === 'user') && currentUser && !db.getMessage(currentUser.id)?.retractedAt) current.unshift(currentUser)
-    const groups = groupMessages(messages.filter(message => message.requestId !== requestId && message.seq > (summary?.throughSeq ?? 0)))
-      .map(group => visibleHistory(group.messages, group.messages[0]?.requestId ? db.listOperations({ requestId: group.messages[0].requestId }).map(operationForContext) : []))
-      .filter(group => group.length)
+    const groups = groupMessages(messages.filter(message => message.requestId !== requestId))
+      // A summary cursor can end in the middle of a turn. Retain or archive
+      // that turn together, rather than replay an orphaned native tool result.
+      .filter(group => !budget.enabled || group.messages.at(-1).seq > (summary?.throughSeq ?? 0))
+      .map(group => {
+        const operations = group.messages[0]?.requestId ? db.listOperations({ requestId: group.messages[0].requestId }).map(operationForContext) : []
+        const incomplete = group.messages[0].role !== 'user' && group.messages.some(message => message.reasoningContent !== undefined || message.role === 'tool')
+        return { original: group.messages, operations,
+          visible: incomplete ? archivedHistory(group.messages, operations) : budget.enabled ? visibleHistory(group.messages, operations) : group.messages.map(message => ({ ...message })) }
+      }).filter(group => group.visible.length)
     // Reserve the adjacent turns first. A short answer such as "Wednesday at
     // 12:00 PM" has no meaning when its immediately preceding question is cut.
     // Secondary task dictionaries and summaries must yield to that exchange.
-    const reservedTurns = 4
-    const recent = groups.slice(-reservedTurns).flat()
+    const reservedTurns = budget.turns
+    const recentGroups = groups.slice(-reservedTurns)
+    let recent = recentGroups.flatMap(group => group.visible)
     const environment = JSON.parse(base[1].content.slice(environmentPrefix.length))
     const precedingQuestion = latestQuestionBefore(messages, currentUser?.id, summary)
     const choiceNumber = ordinalChoice(currentUser?.content)
     const resolvedChoice = precedingQuestion && choiceNumber && choiceNumber >= 1 && choiceNumber <= precedingQuestion.question.options.length
       ? { number: choiceNumber, label: precedingQuestion.question.options[choiceNumber - 1], sourceMessageId: precedingQuestion.id }
       : null
-    const hasConcreteCorrection = /(?:\d{1,2}\s*[:：]\s*\d{2}|整体|顺延|连堂|改成|换成|后面一节|按这个顺序)/u.test(currentUser?.content ?? '')
+    const hasConcreteCorrection = Boolean(precedingQuestion) && /(?:\d{1,2}\s*[:：]\s*\d{2}|整体|顺延|连堂|改成|换成|后面一节|按这个顺序)/u.test(currentUser?.content ?? '')
     const decisionHint = resolvedChoice || hasConcreteCorrection
       ? { role: 'system', content: `决策绑定：${JSON.stringify({
         ...(resolvedChoice ? { selectedOption: resolvedChoice } : {}),
         ...(hasConcreteCorrection ? { concreteCorrectionOverridesPreviousOptions: true } : {}),
-        rule: '本轮消息里更具体的时间、顺序、课程或数量，覆盖之前的假设和选项编号；不要重新发明选择题。',
+        rule: '本轮消息里更具体的时间、顺序、课程或数量，覆盖之前的假设和选项编号；不重问已定选择，若最新资料出现新的真实冲突，直接问必要取舍。',
       })}` }
       : null
     const compose = () => [...base,
-      { role: 'system', content: `以下对话的出处与发送时间：${JSON.stringify([...recent, ...current].map(message => ({ id: message.id, role: message.role, at: message.createdAt })))}` },
+      { role: 'system', content: `以下对话的出处与发送时间：${JSON.stringify([...recent, ...current].filter(message => message.role !== 'system').map(message => ({ id: message.id, role: message.role, at: message.createdAt })))}` },
       ...(decisionHint ? [decisionHint] : []),
       ...providerMessages([...recent, ...current])]
     const fixedUnits = () => contextUnits(compose()) + contextUnits(XIXI_TOOLS)
-    while (fixedUnits() > MAX_INPUT_UNITS) {
+    // Old thoughts/read payloads yield before live task/calendar facts. Do not
+    // wait for the hard dispatch limit: the next tool result needs headroom.
+    // The current request is never among these candidates, including retries.
+    for (const group of recentGroups) {
+      if (!budget.enabled || fixedUnits() <= budget.soft) break
+      if (!group.original.some(message => message.reasoningContent !== undefined)) continue
+      const archived = archivedHistory(group.original, group.operations)
+      if (contextUnits(archived) >= contextUnits(group.visible)) continue
+      group.visible = archived
+      recent = recentGroups.flatMap(group => group.visible)
+    }
+    if (budget.enabled && fixedUnits() > budget.soft) {
+      environment.productGuide = compactProductGuide()
+      base[1].content = `${environmentPrefix}${JSON.stringify(environment)}`
+    }
+    // A small local budget can spend its soft target on the fixed instructions
+    // and tool schema alone. Reserve a usable live working set before pruning
+    // tasks; the configured hard limit and dispatch guard remain unchanged.
+    const liveFactsLimit = Math.min(budget.hard - 1500, Math.max(budget.soft,
+      contextUnits(base[0]) + contextUnits(XIXI_TOOLS) + 5000))
+    while (budget.enabled && fixedUnits() > liveFactsLimit) {
       if (environment.areas.length > 1) environment.areas.pop()
       else if (environment.tasks.length > 1) { environment.tasks.pop(); environment.moreTasksAvailable = true }
       else if (environment.memories.length) environment.memories.pop()
@@ -683,20 +918,21 @@ export function createXixi({ db, complete, now = () => new Date() }) {
     const recentOriginals = new Map(recent.map(message => [message.id, message.content]))
     for (const limit of [1200, 800, 400]) {
       for (const message of recent) {
-        if (fixedUnits() <= HARD_INPUT_UNITS - 1000) break
+        if (!budget.enabled || fixedUnits() <= budget.hard - 1500) break
+        if (message.role === 'system' || message.role === 'tool' || message.toolCalls?.length || message.reasoningContent !== undefined) continue
         const original = recentOriginals.get(message.id)
         if (original.length > limit) message.content = `${original.slice(0, Math.floor(limit * .65))}\n［原文较长，中间内容用 search_history messageIds=["${message.id}"] 读取］\n${original.slice(-Math.ceil(limit * .35))}`
       }
     }
     for (const group of groups.slice(0, -reservedTurns).reverse()) {
-      recent.unshift(...group)
-      if (fixedUnits() > MAX_INPUT_UNITS) { recent.splice(0, group.length); break }
+      recent.unshift(...group.visible)
+      if (budget.enabled && fixedUnits() > budget.soft) { recent.splice(0, group.visible.length); break }
     }
     const result = compose()
     // The dispatch layer also includes the live clock and execution hints;
     // enforce the hard budget there, after all contributors are present.
     return { messages: result, sourceMessageIds: [...new Set([
-      ...recent.map(message => message.id), ...current.map(message => message.id),
+      ...recent.flatMap(message => message.archivedSourceMessageIds ?? [message.id]), ...current.map(message => message.id),
       ...environment.memories.map(memory => memory.sourceMessageId), ...(environment.summary ? summary?.sourceMessageIds ?? [] : []),
       ...companionSourceIds(environment.companion ?? {}),
     ])] }
@@ -705,8 +941,12 @@ export function createXixi({ db, complete, now = () => new Date() }) {
   function operationId(input, name, args) {
     // Model tool-call IDs change after network retries; semantic arguments give a stable write key.
     const clean = { ...args }
+    if (['save_day_events', 'remove_day_event'].includes(name)) delete clean.evidence
+    if (name === 'save_day_events' && Array.isArray(clean.events)) clean.events = clean.events
+      .map(event => event.id ? event : { ...event, location: event.location ?? '', items: event.items ?? [] })
+      .sort((a, b) => JSON.stringify(canonical(a)).localeCompare(JSON.stringify(canonical(b))))
     if (['update_task', 'save_task_steps'].includes(name)) delete clean.expectedUpdatedAt
-    if (['create_tasks', 'plan_tasks', 'remove_plan', 'save_task_preparation', 'set_day_timetable', 'restore_day_timetable', 'edit_weekly_timetable'].includes(name)) delete clean.expectedRevision
+    if (['create_tasks', 'plan_tasks', 'remove_plan', 'save_day_events', 'remove_day_event', 'save_task_preparation', 'set_day_timetable', 'restore_day_timetable', 'edit_weekly_timetable'].includes(name)) delete clean.expectedRevision
     return stableId(input.requestId, name, clean)
   }
 
@@ -719,10 +959,17 @@ export function createXixi({ db, complete, now = () => new Date() }) {
     knownKeys(args, Object.keys(definition.parameters.properties))
     for (const key of definition.parameters.required) if (args[key] === undefined) throw new ValidationError(`缺少工具参数 ${key}`)
     const name = definition.name
-    if (preferences().assistant?.autonomy === 'propose' && ['create_tasks', 'update_task', 'save_task_steps', 'plan_tasks', 'remove_plan', 'save_task_preparation', 'set_day_timetable', 'restore_day_timetable', 'edit_weekly_timetable'].includes(name)) {
+    if (preferences().assistant?.autonomy === 'propose' && ['create_tasks', 'update_task', 'save_task_steps', 'plan_tasks', 'remove_plan', 'save_day_events', 'remove_day_event', 'save_task_preparation', 'set_day_timetable', 'restore_day_timetable', 'edit_weekly_timetable', 'save_free_time_goal', 'schedule_free_time', 'complete_free_time_session'].includes(name)) {
       throw new ValidationError('当前设为先提议：请给出建议或推演草案，用户可手动应用方案，或在设置中开启自动执行', 409)
     }
     if (name === 'read_current_time') return currentTime(input.context.timezone)
+    if (name === 'read_product_guide') {
+      knownKeys(args, ['section'])
+      const section = args.section
+      if (section === 'records' || section === 'boundaries') return { section, content: ASTARIA_PRODUCT_GUIDE[section] }
+      if (typeof section === 'string' && Object.hasOwn(ASTARIA_PRODUCT_GUIDE.pages, section)) return { section, content: ASTARIA_PRODUCT_GUIDE.pages[section] }
+      throw new ValidationError('请选择实际存在的产品说明章节')
+    }
     if (name === 'read_task_steps') {
       const task = db.getTask(identifier(args.taskId))
       if (!task || task.deletedAt) throw new ValidationError('任务已不存在，请重新读取')
@@ -742,6 +989,19 @@ export function createXixi({ db, complete, now = () => new Date() }) {
     }
     if (name === 'read_planner') return readPlanner(input, args)
     if (name === 'read_weekly_timetable') return readWeekly(args)
+    if (name === 'complete_free_time_session') return { ok: true, completedSession: freeTime.completeSession(args), notice: '本次余时学习已完成，长期目标继续保留' }
+    if (name === 'read_free_time') {
+      const date = args.date ?? localDay(clock())
+      const page = readPageOptions(args, 8, 20)
+      const state = companion.listState({ date, days: 7 })
+      const result = rowPage(state.freeTimeGoals ?? [], { ...page, units: 5000,
+        map: goal => ({ ...goal, source: compactSource(goal.source), sessions: (state.freeTimeSessions ?? []).filter(item => item.goalId === goal.id),
+          progress: state.freeTimeProgress?.find(item => item.goalId === goal.id),
+          feedback: (state.freeTimeFeedback ?? []).filter(item => item.goalId === goal.id).slice(0, 3) }),
+        readMore: { tool: 'read_free_time', ...args } })
+      const { items, ...pagination } = result
+      return { goals: items, ...pagination, date, days: 7, notice: 'scheduled为已安排，completed只计用户记录的完成。反馈可用于更新目标优先级、频率与单次时长。' }
+    }
     if (name === 'read_companion') {
       const result = companion.listState(args)
       const memoryEnabled = preferences().assistant?.useMemory !== false
@@ -766,10 +1026,10 @@ export function createXixi({ db, complete, now = () => new Date() }) {
           scheduledMin: item.scheduledMin, deadlineCount: item.deadlines.length })), readDetails: 'read_planner' }
     }
     if (name === 'ask_user') {
-      if (concreteScheduleIntent(input.text)) throw new ValidationError('本轮已有具体课程或时间信息，先读取课表并按用户最新安排执行，不要追问')
       throw new ValidationError('请单独调用 ask_user，显示问题后等待用户回答')
     }
     if (name === 'read_tasks') {
+      const page = readPageOptions(args, 20, 40)
       const query = args.query === undefined ? '' : inputText(args.query, '关键词', 200)
       if (args.from) dateTime(args.from, '开始日期')
       if (args.to) dateTime(args.to, '结束日期')
@@ -777,7 +1037,12 @@ export function createXixi({ db, complete, now = () => new Date() }) {
       tasks = tasks.filter(task => !task.deletedAt && (!query || `${task.title} ${task.notes ?? ''}`.toLowerCase().includes(query.toLowerCase())) &&
         (!args.status || task.status === args.status) && (!args.from || (task.due || task.startAt || '') >= args.from) &&
         (!args.to || (task.due || task.startAt || '9999').slice(0, 10) <= args.to))
-      return { tasks: tasks.slice(0, 12).map(task => ({ ...taskView(task), notes: clipped(task.notes, 240) })), count: tasks.length }
+      const result = rowPage(tasks, { ...page, units: 6000,
+        map: task => ({ ...taskView(task), notes: args.taskId ? task.notes ?? '' : clipped(task.notes, 240),
+          ...(!args.taskId && task.notes?.length > 240 ? { notesTruncated: true, readMore: { tool: 'read_tasks', taskId: task.id } } : {}) }),
+        readMore: { tool: 'read_tasks', ...args } })
+      const { items, ...pagination } = result
+      return { tasks: items, count: tasks.length, ...pagination }
     }
     if (name === 'search_history') {
       if (preferences().assistant?.useHistory === false) return { messages: [], memories: [], notice: '对话历史检索已在设置中关闭' }
@@ -792,6 +1057,18 @@ export function createXixi({ db, complete, now = () => new Date() }) {
         memories: args.query && preferences().assistant?.useMemory !== false ? db.listMemories({ query: inputText(args.query, '关键词', 160), taskId: args.taskId }).slice(0, 6).map(memoryView) : [] }
     }
     const id = operationId(input, name, args)
+    if (name === 'save_free_time_goal' || name === 'schedule_free_time') {
+      if (!timezoneMatches(input.context.timezone)) throw new ValidationError('日程与页面时区不同，请统一时区后安排', 409)
+      const source = { kind: 'conversation', messageId: userMessageId, evidence: args.evidence || input.text, actionId: id, requestId: input.requestId }
+      if (name === 'schedule_free_time') {
+        const result = freeTime.schedule(args, source)
+        return { ok: true, ...result, operation: result.operation ? operationForContext(result.operation) : null }
+      }
+      const goal = companion.saveFreeTimeGoal(args, source)
+      if (goal.status !== 'active') return { ok: true, goal, notice: goal.status === 'paused' ? '余时目标已暂停，已保存的日程仍保留' : '余时目标已移除' }
+      const scheduled = freeTime.schedule({ date: localDay(clock()) }, { ...source, actionId: stableId(id, 'schedule') })
+      return { ok: true, goal, ...scheduled, operation: scheduled.operation ? operationForContext(scheduled.operation) : null }
+    }
     if (['save_handoff', 'remember_wish', 'update_wish', 'preview_scenario'].includes(name)) {
       const evidence = inputText(args.evidence, '用户原话', 2000)
       if (!input.text.includes(evidence)) throw new ValidationError('需要引用本轮用户的连续原话')
@@ -815,25 +1092,39 @@ export function createXixi({ db, complete, now = () => new Date() }) {
       const automatic = db.listOperations({ requestId: input.requestId }).find(item => item.id === stableId(id, 'initial-schedule'))
       const tasks = oldOperation.changes.filter(change => change.table === 'tasks' && change.after).map(change => db.getTask(change.id)).filter(Boolean)
       return { ok: true, reused: true, operation: operationForContext(oldOperation),
+        ...(name === 'remove_day_event' ? { removedEventIds: (oldOperation.requestedActions ?? []).filter(action => action.type === 'delete-day-event').map(action => action.id) } : {}),
+        ...(name === 'save_day_events' ? { conflicts: eventConflicts(db.getPlanner(), (oldOperation.requestedActions ?? []).filter(action => action.type === 'save-day-event').map(action => action.event)), expectedEvents: (oldOperation.requestedActions ?? []).filter(action => action.type === 'save-day-event').map(action => action.event),
+          savedEvents: (oldOperation.requestedActions ?? []).filter(action => action.type === 'save-day-event')
+          .map(action => db.getPlanner().dayEvents?.find(event => event.id === action.event.id)).filter(Boolean),
+          notice: '沿用本轮原操作，没有再次创建。savedEvents为活动当前状态，expectedEvents为原提交目标；不同表示之后被修改，不得把旧目标说成当前事实。' } : {}),
         ...(name === 'plan_tasks' ? { savedPlans: (oldOperation.planChanges ?? []).map(change => change.after).filter(Boolean) } : {}),
         ...(name === 'create_tasks' ? { scheduling: automatic ? { changed: !automatic.undoneAt, required: false,
           savedPlans: automatic.undoneAt ? [] : db.getPlanner().blocks.filter(block => tasks.some(task => task.id === block.taskId)),
+          ...(!automatic.undoneAt ? recurringScheduling(tasks, db.getPlanner().blocks) : {}),
           ...(!automatic.undoneAt && args.tasks.some(task => task.schedule) ? { requirements: tasks.map((task, index) => ({ taskId: task.id, title: task.title,
             ...(task.startAt ? { date: task.startAt.slice(0, 10) } : {}), ...(args.tasks[index]?.schedule ? { slot: args.tasks[index].schedule } : {}) })) } : {}),
           notice: automatic.undoneAt ? '自动安排已经被撤销，保持当前状态，不要重新安排。' : '自动安排已保存，沿用当前日历，不重复安排。' } : explicitTimeRange(input.text)
           ? taskSchedulingReceipt(tasks) : { changed: false, required: false, notice: '沿用已记录事项和当前日历状态，不重复创建或安排。' } } : {}),
         ...(automatic && !automatic.undoneAt ? { operations: [operationForContext(automatic)] } : {}) }
     }
-    if (['plan_tasks', 'remove_plan', 'save_task_preparation', 'set_day_timetable', 'restore_day_timetable', 'edit_weekly_timetable'].includes(name)) return applyPlannerTool(name, args, input, id)
+    if (['plan_tasks', 'remove_plan', 'save_day_events', 'remove_day_event', 'save_task_preparation', 'set_day_timetable', 'restore_day_timetable', 'edit_weekly_timetable'].includes(name)) return applyPlannerTool(name, args, input, id)
     const at = timestamp()
-    let changes, summary
+    let changes, summary, creationDrafts
     if (name === 'create_tasks') {
       if (!Array.isArray(args.tasks) || args.tasks.length < 1 || args.tasks.length > 8) throw new ValidationError('每次可创建1至8项任务')
-      changes = args.tasks.map((draft, index) => {
-        knownKeys(draft, Object.keys(creationProperties))
+      for (const draft of args.tasks) knownKeys(draft, Object.keys(creationProperties))
+      creationDrafts = expandRecurringTaskDrafts(args.tasks, { today: localDay(clock()), seriesIdFor: index => stableId(id, 'series', index) })
+      changes = creationDrafts.map((draft, index) => {
         requireDateIntent(draft)
-        const { scheduleWindow, schedule, ...fields } = draft
+        const { scheduleWindow, scheduleDate, schedule, ...fields } = draft
         if (scheduleWindow !== undefined) inputText(scheduleWindow, '可用窗口名称', 160)
+        if (scheduleDate !== undefined) {
+          day(scheduleDate, '指定安排日期')
+          if (fields.occurrence) throw new ValidationError('重复事项的日期由repeat指定，不混用scheduleDate')
+          if (fields.startAt && fields.startAt !== scheduleDate) throw new ValidationError('计划日期与指定安排日期不一致')
+          if (schedule && schedule.date !== scheduleDate) throw new ValidationError('具体时段与指定安排日期不一致')
+          fields.startAt = scheduleDate
+        }
         if (schedule !== undefined) {
           knownKeys(schedule, ['date', 'start', 'end'])
           day(schedule.date); clockTime(schedule.start); clockTime(schedule.end)
@@ -852,7 +1143,8 @@ export function createXixi({ db, complete, now = () => new Date() }) {
         if (after.status === 'done') after.doneAt = at
         return { table: 'tasks', id: after.id, before: null, after }
       })
-      summary = `创建 ${changes.length} 项事项：${changes.map(change => change.after.title).join('、')}`
+      summary = `创建 ${changes.length} 项事项：${[...new Set(changes.map(change => change.after.title))].join('、')}${changes.some(change => change.after.occurrence)
+        ? `；逐日安排 ${[...new Set(changes.filter(change => change.after.occurrence).map(change => change.after.occurrence.date))].join('、')}` : ''}`
     } else if (name === 'save_task_steps') {
       const before = db.getTask(identifier(args.taskId))
       if (!before || before.deletedAt || before.status === 'dropped') throw new ValidationError('这项任务已不可编辑，请重新读取')
@@ -863,13 +1155,19 @@ export function createXixi({ db, complete, now = () => new Date() }) {
       changes = [{ table: 'tasks', id: before.id, before, after }]
       summary = `整理 ${subSteps.length} 个步骤：${before.title}`
     } else if (name === 'update_task') {
-      knownKeys(args.patch, Object.keys(taskProperties))
+      knownKeys(args.patch, Object.keys(patchProperties))
       requireDateIntent(args.patch)
       if (!Object.keys(args.patch).length) throw new ValidationError('请填写需要修改的字段')
       const before = db.getTask(identifier(args.taskId))
       if (!before || before.deletedAt) throw new ValidationError('任务已不存在，请重新读取')
       if (args.expectedUpdatedAt !== before.updatedAt) throw new ValidationError('任务已在其他窗口更新，请重新读取后再修改', 409)
-      const patch = taskInput(args.patch, { partial: true })
+      const { occurrenceDate, ...fields } = args.patch
+      if (occurrenceDate !== undefined) {
+        if (!before.occurrence) throw new ValidationError('只有重复实例可以修改occurrenceDate')
+        fields.occurrence = { ...before.occurrence, date: day(occurrenceDate) }
+        fields.startAt = fields.occurrence.date
+      }
+      const patch = taskInput(fields, { partial: true })
       const after = { ...before, ...patch, updatedAt: at }
       if (patch.status) after.doneAt = patch.status === 'done' ? at : undefined
       changes = [{ table: 'tasks', id: before.id, before, after }]
@@ -912,7 +1210,7 @@ export function createXixi({ db, complete, now = () => new Date() }) {
     const created = changes.filter(change => change.table === 'tasks' && change.after).map(change => db.getTask(change.id))
     if (onlyRecordRequested(input.text)) return { ok: true, operation: operationForContext(operation),
       scheduling: { changed: false, required: false, notice: '按用户要求只记录事项，日历没有变动。' } }
-    const explicitPlans = created.flatMap((task, index) => args.tasks[index].schedule ? [{ taskId: task.id, ...args.tasks[index].schedule }] : [])
+    const explicitPlans = created.flatMap((task, index) => creationDrafts[index].schedule ? [{ taskId: task.id, ...creationDrafts[index].schedule }] : [])
     if (explicitPlans.length) {
       // The caller's transaction rolls back both task creation and placement on
       // stale reads, conflicts or invalid slots; undo also follows the parent.
@@ -924,7 +1222,7 @@ export function createXixi({ db, complete, now = () => new Date() }) {
           ...(explicitPlans.find(plan => plan.taskId === task.id) ? { slot: explicitPlans.find(plan => plan.taskId === task.id) } : {}) })),
         notice: missing.length ? 'savedPlans已实际写入；其余taskIds尚未排入日历，请继续完成。' : '事项与指定日历时段已在同一事务保存；按savedPlans确认。' } }
     }
-    if (explicitTimeRange(input.text)) return { ok: true, operation: operationForContext(operation), scheduling: taskSchedulingReceipt(created) }
+    if (!created.some(task => task.occurrence) && explicitTimeRange(input.text)) return { ok: true, operation: operationForContext(operation), scheduling: taskSchedulingReceipt(created) }
     if (!timezoneMatches(input.context.timezone)) return { ok: true, operation: operationForContext(operation),
       scheduling: { changed: false, required: false, unscheduled: created.map(task => ({ taskId: task.id, title: task.title, reason: '页面与日程时区不一致，未自动安排' })),
         notice: '事项已保存，但页面与日程时区不一致；尚未排入日历，不能报告已安排。' } }
@@ -932,22 +1230,32 @@ export function createXixi({ db, complete, now = () => new Date() }) {
     const mentionedWindows = [...new Set(state.routines.filter(routine => routine.enabled && routine.kind === 'available' &&
       input.text.includes(routine.title)).map(routine => routine.title))]
     const windowByTask = new Map(created.flatMap((task, index) => {
-      const title = args.tasks[index].scheduleWindow ?? (mentionedWindows.length === 1 ? mentionedWindows[0] : null)
+      if (task.occurrence) return []
+      const title = creationDrafts[index].scheduleWindow ?? (mentionedWindows.length === 1 ? mentionedWindows[0] : null)
       return title ? [[task.id, title]] : []
     }))
     const scheduled = initialTaskSchedule({ state, allTasks: db.listTasks(), tasks: created, now: clock(),
-      idForBlock: (taskId, index) => stableId(id, 'initial-block', taskId, index), bufferMin: preferences().scheduling?.bufferMin ?? 10, windowByTask })
+      idForBlock: (taskId, index) => stableId(id, 'initial-block', taskId, index), bufferMin: preferences().scheduling?.bufferMin ?? 10, windowByTask,
+      dateByTask: new Map(created.flatMap((task, index) => creationDrafts[index].scheduleDate ? [[task.id, creationDrafts[index].scheduleDate]] : [])) })
     const initialEstimates = scheduled.allocations.filter(item => item.estimated && item.scheduledMin > 0)
     const automatic = scheduled.plans.length ? db.applyPlannerOperation({ id: stableId(id, 'initial-schedule'), requestId: input.requestId, parentOperationId: id,
       summary: `自动安排 ${scheduled.plans.length} 段任务时间：${scheduled.plans.map(block => `${block.date} ${block.start}–${block.end}`).join('、')}${initialEstimates.length ? `；${initialEstimates.length} 项未估时事项先按${DEFAULT_INITIAL_MINUTES}分钟预留（可调整）` : ''}`,
       actions: scheduled.plans.map(block => ({ type: 'save-block', block })), expectedRevision: state.revision }, { scenario: true }) : null
     return { ok: true, operation: operationForContext(operation), ...(automatic ? { operations: [operationForContext(automatic)] } : {}),
       scheduling: { changed: Boolean(automatic), required: false, savedPlans: automatic?.planChanges.map(change => change.after).filter(Boolean) ?? [],
+        ...recurringScheduling(created, scheduled.plans),
         allocations: scheduled.allocations, unscheduled: scheduled.unscheduled,
-        notice: 'savedPlans 是已实际写入的日历时段，不要重复安排。estimated=true 表示先按30分钟预留，回复须说明可修改；有 unscheduled 时明确说明未安排部分，不得声称全部排好。' } }
+        ...(scheduled.unscheduled.length ? { nextAction: { kind: 'resolve_unscheduled',
+          savedTaskIds: created.map(task => task.id),
+          instruction: '事项已经保存，不重复创建。按unscheduled说明真实缺口；已有授权备选就执行，否则立即ask_user问一个必要取舍并等待。默认预留不是用户确认的时长，不按题数臆测时长，不反复推演同一组无解安排。' } } : {}),
+        notice: 'savedPlans 是已实际写入的日历时段，不要重复安排。estimated=true 表示先按30分钟预留，回复须说明可修改；有 unscheduled 时明确说明未安排部分，需要用户取舍就直接ask_user，不得声称全部排好。' } }
   }
 
-  async function run(input) {
+  async function run(input, onEvent) {
+    // Live text is provisional; only persisted state is returned as the result.
+    // A disconnected observer must never turn a committed write into a retry.
+    const emit = event => { try { onEvent?.(event) } catch { /* Observer disconnected. */ } }
+    let streamRound = 0
     const snapshot = (status, error) => ({ requestId: input.requestId, conversationId: input.conversationId,
       messages: db.listMessages(input.conversationId, { limit: 80 }),
       operations: db.listOperations({ requestId: input.requestId }), status,
@@ -976,7 +1284,7 @@ export function createXixi({ db, complete, now = () => new Date() }) {
     const committed = new Map(existingOperations.map(operation => [operation.id, operation.summary]))
     let cancelledSummaries = []
     let toolFailures = 0
-    let schedulingNudge = !onlyRecordRequested(input.text) && explicitTimeRange(input.text) && !existingOperations.some(operation => operation.planChanges?.some(change => change.after))
+    let schedulingNudge = false // Only actual task scheduling obligations require a task-plan commit.
     const workOrder = createWorkOrder({ ...input, userMessageId }, previous, timestamp)
     workOrder.resume()
     // A successful first write must not erase the second task in a short
@@ -986,7 +1294,7 @@ export function createXixi({ db, complete, now = () => new Date() }) {
       for (const target of namedTaskSlots(input.text, db.listTasks(), today, input.context.date ?? today)) {
         if (workOrder.value.scheduleRequirements?.some(item => item.taskId === target.taskId)) continue
         workOrder.expectSchedule(target.taskId, minuteOf(target.slot.end) - minuteOf(target.slot.start),
-          `${target.title}：${target.slot.date} ${target.slot.start}–${target.slot.end} 尚未保存`, { mustComplete: true, slot: target.slot })
+          `${target.title}：${target.slot.date} ${target.slot.start}–${target.slot.end} 尚未保存`, { mustComplete: true, inferred: true, slot: target.slot })
       }
     }
     const checkpoint = () => db.updateTurnProgress(input.requestId, workOrder.snapshot())
@@ -1001,8 +1309,13 @@ export function createXixi({ db, complete, now = () => new Date() }) {
           { mustComplete: true, ...(requirement.date ? { date: requirement.date } : {}), ...(slot ? { slot } : {}) })
       }
       for (const item of scheduling?.unscheduled ?? []) {
-        const totalMin = scheduling.allocations?.find(allocation => allocation.taskId === item.taskId)?.totalMin ?? db.getTask(item.taskId)?.estimateMin ?? 30
-        workOrder.expectSchedule(item.taskId, totalMin, `${item.title}：${item.reason}`)
+        const task = db.getTask(item.taskId)
+        const totalMin = scheduling.allocations?.find(allocation => allocation.taskId === item.taskId)?.totalMin ?? task?.estimateMin ?? 30
+        const date = item.date ?? task?.occurrence?.date
+        workOrder.expectSchedule(item.taskId, totalMin, `${item.title}：${item.reason}`, {
+          mustComplete: false, ...(date ? { date } : {}),
+          ...(task?.occurrence ? { contiguous: true } : {}),
+        })
       }
     }
     const registerSavedPlans = plans => {
@@ -1017,6 +1330,21 @@ export function createXixi({ db, complete, now = () => new Date() }) {
       }
       workOrder.expectPlans(plans.map(plan => ({ ...plan, title: db.getTask(plan.taskId)?.title })))
     }
+    const registerSavedEvents = events => {
+      if (!events?.length) return
+      workOrder.expectEvents(events)
+      // A name/time parser cannot decide whether the user means a task or a
+      // fixed event. Once a typed event is committed, retire only the matching
+      // inferred task obligation; explicit task-tool obligations stay intact.
+      const normalized = value => String(value).replace(/[^\p{L}\p{N}]/gu, '').toLowerCase()
+      for (const requirement of workOrder.value.scheduleRequirements ?? []) {
+        const task = db.getTask(requirement.taskId)
+        if (requirement.inferred && task && requirement.slot && events.some(event =>
+          normalized(event.title) === normalized(task.title) && ['date', 'start', 'end'].every(key => event[key] === requirement.slot[key]))) {
+          workOrder.cancelSchedule(requirement.taskId)
+        }
+      }
+    }
     const refreshScheduleProgress = () => {
       const operations = db.listOperations({ requestId: input.requestId })
       cancelledSummaries = operations.filter(operation => operation.undoneAt).map(operation => operation.summary)
@@ -1026,11 +1354,32 @@ export function createXixi({ db, complete, now = () => new Date() }) {
       for (const operation of operations.filter(item => item.undoneAt)) {
         for (const change of operation.changes ?? []) if (change.table === 'tasks' && !change.before && change.after) workOrder.cancelSchedule(change.id)
         for (const change of operation.planChanges ?? []) if (change.after?.taskId) workOrder.cancelSchedule(change.after.taskId)
+        for (const action of operation.requestedActions ?? []) if (action.type === 'save-day-event') workOrder.cancelEvent(action.event.id)
       }
+      workOrder.checkEvents(db.getPlanner().dayEvents ?? [])
       workOrder.checkScheduleBlocks(db.getPlanner().blocks, db.listTasks(), localDay(new Date(workOrder.value.createdAt)))
       const required = (workOrder.value.scheduleRequirements ?? []).filter(item => item.mustComplete)
       if (required.length) schedulingNudge = required.some(item => item.status === 'pending')
       if (!schedulingNudge && workOrder.value.pending === '日历安排尚未保存') workOrder.clearPending()
+    }
+    const performTool = async (call, sourceMessageIds) => {
+      db.assertTurnWritable(input.requestId, sourceMessageIds)
+      // Model-backed previews must not hold a SQLite transaction while awaiting
+      // the provider. The preview service rechecks provenance and versions when
+      // it commits; ordinary local tools remain synchronous and atomic.
+      if (call.function?.name === 'preview_route') {
+        let args
+        try { args = JSON.parse(call.function.arguments) } catch { throw new ValidationError('工具参数必须是JSON对象') }
+        knownKeys(args, ['taskId', 'date', 'question', 'recurrence'])
+        const scenario = await routeAnalysis.analyze(args, { kind: 'conversation', messageId: userMessageId,
+          evidence: input.text.slice(0, 2000), requestId: input.requestId, actionId: operationId(input, 'preview_route', args) })
+        db.assertTurnWritable(input.requestId, sourceMessageIds)
+        return { ok: true, scenario, notice: '模型路线草案已核验并保存；实际日历未改。用户可在平行宇宙对比后采用。' }
+      }
+      return db.transaction(() => {
+        db.assertTurnWritable(input.requestId, sourceMessageIds)
+        return executeTool(call, input, userMessageId)
+      })
     }
     const recordOutcome = (call, step, outcome) => {
       if (outcome.ok === false) { toolFailures += 1; workOrder.fail(step, outcome.error); return }
@@ -1042,6 +1391,8 @@ export function createXixi({ db, complete, now = () => new Date() }) {
       }
       registerSchedule(outcome.scheduling)
       registerSavedPlans(outcome.savedPlans)
+      registerSavedEvents(outcome.expectedEvents ?? outcome.savedEvents)
+      for (const eventId of outcome.removedEventIds ?? []) workOrder.cancelEvent(eventId)
       if (call.function?.name === 'plan_tasks') schedulingNudge = false
       refreshScheduleProgress()
     }
@@ -1052,7 +1403,20 @@ export function createXixi({ db, complete, now = () => new Date() }) {
       try { const outcome = JSON.parse(message.content); if (outcome.ok !== false) {
         registerSchedule(outcome.scheduling)
         registerSavedPlans(outcome.savedPlans)
+        registerSavedEvents(outcome.expectedEvents ?? outcome.savedEvents)
+        for (const eventId of outcome.removedEventIds ?? []) workOrder.cancelEvent(eventId)
       } } catch { /* malformed old receipt is not evidence */ }
+    }
+    // A process can stop after the atomic event write but before journaling its
+    // tool response. The operation itself is durable evidence of the target.
+    for (const operation of existingOperations.filter(item => item.kind === 'planner').sort((a, b) => a.plannerAfterRevision - b.plannerAfterRevision)) {
+      const actions = operation.requestedActions ?? []
+      const events = actions.filter(action => action.type === 'save-day-event').map(action => action.event)
+      if (events.length) registerSavedEvents(events)
+      for (const action of actions) if (action.type === 'delete-day-event') workOrder.cancelEvent(action.id)
+      if (events.length || actions.some(action => action.type === 'delete-day-event')) {
+        if (!workOrder.value.commits.some(commit => commit.operationId === operation.id)) workOrder.commit(workOrder.step(`operation:${operation.id}`, 'saved_day_events'), operation)
+      }
     }
     refreshScheduleProgress()
     checkpoint()
@@ -1089,10 +1453,7 @@ export function createXixi({ db, complete, now = () => new Date() }) {
       for (const { call, sourceMessageIds } of unresolved) {
         const step = workOrder.step(call.id, call.function?.name ?? 'unknown')
         let outcome
-        try { outcome = db.transaction(() => {
-          db.assertTurnWritable(input.requestId, sourceMessageIds)
-          return executeTool(call, input, userMessageId)
-        }) }
+        try { outcome = await performTool(call, sourceMessageIds) }
         catch (error) { outcome = { ok: false, error: safeToolError(error) } }
         recordOutcome(call, step, outcome)
         checkpoint()
@@ -1104,6 +1465,8 @@ export function createXixi({ db, complete, now = () => new Date() }) {
       let modelContext = await makeContext(input, { summarize: true, currentUser })
       let totalCalls = 0, protocolRepairs = 0
       let schedulingNudgeCount = 0
+      const repeatedReads = new Map()
+      let readProgressHint = ''
       for (let round = 0; round < MAX_ROUNDS; round += 1) {
         db.assertTurnWritable(input.requestId, modelContext.sourceMessageIds)
         const last = round === MAX_ROUNDS - 1 || totalCalls >= MAX_CALLS
@@ -1111,13 +1474,20 @@ export function createXixi({ db, complete, now = () => new Date() }) {
         for (;;) {
           const messages = [
             ...modelContext.messages,
+            ...(readProgressHint ? [{ role: 'system', content: readProgressHint }] : []),
             ...((workOrder.value.scheduleRequirements ?? []).some(item => item.mustComplete && item.status === 'pending')
               ? [{ role: 'system', content: `本轮待完成日历事项（逐项核验）：${JSON.stringify(workOrder.value.scheduleRequirements.filter(item => item.mustComplete && item.status === 'pending'))}` }] : []),
             ...(repairThisRound ? [{ role: 'system', content: '上一条回复的调用格式无效，未执行。请继续已确认的请求：操作使用原生 tool_calls，普通回复使用自然语言；以真实成功回执确认完成。' }] : []),
-            ...(concreteScheduleIntent(input.text) ? [{ role: 'system', content: '本轮用户已给出具体课程/时间/顺序，不能调用 ask_user。先读取对应课表，再按最新明确目标一次提交；已有更具体的补充覆盖之前选项。' }] : []),
-            ...(schedulingNudge ? [{ role: 'system', content: '当前用户原话包含明确时间范围，但日历安排尚未保存。不要先结束回复或询问是否要排：立即对目标日期调用 read_planner，然后用 plan_tasks 把已创建事项安排到用户给出的时间；如果该时间落在 available 的晚自习/空课内，这是覆盖窗口的活动，不是固定课程冲突，保留原 available 例行安排。只有 plan_tasks 成功后，才能报告已记好。' }] : []),
           ]
-          const response = await completeWithClock({ messages, ...(last ? {} : { tools: XIXI_TOOLS }), max_tokens: 1800 }, input.context.timezone)
+          const liveRound = ++streamRound
+          emit({ type: 'round', round: liveRound })
+          emit({ type: 'phase', phase: 'thinking' })
+          const response = await completeWithClock({ messages, ...(last ? {} : { tools: XIXI_TOOLS }), max_tokens: 1800 }, input.context.timezone, onEvent ? delta => {
+            try { db.assertTurnWritable(input.requestId, modelContext.sourceMessageIds) }
+            catch { return }
+            emit({ type: 'phase', phase: delta.type === 'reasoning' ? 'thinking' : 'replying' })
+            emit({ ...delta, round: liveRound })
+          } : undefined)
           db.assertTurnWritable(input.requestId, modelContext.sourceMessageIds)
           message = normalizeAssistantProtocol(resultMessage(response))
           if (!message.protocolError) break
@@ -1127,7 +1497,7 @@ export function createXixi({ db, complete, now = () => new Date() }) {
         const calls = message.tool_calls ?? []
         if (!calls.length) {
           refreshScheduleProgress(); checkpoint()
-          if (schedulingNudge && schedulingNudgeCount++ < 3) { modelContext = await makeContext(input, { currentUser }); continue }
+          if (schedulingNudge && !workOrder.value.failures.length && schedulingNudgeCount++ < 3) { modelContext = await makeContext(input, { currentUser }); continue }
           if (schedulingNudge) throw new Error('SCHEDULE_INCOMPLETE')
           workOrder.clearInterruption()
           const executionStatus = workOrder.verify()
@@ -1135,15 +1505,15 @@ export function createXixi({ db, complete, now = () => new Date() }) {
           const useReceipt = incomplete || cancelledSummaries.length > 0
           const content = useReceipt ? committedReceiptText([...committed.values()], workOrder.snapshot(), cancelledSummaries) : inputText(message.content, '回复', 12000)
           workOrder.finishReply(useReceipt ? 'fallback' : 'model'); checkpoint()
-          db.appendMessage({ conversationId: input.conversationId, requestId: input.requestId, role: 'assistant', content,
+          db.appendMessage({ conversationId: input.conversationId, requestId: input.requestId, role: 'assistant', content, reasoningContent: message.reasoning_content,
             ...(!useReceipt && message.question ? { question: questionOptions(message.question) } : {}),
             taskId: input.context.taskId, sourceMessageIds: modelContext.sourceMessageIds })
           return finish('completed')
         }
-        if (last || calls.length > 4 || totalCalls + calls.length > MAX_CALLS || calls.some(call => !call.id || typeof call.function?.arguments !== 'string')) {
+        if (last || calls.length > 8 || totalCalls + calls.length > MAX_CALLS || calls.some(call => !call.id || typeof call.function?.arguments !== 'string')) {
           throw new Error('TOOL_LIMIT')
         }
-        if (calls.length === 1 && calls[0].function.name === 'ask_user' && !concreteScheduleIntent(input.text) && !schedulingNudge) {
+        if (calls.length === 1 && calls[0].function.name === 'ask_user') {
           let args
           try {
             args = JSON.parse(calls[0].function.arguments)
@@ -1155,7 +1525,7 @@ export function createXixi({ db, complete, now = () => new Date() }) {
             workOrder.awaiting('等待用户回答快捷问题'); workOrder.finishReply('model'); checkpoint()
             return db.transaction(() => {
               db.appendMessage({ id: stableId(input.requestId, 'question'), conversationId: input.conversationId,
-                requestId: input.requestId, role: 'assistant', content, question,
+                requestId: input.requestId, role: 'assistant', content, question, reasoningContent: message.reasoning_content,
                 taskId: input.context.taskId, sourceMessageIds: modelContext.sourceMessageIds })
               return finish('completed')
             })
@@ -1165,14 +1535,12 @@ export function createXixi({ db, complete, now = () => new Date() }) {
           }
         }
         db.appendMessage({ conversationId: input.conversationId, requestId: input.requestId, role: 'assistant',
-          content: clipped(message.content, 8000), toolCalls: calls, taskId: input.context.taskId, sourceMessageIds: modelContext.sourceMessageIds })
+          content: clipped(message.content, 8000), reasoningContent: message.reasoning_content, toolCalls: calls, taskId: input.context.taskId, sourceMessageIds: modelContext.sourceMessageIds })
+        emit({ type: 'phase', phase: 'executing' })
         for (const call of calls) {
           const step = workOrder.step(call.id, call.function?.name ?? 'unknown')
           let outcome
-          try { outcome = db.transaction(() => {
-            db.assertTurnWritable(input.requestId, modelContext.sourceMessageIds)
-            return executeTool(call, input, userMessageId)
-          }) }
+          try { outcome = await performTool(call, modelContext.sourceMessageIds) }
           catch (error) { outcome = { ok: false, error: safeToolError(error) } }
           recordOutcome(call, step, outcome)
           checkpoint()
@@ -1181,6 +1549,14 @@ export function createXixi({ db, complete, now = () => new Date() }) {
             sourceMessageIds: [...new Set([...modelContext.sourceMessageIds, ...(outcome.messages ?? []).map(message => message.id),
               ...(outcome.memories ?? []).map(memory => memory.sourceMessageId), ...companionSourceIds(outcome), ...(outcome.evidenceSourceIds ?? [])])] })
           totalCalls += 1
+          if (outcome.ok !== false && (call.function.name.startsWith('read_') || call.function.name === 'search_history')) {
+            const facts = { ...outcome }; delete facts.capturedAt
+            const signature = stableId(call.function.name, JSON.parse(call.function.arguments), facts)
+            const count = (repeatedReads.get(signature) ?? 0) + 1
+            repeatedReads.set(signature, count)
+            if (count >= 2) readProgressHint = `已重复读取 ${call.function.name}，结果没有变化，完整资料已在当前上下文。已有可行方案就执行；已知约束冲突需要用户取舍就直接ask_user。需要下一页时改变 offset，不要重复相同读取。若确实无法完成，直接说明具体未完成项。`
+            if (count >= 4) throw new Error('NO_EXECUTION_PROGRESS')
+          } else if (outcome.ok !== false) { repeatedReads.clear(); readProgressHint = '' }
         }
         modelContext = await makeContext(input, { currentUser })
       }
@@ -1195,7 +1571,7 @@ export function createXixi({ db, complete, now = () => new Date() }) {
       const committedSummaries = [...committed.values()]
       const scheduleRequirements = workOrder.value.scheduleRequirements ?? []
       const verifiedSchedule = scheduleRequirements.length > 0 && scheduleRequirements.every(item => ['verified', 'cancelled'].includes(item.status))
-      const boundedExecutionFailure = cause?.message === 'TOOL_LIMIT' || (cause?.message === 'CONTEXT_TOO_LARGE' && !verifiedSchedule)
+      const boundedExecutionFailure = ['TOOL_LIMIT', 'NO_EXECUTION_PROGRESS'].includes(cause?.message) || (cause?.message === 'CONTEXT_TOO_LARGE' && !verifiedSchedule)
       // A create followed by a concrete time range is a two-phase workflow:
       // the task record alone is not completion. Keep the turn retryable while
       // the scheduling nudge still says that the calendar phase is pending.
@@ -1215,7 +1591,8 @@ export function createXixi({ db, complete, now = () => new Date() }) {
       const hasActions = db.listOperations({ requestId: input.requestId }).length > 0
       const safeFailure = cause instanceof ProviderError ? cause.message : cause?.message === 'CONTEXT_TOO_LARGE'
         ? cause.oversizedInput ? '这条消息本身较长，请拆成较短的消息后发送' : '本轮资料整理未完成，原要求和已保存进度都保留；可重试继续，无需重新描述'
-        : cause?.message === 'TOOL_LIMIT' ? '本轮执行达到上限，后续步骤尚未核验'
+        : cause?.message === 'TOOL_LIMIT' ? '这项请求仍有步骤未完成，已保存进度；重试会接着处理，不用重新描述'
+        : cause?.message === 'NO_EXECUTION_PROGRESS' ? '析熙重复读取了相同资料，没有继续执行，已停止这次空转；原要求和已保存进度保留，可重试继续'
         : cause?.message === 'SCHEDULE_INCOMPLETE' ? '事项已记录，但日历时段尚未保存'
         : '析熙暂时没能完成回复，请稍后重试'
       workOrder.interrupt(safeFailure)
@@ -1227,7 +1604,7 @@ export function createXixi({ db, complete, now = () => new Date() }) {
   }
 
   return {
-    async chat(value) {
+    async chat(value, { onEvent } = {}) {
       plainObject(value, '聊天请求')
       const requestId = identifier(value.requestId, '请求标识')
       if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(requestId)) throw new ValidationError('请求标识需要UUID')
@@ -1242,7 +1619,7 @@ export function createXixi({ db, complete, now = () => new Date() }) {
         ...(context.taskId ? { taskId: identifier(context.taskId) } : {}) } }
       const previousLock = locks.get(conversationId)
       const ahead = previousLock && !db.getTurn(previousLock.requestId)?.retractedAt ? previousLock.promise : Promise.resolve()
-      const pending = ahead.catch(() => {}).then(() => run(input))
+      const pending = ahead.catch(() => {}).then(() => run(input, onEvent))
       locks.set(conversationId, { requestId, promise: pending })
       try { return await pending }
       finally { if (locks.get(conversationId)?.promise === pending) locks.delete(conversationId) }

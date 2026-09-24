@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto'
 import { validateModelSettings } from './modelSettings.mjs'
+import { validateRouteJudgment } from './routeAnalysis.mjs'
 import { ValidationError, knownKeys, identifier, text, object, choice, dateTime, day, clockTime, taskInput, questionOptions, validateMemory } from './validation.mjs'
+import { dayEventValue, validateDayEvents } from './planner.mjs'
 
 const columns = {
   areas: ['id', 'document'], tasks: ['id', 'document'], events: ['id', 'document'], availability: ['id', 'document'], assignments: ['id', 'document'],
@@ -26,6 +28,16 @@ function block(value) {
   if (value.locked !== undefined) bool(value.locked)
   if (value.title !== undefined) text(value.title, '任务名', 160)
 }
+// Read-only snapshots may clip an older exact startAt placement at midnight;
+// this is not a new editable planner block and cannot be adopted as a plan.
+function snapshotBlock(value) {
+  knownKeys(value, ['id', 'taskId', 'title', 'date', 'start', 'end', 'locked'])
+  identifier(value.id); identifier(value.taskId); day(value.date); clockTime(value.start)
+  if (value.end !== '24:00') clockTime(value.end)
+  if (value.start >= value.end) fail('备份事实时间段无效')
+  if (value.locked !== undefined) bool(value.locked)
+  if (value.title !== undefined) text(value.title, '任务名', 160)
+}
 function source(value) {
   knownKeys(value, ['kind', 'messageId', 'evidence', 'actionId'])
   choice(value.kind, ['user', 'conversation'], '来源')
@@ -34,7 +46,7 @@ function source(value) {
   if (value.actionId !== undefined) identifier(value.actionId)
 }
 function companion(value) {
-  knownKeys(value, ['handoffs', 'wishes', 'scenarios'])
+  knownKeys(value, ['handoffs', 'wishes', 'freeTimeGoals', 'freeTimeHistory', 'scenarios'])
   const unique = (rows, key) => { if (new Set(rows.map(item => item[key])).size !== rows.length) fail('备份记录标识重复') }
   for (const item of array(value.handoffs, 2000)) {
     knownKeys(item, ['taskId', 'progress', 'obstacle', 'nextStep', 'materials', 'version', 'source', 'createdAt', 'updatedAt'])
@@ -51,11 +63,28 @@ function companion(value) {
     choice(item.status, ['active', 'paused', 'deleted'], '牵挂状态'); integer(item.version, 1); source(item.source); stamp(item.createdAt); stamp(item.updatedAt)
   }
   unique(value.wishes, 'id')
+  for (const item of array(value.freeTimeGoals ?? [], 500)) {
+    knownKeys(item, ['id', 'title', 'evidence', 'priority', 'minPerWeek', 'sessionMin', 'sessionMax', 'targetDate', 'targetNote', 'taskId', 'fromWishId', 'status', 'version', 'source', 'createdAt', 'updatedAt'])
+    identifier(item.id); text(item.title, '余时目标名称', 160); text(item.evidence, '原话', 2000)
+    choice(item.priority, ['high', 'normal', 'low'], '余时目标优先级'); integer(item.minPerWeek, 0, 14)
+    integer(item.sessionMin, 5, 720); integer(item.sessionMax, 5, 720); if (item.sessionMax < item.sessionMin) fail('余时目标时长范围无效')
+    choice(item.status, ['active', 'paused', 'deleted'], '余时目标状态'); integer(item.version, 1); source(item.source); stamp(item.createdAt); stamp(item.updatedAt)
+    if (item.targetDate != null) day(item.targetDate)
+    if (item.targetNote !== undefined) text(item.targetNote, '阶段目标', 1500, { empty: true })
+    for (const key of ['taskId', 'fromWishId']) if (item[key] !== undefined) identifier(item[key])
+  }
+  unique(value.freeTimeGoals ?? [], 'id')
+  for (const item of array(value.freeTimeHistory ?? [], 5000)) {
+    knownKeys(item, ['sessionId', 'goalId', 'date', 'minutes', 'feedback', 'nextStep', 'completedAt'])
+    identifier(item.sessionId); identifier(item.goalId); day(item.date); integer(item.minutes, 1, 1440)
+    choice(item.feedback, ['smooth', 'stuck', 'continue'], '学习反馈'); text(item.nextStep, '下次接着做', 1500, { empty: true }); stamp(item.completedAt)
+  }
+  unique(value.freeTimeHistory ?? [], 'sessionId')
   for (const item of array(value.scenarios, 100)) {
-    knownKeys(item, ['id', 'version', 'status', 'baseRevision', 'date', 'days', 'mode', 'budgetMin', 'bufferMin', 'timezone', 'plans', 'removedBlockIds', 'unscheduled', 'warnings', 'taskVersions', 'source', 'createdAt', 'metrics', 'operationId', 'appliedAt'])
+    knownKeys(item, ['id', 'version', 'status', 'baseRevision', 'date', 'days', 'mode', 'budgetMin', 'bufferMin', 'timezone', 'plans', 'removedBlockIds', 'unscheduled', 'warnings', 'taskVersions', 'source', 'createdAt', 'metrics', 'operationId', 'appliedAt', 'decision', 'routeAnalysis'])
     identifier(item.id); integer(item.version, 1); integer(item.baseRevision); day(item.date); integer(item.days, 1, 7)
     choice(item.mode, ['rebalance', 'rest', 'light'], '推演方式'); choice(item.status, ['preview', 'applied', 'discarded', 'undone'], '方案状态')
-    integer(item.budgetMin, 15, 720); integer(item.bufferMin, 0, 60); text(item.timezone, '时区', 100)
+    integer(item.budgetMin, item.decision ? 5 : 15, 720); integer(item.bufferMin, 0, 60); text(item.timezone, '时区', 100)
     try { new Intl.DateTimeFormat('en', { timeZone: item.timezone }) } catch { fail('备份时区无效') }
     array(item.plans, 64).forEach(block); ids(item.removedBlockIds); unique(item.plans, 'id')
     for (const pending of array(item.unscheduled, 64)) { knownKeys(pending, ['taskId', 'title', 'remainingMin', 'reason']); identifier(pending.taskId); text(pending.title, '任务名', 160); text(pending.reason, '原因', 600); if (pending.remainingMin !== null) integer(pending.remainingMin, 0, 525600) }
@@ -63,17 +92,67 @@ function companion(value) {
     for (const [id, updatedAt] of Object.entries(item.taskVersions)) { identifier(id); stamp(updatedAt) }
     source(item.source); stamp(item.createdAt); optionalStamp(item.appliedAt); if (item.operationId !== undefined) identifier(item.operationId)
     knownKeys(item.metrics, ['scheduledMin', 'unscheduledMin', 'bufferMin']); Object.values(item.metrics).forEach(value => integer(value))
+    if (item.decision !== undefined) {
+      const decision = item.decision
+      knownKeys(decision, ['taskId', 'title', 'strategy', 'recurrence', 'todayMin', 'effortMin', 'baseline'])
+      identifier(decision.taskId); text(decision.title, '任务名', 160)
+      choice(decision.strategy, ['today', 'split', 'defer', 'model'], '决策路径'); choice(decision.recurrence, ['once', 'weekly'], '持续条件')
+      integer(decision.todayMin, 5, 720); if (decision.effortMin !== null) integer(decision.effortMin)
+      array(decision.baseline, 3000).forEach(snapshotBlock)
+      if (item.days !== 7 || item.plans.some(plan => plan.taskId !== decision.taskId)) fail('备份决策方案任务或日期范围无效')
+      if ((decision.strategy === 'model') !== (item.routeAnalysis !== undefined)) fail('备份模型路线缺少对应判断')
+    }
+    if (item.routeAnalysis !== undefined) {
+      const route = item.routeAnalysis
+      knownKeys(route, ['question', 'current', 'candidate', 'benefits', 'costs', 'risks', 'recovery', 'observations', 'assumptions', 'trends', 'kind', 'conditional', 'facts'])
+      text(route.question, '具体选择', 2000); choice(route.kind, ['model-judgment'], '路线来源')
+      if (route.conditional !== true || item.decision?.strategy !== 'model') fail('备份模型路线必须保留条件说明')
+      const { question, kind, conditional, facts, ...judgment } = route
+      validateRouteJudgment(judgment)
+      knownKeys(facts, ['task', 'dates', 'baseline', 'candidate', 'timeline', 'availableWindows', 'effortMin', 'heldMin', 'remainingMin', 'bufferMin', 'baseRevision', 'asOf', 'exactStartProtected', 'verified'])
+      knownKeys(facts.task, ['id', 'title', 'due', 'estimateMin', 'status']); identifier(facts.task.id); text(facts.task.title, '任务名', 160)
+      if (facts.task.due !== undefined) dateTime(facts.task.due)
+      if (facts.task.estimateMin !== undefined && (typeof facts.task.estimateMin !== 'number' || !Number.isFinite(facts.task.estimateMin) || facts.task.estimateMin <= 0)) fail('备份路线估时无效')
+      choice(facts.task.status, ['todo', 'doing'], '任务状态'); array(facts.dates, 7).forEach(day)
+      if (facts.dates.length !== 7 || new Set(facts.dates).size !== 7) fail('备份路线日期范围无效')
+      array(facts.baseline, 3000).forEach(snapshotBlock); array(facts.candidate, 64).forEach(block)
+      for (const window of array(facts.availableWindows, 10000)) {
+        knownKeys(window, ['date', 'start', 'end']); day(window.date); clockTime(window.start); clockTime(window.end)
+        if (window.start >= window.end || !facts.dates.includes(window.date)) fail('备份路线空闲窗口无效')
+      }
+      for (const row of array(facts.timeline, 7)) {
+        knownKeys(row, ['date', 'availableMin', 'freeMin', 'remainingMin', 'scheduledMin', 'blocks', 'deadlines']); day(row.date)
+        for (const field of ['availableMin', 'freeMin', 'remainingMin', 'scheduledMin']) if (typeof row[field] !== 'number' || !Number.isFinite(row[field]) || row[field] < 0) fail('备份路线时间容量无效')
+        for (const entry of array(row.blocks, 10000)) {
+          knownKeys(entry, ['id', 'title', 'date', 'taskId', 'start', 'end', 'kind', 'locked'])
+          identifier(entry.id); text(entry.title, '安排名称', 160); clockTime(entry.start)
+          // A clipped legacy placement can end at midnight in the timeline.
+          if (entry.end !== '24:00') clockTime(entry.end)
+          if (entry.start >= entry.end) fail('备份路线事实时段无效')
+          choice(entry.kind, ['class', 'available', 'break', 'task'], '安排类型')
+          if (entry.taskId !== undefined) identifier(entry.taskId)
+          if (entry.date !== undefined) day(entry.date)
+          if (entry.locked !== undefined) bool(entry.locked)
+        }
+        for (const entry of array(row.deadlines, 10000)) { knownKeys(entry, ['taskId', 'title', 'due']); identifier(entry.taskId); text(entry.title, '任务名', 160); dateTime(entry.due) }
+      }
+      for (const key of ['effortMin', 'remainingMin']) if (facts[key] !== null) integer(facts[key])
+      for (const key of ['heldMin', 'bufferMin', 'baseRevision']) integer(facts[key])
+      stamp(facts.asOf); bool(facts.exactStartProtected); array(facts.verified, 12).forEach(value => text(value, '核验事实', 600))
+      if (facts.task.id !== item.decision.taskId || facts.baseRevision !== item.baseRevision || JSON.stringify(facts.candidate) !== JSON.stringify(item.plans)) fail('备份路线事实与方案不一致')
+    }
   }
   unique(value.scenarios, 'id')
 }
 
 function validateDocument(table, document) {
   if (table === 'messages') {
-    knownKeys(document, ['id', 'conversationId', 'role', 'content', 'requestId', 'taskId', 'toolCallId', 'toolCalls', 'question', 'sourceMessageIds', 'createdAt', 'excludeFromContext', 'retractedAt', 'contextRetractedAt'])
+    knownKeys(document, ['id', 'conversationId', 'role', 'content', 'requestId', 'taskId', 'toolCallId', 'toolCalls', 'reasoningContent', 'question', 'sourceMessageIds', 'createdAt', 'excludeFromContext', 'retractedAt', 'contextRetractedAt'])
     identifier(document.conversationId); choice(document.role, ['user', 'assistant', 'tool'], '消息角色'); stamp(document.createdAt); bool(document.excludeFromContext)
     for (const key of ['requestId', 'taskId', 'toolCallId']) if (document[key] !== undefined) identifier(document[key])
     optionalStamp(document.retractedAt); optionalStamp(document.contextRetractedAt)
     if (document.sourceMessageIds !== undefined) ids(document.sourceMessageIds)
+    if (document.reasoningContent !== undefined) { choice(document.role, ['assistant'], '思考内容角色'); text(document.reasoningContent, '思考内容', 2000000, { empty: true }) }
     if (document.question !== undefined) questionOptions(document.question)
     if (document.toolCalls !== undefined) for (const call of array(document.toolCalls, 12)) {
       knownKeys(call, ['id', 'type', 'function']); identifier(call.id); choice(call.type, ['function'], '工具类型')
@@ -102,7 +181,7 @@ function validateDocument(table, document) {
     if (document.progress !== undefined) { object(document.progress); if (JSON.stringify(document.progress).length > 256000) fail('执行进度过大') }
     if (document.result !== undefined) { knownKeys(document.result, ['requestId', 'conversationId', 'status', 'error', 'execution']); identifier(document.result.requestId); identifier(document.result.conversationId); choice(document.result.status, ['completed', 'failed'], '请求结果'); if (document.result.error !== undefined) text(document.result.error, '请求错误', 2000); if (document.result.execution !== undefined) { object(document.result.execution); if (JSON.stringify(document.result.execution).length > 256000) fail('执行结果过大') } }
   } else if (table === 'operations') {
-    knownKeys(document, ['id', 'requestId', 'summary', 'kind', 'changes', 'createdAt', 'readAt', 'undoneAt', 'undoable', 'requestedChanges', 'removedAssignments', 'memoryId', 'requestedActions', 'plannerBefore', 'plannerAfterRevision', 'planChanges', 'parentOperationId'])
+    knownKeys(document, ['id', 'requestId', 'summary', 'kind', 'changes', 'createdAt', 'readAt', 'undoneAt', 'undoable', 'requestedChanges', 'removedAssignments', 'memoryId', 'requestedActions', 'plannerBefore', 'plannerAfterRevision', 'planChanges', 'parentOperationId', 'taskPlannerBefore', 'taskPlannerAfterRevision'])
     identifier(document.requestId); text(document.summary, '操作摘要', 2000); stamp(document.createdAt); optionalStamp(document.readAt); optionalStamp(document.undoneAt)
     if (document.parentOperationId !== undefined) identifier(document.parentOperationId)
     if (document.kind !== undefined) choice(document.kind, ['planner', 'forget', 'restored'], '操作类型')
@@ -116,9 +195,14 @@ function validateDocument(table, document) {
     }
     if (document.requestedChanges !== undefined) array(document.requestedChanges, 50)
     if (document.removedAssignments !== undefined) array(document.removedAssignments, 10000)
-    if (document.requestedActions !== undefined) for (const action of array(document.requestedActions, 128)) { choice(action.type, ['save-block', 'delete-block', 'save-details', 'set-day-template', 'remove-day-template', 'edit-weekday'], '操作类型') }
-    if (document.plannerBefore !== undefined) object(document.plannerBefore)
+    if (document.requestedActions !== undefined) for (const action of array(document.requestedActions, 128)) {
+      choice(action.type, ['save-block', 'delete-block', 'save-details', 'set-day-template', 'remove-day-template', 'edit-weekday', 'save-day-event', 'delete-day-event'], '操作类型')
+      if (action.type === 'save-day-event') { knownKeys(action, ['type', 'event']); dayEventValue(action.event) }
+      if (action.type === 'delete-day-event') { knownKeys(action, ['type', 'id']); identifier(action.id) }
+    }
+    if (document.plannerBefore !== undefined) { object(document.plannerBefore); validateDayEvents(document.plannerBefore.dayEvents) }
     if (document.plannerAfterRevision !== undefined) integer(document.plannerAfterRevision)
+    if (document.taskPlannerBefore !== undefined) { object(document.taskPlannerBefore); validateDayEvents(document.taskPlannerBefore.dayEvents); integer(document.taskPlannerAfterRevision) }
     if (document.planChanges !== undefined) for (const change of array(document.planChanges, 128)) { knownKeys(change, ['id', 'before', 'after']); identifier(change.id); if (change.before !== null) block(change.before); if (change.after !== null) block(change.after) }
   }
 }
@@ -251,6 +335,8 @@ export function createBackupStore({ db, transaction, validate }) {
         }
         value.handoffs = value.handoffs.filter(item => keep(item) && db.prepare('SELECT 1 FROM tasks WHERE id=?').get(item.taskId)).map(item => ({ ...item, version: integer(item.version + 1, 1), updatedAt: stampNow }))
         value.wishes = value.wishes.filter(keep).map(item => ({ ...item, version: integer(item.version + 1, 1), updatedAt: stampNow }))
+        value.freeTimeGoals = (value.freeTimeGoals ?? []).filter(keep).map(item => ({ ...item, version: integer(item.version + 1, 1), updatedAt: stampNow }))
+        value.freeTimeHistory = (value.freeTimeHistory ?? []).filter(item => value.freeTimeGoals.some(goal => goal.id === item.goalId))
         value.scenarios = value.scenarios.filter(keep).map(item => ({ ...item, version: integer(item.version + 1, 1), status: item.status === 'preview' ? 'discarded' : item.status }))
         tombstone.run('companion-v1', JSON.stringify(value))
       }

@@ -2,6 +2,7 @@ import type { Task } from '../domain/task'
 import { agendaDate, isOpenTask, localDay } from '../home/agenda'
 import { deadlineTime, upcomingDeadlines } from './deadlines'
 import { recommendationReason, taskGroups } from './tasks'
+import type { WorkbenchSchedule } from './tasks'
 
 export type BriefingRecommendation = {
   task: Task
@@ -105,12 +106,12 @@ export function deadlineContext(task: Task, now: Date, focusMin: number, getSpen
   return { effortLabel, evidence, tone, suggestion }
 }
 
-export function buildWorkbenchBriefing(tasks: readonly Task[], now: Date, focusMin: number, getSpentMs: (id: string) => number, scheduled: ScheduledMinutes = {}): WorkbenchBriefing {
+export function buildWorkbenchBriefing(tasks: readonly Task[], now: Date, focusMin: number, getSpentMs: (id: string) => number, scheduled: ScheduledMinutes = {}, scheduleBlocks: readonly WorkbenchSchedule[] = []): WorkbenchBriefing {
   if (!Number.isFinite(now.getTime())) {
     return { availableCount: 0, dueSoonCount: 0, overdueCount: 0, completedTodayCount: 0, estimatedMin: 0, unestimatedCount: 0, recommendation: null, notices: [] }
   }
-  const { available, completed } = taskGroups(tasks, now)
-  const open = tasks.filter(isOpenTask)
+  const { available, completed } = taskGroups(tasks, now, scheduleBlocks)
+  const open = tasks.filter(task => isOpenTask(task) && !task.freeTimeGoalId)
   const deadlines = upcomingDeadlines(tasks, now)
   const today = localDay(now)
   const recommended = available[0]

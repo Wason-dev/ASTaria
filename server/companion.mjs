@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { ValidationError, knownKeys, text, identifier, choice, day, dateTime, number } from './validation.mjs'
 import { dayCapacity, carryItems, blocksForDay, routinesForDay, minuteOf } from '../src/planner/model.ts'
 import { localDay } from '../src/home/agenda.ts'
+import { freeTimeState } from './freeTime.mjs'
 
 const fail = (message, status = 400) => { throw new ValidationError(message, status) }
 const active = task => task && !task.deletedAt && ['todo', 'doing'].includes(task.status)
@@ -28,9 +29,12 @@ const version = (current, expected) => {
 export function createCompanion({ db, now = () => new Date() }) {
   const clock = () => new Date(now())
   const timezone = () => Intl.DateTimeFormat().resolvedOptions().timeZone
-  const state = () => db.getCompanionState()
+  const state = () => {
+    const value = db.getCompanionState()
+    return { handoffs: [], wishes: [], scenarios: [], ...value, freeTimeGoals: value.freeTimeGoals ?? [], freeTimeHistory: value.freeTimeHistory ?? [] }
+  }
   const save = value => {
-    if (value.wishes.length > 500 || value.handoffs.length > 2000 || value.scenarios.length > 100) fail('本地记录较多，请先清理旧记录', 409)
+    if (value.wishes.length > 500 || value.freeTimeGoals.length > 500 || value.handoffs.length > 2000 || value.scenarios.length > 100) fail('本地记录较多，请先清理旧记录', 409)
     return db.saveCompanionState(value)
   }
   const validSource = source => source?.kind !== 'conversation' || (() => {
@@ -38,7 +42,7 @@ export function createCompanion({ db, now = () => new Date() }) {
     return message && !message.excludeFromContext && !message.retractedAt
   })()
   const sourceValue = (source, evidence) => {
-    if (!source || source.kind === 'user') return { kind: 'user', ...(evidence ? { evidence } : {}) }
+    if (!source || source.kind === 'user') return { kind: 'user', ...(evidence ? { evidence } : {}), ...(source?.actionId ? { actionId: identifier(source.actionId) } : {}) }
     const messageId = identifier(source.messageId, '原话来源'), message = db.getMessage(messageId)
     if (source.kind !== 'conversation' || !message || message.role !== 'user' || message.excludeFromContext || message.retractedAt) fail('原话来源已失效', 409)
     const quote = text(evidence ?? source.evidence, '原话', 2000)
@@ -117,6 +121,77 @@ export function createCompanion({ db, now = () => new Date() }) {
     })
   }
 
+  /**
+   * A free-time goal is a durable learning/interest target. It is deliberately
+   * separate from a task: saving one does not create a task or occupy the
+   * planner. The future scheduler can use its preference range and weekly
+   * minimum when it chooses otherwise-empty time.
+   */
+  function saveFreeTimeGoal(input, source) {
+    knownKeys(input, ['id', 'title', 'evidence', 'priority', 'minPerWeek', 'sessionMin', 'sessionMax', 'targetDate', 'targetNote', 'status', 'expectedVersion', 'fromWishId', 'expectedWishVersion'], '余时目标')
+    return db.transaction(() => {
+      const value = state(), previous = input.id ? value.freeTimeGoals.find(item => item.id === identifier(input.id)) : undefined
+      const wish = input.fromWishId ? value.wishes.find(item => item.id === identifier(input.fromWishId)) : null
+      if (input.fromWishId) {
+        const migrated = value.freeTimeGoals.find(item => item.fromWishId === input.fromWishId)
+        if (migrated) return migrated
+        if (!wish || !validSource(wish.source)) fail('这条牵挂已不存在', 404)
+        version(wish, input.expectedWishVersion)
+      }
+      const replay = source?.actionId && value.freeTimeGoals.find(item => item.source?.actionId === source.actionId)
+      if (replay) return replay
+      if (input.id && !previous) fail('找不到这个余时目标', 404)
+      if (previous?.status === 'deleted') fail('这个余时目标已移除', 410)
+      version(previous, input.expectedVersion ?? (previous ? undefined : 0))
+      const title = text(input.title ?? previous?.title ?? wish?.content, '余时目标名称', 160)
+      const evidence = text(input.evidence ?? previous?.evidence ?? wish?.evidence ?? title, '原话', 2000)
+      const priority = choice(input.priority, ['high', 'normal', 'low'], '余时目标优先级', previous?.priority ?? 'normal')
+      const minPerWeek = number(input.minPerWeek, '每周最低次数', 0, 14, previous?.minPerWeek ?? 0)
+      const sessionMin = number(input.sessionMin, '单次最短分钟数', 5, 720, previous?.sessionMin ?? 20)
+      const sessionMax = number(input.sessionMax, '单次最长分钟数', 5, 720, previous?.sessionMax ?? 40)
+      if (![minPerWeek, sessionMin, sessionMax].every(Number.isInteger)) fail('余时目标的次数与分钟数需要为整数')
+      if (sessionMax < sessionMin) fail('单次最长分钟数不能小于最短分钟数')
+      const status = choice(input.status, ['active', 'paused', 'deleted'], '余时目标状态', previous?.status ?? 'active')
+      const targetDate = input.targetDate === undefined ? previous?.targetDate ?? null : input.targetDate == null ? null : day(input.targetDate, '阶段目标日期')
+      const targetNote = text(input.targetNote ?? previous?.targetNote ?? '', '阶段目标', 1500, { empty: true })
+      const stamp = clock().toISOString()
+      const record = { id: previous?.id ?? randomUUID(), title, evidence, priority, minPerWeek, sessionMin, sessionMax,
+        targetDate, targetNote, ...(previous?.taskId ? { taskId: previous.taskId } : {}),
+        ...(previous?.fromWishId || wish ? { fromWishId: previous?.fromWishId ?? wish.id } : {}),
+        status, version: (previous?.version ?? 0) + 1, source: sourceValue(source, evidence),
+        createdAt: previous?.createdAt ?? stamp, updatedAt: stamp }
+      value.freeTimeGoals = status === 'deleted'
+        ? value.freeTimeGoals.filter(item => item.id !== record.id)
+        : [...value.freeTimeGoals.filter(item => item.id !== record.id), record]
+      if (status === 'deleted' && record.taskId) db.retireFreeTimeTask(record.taskId, clock())
+      if (status === 'deleted') value.freeTimeHistory = value.freeTimeHistory.filter(item => item.goalId !== record.id)
+      else if (record.taskId) {
+        const task = db.getTask(record.taskId)
+        if (task && !task.deletedAt) db.updateTask(task.id, { title, importance: priority === 'high' ? 3 : priority === 'low' ? 1 : 2, estimateMin: sessionMin })
+      }
+      if (wish) value.wishes = value.wishes.map(item => item.id === wish.id ? { ...item, status: 'paused', version: item.version + 1, updatedAt: stamp } : item)
+      save(value)
+      return record
+    })
+  }
+
+  function updateFreeTimeGoal(id, input) {
+    return saveFreeTimeGoal({ ...input, id: identifier(id, '余时目标标识') }, undefined)
+  }
+
+  // Internal persistence boundary: routeAnalysis validates the complete model
+  // proposal and current snapshot inside the caller's database transaction.
+  function saveRouteScenario(record) {
+    return db.transaction(() => {
+      const value = state()
+      if (value.scenarios.some(item => item.id === record.id)) fail('推演标识已经存在', 409)
+      value.scenarios.push(record)
+      if (value.scenarios.length > 100) value.scenarios = value.scenarios.filter(item => item.status === 'preview').concat(value.scenarios.filter(item => item.status !== 'preview').slice(-30))
+      save(value)
+      return record
+    })
+  }
+
   function previewScenario(input, source) {
     knownKeys(input, ['date', 'days', 'mode', 'taskIds', 'budgetMin'], '推演')
     const date = day(input.date), days = number(input.days, '推演天数', 1, 7, 3)
@@ -134,7 +209,8 @@ export function createCompanion({ db, now = () => new Date() }) {
       const selected = allTasks.filter(task => active(task) && (!ids || ids.has(task.id)))
       if (selected.length > 64) fail('请先选择最多64项任务进行推演')
       const selectedIds = new Set(selected.map(task => task.id))
-      const movable = planner.blocks.filter(block => selectedIds.has(block.taskId) && dates.includes(block.date) &&
+      const occurrenceIds = new Set(selected.filter(task => task.occurrence || task.freeTimeGoalId).map(task => task.id))
+      const movable = planner.blocks.filter(block => selectedIds.has(block.taskId) && !occurrenceIds.has(block.taskId) && dates.includes(block.date) &&
         !block.locked && instant(block.date, block.start) >= at.getTime())
       if (movable.length > 64) fail('这一范围包含较多安排，请缩短推演天数')
       const removedBlockIds = movable.map(block => block.id)
@@ -149,6 +225,22 @@ export function createCompanion({ db, now = () => new Date() }) {
       const maxEnd = instant(dates.at(-1), '23:59') + 59_999
       const sorted = [...selected].sort((a, b) => deadline(a) - deadline(b) || b.importance - a.importance || a.createdAt.localeCompare(b.createdAt))
       for (const task of sorted) {
+        if (task.freeTimeGoalId) {
+          warnings.push(`${task.title}：保留余时目标的各次学习安排；频率与学习节奏请在余时页调整`)
+          continue
+        }
+        // Daily instances are date-bound, indivisible sessions. A general
+        // load-balancing preview must not turn them back into fungible effort.
+        if (task.occurrence) {
+          if (dates.includes(task.occurrence.date)) {
+            const blocks = working.blocks.filter(block => block.taskId === task.id)
+            const valid = blocks.length === 1 && blocks[0].date === task.occurrence.date
+            if (!valid) unscheduled.push({ taskId: task.id, title: task.title, remainingMin: task.estimateMin,
+              reason: `${task.occurrence.date} 的重复实例尚需当天完整${task.estimateMin}分钟，保持日期不变` })
+            else warnings.push(`${task.title}：保留${task.occurrence.date}的每日安排`)
+          }
+          continue
+        }
         // Keep exact legacy startAt placements stable; changing only one side
         // of that representation would make preview and real occupancy differ.
         if (task.startAt?.includes('T') && !planner.blocks.some(block => block.taskId === task.id)) {
@@ -220,6 +312,8 @@ export function createCompanion({ db, now = () => new Date() }) {
     return db.transaction(() => {
       const at = clock(), task = requireTask(taskId)
       if (!active(task)) fail('已完成或已放下的任务不能推演', 409)
+      if (task.occurrence) fail(`这项任务是${task.occurrence.date}的每日实例，保留当天的一个时段；改期请编辑该实例，调整实际时长请编辑原日程块`, 409)
+      if (task.freeTimeGoalId) fail('这是一项余时长期目标，请在余时页调整频率与学习节奏，不按一次性任务重排', 409)
       if (date < localDay(at)) fail('请选择今天或未来的日期')
       const planner = db.getPlanner(), tasks = db.listTasks(), dates = datesFrom(date, 7), value = state()
       const original = planner.blocks.filter(block => block.taskId === taskId)
@@ -344,7 +438,7 @@ export function createCompanion({ db, now = () => new Date() }) {
         ...record.plans.map(({ title: unused, ...plan }) => ({ type: 'save-block', block: { ...plan, locked: false } }))]
       if (!actions.length) fail('这份方案没有可应用的时间变更，待安排事项继续保留', 409)
       const operation = db.applyPlannerOperation({ id: `scenario:${record.id}`, requestId: `scenario:${record.id}`,
-        summary: record.decision ? `采用「${record.decision.title}」${record.decision.strategy === 'defer' ? '明天再做' : record.decision.strategy === 'split' ? '今天先做一部分' : '今天优先'}路径：本次 7 天安排 ${record.plans.length} 段，${record.unscheduled.length} 项待安排`
+        summary: record.decision ? `采用「${record.decision.title}」${record.decision.strategy === 'model' ? '候选路线' : record.decision.strategy === 'defer' ? '明天再做路径' : record.decision.strategy === 'split' ? '今天先做一部分路径' : '今天优先路径'}：本次 7 天安排 ${record.plans.length} 段，${record.unscheduled.length} 项待安排`
           : `应用${record.mode === 'rest' ? '休息' : record.mode === 'light' ? '轻量' : '平衡'}方案：安排 ${record.plans.length} 段，${record.unscheduled.length} 项待安排`,
         actions, expectedRevision: record.baseRevision }, { scenario: true })
       Object.assign(record, { status: 'applied', version: record.version + 1, operationId: operation.id, appliedAt: at.toISOString() })
@@ -372,6 +466,7 @@ export function createCompanion({ db, now = () => new Date() }) {
     const value = state(), planner = db.getPlanner(), tasks = db.listTasks(), taskMap = new Map(tasks.map(task => [task.id, task]))
     const wishes = value.wishes.filter(item => item.status !== 'deleted' && validSource(item.source)).map(item => ({ ...item,
       status: item.expiresAt && Date.parse(item.expiresAt) <= at.getTime() ? 'expired' : item.status }))
+    const freeTimeGoals = value.freeTimeGoals.filter(item => item.status !== 'deleted' && validSource(item.source))
     const operations = new Map(db.listOperations().map(item => [item.id, item]))
     const scenarios = value.scenarios.filter(item => validSource(item.source)).map(item => ({ ...item,
       status: operations.get(item.operationId)?.undoneAt ? 'undone' : item.status }))
@@ -398,7 +493,7 @@ export function createCompanion({ db, now = () => new Date() }) {
         reason: '根据当天课表、任务准备与明确的学习条件整理', items: carry.map(item => item.label ?? item.name ?? item.key),
         source: { kind: 'planner' } })
     }
-    return { handoffs: value.handoffs.filter(item => validSource(item.source) && taskMap.has(item.taskId)), wishes, scenarios, opportunities, timeline }
+    return { handoffs: value.handoffs.filter(item => validSource(item.source) && taskMap.has(item.taskId)), wishes, freeTimeGoals, ...freeTimeState(db, { date, days, now: at }), scenarios, opportunities, timeline }
   }
-  return { listState, saveHandoff, clearHandoff, saveWish, updateWish, previewScenario, previewDecision, applyScenario, discardScenario }
+  return { listState, saveHandoff, clearHandoff, saveWish, updateWish, saveFreeTimeGoal, updateFreeTimeGoal, previewScenario, previewDecision, saveRouteScenario, applyScenario, discardScenario }
 }

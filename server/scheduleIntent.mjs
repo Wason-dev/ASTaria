@@ -32,6 +32,11 @@ export function explicitTaskSlot(text, title, today, fallbackDate) {
  * A short leading name ("数学缩到…") binds only when one live task has that
  * prefix. Ambiguous references stay with the model; this is not a scheduler. */
 export function namedTaskSlots(text, tasks, today, fallbackDate) {
+  // Reading a named time range (e.g. asking its duration) is not a write goal.
+  // Explicit requests still bind even when phrased politely as a question.
+  const question = /(?:[?？]|吗|么|是否|是不是|多长|多久|几点)/u.test(text)
+  const action = /(?:把|将|安排|挪到|移到|改到|改成|缩到|顺延|排到|排进|记录|添加|创建)/u.test(text)
+  if (question && !action) return []
   const live = tasks.filter(task => !task.deletedAt && !['done', 'dropped'].includes(task.status))
   const targets = new Map()
   for (const task of live) {

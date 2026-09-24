@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { createDatabase } from '../server/database.mjs'
-import { createXixi, contextUnits, XIXI_TOOLS } from '../server/xixi.mjs'
+import { createXixi, contextUnits, XIXI_TOOLS, HARD_INPUT_UNITS } from '../server/xixi.mjs'
 
 process.env.TZ = 'Asia/Shanghai'
 const DATE = '2026-09-18', NOW = new Date(`${DATE}T17:00:00+08:00`)
@@ -75,7 +75,7 @@ test('named dorm availability survives a truncated school day and supports direc
   assert.equal(result.operations.length, 1)
   assert.equal(f.db.getPlanner().blocks.length, 2)
   assert.equal(f.db.getPlanner().blocks.find(block => block.id === 'sat-plan').start, '20:30')
-  assert.ok(f.requests.every(request => contextUnits(request.messages) + contextUnits(XIXI_TOOLS) < 14000))
+  assert.ok(f.requests.every(request => contextUnits(request.messages) + contextUnits(XIXI_TOOLS) <= HARD_INPUT_UNITS))
 })
 
 test('availability names use fresh target-day overrides and respect occupied time', async t => {
@@ -356,7 +356,7 @@ test('read planner bounds days and content, and context.date rejects malformed d
     assert.equal(data.days.length, 7)
     assert.equal(data.days[6].date, '2026-09-24')
     assert.ok(contextUnits(data) < 4500)
-    assert.ok(contextUnits(request.messages) + contextUnits(XIXI_TOOLS) < 14000)
+    assert.ok(contextUnits(request.messages) + contextUnits(XIXI_TOOLS) <= HARD_INPUT_UNITS)
     return reply('看完这周了')
   })
   await f.xixi.chat(input('看看未来7天', { date: '2026-09-19' }))

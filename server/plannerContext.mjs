@@ -17,7 +17,7 @@ const within = (ranges, window) => ranges.map(range => ({ start: Math.max(range.
 function scheduleRows(state, tasks, date) {
   const byId = new Map(tasks.map(task => [task.id, task]))
   const rows = [
-    ...routinesForDay(state, date).filter(item => item.kind !== 'available').map(({ id, title, kind, start, end, location }) => ({ id, title, kind, start, end, location })),
+    ...routinesForDay(state, date).filter(item => item.kind !== 'available').map(({ id, title, kind, start, end, location, sourceDate }) => ({ id, title, kind, start, end, location, ...(sourceDate ? { sourceDate } : {}) })),
     ...blocksForDay(state, tasks, date).map(item => ({ id: item.id, taskId: item.taskId, title: byId.get(item.taskId)?.title ?? '任务',
       kind: 'plan', start: item.start, end: item.end, location: '' })),
   ]

@@ -144,7 +144,7 @@ try {
   await check('scrolling settings cannot paint content across global navigation', `(()=>{const viewport=document.querySelector('.xixi-settings-scroll').getBoundingClientRect(),nav=document.querySelector('.home-brand').getBoundingClientRect();return viewport.top>=nav.bottom+6})()`)
   await shot('light-390x844')
   await evaluate("document.querySelector('.xixi-settings-scroll').scrollTop=0;true"); await delay(200)
-  await check('light narrow settings header keeps one brand mark and starts below global navigation', `(()=>{const localBrand=document.querySelector('.xixi-settings-page-header>div>span'),title=document.querySelector('.xixi-settings-page-header h2'),global=document.querySelector('.home-brand').getBoundingClientRect(),heading=title.getBoundingClientRect();return getComputedStyle(localBrand).display==='none'&&heading.top>=global.bottom+6})()`)
+  await check('light narrow settings header keeps one brand mark and starts below global navigation', `(()=>{const localBrand=document.querySelector('.xixi-settings-page-header>div>span'),title=document.querySelector('.xixi-settings-page-header h2'),global=document.querySelector('.home-brand').getBoundingClientRect(),heading=title.getBoundingClientRect();return !localBrand&&heading.top>=global.bottom+6})()`)
   await shot('light-390x844-header')
   await check('personality changes and layout checks make zero model calls', providerCalls === 0)
   await check('the only mutating API calls were preference saves', requests.filter(request => request.method !== 'GET').every(request => request.path === '/api/preferences'))

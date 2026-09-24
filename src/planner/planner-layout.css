@@ -8,7 +8,7 @@
 .planner .pl-header-actions { flex-wrap:nowrap; gap:6px }
 .planner .pl-header-actions .pl-primary { color:#201c16; background:#dfcfaf; border-color:#dfcfaf; box-shadow:inset 0 1px 0 #ffffff55 }
 .planner .pl-header-actions .pl-primary:hover { background:#eee0c5 }
-.planner[data-theme=light] .pl-header-actions .pl-primary { color:#faf7ef; background:#55544e; border-color:#55544e }
+.planner[data-theme=light] .pl-header-actions .pl-primary { color:#201c16; background:#dfcfaf; border-color:#c8b68f }
 .planner .pl-header-actions .pl-primary[aria-expanded=true] { background:var(--pl-well); color:var(--pl-gold); border-color:#d5bb8b77 }
 .planner .pl-selected-summary { display:none }
 .planner .pl-setup { padding:8px 12px; margin-bottom:12px; font-size:10px; background:transparent; box-shadow:none; border-style:dashed; gap:8px }
@@ -42,7 +42,6 @@
 .planner .pl-muted { font-size:11px }
 .planner .pl-calendar-summary-focus strong { font-size:21px }
 .planner .pl-capacity-hero strong { font-size:25px }
-.planner .pl-calendar-day[data-today=true] .pl-calendar-date>span { background:#ddd2b3; color:#1d1c18 }
 .planner .pl-calendar-day[aria-pressed=true] { background:var(--pl-plate); border-color:#d5bb8ba6; box-shadow:var(--pl-plate-shadow),inset 0 0 0 1px #d5bb8b22 }
 .p0 .planner .pl-calendar-day { padding-inline:9px }
 .planner .pl-calendar-entries { gap:6px; margin-block:2px }
@@ -114,6 +113,17 @@
 .planner .pl-month-deadline>span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
 .planner .pl-month-deadline[data-done=true] { color:var(--pl-muted) }
 .planner .pl-month-deadline .pl-icon { width:12px; height:12px; color:#9db8aa; margin-left:auto; flex:none }
+.planner .pl-month-deadline-toggle { display:flex; align-items:center; justify-content:space-between; gap:10px; min-height:27px; cursor:pointer; list-style:none; font-size:12px; font-weight:500 }
+.planner .pl-month-deadline-toggle::-webkit-details-marker { display:none }
+.planner .pl-month-deadline-toggle small { margin-left:5px; color:var(--pl-muted); font-size:10px; font-weight:400 }
+.planner .pl-month-deadline-toggle>.pl-icon { width:13px; height:13px; flex:none; color:var(--pl-muted) }
+.planner details[open]>.pl-month-deadline-toggle>.pl-icon { transform:rotate(90deg) }
+.planner .pl-month-deadline-toggle:focus-visible { outline:1px solid var(--pl-gold); outline-offset:3px; border-radius:3px }
+.planner .pl-month-deadline-content>.pl-muted { margin:5px 0 7px }
+.planner .pl-month-deadlines-completed { margin-top:7px; padding-top:6px; border-top:1px solid var(--pl-line) }
+.planner .pl-month-deadlines-completed>.pl-month-deadline-toggle { color:var(--pl-muted); font-size:11px }
+.planner .pl-month-deadline-pages { display:flex; align-items:center; justify-content:space-between; gap:8px; margin:7px 0; color:var(--pl-muted); font-size:10px }
+.planner .pl-month-deadline-pages button { padding:4px 0; color:var(--pl-gold); font-size:10px }
 .planner .pl-layout,.planner .pl-layout[data-chat=true],.planner .pl-layout[data-chat-open=true] { grid-template-columns:minmax(0,1fr) 0px; grid-template-rows:auto; gap:0; height:auto; min-height:0; transition:grid-template-columns 340ms var(--pl-ease) }
 .planner .pl-layout[data-chat-open=true] { grid-template-columns:minmax(0,1fr) 324px }
 .planner .pl-layout>.pl-board { grid-column:1; grid-row:1; min-height:0; height:auto }
@@ -163,8 +173,8 @@
 .planner[data-entering=true] .pl-overview-grid>section { animation:pl-content-arrive 280ms var(--pl-motion-ease) 50ms backwards }
 @media(min-width:768px) and (max-width:1099px) {
   .planner .pl-page-header { gap:12px }
-  .planner .pl-header-edit>span,.planner .pl-header-add>span { display:none }
-  .planner :is(.pl-header-edit,.pl-header-add) { width:32px; padding:6px }
+  .planner .pl-header-edit>span { display:none }
+  .planner .pl-header-edit { width:32px; padding:6px }
   .planner .pl-overview-grid { grid-template-columns:minmax(190px,.9fr) minmax(0,1fr) minmax(175px,.9fr); gap:16px }
   .planner .pl-overview-grid[data-view=timetable] { grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px 24px }
   .planner .pl-overview-grid[data-view=timetable] .pl-overview-summary { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:12px }
@@ -179,8 +189,8 @@
   .planner .pl-page-header { grid-template-columns:auto minmax(0,1fr); gap:10px 6px; margin-bottom:12px }
   .planner .pl-page-title h2 { font-size:20px }
   .planner .pl-header-actions { grid-column:2; grid-row:1; justify-self:end; gap:3px }
-  .planner .pl-header-edit>span,.planner .pl-header-add>span { display:none }
-  .planner :is(.pl-header-edit,.pl-header-add) { width:30px; padding:5px }
+  .planner .pl-header-edit>span { display:none }
+  .planner .pl-header-edit { width:30px; padding:5px }
   .planner .pl-header-actions>.pl-icon-button { width:28px; padding:5px }
   .planner .pl-header-actions>.pl-primary { padding:5px 9px; gap:5px; font-size:11px }
   .planner .pl-page-header .pl-board-toolbar { grid-column:1 / -1; grid-row:2; justify-content:space-between; gap:4px; flex-wrap:nowrap }
@@ -285,3 +295,11 @@
 .planner[data-theme=light] .pl-calendar-day[data-outside=true] { opacity: .56; }
 @media(max-width:850px) { .planner .pl-calendar-grid { gap: 5px; padding: 3px; } }
 @media(max-width:500px) { .planner .pl-calendar-grid { gap: 4px; padding: 2px; } .p0 .planner .pl-calendar-day { border-radius: 11px; } }
+
+/* Keep the primary action readable alongside the shared page description. */
+.planner .pl-header-actions .pl-header-add { width:auto; white-space:nowrap }
+@media (min-width:768px) and (max-width:1099px) {
+  .planner .pl-page-header { grid-template-columns:minmax(0,1fr) auto }
+  .planner .pl-header-actions { grid-column:2; grid-row:1; justify-self:end }
+  .planner .pl-page-header .pl-board-toolbar { grid-column:1 / -1; grid-row:2; justify-content:space-between }
+}

@@ -1,0 +1,88 @@
+.horizon-studio { color:#eae0cc }
+.horizon-studio .orbit-canvas { opacity:var(--orbit-reveal) }
+.horizon-studio .orbit-heading h1 { font-size:21px; letter-spacing:.18em; color:#e6dcc8 }
+.horizon-studio .orbit-heading p { color:#8f8c81; font-size:11px; letter-spacing:.09em }
+.horizon-day-heading { position:absolute; top:19%; left:50%; transform:translateX(-50%); width:max-content; max-width:90%; text-align:center; opacity:var(--orbit-reveal); z-index:3 }
+.horizon-day-heading nav { display:flex; justify-content:center; gap:10px }
+.p0 .horizon-day-heading nav button { position:relative; min-width:88px; height:48px; padding:10px 16px; border:1px solid transparent; border-radius:18px; background:transparent; color:#827e74; font-size:14px; letter-spacing:.12em; cursor:pointer; transition:color 300ms,border-color 400ms,box-shadow 400ms; overflow:hidden }
+.horizon-day-heading nav button>.home-glass-measure { position:absolute; inset:0; opacity:0; pointer-events:none; transition:opacity 400ms }
+.horizon-day-heading nav button>span:not(.home-glass-measure) { position:relative; z-index:1 }
+.p0 .horizon-day-heading nav button[data-drop=true] { opacity:1; color:#c9bdab; border-color:#e0dcc329; box-shadow:inset 0 1px 0 #fff1 }
+.horizon-day-heading nav button[data-drop=true]>.home-glass-measure { opacity:1 }
+.horizon-day-heading nav button .home-glass-surface { background:transparent }
+.p0 .horizon-day-heading nav button[data-target=true] { color:#f9e5bc; border-color:#dec28b9c; box-shadow:inset 0 1px 0 #ffe5b933,0 0 22px #cca05b13 }
+.p0 .horizon-day-heading nav button[aria-pressed=true] { color:#e4d4b3 }
+.horizon-day-heading nav button::after { content:''; position:absolute; bottom:0; left:25%; right:25%; height:1px; background:#dcc090; opacity:0; transform:scaleX(.5); transition:opacity 350ms,transform 350ms }
+.horizon-day-heading nav button[aria-pressed=true]::after { opacity:.65; transform:scaleX(1) }
+.horizon-day-copy { animation:horizon-day-arrive 600ms ease both; transition:opacity 300ms }
+.horizon-studio[data-expanded=true] .horizon-day-copy { visibility:hidden }
+.horizon-day-copy p { margin:26px 0 10px; color:#c2bba8; font-size:12px; font-weight:400; letter-spacing:.13em }
+.horizon-day-copy>span { color:#73736b; font-size:11px; letter-spacing:.07em }
+.horizon-studio .orbit-group-caption { width:158px; text-shadow:0 2px 12px #000; color:#e2dacb; transition:opacity 250ms }
+.horizon-studio .orbit-group-caption strong { font-size:14px; font-weight:400; line-height:1.65; letter-spacing:.035em }
+.horizon-group-order { display:block; margin-bottom:7px; font-size:9px; line-height:1; letter-spacing:.13em; color:#9a8764; font-variant-numeric:tabular-nums }
+.horizon-studio .orbit-group-caption small { font-size:10px; color:#b4a183; margin-top:5px }
+.horizon-studio .orbit-group-tether { top:24px; background:linear-gradient(#e0c39760,#e0c39708); opacity:.5 }
+.horizon-studio .orbit-group[data-dragged=true] { z-index:5 }
+.horizon-studio .orbit-group[data-dragged=true] .orbit-group-caption { color:#fff1d3 }
+.horizon-studio .orbit-caption { left:50%; translate:-50% 0; bottom:107px; width:max-content; text-align:center; max-width:90%; opacity:calc(var(--orbit-reveal)*.85) }
+.horizon-studio[data-expanded=true] .orbit-caption { opacity:0 }
+.horizon-studio .orbit-hit-layer { transition:opacity 420ms }
+.horizon-studio[data-expanded=true] .orbit-hit-layer { opacity:0 }
+.horizon-group-detail { position:absolute; inset:0; z-index:2; pointer-events:none; opacity:0; transition:opacity 500ms; }
+.horizon-group-detail[data-open=true] { opacity:var(--orbit-reveal) }
+.horizon-detail-heading { position:absolute; top:31%; left:50%; translate:-50% 0; width:min(600px,85vw); text-align:center; pointer-events:auto }
+.horizon-detail-heading>small { font-size:10px; letter-spacing:.14em; color:#9d8969 }
+.horizon-detail-heading h2 { margin:12px 0 11px; font-size:22px; font-weight:350; line-height:1.5; letter-spacing:.08em; color:#e8dcc6 }
+.p0 .horizon-detail-heading .horizon-detail-back { position:relative; display:inline-flex; justify-content:center; align-items:center; gap:10px; min-height:40px; padding:9px 17px; margin-top:2px; border:1px solid #d1b17a66; border-radius:20px; background:transparent; font-size:12px; color:#e0cba5; cursor:pointer; overflow:hidden; transition:color 220ms,border-color 220ms,box-shadow 220ms }
+.horizon-detail-back>.home-glass-measure { position:absolute; inset:0; pointer-events:none }
+.horizon-detail-back>:not(.home-glass-measure) { position:relative; z-index:1 }
+.horizon-detail-back .home-glass-surface { background:transparent }
+.horizon-detail-back>svg { width:16px; height:16px; fill:none; stroke:currentColor; stroke-width:1.3; stroke-linecap:round; stroke-linejoin:round }
+.p0 .horizon-detail-heading .horizon-detail-back:hover { color:#fff0cf; border-color:#ead1a39c; box-shadow:0 0 20px #d8af5b13 }
+.horizon-task-strands,.horizon-task-layer { position:absolute; inset:0; width:100%; height:100%; overflow:visible; pointer-events:none }
+.horizon-task-strands { fill:none; stroke-linecap:round }
+.horizon-task-strands g { transition:opacity 300ms }
+.horizon-group-detail[data-dragging=true] .horizon-task-strands g:not([data-dragged=true]) { opacity:.5 }
+.p0 .horizon-task { position:absolute; top:0; left:0; width:80px; height:44px; padding:0; border:0; border-radius:0; background:transparent; color:#e2d8c5; cursor:grab; touch-action:none; pointer-events:auto; will-change:transform; }
+.horizon-task-caption { position:absolute; left:40px; bottom:60px; translate:-50% 0; width:190px; text-align:center; text-shadow:0 2px 12px #000; }
+.horizon-task-caption>small { display:block; margin-bottom:12px; font-size:9px; letter-spacing:.14em; color:#a98a58 }
+.horizon-task-caption strong { display:block; font-weight:400; font-size:14px; line-height:1.7; letter-spacing:.035em; text-wrap:balance }
+.horizon-task-caption>span { display:block; margin-top:7px; font-size:10px; color:#a39377 }
+.horizon-task>i { position:absolute; left:40px; bottom:24px; width:1px; height:26px; background:linear-gradient(#d9bb7b55,#d9bb7b08); }
+.p0 .horizon-task[data-dragged=true] { z-index:4; cursor:grabbing; color:#fff0ce }
+.p0 .horizon-task:focus-visible { outline:none }
+.horizon-task:focus-visible .horizon-task-caption strong { text-decoration:underline; text-decoration-color:#b39a6455; text-underline-offset:7px }
+.horizon-detail-hint { position:absolute; bottom:107px; left:50%; translate:-50% 0; width:max-content; max-width:90%; margin:0; text-align:center; font-size:11px; color:#85867f; letter-spacing:.07em }
+.horizon-tuning-fields { display:grid; gap:18px; margin:20px 0 }
+.horizon-studio[data-reduced=true] * { animation:none!important; transition:none!important }
+@keyframes horizon-day-arrive { from { opacity:0; translate:0 8px } to { opacity:1; translate:0 0 } }
+@media(max-width:800px) {
+  .horizon-studio .orbit-heading h1 { font-size:20px }
+  .horizon-studio .orbit-group-caption { width:158px }
+  .horizon-studio .orbit-group-caption strong { font-size:12px }
+  .horizon-task-caption { width:150px }
+}
+@media(max-width:520px) {
+  .horizon-day-heading { top:20% }
+  .horizon-day-heading nav { gap:5px }
+  .horizon-studio .orbit-group-caption { width:120px }
+  .horizon-studio .orbit-group-caption strong { font-size:12px }
+  .horizon-task-caption { width:100px; bottom:57px }
+  .horizon-task-caption strong { font-size:12px }
+  .horizon-detail-heading { top:33% }
+  .horizon-detail-heading h2 { font-size:19px }
+  .horizon-studio .orbit-footer { gap:12px }
+}
+@media(max-height:520px) and (min-width:600px) {
+  .horizon-day-heading { top:15px }
+  .horizon-day-copy p { margin:13px 0 5px }
+  .horizon-day-copy>span { display:none }
+  .horizon-detail-heading { top:85px }
+  .horizon-detail-heading>small { display:none }
+  .horizon-detail-heading h2 { margin:0; font-size:17px }
+  .horizon-task-caption { bottom:48px }
+  .horizon-task-caption>small { margin-bottom:4px }
+  .horizon-detail-hint { bottom:84px }
+  .horizon-studio .orbit-caption { bottom:84px }
+}

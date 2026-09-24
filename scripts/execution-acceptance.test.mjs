@@ -152,7 +152,7 @@ test('HTTP flow: interrupted math/physics rescheduling survives restart and retr
   assert.equal(f.responses.length, 0)
 })
 
-test('HTTP flow: PSEC creation and moving an existing exam produce separate calendar commits; undo stays undone on replay', async t => {
+test('HTTP flow: PSEC creation and its first placement share one receipt while moving an existing exam remains separate; undo stays undone on replay', async t => {
   const f = fixture(t)
   const exam = await f.ok('/tasks/create', { title: '考试', estimateMin: 30 })
   await f.plannerAction({ type: 'save-block', block: { id: 'exam-plan', taskId: exam.id,
@@ -169,7 +169,7 @@ test('HTTP flow: PSEC creation and moving an existing exam produce separate cale
   assert.equal(result.status, 'completed')
   assert.equal(result.execution.status, 'verified')
   assert.ok(result.execution.scheduleRequirements.every(item => item.status === 'verified'))
-  assert.equal(result.operations.length, 3)
+  assert.equal(result.operations.length, 2)
   const saved = await publicState(f, result)
   assert.equal(saved.tasks.length, 2)
   const activity = saved.tasks.find(task => task.title === 'PSEC社团活动')
@@ -178,10 +178,14 @@ test('HTTP flow: PSEC creation and moving an existing exam produce separate cale
     { taskId: activity.id, ...slot },
     { taskId: exam.id, date: TOMORROW, start: '18:30', end: '19:00' },
   ])
-  assert.ok(result.operations.some(operation => operation.details.includes(`${TOMORROW} 17:15–18:00`)))
+  assert.ok(result.operations.some(operation => operation.details.some(detail => detail.includes(`${TOMORROW} 17:15–18:00`))))
   assert.ok(result.operations.some(operation => operation.details.includes(`${TOMORROW} 18:30–19:00`)))
   const creation = result.operations.find(operation => operation.createdTasks.some(task => task.id === activity.id))
   assert.ok(creation)
+  assert.equal(creation.undoLabel, '撤销创建与安排')
+  assert.equal(creation.relatedOperationIds.length, 1)
+  assert.ok(creation.details.some(detail => detail.includes(`${TOMORROW} 17:15–18:00`)))
+  assert.equal(result.operations.some(operation => creation.relatedOperationIds.includes(operation.id)), false)
   const undone = await f.ok(`/operations/${creation.id}/undo`, {})
   assert.ok(undone.undoneAt)
   assert.deepEqual(await f.ok('/tasks'), [exam])
@@ -192,8 +196,9 @@ test('HTTP flow: PSEC creation and moving an existing exam produce separate cale
   const providerCount = f.requests.length
   const replay = await f.ok('/chat', input)
   assert.equal(f.requests.length, providerCount)
-  assert.equal(replay.operations.length, 3)
-  assert.equal(replay.operations.filter(operation => operation.undoneAt).length, 2)
+  assert.equal(replay.operations.length, 2)
+  assert.equal(replay.operations.filter(operation => operation.undoneAt).length, 1)
+  assert.ok(replay.operations.find(operation => operation.id === creation.id).undoneAt)
   assert.equal(replay.messages.filter(message => message.role === 'user').length, 1)
   const reloaded = await publicState(f, replay)
   assert.deepEqual(reloaded.tasks, [exam])

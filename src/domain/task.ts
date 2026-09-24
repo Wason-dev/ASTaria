@@ -19,6 +19,14 @@ export type Task = {
   due?: string
   startAt?: string
   estimateMin?: number
+  freeTimeGoalId?: string
+  occurrence?: {
+    seriesId: string
+    date: string
+    preferredWindow?: string
+    allowFallback: boolean
+    placement: 'start' | 'end'
+  }
   subSteps?: unknown[]
   surfaceAt?: string
   leadDays: number

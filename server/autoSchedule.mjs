@@ -24,26 +24,76 @@ const mergeRanges = ranges => {
   return merged
 }
 
+function occurrenceSlot(task, state, allTasks, now, bufferMin) {
+  const { date, preferredWindow, placement, allowFallback } = task.occurrence
+  const minutes = task.estimateMin
+  if (date < localDay(now)) return null
+  const capacity = dayCapacity(state, allTasks, date, now)
+  const windows = routinesForDay(state, date).filter(routine => routine.kind === 'available' && routine.title === preferredWindow)
+    .map(window => ({ start: minuteOf(window.start), end: minuteOf(window.end) }))
+  const dayStart = new Date(`${date}T00:00:00`).getTime()
+  const deadline = task.due ? new Date(task.due.length === 10 ? `${nextDay(task.due, 1)}T00:00:00` : task.due).getTime() : Infinity
+  const available = capacity.remaining.map(range => ({
+    start: Math.ceil((range.start + (state.blocks.some(block => block.date === date && minuteOf(block.end) === range.start) ? bufferMin : 0)) / 5) * 5,
+    end: Math.min(Math.floor(range.end - (state.blocks.some(block => block.date === date && minuteOf(block.start) === range.end) ? bufferMin : 0)),
+      Math.floor((deadline - dayStart) / 60000)),
+  })).filter(range => range.end - range.start >= minutes)
+  const withinWindow = preferredWindow ? mergeRanges(available.flatMap(range => windows.map(window => ({
+    start: Math.max(range.start, window.start), end: Math.min(range.end, window.end),
+  })).filter(range => range.end - range.start >= minutes))) : available
+  const pickEdge = ranges => placement === 'end' ? ranges.at(-1) && { start: ranges.at(-1).end - minutes, end: ranges.at(-1).end }
+    : ranges[0] && { start: ranges[0].start, end: ranges[0].start + minutes }
+  const preferred = pickEdge(withinWindow)
+  if (preferred) return { date, ...preferred, fallback: false }
+  if (!allowFallback || !available.length) return null
+  // A preferred window occupied by another event can fall back to the nearest
+  // complete same-day slot, never to tomorrow or several fragments.
+  const anchor = windows.length ? placement === 'end' ? Math.max(...windows.map(window => window.end)) - minutes
+    : Math.min(...windows.map(window => window.start)) : null
+  const alternative = anchor === null ? pickEdge(available) : available.map(range => {
+    const start = Math.max(range.start, Math.min(anchor, range.end - minutes))
+    return { start, end: start + minutes }
+  }).sort((a, b) => Math.abs(a.start - anchor) - Math.abs(b.start - anchor) || a.start - b.start)[0]
+  return alternative ? { date, ...alternative, fallback: Boolean(preferredWindow) } : null
+}
+
 /** Pure placement against the same capacity calculation used by the calendar.
  * No existing block is moved; validation and commit still belong to the store. */
-export function initialTaskSchedule({ state, allTasks, tasks, now, idForBlock, bufferMin = 10, windowByTask = new Map() }) {
+export function initialTaskSchedule({ state, allTasks, tasks, now, idForBlock, bufferMin = 10, windowByTask = new Map(), dateByTask = new Map() }) {
   const plans = [], allocations = [], unscheduled = []
   const working = { ...state, blocks: [...state.blocks] }
   const today = localDay(now)
-  const ordered = [...tasks].filter(task => ['todo', 'doing'].includes(task.status))
+  const ordered = [...tasks].filter(task => ['todo', 'doing'].includes(task.status) && !task.freeTimeGoalId)
     .sort((a, b) => (a.due ?? '9999').localeCompare(b.due ?? '9999') || b.importance - a.importance)
   for (const task of ordered) {
     const estimated = !task.estimateMin
     const totalMin = task.estimateMin ?? DEFAULT_INITIAL_MINUTES
+    if (task.occurrence) {
+      const slot = occurrenceSlot(task, working, allTasks, now, bufferMin)
+      if (slot && plans.length < 64) {
+        const block = { id: idForBlock(task.id, plans.length), taskId: task.id, date: task.occurrence.date,
+          start: timeOf(slot.start), end: timeOf(slot.end), locked: false }
+        plans.push(block); working.blocks.push(block)
+        allocations.push({ taskId: task.id, title: task.title, date: task.occurrence.date, totalMin, scheduledMin: totalMin, estimated,
+          ...(task.occurrence.preferredWindow ? { preferredWindow: task.occurrence.preferredWindow, fallback: slot.fallback } : {}) })
+      } else {
+        allocations.push({ taskId: task.id, title: task.title, date: task.occurrence.date, totalMin, scheduledMin: 0, estimated })
+        unscheduled.push({ taskId: task.id, title: task.title, date: task.occurrence.date, remainingMin: totalMin,
+          reason: `${task.occurrence.date} ${task.occurrence.preferredWindow && !task.occurrence.allowFallback ? `的「${task.occurrence.preferredWindow}」` : '当天'}没有可用的完整 ${totalMin} 分钟空档；保留当天实例，不拆段、不挪到其他日期` })
+      }
+      continue
+    }
     let remainingMin = totalMin
-    const firstDate = task.startAt && task.startAt > today ? task.startAt : today
+    const exactDate = dateByTask.get(task.id)
+    const firstDate = exactDate ?? (task.startAt && task.startAt > today ? task.startAt : today)
     const deadline = task.due ? new Date(task.due.length === 10 ? `${nextDay(task.due, 1)}T00:00:00` : task.due).getTime() : Infinity
-    const lastDate = task.due ? localDay(new Date(deadline - 1)) : nextDay(firstDate, 6)
+    const lastDate = exactDate ?? (task.due ? localDay(new Date(deadline - 1)) : nextDay(firstDate, 6))
     // One year is a bounded search horizon for a far-future explicitly dated
     // task; ordinary new tasks stop at the first available few slots.
     for (let offset = 0; offset < 366 && remainingMin > 0 && plans.length < 64; offset++) {
       const date = nextDay(firstDate, offset)
       if (date > lastDate) break
+      if (exactDate && (date < today || (task.startAt && date < task.startAt))) continue
       const capacity = dayCapacity(working, allTasks, date, now)
       const windowTitle = windowByTask.get(task.id)
       const windows = windowTitle ? routinesForDay(working, date).filter(routine => routine.kind === 'available' && routine.title === windowTitle) : []
@@ -57,7 +107,9 @@ export function initialTaskSchedule({ state, allTasks, tasks, now, idForBlock, b
         let end = Math.floor(range.end - (adjacentAfter ? bufferMin : 0))
         const dayStart = new Date(`${date}T00:00:00`).getTime()
         end = Math.min(end, Math.floor((deadline - dayStart) / 60000))
-        if (end - start < Math.min(10, remainingMin)) continue
+        // A requested day is a constraint, not the beginning of a search week.
+        // Leave an undersized window untouched so the user can choose a tradeoff.
+        if (end - start < (exactDate ? totalMin : Math.min(10, remainingMin))) continue
         const duration = Math.min(remainingMin, end - start)
         const block = { id: idForBlock(task.id, plans.length), taskId: task.id, date,
           start: timeOf(start), end: timeOf(start + duration), locked: false }
@@ -65,9 +117,11 @@ export function initialTaskSchedule({ state, allTasks, tasks, now, idForBlock, b
         if (!remainingMin || plans.length >= 64) break
       }
     }
-    allocations.push({ taskId: task.id, title: task.title, totalMin, scheduledMin: totalMin - remainingMin, estimated })
-    if (remainingMin) unscheduled.push({ taskId: task.id, title: task.title, remainingMin,
-      reason: `${deadline <= now.getTime() ? '截止时间已过，未安排过去的时段' : `截止前${windowByTask.has(task.id) ? `的「${windowByTask.get(task.id)}」` : ''}没有足够的已知空档，现有安排保持不变`}；还剩 ${remainingMin} 分钟未安排` })
+    allocations.push({ taskId: task.id, title: task.title, ...(exactDate ? { date: exactDate } : {}), totalMin, scheduledMin: totalMin - remainingMin, estimated })
+    if (remainingMin) unscheduled.push({ taskId: task.id, title: task.title, ...(exactDate ? { date: exactDate } : {}), remainingMin,
+      reason: exactDate
+        ? `${exactDate}${windowByTask.has(task.id) ? ` 的「${windowByTask.get(task.id)}」` : ' 当天'}没有可用的完整 ${totalMin} 分钟空档；未拆分或挪到其他日期，现有安排保持不变`
+        : `${deadline <= now.getTime() ? '截止时间已过，未安排过去的时段' : `截止前${windowByTask.has(task.id) ? `的「${windowByTask.get(task.id)}」` : ''}没有足够的已知空档，现有安排保持不变`}；还剩 ${remainingMin} 分钟未安排` })
   }
   return { plans, allocations, unscheduled }
 }

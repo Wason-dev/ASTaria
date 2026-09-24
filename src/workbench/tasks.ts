@@ -2,19 +2,66 @@ import type { Task } from '../domain/task'
 import { SEED_AREAS } from '../domain/task'
 import { agendaDate, isOpenTask, localDay } from '../home/agenda'
 import { deadlineTime } from './deadlines'
+import type { PlanBlock } from '../planner/types'
+import { minuteOf } from '../planner/model'
+
+export type WorkbenchSchedule = Pick<PlanBlock, 'taskId' | 'date' | 'start' | 'end'>
 
 function isOverdue(task: Task, now: Date) {
   return (deadlineTime(task.due) ?? Infinity) <= now.getTime()
 }
 
-export function taskGroups(tasks: readonly Task[], now: Date) {
-  const today = localDay(now)
+function blockMinutes(block: WorkbenchSchedule) {
+  const start = minuteOf(block.start), end = minuteOf(block.end)
+  return Number.isFinite(start) && Number.isFinite(end) && start < 1440 && end > start ? { start, end } : undefined
+}
+
+function validBlocks(task: Task, blocks: readonly WorkbenchSchedule[]) {
+  return blocks.filter(block => block.taskId === task.id && /^\d{4}-\d{2}-\d{2}$/u.test(block.date) && agendaDate(block.date) && blockMinutes(block))
+}
+
+/** Return the most relevant concrete planner block for a task. */
+export function taskSchedule(task: Task, now: Date, blocks: readonly WorkbenchSchedule[] = []): WorkbenchSchedule | undefined {
+  const today = localDay(now), minute = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60 + now.getMilliseconds() / 60000
+  const candidates = validBlocks(task, blocks)
+  if (!candidates.length) return undefined
+  return [...candidates].sort((a, b) => {
+    const aTime = blockMinutes(a)!, bTime = blockMinutes(b)!
+    const rank = (block: WorkbenchSchedule, time: { start: number; end: number }) => {
+      if (block.date === today && time.start <= minute && minute < time.end) return 0
+      if (block.date === today && time.start > minute) return 1
+      if (block.date > today) return 2
+      return 3
+    }
+    const aRank = rank(a, aTime), bRank = rank(b, bTime)
+    return aRank - bRank || (aRank === 3
+      ? b.date.localeCompare(a.date) || bTime.end - aTime.end || bTime.start - aTime.start
+      : a.date.localeCompare(b.date) || aTime.start - bTime.start || aTime.end - bTime.end)
+  })[0]
+}
+
+/**
+ * Workbench readiness follows concrete planner blocks when present. A block
+ * becomes visible twenty minutes before its start (inclusive), remains visible
+ * while running. A task with another future block waits for that block; if all
+ * blocks ended, unfinished work stays visible to resume. Future-day blocks stay
+ * in later until their day arrives. A deadline alone never delays availability;
+ * future start-date intentions and someday tasks still remain in later.
+ */
+export function taskGroups(tasks: readonly Task[], now: Date, blocks: readonly WorkbenchSchedule[] = []) {
+  const today = localDay(now), currentMinute = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60 + now.getMilliseconds() / 60000
   const later: Task[] = [], available: Task[] = []
-  for (const task of tasks.filter(isOpenTask)) {
+  for (const task of tasks.filter(task => isOpenTask(task) && !task.freeTimeGoalId)) {
+    const schedule = taskSchedule(task, now, blocks)
     const start = agendaDate(task.startAt)
     const due = agendaDate(task.due)
-    const future = start ? localDay(start) > today : due ? localDay(due) > today : task.fuzzyWindow === 'someday'
-    ;(future && task.status !== 'doing' && !(task.fuzzyWindow === 'today' && !start) && !(due && localDay(due) <= today) ? later : available).push(task)
+    const futureDate = start ? localDay(start) > today : task.fuzzyWindow === 'someday'
+    const shouldWait = schedule
+      ? schedule.date > today || (schedule.date === today && currentMinute < blockMinutes(schedule)!.start - 20)
+      : start && task.startAt?.includes('T')
+        ? localDay(start) > today || now.getTime() < start.getTime() - 20 * 60000
+        : futureDate && task.status !== 'doing' && !(task.fuzzyWindow === 'today' && !start) && !(due && localDay(due) <= today)
+    ;(shouldWait ? later : available).push(task)
   }
   const sort = (a: Task, b: Task) => Number(isOverdue(b, now)) - Number(isOverdue(a, now))
     || Number(b.status === 'doing') - Number(a.status === 'doing')
@@ -24,6 +71,24 @@ export function taskGroups(tasks: readonly Task[], now: Date) {
   const completed = tasks.filter(task => !task.deletedAt && task.status === 'done')
     .sort((a, b) => (b.doneAt ?? b.updatedAt).localeCompare(a.doneAt ?? a.updatedAt))
   return { available, later, completed }
+}
+
+export function scheduleDisplay(block: WorkbenchSchedule, now: Date) {
+  const date = agendaDate(block.date)
+  if (!date) return `安排 ${block.start}–${block.end}`
+  const day = localDay(date) === localDay(now) ? '今天' : localDay(date) === localDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)) ? '明天' : `${date.getFullYear() !== now.getFullYear() ? `${date.getFullYear()}年` : ''}${date.getMonth() + 1}月${date.getDate()}日`
+  return `${day} ${block.start}–${block.end}`
+}
+
+export function scheduleStatusLabel(block: WorkbenchSchedule, now: Date): string | undefined {
+  if (block.date < localDay(now)) return '原安排已结束，可继续'
+  if (block.date > localDay(now)) return undefined
+  const times = blockMinutes(block)
+  if (!times) return undefined
+  const minute = now.getHours() * 60 + now.getMinutes()
+  if (minute >= times.start && minute < times.end) return '当前安排，可以开始'
+  if (minute < times.start) return minute >= times.start - 20 ? '即将开始' : '按日历时段开始'
+  return '原安排已结束，可继续'
 }
 
 export function recommendationReason(task: Task, now: Date) {

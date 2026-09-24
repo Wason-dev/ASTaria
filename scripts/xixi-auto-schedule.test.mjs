@@ -212,7 +212,7 @@ test('a planner commit failure rolls back the paired task creation and leaves no
   assert.equal(toolResult(f.requests[1]).ok, false)
 })
 
-test('replayed create after an automatic schedule undo never restores that schedule', async t => {
+test('replaying after undoing a legacy automatic-schedule receipt restores neither task nor schedule', async t => {
   const db = createDatabase(':memory:'); t.after(() => db.close())
   const request = input('记下作业')
   const args = { tasks: [{ title: '作业', due: '2026-09-19' }] }
@@ -223,7 +223,10 @@ test('replayed create after an automatic schedule undo never restores that sched
   } })
   const created = await initial.chat(request)
   const scheduled = created.operations.find(operation => operation.kind === 'planner')
-  db.undoOperation(scheduled.id)
+  const undone = db.undoOperation(scheduled.id)
+  assert.equal(undone.id, scheduled.parentOperationId, 'legacy schedule undo resolves to its creation')
+  assert.equal(db.listTasks().length, 0)
+  assert.ok(db.listOperations({ requestId: request.requestId }).every(operation => operation.undoneAt))
   // Reopening simulates interruption before the original completion marker.
   db.finishTurn(request.requestId, { status: 'failed', error: 'interrupted acknowledgement' })
   const requests = []
@@ -232,10 +235,11 @@ test('replayed create after an automatic schedule undo never restores that sched
     return requests.length === 1 ? call('create_tasks', args) : reply('保留当前状态')
   } })
   await replay.chat(request)
-  assert.equal(db.listTasks().length, 1)
+  assert.equal(db.listTasks().length, 0)
   assert.equal(db.getPlanner().blocks.length, 0)
   assert.equal(db.listOperations({ requestId: request.requestId }).length, 2)
-  assert.match(toolResult(requests[1]).scheduling.notice, /已经被撤销/u)
+  assert.equal(toolResult(requests[1]).ok, false)
+  assert.match(toolResult(requests[1]).error, /已经被用户撤销/u)
 })
 
 test('a named dorm window is honored rather than taking an earlier school slot', async t => {

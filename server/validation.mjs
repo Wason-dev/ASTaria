@@ -92,7 +92,7 @@ export function jsonValue(value, label, max = 32000) {
   return JSON.parse(serialized)
 }
 
-const TASK_FIELDS = ['title', 'notes', 'area', 'source', 'inbox', 'due', 'startAt', 'estimateMin', 'subSteps', 'surfaceAt', 'leadDays', 'importance', 'energy', 'context', 'fuzzyWindow', 'status', 'doneAt', 'deletedAt']
+const TASK_FIELDS = ['title', 'notes', 'area', 'source', 'inbox', 'due', 'startAt', 'estimateMin', 'occurrence', 'freeTimeGoalId', 'subSteps', 'surfaceAt', 'leadDays', 'importance', 'energy', 'context', 'fuzzyWindow', 'status', 'doneAt', 'deletedAt']
 export function taskInput(input, { partial = false } = {}) {
   object(input, '任务')
   const value = {}
@@ -109,6 +109,17 @@ export function taskInput(input, { partial = false } = {}) {
     if (has(key)) value[key] = input[key] == null ? undefined : dateTime(input[key], key)
   }
   if (has('estimateMin')) value.estimateMin = input.estimateMin == null ? undefined : number(input.estimateMin, '预计用时', 1, 525600)
+  if (has('freeTimeGoalId')) value.freeTimeGoalId = input.freeTimeGoalId == null ? undefined : identifier(input.freeTimeGoalId, '余时目标标识')
+  if (has('occurrence')) {
+    if (input.occurrence == null) value.occurrence = undefined
+    else {
+      knownKeys(input.occurrence, ['seriesId', 'date', 'preferredWindow', 'allowFallback', 'placement'], '重复实例')
+      value.occurrence = { seriesId: identifier(input.occurrence.seriesId, '重复系列'), date: day(input.occurrence.date),
+        ...(input.occurrence.preferredWindow === undefined ? {} : { preferredWindow: text(input.occurrence.preferredWindow, '优先窗口', 160) }),
+        allowFallback: boolean(input.occurrence.allowFallback, '允许同日其他空档'),
+        placement: choice(input.occurrence.placement, ['start', 'end'], '窗口位置', 'start') }
+    }
+  }
   if (has('subSteps')) {
     if (input.subSteps !== undefined && (!Array.isArray(input.subSteps) || input.subSteps.length > 100)) throw new ValidationError('子步骤最多 100 项')
     value.subSteps = input.subSteps === undefined ? undefined : jsonValue(input.subSteps, '子步骤')
@@ -124,6 +135,10 @@ export function taskInput(input, { partial = false } = {}) {
   if (has('fuzzyWindow')) value.fuzzyWindow = input.fuzzyWindow == null ? undefined : choice(input.fuzzyWindow, ['today', 'this-week', 'someday'], '时间范围')
   if (has('status')) value.status = choice(input.status, ['todo', 'doing', 'done', 'dropped'], '任务状态', 'todo')
   if (has('deletedAt')) value.deletedAt = input.deletedAt == null ? null : dateTime(input.deletedAt, '删除时间')
+  if (!partial && value.occurrence) {
+    if (!Number.isInteger(value.estimateMin) || value.estimateMin < 1 || value.estimateMin > 1440) throw new ValidationError('重复实例需要1至1440分钟的每次明确用时')
+    if (value.startAt && value.startAt !== value.occurrence.date) throw new ValidationError('重复实例的开始日期需与occurrence.date一致；改期请一起更新该实例日期')
+  }
   return value
 }
 

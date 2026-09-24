@@ -2,6 +2,19 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createWorkOrder } from '../server/workOrder.mjs'
 
+test('an occurrence verifies requested minutes independently of a later estimate edit', () => {
+  const order = createWorkOrder({ requestId: 'repeat-edit', conversationId: 'chat', userMessageId: 'msg' })
+  order.expectSchedule('sat', 20, '每天20分钟', { date: '2026-09-22' })
+  const task = { id: 'sat', status: 'todo', estimateMin: 45, occurrence: { seriesId: 'sat-week', date: '2026-09-22' } }
+  const block = { id: 'sat-slot', taskId: 'sat', date: '2026-09-22', start: '19:40', end: '20:00' }
+  order.checkScheduleBlocks([block], [task], '2026-09-22')
+  assert.equal(order.value.scheduleRequirements[0].status, 'verified')
+  order.checkScheduleBlocks([{ ...block, end: '19:50' }], [task], '2026-09-22')
+  assert.equal(order.value.scheduleRequirements[0].status, 'pending')
+  order.checkScheduleBlocks([{ ...block, end: '19:50' }, { ...block, id: 'split', start: '19:50' }], [task], '2026-09-22')
+  assert.equal(order.value.scheduleRequirements[0].status, 'pending')
+})
+
 test('a work order records commits separately from the reply channel', () => {
   const order = createWorkOrder({ requestId: 'req', conversationId: 'chat', userMessageId: 'msg' })
   const step = order.step('call-1', 'create_tasks')

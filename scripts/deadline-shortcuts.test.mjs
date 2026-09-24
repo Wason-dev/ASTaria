@@ -4,6 +4,14 @@ import { Readable } from 'node:stream'
 import { createDatabase } from '../server/database.mjs'
 import { createLocalService } from '../server/index.mjs'
 import { deadlineOnDay, deadlineParts, deadlineShortcuts, plansAfterDeadline } from '../src/xixi/deadlineShortcuts.ts'
+import { ESTIMATE_SHORTCUTS, parseReceiptEstimate, receiptScheduledMinutes } from '../src/xixi/receiptTaskSettings.ts'
+
+test('receipt estimate shortcuts stay bounded and distinguish custom durations from scheduled minutes', () => {
+  assert.deepEqual(ESTIMATE_SHORTCUTS, [15, 20, 30, 45, 60])
+  for (const value of ['1', '15', '1440']) assert.equal(parseReceiptEstimate(value), Number(value))
+  for (const value of ['', '0', '1.5', '1441', '30x']) assert.throws(() => parseReceiptEstimate(value), /1–1440/u)
+  assert.equal(receiptScheduledMinutes('a', [{ taskId: 'a', start: '20:30', end: '21:00' }, { taskId: 'a', start: '21:15', end: '21:30' }, { taskId: 'b', start: '20:00', end: '22:00' }]), 45)
+})
 
 test('deadline shortcuts use local calendar days across months and years', () => {
   assert.deepEqual(deadlineShortcuts(new Date(2026, 11, 31, 23, 59)), [

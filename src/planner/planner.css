@@ -54,6 +54,11 @@
 .p0 .pl-dialog { --pl-ink:#eeeae3; --pl-muted:#aaa89f; --pl-line:#d0cabf2b; --pl-gold:#d0bc93; --pl-well:#090c103b; --pl-highlight:#ccb78f17; position:fixed; width:min(450px,calc(100vw - 32px)); max-height:calc(100dvh - 72px); margin:auto; border-radius:22px; border:1px solid var(--pl-line); background:#14171bea; color:var(--pl-ink); padding:0; overflow:visible; box-shadow:0 8px 28px #0007; font-size:12px; animation:pl-dialog-in 200ms ease both; contain:layout paint; isolation:isolate; transform:translate3d(0,0,0) }
 .pl-dialog[open] { display:flex; flex-direction:column }.pl-dialog>.home-glass-measure { position:absolute; inset:0; z-index:0; transform:translate3d(0,0,0); pointer-events:none; contain:paint; will-change:transform }.pl-dialog>.home-glass-measure>.home-glass-surface { transform:translate3d(0,0,0); backface-visibility:hidden }
 .pl-dialog::backdrop { background:#05070a45; animation:pl-fade-in 200ms both }.pl-dialog[data-closing=true] { pointer-events:none; animation:pl-dialog-out 180ms both }.pl-dialog[data-closing=true]::backdrop { animation:pl-fade-out 180ms both }.pl-dialog-body { position:relative; z-index:1; min-height:0; padding:0 20px 20px; overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; border-radius:0 0 21px 21px; scrollbar-gutter:stable }.pl-dialog-header { position:relative; z-index:2; flex:none; display:flex; justify-content:space-between; align-items:center; padding:16px 20px; gap:12px; border-bottom:1px solid #d0cabf14; margin-bottom:16px }.pl-dialog h2 { font-size:15px; font-weight:500; margin:0 }.pl-dialog h3 { font-size:12px; font-weight:500; display:flex; gap:8px; align-items:center; margin:18px 0 10px }.pl-dialog-task-title { font-size:16px; line-height:1.6; margin:0 0 8px }.pl-form { margin-top:14px }.pl-form fieldset { padding:0; margin:0; border:0; min-width:0 }.pl-form label,.pl-label { display:block; color:var(--pl-muted); font-size:11px; margin:11px 0 }.pl-form :is(input:not([type=checkbox]),textarea,select) { width:100%; display:block; min-height:36px; border:1px solid var(--pl-line); border-radius:10px; padding:8px 10px; background:#ffffff07; color:var(--pl-ink); font:inherit; margin-top:6px; box-sizing:border-box }.pl-form select option { background:#202429; color:#eeeae3 }.pl-form textarea { resize:vertical; max-height:200px; min-height:70px }.pl-form-pair { display:grid; grid-template-columns:1fr 1fr; gap:12px }.pl-form .pl-checkbox { display:flex; gap:9px; align-items:center; line-height:1.6 }.pl-checkbox input { accent-color:#baa780 }.pl-weekday-picks { display:flex; gap:6px }.pl-weekday-picks button { border:1px solid var(--pl-line); border-radius:50%; width:32px; height:32px; font-size:11px }.pl-weekday-picks button[aria-pressed=true] { background:#b2a07133; border-color:#cbbb8373; color:var(--pl-gold) }.pl-form footer { display:flex; justify-content:flex-end; gap:10px; align-items:center; margin-top:17px }.pl-form footer>.pl-delete { margin-right:auto; color:#d6a197; font-size:11px }.pl-submission,.pl-task-status-actions { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:14px 0; border-top:1px solid var(--pl-line); margin-top:16px; font-size:11px }.pl-existing-plans { border-top:1px solid var(--pl-line); margin-top:18px }.pl-plan-row { display:flex; justify-content:space-between; gap:8px; align-items:center; padding:6px 0; font-size:10px }.pl-plan-row>div { display:flex }.pl-import-preview>div { padding:8px 0; display:flex; gap:12px; border-bottom:1px solid var(--pl-line); line-height:1.8; font-size:11px }.pl-import-preview strong { flex:none }.pl-import-preview { margin:15px 0 }.pl-empty { padding:70px 20px; text-align:center; color:var(--pl-muted) }.pl-loading { display:block; font-size:10px; color:var(--pl-muted); margin:8px 0 }.pl-routine-list { margin-bottom:12px }
+.pl-task-status-actions { flex-wrap:wrap }
+.pl-task-status-buttons { display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:10px; margin-left:auto }
+.pl-task-status-buttons .pl-delete { color:#d6a197; font-size:11px }
+.pl-task-delete-confirm { border-top:1px solid var(--pl-line); margin-top:16px; padding:14px 0; font-size:12px }
+.pl-task-delete-confirm p { margin:0 0 12px; line-height:1.7; overflow-wrap:anywhere }
 .pl-dialog[data-scrolling=true] .home-glass-surface { backdrop-filter:blur(6px)!important; -webkit-backdrop-filter:blur(6px)!important }
 .pl-dialog[data-closing=true] .home-glass-surface { backdrop-filter:none!important; -webkit-backdrop-filter:none!important }
 @keyframes pl-enter { from { transform:translateY(5px); opacity:0 } to { transform:none; opacity:1 } }
@@ -111,3 +116,71 @@
 .pl-deadline-shortcuts { display:flex; gap:6px; flex-wrap:wrap; margin-top:-5px }
 .pl-deadline-shortcuts .pl-secondary { padding:4px 12px; border-radius:999px }
 .pl-deadline-shortcuts .pl-secondary[aria-pressed=true] { border-color:var(--pl-gold); color:var(--pl-gold); background:var(--pl-highlight) }
+.pl-plans-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:18px 0 10px }
+.pl-plans-heading h3 { margin:0 }.pl-plans-heading>.pl-secondary { flex:none }
+.pl-plan-row { padding:4px 6px; margin:4px 0; border:1px solid transparent; border-radius:10px }
+.pl-plan-row[data-selected=true] { border-color:var(--pl-line); background:var(--pl-highlight) }
+.pl-plan-row .pl-plan-select,.pl-plan-row .pl-plan-label { display:flex; flex:1; min-width:0; flex-wrap:wrap; align-items:center; gap:4px 10px; padding:7px 4px; text-align:left; font:inherit; color:inherit }
+.pl-plan-row :is(.pl-plan-select,.pl-plan-label)>span { display:flex; align-items:center; flex-wrap:wrap; gap:4px }
+.pl-plan-row small { font-size:10px; color:var(--pl-gold); white-space:nowrap }.pl-plan-actions { flex:none; align-items:center }
+
+/* Month dates share the timetable's open sides and restrained glass reflection.
+   The existing board remains the only scene-sampling surface. */
+.p0 .planner .pl-calendar-board[data-mode=month] .pl-calendar-day {
+  --card-edge-color:var(--pl-calendar-line);
+  --card-edge-rim:transparent;
+  border:1px solid transparent;
+  border-inline:2px solid var(--card-edge-color);
+  border-radius:7px;
+  background:transparent;
+  box-shadow:none;
+  gap:6px;
+}
+.p0 .planner .pl-calendar-board[data-mode=month] .pl-calendar-day:is(:hover,:focus-visible,[data-hovered=true]) {
+  --card-edge-color:color-mix(in srgb,var(--pl-gold) 65%,transparent);
+  background:transparent;
+  box-shadow:none;
+}
+.p0 .planner .pl-calendar-board[data-mode=month] .pl-calendar-day[aria-pressed=true] {
+  --card-edge-color:var(--pl-gold);
+  background:transparent;
+  box-shadow:none;
+}
+.p0 .home-workspace[data-card-edges=left] .planner .pl-calendar-board[data-mode=month] .pl-calendar-day { border-right-color:transparent }
+.p0 .home-workspace[data-card-edges=none] .planner .pl-calendar-board[data-mode=month] .pl-calendar-day { border-inline-color:transparent }
+.p0 .planner .pl-calendar-board[data-mode=month] .pl-calendar-day::before,
+.p0 .planner .pl-calendar-board[data-mode=month] .pl-calendar-day::after { content:none }
+.planner .pl-calendar-board[data-mode=month] .pl-calendar-date { width:100%; justify-content:flex-start }
+.planner .pl-calendar-board[data-mode=month] .pl-calendar-date>span { background:transparent; color:var(--pl-ink); border-radius:0 }
+.planner .pl-calendar-board[data-mode=month] .pl-calendar-day:is([data-today=true],[aria-pressed=true]) .pl-calendar-date>span { background:transparent; color:var(--pl-gold); font-weight:600 }
+.planner .pl-calendar-board[data-mode=month] .pl-calendar-entries { gap:5px }
+.planner .pl-calendar-board[data-mode=month] .pl-calendar-entry {
+  --card-edge-rim:transparent;
+  min-width:0;
+  padding:3px 5px;
+  border-top-color:transparent;
+  border-bottom-color:transparent;
+  border-radius:4px;
+  background:transparent;
+  box-shadow:none;
+  color:var(--pl-ink);
+  font-size:10px;
+  line-height:1.45;
+}
+.planner .pl-calendar-board[data-mode=month] .pl-calendar-entry[data-kind=deadline] { color:var(--pl-gold); background:transparent }
+.planner .pl-calendar-board[data-mode=month] .pl-calendar-entry-copy { display:flex; flex-direction:column; min-width:0; gap:1px }
+.planner .pl-calendar-board[data-mode=month] .pl-calendar-entry-copy>span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.planner .pl-calendar-board[data-mode=month] .pl-calendar-entry-time { color:var(--pl-muted); font-size:9px; font-variant-numeric:tabular-nums; line-height:1.4 }
+.planner .pl-calendar-board[data-mode=month] .pl-calendar-deadline-mark { flex:none; align-self:flex-start; color:var(--pl-gold) }
+@media(max-width:500px) {
+  .planner .pl-calendar-board[data-mode=month] .pl-calendar-entry { padding:3px 2px; font-size:9px }
+  .planner .pl-calendar-board[data-mode=month] .pl-calendar-entry-time { font-size:8px }
+}
+@media(forced-colors:active) {
+  .p0 .planner .pl-calendar-board[data-mode=month] .pl-calendar-day[aria-pressed=true] { --card-edge-color:Highlight }
+  .p0 .planner .pl-calendar-board[data-mode=month] .pl-calendar-day:focus-visible { outline:2px solid Highlight; outline-offset:-3px }
+}
+
+/* Overview entries sit on the same glass as the month board. */
+.p0 .planner[data-mode=month] .pl-overview .pl-calendar-summary-task,
+.p0 .planner[data-mode=month] .pl-overview .pl-calendar-summary-task:is(:hover,:focus-visible) { background:transparent; box-shadow:none }

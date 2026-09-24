@@ -167,7 +167,8 @@ test('chat receipts close after a committed write and undo restores state', asyn
   const first = await f.request('/chat', input)
   assert.equal(first.status, 200)
   assert.equal(first.value.status, 'completed')
-  assert.equal(first.value.operations.length, 2)
+  assert.equal(first.value.operations.length, 1)
+  assert.equal(first.value.operations[0].undoLabel, '撤销创建与安排')
   assert.doesNotMatch(first.raw, new RegExp(SECRET))
   assert.equal(first.value.operations[0].changes, undefined)
   assert.equal(first.value.messages.some(message => message.role === 'tool' || message.toolCalls), false)
@@ -175,7 +176,7 @@ test('chat receipts close after a committed write and undo restores state', asyn
   assert.equal(retried.value.status, 'completed')
   assert.equal(retried.value.messages.filter(message => message.role === 'user').length, 1)
   assert.equal((await f.request('/tasks')).value.length, 1)
-  assert.equal(retried.value.operations.length, 2)
+  assert.equal(retried.value.operations.length, 1)
   const completedAgain = await f.request('/chat', input)
   assert.deepEqual(completedAgain.value, retried.value)
   assert.equal(f.requests.length, 2)
@@ -289,7 +290,8 @@ test('provider pins the endpoint and model and keeps secrets out of bodies and e
   assert.equal(calls[0].options.headers.Authorization, `Bearer ${SECRET}`)
   const payload = JSON.parse(calls[0].options.body)
   assert.equal(payload.model, 'deepseek-flash')
-  assert.deepEqual(payload.thinking, { type: 'disabled' })
+  assert.deepEqual(payload.thinking, { type: 'enabled' })
+  assert.equal(payload.reasoning_effort, 'max')
   assert.equal(payload.stream, false)
   assert.doesNotMatch(calls[0].options.body, new RegExp(SECRET))
   for (const status of [401, 429, 500, 302]) {
@@ -322,7 +324,7 @@ test('provider uses the current saved model on each request and rejects unsuppor
 })
 
 test('provider bounds successful response bodies and sanitizes malformed data', async () => {
-  for (const content of [SECRET, JSON.stringify(reply('x'.repeat(513 * 1024)))]) {
+  for (const content of [SECRET, JSON.stringify(reply('x'.repeat(4 * 1024 * 1024 + 1)))]) {
     const complete = createCompletion({ read: async () => SECRET }, async () => new Response(content, { status: 200 }))
     await assert.rejects(complete({ messages: [] }), error => error instanceof ProviderError && !error.message.includes(SECRET))
   }

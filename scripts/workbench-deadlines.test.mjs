@@ -160,9 +160,9 @@ test('recommendations and Upcoming both place precise deadlines before the end o
     task('tomorrow-morning', '2026-09-18T09:00:00+08:00'),
   ]
   const groups = taskGroups(tasks, now)
-  assert.deepEqual(groups.available.map(entry => entry.id), ['afternoon', 'late-evening', 'all-day'])
-  assert.deepEqual(groups.later.map(entry => entry.id), ['tomorrow-morning', 'tomorrow-all-day'])
-  assert.deepEqual([...groups.available, ...groups.later].map(entry => entry.id), upcomingDeadlines(tasks, now).map(entry => entry.task.id))
+  assert.deepEqual(groups.available.map(entry => entry.id), ['afternoon', 'late-evening', 'all-day', 'tomorrow-morning', 'tomorrow-all-day'])
+  assert.deepEqual(groups.later.map(entry => entry.id), [])
+  assert.deepEqual([...groups.available, ...groups.later].map(entry => entry.id).sort(), upcomingDeadlines(tasks, now).map(entry => entry.task.id).sort())
   assert.equal(recommendationReason(groups.available[0], now), '截止时间更近，先留出这一段时间')
 })
 

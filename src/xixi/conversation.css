@@ -62,6 +62,24 @@
 .xixi-thinking > span { width: 3px; height: 3px; background: currentColor; border-radius: 50%; animation: xixi-thinking 1200ms ease-in-out infinite }
 .xixi-thinking > span:nth-child(2) { animation-delay: 140ms }
 .xixi-thinking > span:nth-child(3) { animation-delay: 280ms }
+.xixi-stream > span small { margin-left: 5px; font-size: 9px; color: var(--xixi-muted); font-weight: 400 }
+.xixi-stream-status { display: flex; align-items: center; gap: 7px; margin-top: 6px; color: var(--xixi-muted); font-size: 10px }
+.xixi-reasoning { min-width: 0; margin: 5px 0 9px; border-left: 1px solid var(--xixi-line); padding-left: 9px; color: var(--xixi-muted) }
+.xixi-reasoning-header { display: flex; align-items: center; gap: 10px }
+.xixi-reasoning-copy { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 5px; flex-shrink: 0; max-width: 60%; font-size: 10px }
+.xixi-reasoning-copy small { flex-basis: 100%; font-size: 10px; overflow-wrap: anywhere }
+.p0 .xixi-reasoning-copy button { font-size: 10px; white-space: nowrap }
+.p0 .xixi-reasoning-toggle { display: flex; align-items: center; gap: 5px; width: 100%; padding: 3px 0; font-size: 10px; line-height: 1.7; color: inherit; background: none; border: 0; border-radius: 4px; box-shadow: none; text-align: left }
+.xixi-reasoning-toggle svg { width: 10px; height: 10px; flex: none; fill: none; stroke: currentColor; stroke-width: 1; stroke-linecap: round; stroke-linejoin: round; transition: transform 200ms ease }
+.xixi-reasoning[data-expanded=true] .xixi-reasoning-toggle svg { transform: rotate(90deg) }
+.xixi-reasoning-collapse { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows 220ms ease, opacity 180ms ease }
+.xixi-reasoning[data-expanded=true] .xixi-reasoning-collapse { grid-template-rows: 1fr; opacity: 1 }
+.xixi-reasoning-collapse > div { min-height: 0; overflow: hidden }
+.xixi-reasoning-content { max-height: min(180px, 28dvh); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #b6aa9466 transparent; padding: 5px 7px 3px 0; font-size: 11px; line-height: 1.7; overflow-wrap: anywhere }
+.xixi-reasoning-round + .xixi-reasoning-round { margin-top: 12px; padding-top: 9px; border-top: 1px solid var(--xixi-line) }
+.xixi-reasoning-round > small { display: block; margin-bottom: 5px; color: var(--xixi-gold); font-size: 10px; opacity: .8 }
+.xixi-reasoning-error { display: flex; flex-wrap: wrap; align-items: center; gap: 7px }
+.xixi-reasoning-toggle:focus-visible, .xixi-reasoning-content:focus-visible { outline: 1px solid var(--xixi-gold); outline-offset: 2px }
 .xixi-receipt { margin-top: 9px; padding: 9px 10px; border-radius: 11px; border: 1px solid var(--xixi-line); background: #a9906010; font-size: 11px }
 .xixi-receipt > header, .wb-xixi .xixi-receipt > header { display: flex; gap: 8px; justify-content: space-between; align-items: start; padding: 0; border: 0 }
 .xixi-receipt > header strong { font-size: 11px; font-weight: 400; letter-spacing: 0 }
@@ -128,7 +146,7 @@
 @media (max-width: 760px) { .p0 .wb-xixi .xixi-conversation { flex-basis: min(360px, 44dvh); max-height: min(500px, 55dvh) } }
 @media (pointer: coarse) { .xixi-message-actions { opacity: .8 }.p0 .xixi-message-actions button { min-height: 32px; padding-inline: 3px } }
 @media (max-height: 520px) { .home-xixi .xixi-conversation { padding-block: 8px; min-height: 0 }.p0 .wb-xixi .xixi-conversation { flex-basis: 160px; max-height: 240px } }
-@media (prefers-reduced-motion: reduce) { .xixi-message, .xixi-thinking > span, .xixi-topic-popover, .xixi-topic-edit, .xixi-topic-confirm { animation: none }.p0 .xixi-quick-options button,.xixi-message-actions,.xixi-topic-row,.xixi-topic-actions { transition: none } }
+@media (prefers-reduced-motion: reduce) { .xixi-message, .xixi-thinking > span, .xixi-topic-popover, .xixi-topic-edit, .xixi-topic-confirm { animation: none }.p0 .xixi-quick-options button,.xixi-message-actions,.xixi-topic-row,.xixi-topic-actions,.xixi-reasoning-toggle svg,.xixi-reasoning-collapse { transition: none } }
 @media (forced-colors: active) {
   .xixi-message[data-role=user], .xixi-receipt { border: 1px solid CanvasText; background: Canvas }
   .xixi-send-error, .xixi-status, .xixi-empty { color: CanvasText }

@@ -30,6 +30,9 @@ uniform float uMaxPhi;
 uniform float uCriticalImpact;
 uniform float uMaxImpact;
 uniform float uCameraRadius;
+uniform float uFlightCameraRadius;
+uniform float uFlightEdgeFocus;
+uniform vec3 uFlightEdgePull;
 uniform float uResponseStrength;
 uniform float uResponseReply;
 uniform float uResponseTime;
@@ -300,11 +303,41 @@ vec3 sky(vec3 direction, vec2 p) {
   return mix(paper,night,smoothstep(.05,.95,uNight));
 }
 
+// Continue the existing R=30 transfer orbit from a nearer inward-looking
+// observer. Eight-point Gauss integration of dphi/du reuses the same LUT:
+// rotating its reference basis preserves the actual equatorial crossings.
+float flightOrbitIntegrand(float inverseRadius, float impactSquared) {
+  return inversesqrt(max(.000001,1.0-impactSquared*inverseRadius*inverseRadius*(1.0-inverseRadius)));
+}
+
+float flightOrbitOffset(float impact, float radius) {
+  float halfRange = (1.0/radius-1.0/uCameraRadius)*.5;
+  float middle = (1.0/radius+1.0/uCameraRadius)*.5;
+  float b2 = impact*impact;
+  float sum = .1012285363*(flightOrbitIntegrand(middle-halfRange*.9602898565,b2)+flightOrbitIntegrand(middle+halfRange*.9602898565,b2));
+  sum += .2223810345*(flightOrbitIntegrand(middle-halfRange*.7966664774,b2)+flightOrbitIntegrand(middle+halfRange*.7966664774,b2));
+  sum += .3137066459*(flightOrbitIntegrand(middle-halfRange*.5255324099,b2)+flightOrbitIntegrand(middle+halfRange*.5255324099,b2));
+  sum += .3626837834*(flightOrbitIntegrand(middle-halfRange*.1834346425,b2)+flightOrbitIntegrand(middle+halfRange*.1834346425,b2));
+  return max(0.0,impact*halfRange*sum);
+}
+
 void main() {
   float aspect = uResolution.x/uResolution.y;
   vec2 center = aspect < .8 ? vec2(.5)+(uCenter-vec2(.5))*vec2(.2,6.0) : uCenter;
   float scale = (aspect < .8 ? 13.8 : 10.2)/uZoom;
   vec2 screen = (vUv-center)*vec2(aspect,1.0)*scale;
+  // Invert the same angular normal displacement used by the canvas strands.
+  // Positive pull expands the visible surface; the ray samples its original
+  // radius. This also keeps the exposure shoulder attached to the new limb.
+  float radialDistance = length(screen);
+  float pullAmount = uFlightEdgePull.y;
+  if (abs(pullAmount) > .0000001 && radialDistance > .000001) {
+    float angle = atan(screen.x,screen.y);
+    float difference = mod(angle-uFlightEdgePull.x+PI,2.0*PI)-PI;
+    float normalizedDistance = difference/max(.015,uFlightEdgePull.z);
+    float displacement = pullAmount*exp(-.5*normalizedDistance*normalizedDistance)*scale;
+    screen *= max(.000001,radialDistance-displacement)/radialDistance;
+  }
   vec2 p = rotate(-uRoll)*screen;
   float screenRadius = length(p);
   float bendRegion = smoothstep(3.15,4.6,screenRadius)*(1.0-smoothstep(10.0,19.0,screenRadius));
@@ -312,24 +345,34 @@ void main() {
   // Optical distortion changes the incident ray before geodesic lookup. The
   // event-horizon silhouette is untouched; distant stellar rays really move.
   p *= 1.0-uDecisionLens*.24*bendRegion*(.78+.22*cos(bendAngle*2.0+uDecisionBranch));
-  // Keep the observer distance fixed; zoom is a stable image-plane framing
-  // control, so preset transitions cannot introduce a second hidden motion.
-  const float cameraDistance = 30.0;
+  // Ordinary presets still keep R=30 and use the same image-plane framing.
+  // String flight moves the real observer while retaining that focal length.
+  float cameraDistance = max(1.6,uFlightCameraRadius);
   vec3 origin = vec3(0.0,cos(uInclination),sin(uInclination))*cameraDistance;
   vec3 forward = -normalize(origin);
   vec3 right = vec3(1,0,0);
   vec3 up = normalize(cross(right,forward));
-  vec3 ray = normalize(forward*cameraDistance + right*p.x + up*p.y);
+  vec3 ray = normalize(forward*30.0 + right*p.x + up*p.y);
   vec3 e1 = normalize(origin);
   vec3 tangentPart = ray - dot(ray,e1)*e1;
   vec3 e2 = length(tangentPart) > 1e-6 ? normalize(tangentPart) : up;
-  float b = uCameraRadius*length(cross(e1,ray))/sqrt(1.0-1.0/uCameraRadius);
+  float b = cameraDistance*length(cross(e1,ray))/sqrt(1.0-1.0/cameraDistance);
   float delta = b-uCriticalImpact;
   float span = delta < 0.0 ? uCriticalImpact : uMaxImpact-uCriticalImpact;
   float q = sign(delta)*pow(abs(delta)/span,1.0/3.0);
   float lutX = ((q+1.0)*.5*(uLutSize.x-1.0)+.5)/uLutSize.x;
   vec4 terminal = texture2D(uTermination,vec2(lutX,.5));
   float phi0 = mod(atan(-e1.y,e2.y)+PI,PI);
+  float observerPhi = 0.0;
+  if (cameraDistance < uCameraRadius-.00001 && uLens > .5) {
+    float offset = flightOrbitOffset(b,cameraDistance);
+    float c = cos(offset), s = sin(offset);
+    vec3 localE1 = e1;
+    e1 = localE1*c-e2*s;
+    e2 = localE1*s+e2*c;
+    phi0 += offset;
+    observerPhi = offset;
+  }
   vec3 color = vec3(0.0);
   float transmission = 1.0;
   float hit = 0.0;
@@ -357,7 +400,7 @@ void main() {
           float derivative = ((ahead.y-decisionSurfaceHeight(ahead))
             -(behind.y-decisionSurfaceHeight(behind)))/.012;
           if (abs(derivative) > .05) phi -= clamp(residual/derivative,-.10,.10);
-          phi = clamp(phi,0.00001,max(.00002,terminal.r-.00001));
+          phi = clamp(phi,observerPhi+.00001,max(observerPhi+.00002,terminal.r-.00001));
         }
       }
       float lutY = (phi/uMaxPhi*(uLutSize.y-1.0)+.5)/uLutSize.y;
@@ -397,14 +440,15 @@ void main() {
     float directAA = max(length(vec2(dFdx(directImpact),dFdy(directImpact)))*.8, .00001);
     swallowed = 1.0-smoothstep(1.0-directAA,1.0+directAA,directImpact);
   }
-  vec3 background = sky(normalize(ray),p);
+  float cameraScale = cameraDistance/uCameraRadius*sqrt((1.0-1.0/uCameraRadius)/(1.0-1.0/cameraDistance));
+  vec3 background = sky(normalize(ray),p*cameraScale);
   vec3 horizon = mix(vec3(.014,.012,.01),vec3(.00002),uNight);
   color += transmission*mix(background,horizon,swallowed);
   // A subpixel SDF ring has a sharp threshold and a separate decaying
   // scattering shoulder. The radius is the critical impact parameter.
   float theta = atan(p.y,p.x);
   float edge = abs(b-uCriticalImpact);
-  float pixel = scale/uResolution.y;
+  float pixel = scale/uResolution.y*cameraScale;
   float ringWidth = max(fwidth(b)*.64,pixel*.42);
   float ring = exp(-.5*pow(edge/ringWidth,2.0));
   float shoulder = exp(-edge*85.0)*.16;
@@ -422,6 +466,14 @@ void main() {
   // paper a second time would create a white halo around the daytime disk.
   vec3 dayColor = color;
   vec3 finalColor = mix(dayColor,nightColor,uNight);
+  // As the observer settles at the edge, adapt exposure away from the limb.
+  // Keep the same moving disk/stellar field, with quiet space for the labels;
+  // the near-horizon strands retain their original photographic brightness.
+  float shadowSine = uCriticalImpact*sqrt(1.0-1.0/cameraDistance)/cameraDistance;
+  float shadowImageRadius = 30.0*shadowSine/sqrt(max(.00001,1.0-shadowSine*shadowSine));
+  float limbDistance = abs(length(screen)-shadowImageRadius)/scale;
+  float edgeExposure = mix(.065,1.0,exp(-pow(limbDistance/.10,2.0)));
+  finalColor = mix(finalColor,clamp(finalColor,vec3(0.0),vec3(1.0))*edgeExposure,uFlightEdgeFocus);
   finalColor += (hash(gl_FragCoord.xy+vec2(7,13))-.5)/255.0;
   gl_FragColor = vec4(clamp(finalColor,0.0,1.0),1.0);
 }

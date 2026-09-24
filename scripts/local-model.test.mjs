@@ -8,7 +8,8 @@ import { Readable } from 'node:stream'
 import { createDatabase } from '../server/database.mjs'
 import { createLocalService } from '../server/index.mjs'
 import { createCompletion, discoverLocalModels, ProviderError, testLocalCompletion } from '../server/provider.mjs'
-import { getModelSettings, localEndpoint, saveModelSettings, validateModelSettings } from '../server/modelSettings.mjs'
+import { deviceRecommendation, getModelSettings, LOCAL_DEFAULT, localEndpoint, saveModelSettings, validateModelSettings } from '../server/modelSettings.mjs'
+import { withRecommendedLocalModel } from '../src/xixi/modelConnectionDefaults.ts'
 import { ValidationError } from '../server/validation.mjs'
 
 const localSettings = () => ({ provider: 'local', cloudModel: 'deepseek-v4-pro',
@@ -111,6 +112,116 @@ test('local settings validate before changing the provider, model or saved conne
   } finally { db.close() }
 })
 
+test('reasoning depth defaults to max for old settings and accepts the four cloud choices', () => {
+  const base = localSettings()
+  delete base.reasoningEffort
+  const migrated = validateModelSettings(base)
+  assert.equal(migrated.reasoningEffort, 'max')
+  for (const reasoningEffort of ['off', 'low', 'high', 'max']) {
+    const saved = validateModelSettings({ ...base, reasoningEffort })
+    assert.equal(saved.reasoningEffort, reasoningEffort)
+  }
+  assert.throws(() => validateModelSettings({ ...base, reasoningEffort: 'disabled' }), ValidationError)
+  const db = createDatabase(':memory:')
+  try {
+    assert.equal(getModelSettings(db).reasoningEffort, 'max', 'new connections default to maximum thinking')
+    db.setPreference('model-connection', base)
+    const restored = getModelSettings(db)
+    assert.equal(restored.reasoningEffort, 'max', 'pre-existing preferences adopt the default')
+    assert.equal(restored.provider, base.provider)
+    assert.deepEqual(restored.local, base.local)
+  } finally { db.close() }
+})
+
+test('streaming defaults on for legacy settings and rejects non-boolean values', () => {
+  const original = localSettings()
+  const migrated = validateModelSettings(original)
+  assert.equal(migrated.streamResponses, true)
+  assert.equal(original.streamResponses, undefined, 'validation does not mutate a legacy input')
+  for (const streamResponses of [true, false]) assert.equal(validateModelSettings({ ...original, streamResponses }).streamResponses, streamResponses)
+  for (const streamResponses of ['true', 'false', 0, 1, null]) assert.throws(() => validateModelSettings({ ...original, streamResponses }), ValidationError)
+})
+
+test('Qwen recommendation fits device memory and only fills a blank local Ollama draft', () => {
+  const device = memoryGB => deviceRecommendation({ platform: 'darwin', arch: 'arm64', memoryGB, cpu: 'test CPU', logicalCores: 8 })
+  for (const [memoryGB, expected] of [[4, null], [8, 'qwen3:4b'], [12, 'qwen3:4b'], [16, 'qwen3:8b'], [24, 'qwen3:14b'], [48, 'qwen3:32b']]) {
+    const value = device(memoryGB)
+    assert.equal(value.recommendedModel, expected)
+    assert.equal(value.recommendedContextTokens, 32768)
+    assert.match(value.note, /32K/)
+    assert.equal(value.recommendations.some(item => item.fit === 'recommended'), expected !== null)
+  }
+  assert.equal(LOCAL_DEFAULT.model, '', 'a recommendation must not make the backend appear configured')
+  const saved = validateModelSettings({ ...localSettings(), local: { ...LOCAL_DEFAULT } })
+  const filled = withRecommendedLocalModel(saved, device(16).recommendedModel)
+  assert.equal(filled.local.model, 'qwen3:8b')
+  assert.equal(saved.local.model, '', 'prefill changes only the draft')
+  const custom = { ...saved, local: { ...saved.local, model: 'my-finetuned-model' } }
+  assert.equal(withRecommendedLocalModel(custom, 'qwen3:8b'), custom)
+  const cloud = { ...saved, provider: 'deepseek' }
+  assert.equal(withRecommendedLocalModel(cloud, 'qwen3:8b'), cloud)
+  const studio = { ...saved, local: { ...saved.local, engine: 'lmstudio' } }
+  assert.equal(withRecommendedLocalModel(studio, 'qwen3:8b'), studio, 'Ollama tags must not overwrite another runtime name')
+  assert.equal(withRecommendedLocalModel(saved, null), saved)
+})
+
+test('streaming HTTP setting survives restart and backup and old backups default on', async t => {
+  const f = fixture(t)
+  assert.equal((await f.ok('/status')).providerSettings.streamResponses, true)
+  const saved = await f.ok('/settings/provider', { ...localSettings(), streamResponses: false })
+  assert.equal(saved.providerSettings.streamResponses, false)
+  f.restart()
+  assert.equal((await f.ok('/status')).providerSettings.streamResponses, false)
+  const backup = await f.ok('/data/export')
+  await f.ok('/settings/provider', { ...localSettings(), streamResponses: true })
+  await f.ok('/data/import', { backup, confirmed: true })
+  f.restart()
+  assert.equal((await f.ok('/status')).providerSettings.streamResponses, false)
+  const record = backup.tables.state.find(row => row.key === 'preferences:model-connection')
+  const legacy = JSON.parse(record.value)
+  delete legacy.streamResponses
+  record.value = JSON.stringify(legacy)
+  await f.ok('/data/import', { backup: sign(backup), confirmed: true })
+  f.restart()
+  assert.equal((await f.ok('/status')).providerSettings.streamResponses, true)
+  assert.equal((await f.request('/settings/provider', { ...localSettings(), streamResponses: 'false' })).status, 400)
+  assert.equal((await f.ok('/status')).providerSettings.streamResponses, true)
+})
+
+test('reasoning depth saves through HTTP and survives restart and backup restore', async t => {
+  const f = fixture(t)
+  assert.equal((await f.ok('/status')).providerSettings.reasoningEffort, 'max')
+  for (const reasoningEffort of ['high', 'off']) {
+    const saved = await f.ok('/settings/provider', { ...localSettings(), reasoningEffort })
+    assert.equal(saved.providerSettings.reasoningEffort, reasoningEffort)
+    f.restart()
+    assert.equal((await f.ok('/status')).providerSettings.reasoningEffort, reasoningEffort)
+    const backup = await f.ok('/data/export')
+    const stored = JSON.parse(backup.tables.state.find(row => row.key === 'preferences:model-connection').value)
+    assert.equal(stored.reasoningEffort, reasoningEffort)
+    await f.ok('/settings/provider', { ...localSettings(), reasoningEffort: 'low' })
+    assert.equal((await f.ok('/status')).providerSettings.reasoningEffort, 'low')
+    await f.ok('/data/import', { backup, confirmed: true })
+    f.restart()
+    assert.equal((await f.ok('/status')).providerSettings.reasoningEffort, reasoningEffort)
+  }
+  const before = (await f.ok('/status')).providerSettings
+  for (const reasoningEffort of ['disabled', 'medium', null, 0]) {
+    assert.equal((await f.request('/settings/provider', { ...localSettings(), reasoningEffort })).status, 400)
+    assert.deepEqual((await f.ok('/status')).providerSettings, before)
+  }
+  const legacyBackup = await f.ok('/data/export')
+  const record = legacyBackup.tables.state.find(row => row.key === 'preferences:model-connection')
+  const legacy = JSON.parse(record.value)
+  delete legacy.reasoningEffort
+  record.value = JSON.stringify(legacy)
+  await f.ok('/data/import', { backup: sign(legacyBackup), confirmed: true })
+  f.restart()
+  assert.equal((await f.ok('/status')).providerSettings.reasoningEffort, 'max', 'old backups adopt maximum thinking')
+  assert.equal(f.requests.length, 0, 'editing preferences does not make a model request')
+  assert.deepEqual(f.vaultCalls, [])
+})
+
 test('model discovery deduplicates valid IDs, bounds the list, pins localhost and refuses redirects or remote endpoints', async () => {
   const calls = []
   const fetcher = async (url, options) => {
@@ -150,6 +261,7 @@ test('local completions never read or send a key and failures never fall back to
   assert.equal(body.model, settings.local.model)
   assert.equal(body.stream, false)
   assert.equal(body.thinking, undefined)
+  assert.equal(body.reasoning_effort, undefined, 'cloud thinking preference is not forwarded to a local service')
   const failureFactories = [
     () => { throw new Error('private socket failure') },
     () => new Response('private rejection', { status: 500 }),
@@ -331,4 +443,30 @@ for (const startProvider of ['local', 'deepseek']) test(`an in-flight ${startPro
   assert.equal(f.requests[2].options.headers.Authorization, nextProvider === 'local' ? undefined : `Bearer ${secret}`)
   assert.equal(keyReads.length, startProvider === 'local' ? 1 : 2)
   assert.equal(f.responses.length, 0)
+})
+
+test('a running cloud turn keeps maximum thinking through its tools and the next turn uses a saved off setting', async t => {
+  const initial = { ...localSettings(), provider: 'deepseek', reasoningEffort: 'max' }
+  const f = fixture(t, { settings: initial, vault: {
+    status: async () => true, read: async () => 'fake-test-key-not-a-real-secret',
+    save: async () => { throw new Error('not used') }, remove: async () => { throw new Error('not used') },
+  } })
+  let entered, release
+  const started = new Promise(resolve => { entered = resolve })
+  const gate = new Promise(resolve => { release = resolve })
+  f.responses.push(async () => { entered(); await gate; return json(toolReply('read_current_time', {})) }, json(reply('本轮完成')))
+  const inFlight = f.ok('/chat', chatInput('先看看当前时间'))
+  await started
+  assert.equal((await f.ok('/settings/provider', { ...initial, reasoningEffort: 'off' })).providerSettings.reasoningEffort, 'off')
+  release()
+  assert.equal((await inFlight).status, 'completed')
+  assert.equal(f.requests.length, 2)
+  for (const { payload } of f.requests) {
+    assert.deepEqual(payload.thinking, { type: 'enabled' })
+    assert.equal(payload.reasoning_effort, 'max')
+  }
+  f.responses.push(json(reply('下一轮完成')))
+  assert.equal((await f.ok('/chat', chatInput('继续'))).status, 'completed')
+  assert.deepEqual(f.requests[2].payload.thinking, { type: 'disabled' })
+  assert.equal(f.requests[2].payload.reasoning_effort, 'none')
 })

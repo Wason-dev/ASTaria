@@ -80,6 +80,7 @@ try {
   const baseline=await camera()
   await openSettings()
   await check('settings is a full page rather than a modal',"document.querySelector('.home-workspace').dataset.page==='settings'&&document.querySelector('.xixi-settings').tagName==='SECTION'&&!document.querySelector('dialog.xixi-settings')")
+  await check('memory lives within the Xixi section',"document.querySelector('.xixi-settings-content').dataset.section==='析熙'&&!!document.querySelector('button[aria-label=使用长期记忆]')&&!!document.querySelector('.xixi-memory-manager')&&![...document.querySelectorAll('.xixi-settings-tabs button')].some(e=>e.textContent==='记忆')")
   await check('settings contents use outer page scrolling',"getComputedStyle(document.querySelector('.xixi-settings-content')).overflowY==='visible'&&getComputedStyle(document.querySelector('.xixi-settings-scroll')).overflowY==='auto'")
   await check('default glass keeps zero blur and background grid enabled',"document.querySelector('.xixi-settings feGaussianBlur').getAttribute('stdDeviation')==='0'&&document.querySelector('.home-workspace').dataset.grid==='true'")
   for (const [width, height] of [[1440,900],[1366,768],[1280,800],[1024,768]]) {
@@ -120,7 +121,7 @@ try {
   await openSettings();await tab('外观与动画')
   await check('render selection survives leaving and reopening settings',"document.querySelector('.xixi-render-options button:first-child').getAttribute('aria-pressed')==='true'")
   await click('.xixi-render-options button:nth-child(3)')
-  for(const name of ['通用','析熙','记忆','时间安排','通知','外观与动画','数据']){
+  for(const name of ['通用','析熙','时间安排','通知','外观与动画','数据']){
     await tab(name)
     await check(`desktop ${name} renders and remains within viewport`,`(()=>{const d=document.querySelector('.xixi-settings'),r=d.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth+1&&r.top>=0&&r.bottom<=innerHeight+1&&!!d.querySelector('section h3')})()`)
     await shot(`desktop-${name}`)
@@ -197,7 +198,7 @@ try {
   releaseProvider();await delay(4500)
   await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true})
   await delay(500);await openSettings()
-  for(const name of ['通用','析熙','记忆','时间安排','通知','外观与动画','数据']){
+  for(const name of ['通用','析熙','时间安排','通知','外观与动画','数据']){
     await tab(name)
     await probe(`390px ${name} has no clipping or horizontal overflow`,`(()=>{const d=document.querySelector('.xixi-settings'),r=d.getBoundingClientRect(),c=d.querySelector('.xixi-settings-content');return r.left>=0&&r.right<=innerWidth+1&&r.bottom<=innerHeight+1&&c.scrollWidth<=c.clientWidth+1})()`)
     await shot(`mobile-${name}`)

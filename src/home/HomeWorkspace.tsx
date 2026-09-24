@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import type { Task, TaskStatus } from '../domain/task'
 import type { SceneCamera } from '../spatial/scene'
@@ -8,6 +8,7 @@ import { useSpatialTasks } from '../spatial/useSpatialTasks'
 import { GlassSamplingContext, GlassSurface, MeasuredGlassSurface } from './GlassSurface'
 import { HomeStatus } from './HomeStatus'
 import { HomeAgenda } from './HomeAgenda'
+import { HomeDeadlinePicker } from './HomeDeadlinePicker'
 import { useLocalTime } from './useLocalTime'
 import { Workbench } from '../workbench/Workbench'
 import { useAppearance } from '../workbench/appearance'
@@ -19,13 +20,18 @@ import { restoreWithdrawnDraft } from '../xixi/draft'
 import { selectCurrentTask } from './currentTask'
 import { LocalSettings } from '../xixi/LocalSettings'
 import { notifyLocalDataChange } from '../stores/migration'
+import { localApi } from '../xixi/api'
+import { localDay } from './agenda'
 import { PlannerWorkspace } from '../planner/PlannerWorkspace'
 import type { PlannerPage } from '../planner/PlannerWorkspace'
 import type { ResponseEffectSettings, ResponsePhase } from '../prototype/responseEffects'
 import type { RenderProfile, RenderScene } from '../prototype/renderProfile'
 import { usePreferences, notificationsAllowed } from '../xixi/preferences'
-import { CompanionPanel } from '../xixi/CompanionPanel'
+import { StringStudio } from '../xixi/StringStudio'
+import { OrbitStudio } from '../xixi/OrbitStudio'
+import { FreeTimePanel } from '../xixi/FreeTimePanel'
 import { useXixiNotice } from '../xixi/useXixiNotice'
+import { BlackHoleEntry } from './BlackHoleEntry'
 import './home.css'
 import './scrollbars.css'
 import './theme.css'
@@ -41,20 +47,30 @@ type Props = {
   onRenderProfile: (profile: RenderProfile, scene: RenderScene) => void
 }
 const DRAFT_KEY = 'astaria-home-draft'
-type WorkspacePage = 'home' | 'workbench' | 'settings' | 'companion' | PlannerPage
-type CompanionTarget = { tab: 'scenarios' | 'wishes' | 'opportunities'; targetId?: string }
+type WorkspacePage = 'home' | 'workbench' | 'settings' | 'companion' | 'free-time' | PlannerPage
 function readDraft() { try { return sessionStorage.getItem(DRAFT_KEY) ?? '' } catch { return '' } }
 
 export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onResponseEffect, onResponsePhase, onRenderProfile, sceneUnavailable }: Props) {
   const data = useSpatialTasks()
   const now = useLocalTime()
+  const today = localDay(now)
+  useEffect(() => {
+    let current = true
+    void localApi<{ operation: { id: string } | null }>('/companion/free-time/ensure', {}).then(result => {
+      if (current && result.operation) notifyLocalDataChange()
+    }).catch(() => undefined)
+    return () => { current = false }
+  }, [today])
   const [page, setPage] = useState<WorkspacePage>('home')
+  const [freeTimeMounted, setFreeTimeMounted] = useState(false)
+  useEffect(() => { if (page === 'free-time') setFreeTimeMounted(true) }, [page])
   const appearance = useAppearance()
   const preferences = usePreferences()
   const started = useRef(false)
-  const [companionTarget, setCompanionTarget] = useState<CompanionTarget>({ tab: 'scenarios' })
-  const [companionLeaving, setCompanionLeaving] = useState(false)
-  const companionDestination = useRef<{ page: WorkspacePage; openChat: boolean; revealed: boolean } | null>(null)
+  const [stringsOpen, setStringsOpen] = useState(false)
+  const stringsOpener = useRef<HTMLElement | null>(null)
+  const [orbitPreview, setOrbitPreview] = useState(true)
+  const [stringCovered, setStringCovered] = useState(false)
   const [previewPhase, setPreviewPhase] = useState<ResponsePhase | null>(null)
   const previewTimers = useRef<Array<ReturnType<typeof setTimeout>>>([])
   useEffect(() => {
@@ -72,20 +88,16 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
     if (!preferences.loaded) return
     const value = preferences.value
     appearance.setValue(current => ({ ...current, theme: value.theme, ...(value.glass === 'soft' ? { blur: 6 } : { blur: 0 }), font: value.density === 'comfortable' ? 14 : 13, gap: value.density === 'comfortable' ? 12 : 8 }))
-    if (!started.current) { started.current = true; setPage(value.startupPage) }
+    if (!started.current) { started.current = true; setPage(value.startupPage === 'companion' ? 'free-time' : value.startupPage) }
   }, [preferences.loaded, preferences.value.theme, preferences.value.glass, preferences.value.density])
   const stopPreview = () => { previewTimers.current.forEach(clearTimeout); previewTimers.current = []; setPreviewPhase(null) }
   const previewEffect = () => {
     stopPreview(); setPreviewPhase('thinking')
     previewTimers.current = [setTimeout(() => setPreviewPhase('replying'), 3200), setTimeout(() => setPreviewPhase('idle'), 7200), setTimeout(() => setPreviewPhase(null), 10500)]
   }
-  const openCompanion = (target: CompanionTarget = { tab: 'scenarios' }) => {
-    if (page !== 'companion') changePage('companion')
-    else { companionDestination.current = null; setCompanionLeaving(false); setMenuOpen(false) }
-    setCompanionTarget(target)
-  }
+  // Old scenario receipts lead to the new home for optional plans.
   useEffect(() => {
-    const open = (event: Event) => { const detail = (event as CustomEvent).detail; openCompanion({ tab: ['scenarios', 'wishes', 'opportunities'].includes(detail?.tab) ? detail.tab : 'scenarios', targetId: typeof detail?.targetId === 'string' ? detail.targetId : undefined }) }
+    const open = () => changePage('free-time')
     window.addEventListener('astaria-open-companion', open)
     return () => window.removeEventListener('astaria-open-companion', open)
   })
@@ -95,7 +107,7 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
   const settingsOpener = useRef<HTMLElement | null>(null)
   const [chatOpen, setChatOpen] = useState(false)
   const [informationActive, setInformationActive] = useState(false)
-  const camera = useSceneCamera(readCamera, String(chatOpen))
+  const camera = useSceneCamera(readCamera, `${page}:${chatOpen}:${stringsOpen}`)
   const [cameraMissing, setCameraMissing] = useState(false)
   const progress = sceneUnavailable || cameraMissing ? Number(chatOpen) : Math.max(0, Math.min(1, (camera.zoom - .7) / (2.05 - .7)))
   const [menuOpen, setMenuOpen] = useState(false)
@@ -220,33 +232,28 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
     }
   }
   const changePage = (next: WorkspacePage, openChat = false) => {
-    if (companionLeaving && next === 'companion') {
-      companionDestination.current = null
-      setCompanionLeaving(false)
-    }
-    if (page === 'companion' && next !== 'companion') {
-      companionDestination.current = { page: next, openChat, revealed: false }
-      clearTimeout(menuTimer.current)
-      setMenuOpen(false)
-      setSelectedId(null)
-      setCompanionLeaving(true)
-      return
-    }
-    commitPage(next, openChat)
+    const destination = next === 'companion' ? 'free-time' : next
+    if (destination === 'free-time') setFreeTimeMounted(true)
+    commitPage(destination, openChat)
   }
-  const revealCompanionDestination = () => {
-    const destination = companionDestination.current
-    if (destination && !destination.revealed) {
-      destination.revealed = true
-      commitPage(destination.page, destination.openChat)
-    }
-  }
-  const finishCompanionDeparture = () => {
-    const destination = companionDestination.current
-    companionDestination.current = null
-    setCompanionLeaving(false)
-    if (destination && !destination.revealed) commitPage(destination.page, destination.openChat)
-  }
+  const openStrings = useCallback(() => {
+    // Both entry surfaces already show the panorama. Preserve its actual
+    // camera position rather than starting a second preset transition.
+    focusAfterTransition.current = false
+    clearTimeout(menuTimer.current)
+    stringsOpener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    setOrbitPreview(true)
+    setMenuOpen(false); setStringCovered(true); setStringsOpen(true)
+  }, [])
+  const closeStrings = useCallback(() => {
+    setStringsOpen(false); setStringCovered(false)
+    // The dialog unmounts before its original homepage control leaves inert.
+    requestAnimationFrame(() => {
+      const opener = stringsOpener.current
+      if (opener?.isConnected && !opener.closest('[inert]')) opener.focus({ preventScroll: true })
+    })
+  }, [])
+  const freeTimeChanged = useCallback(() => { data.retry(); void chat.refresh() }, [data.retry, chat.refresh])
   useEffect(() => {
     const escape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing || selectedId || settingsOpen) return
@@ -335,7 +342,7 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
   const radius = 19 + (15 - 19) * progress
   const chatVisible = progress > .35
 
-  return <div ref={root} className="home-workspace" data-spatial-ui data-theme={appearance.value.theme} data-chat-open={chatOpen} data-page={page} data-grid={preferences.value.grid} data-card-edges={preferences.value.cardEdges ?? 'both'} data-motion={preferences.value.effect.motion} data-effect-preview={previewPhase !== null}>
+  return <div ref={root} className="home-workspace" data-spatial-ui data-string-covered={stringCovered} data-theme={appearance.value.theme} data-chat-open={chatOpen} data-page={page} data-grid={preferences.value.grid} data-card-edges={preferences.value.cardEdges ?? 'both'} data-motion={preferences.value.effect.motion} data-effect-preview={previewPhase !== null}>
     <nav ref={nav} className="home-nav" aria-label="ASTaria 导航" data-menu-open={menuOpen}
       onPointerEnter={event => { if (event.pointerType !== 'touch') { clearTimeout(menuTimer.current); menuOpenedByHover.current = !menuOpen; setMenuOpen(true) } }}
       onPointerLeave={() => { menuTimer.current = setTimeout(() => { if (!nav.current?.contains(document.activeElement)) setMenuOpen(false) }, 180) }}
@@ -377,18 +384,25 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
           <li><button aria-current={page === 'home' ? 'page' : undefined} onClick={() => changePage('home')}>首页</button></li>
           <li><button aria-current={page === 'workbench' ? 'page' : undefined} onClick={() => changePage('workbench')}>工作台</button></li>
           <li><button aria-current={page === 'schedule' ? 'page' : undefined} onClick={() => changePage('schedule')}>日程</button></li>
-          <li><button aria-current={page === 'companion' ? 'page' : undefined} onClick={() => openCompanion()}>平行宇宙</button></li>
+          <li><button aria-current={page === 'free-time' ? 'page' : undefined} onClick={() => changePage('free-time')}>余时</button></li>
           <li><button aria-current={page === 'settings' ? 'page' : undefined} onClick={openSettings}>设置</button></li>
         </ul>
       </div>
     </nav>
     <HomeStatus now={now} showClock={!sceneUnavailable} notification={notificationsAllowed(preferences.value.notifications, now) ? notification || proactiveNotice : notification || '免打扰 · 变更记录已保留'} onNotification={() => {
       if (proactiveNotice.startsWith('有未读变更') || notification) { openSettings(); setSettingsTab('通知') }
-      else openCompanion({ tab: 'opportunities' })
+      else changePage('free-time')
     }} />
 
-    <GlassSamplingContext.Provider value={page === 'home' && previewPhase === null}>
-    <div className="home-scene-ui" inert={page !== 'home'} aria-hidden={page !== 'home'}>
+    <GlassSamplingContext.Provider value={page === 'home' && previewPhase === null && !stringCovered}>
+    <div className="home-scene-ui" inert={page !== 'home' || stringsOpen} aria-hidden={page !== 'home' || stringCovered}>
+    <BlackHoleEntry
+      camera={camera}
+      width={layout.width}
+      height={layout.height}
+      visible={page === 'home' && !chatOpen && !stringCovered && !stringsOpen && !sceneUnavailable && !camera.cameraTransition && progress < .08}
+      onEnter={openStrings}
+    />
     <div ref={current} className="home-current" style={{ opacity: Math.max(0, 1 - progress * 3), visibility: progress > .6 ? 'hidden' : 'visible' }} inert={chatOpen}>
       <span>当前任务</span>
       <button ref={currentButton} className="home-current-title" onClick={() => data.loadError ? data.retry() : currentTask ? openTask(currentTask.id) : changeChat(true)}
@@ -403,6 +417,8 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
         style={{ opacity: Math.max(0, 1 - progress * 4), visibility: progress > .35 ? 'hidden' : 'visible' }} disabled={chatOpen}>交给析熙</button>
       <div className="home-deck" style={{ opacity: Math.max(0, Math.min(1, (progress - .45) / .55)), visibility: chatVisible ? 'visible' : 'hidden' }}>
       <div className="home-pane-track" style={{ width: endWidth * 2, transform: `translateX(${compact && informationActive ? -endWidth : 0}px)` }}>
+      <HomeDeadlinePicker active={page === 'home' && chatOpen} conversationId={chat.conversation?.conversationId}
+        onOpen={() => { if (compact) setInformationActive(true) }} onClose={() => setInformationActive(false)}>
       <section id="home-xixi" className="home-xixi" aria-label="析熙" inert={!chatOpen || progress < .99 || (compact && informationActive)} aria-hidden={!chatOpen || (compact && informationActive)}>
         <header><div className="home-chat-title">
           <button className="home-collapse" onClick={() => changeChat(false)} aria-label="收起析熙" title="收起析熙">
@@ -442,15 +458,19 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
           setInformationActive(false)
           requestAnimationFrame(() => informationToggle.current?.focus({ preventScroll: true }))
         }} />
+      </HomeDeadlinePicker>
       </div>
       </div>
     </div>
     </div>
     </GlassSamplingContext.Provider>
     <Workbench active={page === 'workbench'} appearance={appearance} data={data} now={now} onCapture={() => changePage('home', true)} onNotice={setNotification} chat={chat} onSettings={openSettings} />
-    <PlannerWorkspace active={page === 'schedule'} tasks={data.tasks} tasksLoading={data.loading} tasksError={data.loadError} now={now} appearance={appearance} chat={chat} onSettings={openSettings} onNotice={setNotification} onRefresh={data.retry} />
+    <PlannerWorkspace active={page === 'schedule'} tasks={data.tasks} tasksLoading={data.loading} tasksError={data.loadError} now={now} appearance={appearance} onNotice={setNotification} onRefresh={data.retry} />
+    {(freeTimeMounted || page === 'free-time') && <FreeTimePanel active={page === 'free-time' && !stringCovered} today={today} theme={preferences.value.theme} grid={preferences.value.grid} glass={preferences.value.glass} onOpenStrings={openStrings} onChanged={freeTimeChanged} onNotice={setNotification} />}
     {settingsOpen && <LocalSettings initialTab={settingsTab} onClose={closeSettings} onSaved={chat.refreshStatus} onPreviewEffect={previewEffect} onStopPreview={stopPreview} previewPhase={previewPhase} />}
-    {(page === 'companion' || companionLeaving) && <CompanionPanel exiting={companionLeaving} onRevealDestination={revealCompanionDestination} onExited={finishCompanionDeparture} tasks={data.tasks} tasksLoading={data.loading} tasksError={data.loadError} initialTab={companionTarget.tab} initialScenarioId={companionTarget.targetId} onChanged={() => { data.retry(); notifyLocalDataChange(); void chat.refresh() }} onNotice={setNotification} />}
+    {stringsOpen && (orbitPreview
+      ? <OrbitStudio onReveal={() => setStringCovered(false)} onClose={closeStrings} onSelected={setNotification} onExisting={() => setOrbitPreview(false)} />
+      : <StringStudio onReveal={() => setStringCovered(false)} onClose={closeStrings} onSaved={message => { data.retry(); void chat.refresh(); setNotification(message) }} />)}
     {selectedId && <TaskDialog task={selectedTask} saving={data.saving} onClose={closeTask} onStatus={data.setStatus} />}
   </div>
 }

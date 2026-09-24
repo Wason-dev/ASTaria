@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { createDatabase } from '../server/database.mjs'
-import { createXixi, contextUnits, XIXI_TOOLS } from '../server/xixi.mjs'
+import { createXixi, contextUnits, XIXI_TOOLS, MAX_ROUNDS, HARD_INPUT_UNITS } from '../server/xixi.mjs'
 
 const NOW = new Date('2026-09-18T00:30:00+08:00')
 const reply = content => ({ choices: [{ message: { role: 'assistant', content } }] })
@@ -141,7 +141,7 @@ test('focused task receives its latest bounded notes and classification dictiona
   assert.ok(context.areas.some(area => area.id === 'phy2' && area.name === 'Phy2' && area.defaultEnergy === 'deep'))
   assert.ok(context.tasks.every(task => task.notes === undefined))
   assert.doesNotMatch(JSON.stringify(f.requests[0]), /不相关的完整备注不应默认发出/)
-  assert.ok(contextUnits(f.requests[0].messages) + contextUnits(XIXI_TOOLS) < 10000)
+  assert.ok(contextUnits(f.requests[0].messages) + contextUnits(XIXI_TOOLS) <= HARD_INPUT_UNITS)
 })
 
 test('memory source is fixed to current user message and inspectable', async t => {
@@ -200,20 +200,20 @@ test('task memories load only in their scope and expired preferences stay out', 
 })
 
 test('tool loop stops after bounded rounds and retains all applied changes', async t => {
-  const f = fixture(t, Array.from({ length: 6 }, (_, i) => call('create_tasks', { tasks: [{ title: `任务${i}` }] })))
+  const f = fixture(t, Array.from({ length: MAX_ROUNDS }, (_, i) => call('create_tasks', { tasks: [{ title: `任务${i}` }] })))
   const result = await f.xixi.chat(input('安排事情'))
-  assert.equal(f.requests.length, 6)
+  assert.equal(f.requests.length, MAX_ROUNDS)
   assert.equal(f.requests.at(-1).tools, undefined)
   assert.equal(result.status, 'failed')
   assert.equal(result.execution.status, 'partial')
   assert.equal(result.execution.reply.mode, 'failed')
-  assert.match(result.execution.interrupted, /上限/)
-  assert.equal(result.operations.filter(operation => operation.kind !== 'planner').length, 5)
-  assert.equal(f.db.listTasks().length, 5)
+  assert.match(result.execution.interrupted, /仍有步骤未完成/)
+  assert.equal(result.operations.filter(operation => operation.kind !== 'planner').length, MAX_ROUNDS - 1)
+  assert.equal(f.db.listTasks().length, MAX_ROUNDS - 1)
 })
 
 test('a provider failure during retry cannot complete a previously interrupted execution', async t => {
-  const f = fixture(t, [call('create_tasks', { tasks: [{ title: '部分完成的报告' }] }), ...Array.from({ length: 5 }, () => call('read_tasks', {})), new Error('private-provider-diagnostic')])
+  const f = fixture(t, [call('create_tasks', { tasks: [{ title: '部分完成的报告' }] }), ...Array.from({ length: 4 }, () => call('read_tasks', {})), new Error('private-provider-diagnostic')])
   const request = input('记录报告并处理后续安排')
   const first = await f.xixi.chat(request)
   assert.equal(first.status, 'failed')
@@ -250,7 +250,7 @@ test('summaries preserve source references and original records while bounding r
   assert.ok(summary.sourceMessageIds.length >= 12)
   assert.equal(f.db.listMessages('main', { limit: 1000 }).length, 38)
   assert.match(summary.text, /未定/)
-  assert.ok(contextUnits(f.requests.at(-1).messages) + contextUnits(XIXI_TOOLS) < 10000)
+  assert.ok(contextUnits(f.requests.at(-1).messages) + contextUnits(XIXI_TOOLS) <= HARD_INPUT_UNITS)
   assert.ok(contextData(f.requests.at(-1)).summary.sourceMessageIds.length > 0)
 })
 

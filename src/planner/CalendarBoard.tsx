@@ -10,7 +10,7 @@ type Props = {
   state: PlannerState; tasks: Task[]; selected: string; anchor: Date; now: Date
   mode: 'month' | 'week'; direction: number; onSelect: (date: string) => void
 }
-type Entry = { task: Task; deadline: boolean; planned: boolean; time: string; label: string }
+type Entry = { id: string; title: string; done: boolean; event: boolean; deadline: boolean; planned: boolean; time: string; label: string }
 const weekdays = ['一', '二', '三', '四', '五', '六', '日']
 const dateLabel = new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' })
 const clock = new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
@@ -21,7 +21,7 @@ function entriesForDay(state: PlannerState, tasks: Task[], day: string): Entry[]
     const start = minuteOf(block.start), end = minuteOf(block.end)
     return agendaDate(block.date) && Number.isFinite(start) && start < 1440 && Number.isFinite(end) && start !== end
   }).map(block => block.taskId))
-  return tasks.filter(task => !task.deletedAt && task.status !== 'dropped').flatMap(task => {
+  const taskEntries: Entry[] = tasks.filter(task => !task.deletedAt && task.status !== 'dropped').flatMap(task => {
     const due = agendaDate(task.due), start = agendaDate(task.startAt)
     const taskBlocks = blocks.filter(block => block.taskId === task.id)
     const deadline = Boolean(due && localDay(due) === day)
@@ -33,9 +33,14 @@ function entriesForDay(state: PlannerState, tasks: Task[], day: string): Entry[]
       : planned && task.startAt?.includes('T') && start ? clock.format(start)
         : deadline && task.due?.includes('T') && due ? clock.format(due) : ''
     const label = [planned ? '已安排' : '', deadline ? '截止' : '', time, task.status === 'done' ? '已完成' : ''].filter(Boolean).join(' · ')
-    return [{ task, deadline, planned, time, label }]
-  }).sort((a, b) => Number(a.task.status === 'done') - Number(b.task.status === 'done')
-    || Number(b.deadline) - Number(a.deadline) || a.time.localeCompare(b.time) || a.task.title.localeCompare(b.task.title, 'zh-CN'))
+    return [{ id: `task:${task.id}`, title: task.title, done: task.status === 'done', event: false, deadline, planned, time, label }]
+  })
+  const eventEntries: Entry[] = (state.dayEvents ?? []).filter(event => event.date === day).map(event => {
+    const time = `${event.start}–${event.end}`
+    return { id: `event:${event.id}`, title: event.title, done: false, event: true, deadline: false, planned: true, time, label: `单日活动 · ${time}` }
+  })
+  return [...taskEntries, ...eventEntries].sort((a, b) => Number(a.done) - Number(b.done)
+    || Number(b.deadline) - Number(a.deadline) || a.time.localeCompare(b.time) || a.title.localeCompare(b.title, 'zh-CN'))
 }
 
 function capacityInfo(state: PlannerState, day: string, today: string, capacity: DayCapacity) {
@@ -85,9 +90,9 @@ export function CalendarBoard({ state, tasks, selected, anchor, now, mode, direc
           data-outside={outside} aria-pressed={day === selected} aria-current={isToday ? 'date' : undefined} aria-label={ariaLabel}
           tabIndex={day === focusDate ? 0 : -1} onClick={() => onSelect(day)} onKeyDown={event => moveDate(event, date)}>
           <span className="pl-calendar-date"><span>{date.getDate()}</span>{isToday && <small>今天</small>}</span>
-          <span className="pl-calendar-entries">{entries.slice(0, 2).map(entry => <span key={entry.task.id} className="pl-calendar-entry"
-            data-kind={entry.planned ? 'plan' : 'deadline'} data-done={entry.task.status === 'done'} title={`${entry.task.title} · ${entry.label}`}>
-            {entry.deadline && <span className="pl-calendar-deadline-mark" aria-hidden="true">◇</span>}<span>{entry.task.title}</span>
+          <span className="pl-calendar-entries">{entries.slice(0, 2).map(entry => <span key={entry.id} className="pl-calendar-entry"
+            data-kind={entry.planned ? 'plan' : 'deadline'} data-done={entry.done} title={`${entry.title} · ${entry.label}`}>
+            {entry.deadline && <span className="pl-calendar-deadline-mark" aria-hidden="true">◇</span>}<span className="pl-calendar-entry-copy">{entry.event && <small className="pl-calendar-entry-time">{entry.time}</small>}<span>{entry.title}</span></span>
           </span>)}</span>
           {entries.length > 2 && <span className="pl-calendar-more">+{entries.length - 2}</span>}
           {capacityBar}
@@ -96,10 +101,10 @@ export function CalendarBoard({ state, tasks, selected, anchor, now, mode, direc
             aria-label={ariaLabel} tabIndex={day === focusDate ? 0 : -1} onClick={() => onSelect(day)} onKeyDown={event => moveDate(event, date)}>
             <span>周{weekdays[(date.getDay() + 6) % 7]}</span><strong>{date.getDate()}</strong>{isToday && <small>今天</small>}
           </button>
-          <ul className="pl-week-list">{entries.map(entry => <li key={entry.task.id} className="pl-week-entry" data-kind={entry.planned ? 'plan' : 'deadline'} data-done={entry.task.status === 'done'}>
-            <button type="button" onClick={() => onSelect(day)} aria-label={`${dateLabel.format(date)}，${entry.task.title}，${entry.label}`}>
+          <ul className="pl-week-list">{entries.map(entry => <li key={entry.id} className="pl-week-entry" data-kind={entry.planned ? 'plan' : 'deadline'} data-done={entry.done}>
+            <button type="button" onClick={() => onSelect(day)} aria-label={`${dateLabel.format(date)}，${entry.title}，${entry.label}`}>
               <span className="pl-week-entry-time">{entry.deadline && <span aria-hidden="true">◇ </span>}{entry.time || (entry.deadline ? '当天截止' : '时间待定')}</span>
-              <strong>{entry.task.title}</strong>{entry.deadline && entry.planned && <small>含当日截止</small>}
+              <strong>{entry.title}</strong>{entry.deadline && entry.planned && <small>含当日截止</small>}
             </button>
           </li>)}</ul>
           {!entries.length && <p className="pl-week-empty">暂无事项</p>}

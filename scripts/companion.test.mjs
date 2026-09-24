@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { createDatabase } from '../server/database.mjs'
 import { createCompanion } from '../server/companion.mjs'
-import { createXixi, contextUnits, XIXI_TOOLS } from '../server/xixi.mjs'
+import { createXixi, contextUnits, XIXI_TOOLS, HARD_INPUT_UNITS } from '../server/xixi.mjs'
 
 process.env.TZ = 'Asia/Shanghai'
 const DATE = '2026-09-19'
@@ -376,7 +376,8 @@ test('large companion records and 50 wishes keep automatic context and explicit 
   const request = input('接着做这个任务'); request.context.taskId = report.id
   const result = await xixi.chat(request)
   assert.equal(result.status, 'completed')
-  assert.ok(requests.every(payload => contextUnits(payload.messages) + contextUnits(XIXI_TOOLS) < 14000))
+  assert.ok(requests.every(payload => contextUnits(payload.messages) + contextUnits(XIXI_TOOLS) <= HARD_INPUT_UNITS))
+  assert.ok(requests.every(payload => payload.messages.some(message => message.role === 'user' && message.content.includes(request.text))))
   const returned = JSON.parse(result.messages.find(message => message.role === 'tool').content)
   assert.equal(returned.counts.wishes, 50)
   assert.equal(returned.truncated, true)

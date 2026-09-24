@@ -9,6 +9,12 @@
 :is(.p0,.app-shell) .xixi-settings .xixi-model-address-note[data-invalid=true]{color:#e1ab93}
 .xixi-model-input-action{display:flex;align-items:center;gap:8px;min-width:0}.xixi-model-input-action input{flex:1;min-width:0}.xixi-model-input-action button{flex:none;white-space:nowrap}
 .xixi-model-cloud-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:1px 0 9px;border-bottom:1px solid var(--settings-line)}
+.xixi-model-thinking-row{padding-top:8px}.xixi-model-reasoning-note{display:block;margin-top:4px;color:var(--settings-muted);font-size:10px;line-height:1.5}
+.xixi-model-context-budget{margin-top:10px;padding-top:8px;border-top:1px solid var(--settings-line)}.xixi-model-context-budget .xixi-model-cloud-row{border-bottom:0;padding-bottom:3px}
+.xixi-model-budget-custom{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:6px}.xixi-model-budget-input{display:flex;align-items:center;gap:7px;color:var(--settings-muted);font-size:11px}.xixi-model-budget-input input{width:100px!important;min-width:0;font-variant-numeric:tabular-nums}
+:is(.p0,.app-shell) .xixi-settings .xixi-model-budget-custom label{margin:0}.xixi-model-budget-error{display:block;margin-top:5px;color:#e1ab93;font-size:10px;line-height:1.5}
+.xixi-model-key-manager{margin-top:9px;font-size:11px;color:var(--settings-muted)}.xixi-model-key-manager>summary{width:fit-content;cursor:pointer;line-height:1.8}.xixi-model-key-manager>summary:focus-visible{outline:2px solid var(--settings-accent);outline-offset:3px;border-radius:4px}
+.xixi-model-stream{margin-top:10px;padding-top:8px;border-top:1px solid var(--settings-line)}.xixi-model-stream>div{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:11px}.xixi-model-stream small{display:block;margin-top:4px;color:var(--settings-muted);font-size:10px;line-height:1.5}
 :is(.p0,.app-shell) .xixi-settings .xixi-model-cloud-row label{margin:0}.xixi-model-cloud-row select{max-width:70%}
 .xixi-model-actions{gap:7px;margin-top:10px}.xixi-model-actions small{margin-left:auto}
 .xixi-model-test{display:flex;flex-direction:column;gap:4px;padding:10px 12px;margin-top:12px;border:1px solid #d8bb7945;background:#d8bb790b;border-radius:12px;font-size:11px;line-height:1.65;overflow-wrap:anywhere}
@@ -19,3 +25,22 @@
 .xixi-model-device ul{display:grid;gap:5px;margin:8px 0;padding:0;list-style:none}.xixi-model-device li{display:grid;grid-template-columns:minmax(70px,.65fr) minmax(0,1.8fr);gap:12px;line-height:1.6}.xixi-model-device li strong{font-weight:500;color:var(--settings-ink)}.xixi-model-device li[data-fit=recommended] strong{color:var(--settings-accent)}
 :is(.p0,.app-shell) .xixi-settings .xixi-model-device p{font-size:10px}.xixi-model-device p button{margin-left:8px}
 @media(max-width:600px){.xixi-model-fields{grid-template-columns:minmax(0,1fr)}.xixi-model-modes span{display:none}.xixi-model-modes strong{font-size:12px}.xixi-model-actions small{margin-left:0}.xixi-model-device-summary{align-items:flex-start}.xixi-model-device li{grid-template-columns:minmax(72px,.6fr) minmax(0,1.4fr)}}
+.xixi-model-engine label{display:flex!important;align-items:center;justify-content:space-between;gap:12px}.xixi-model-engine select{width:60%}
+.xixi-model-advanced,.xixi-model-install-disclosure{margin-top:10px;font-size:11px;color:var(--settings-muted)}
+.xixi-model-advanced summary,.xixi-model-install-disclosure>summary{cursor:pointer;line-height:1.8}.xixi-model-install-disclosure>summary{color:var(--settings-accent)}
+.xixi-model-installer{padding:12px 0 4px}.xixi-installer-heading,.xixi-installer-choice{display:flex;align-items:center;justify-content:space-between;gap:12px}.xixi-installer-heading>strong{color:var(--settings-ink);font-size:12px;font-weight:500}
+:is(.p0,.app-shell) .xixi-settings .xixi-installer-heading button{padding:3px 7px;border:0;background:transparent;color:var(--settings-muted)}
+.xixi-installer-choice select{min-width:0;max-width:70%!important}.xixi-installer-size{font-size:10px!important;line-height:1.8}
+.xixi-installer-runtime{display:flex;flex-direction:column;gap:6px}.xixi-installer-runtime a{align-self:start;color:var(--settings-accent);text-underline-offset:4px}
+.xixi-installer-runtime small{line-height:1.7}.xixi-installer-confirm{padding:10px 12px;border:1px solid var(--settings-line);border-radius:12px}.xixi-installer-confirm>div{display:flex;gap:8px}
+:is(.p0,.app-shell) .xixi-settings .xixi-installer-primary{background:#d8bb7920;border-color:#d8bb7960;color:var(--settings-accent)}
+.xixi-installer-progress{display:flex;flex-direction:column;align-items:start;gap:7px;margin-top:12px}.xixi-installer-progress>div{display:flex;width:100%;justify-content:space-between;gap:10px}.xixi-installer-progress strong{font-weight:500;color:var(--settings-ink)}.xixi-installer-progress span{color:var(--settings-accent);font-variant-numeric:tabular-nums}
+.xixi-installer-progress progress{width:100%;height:5px;accent-color:var(--settings-accent);border:0;border-radius:9px;overflow:hidden}.xixi-installer-progress progress::-webkit-progress-bar{background:var(--settings-line)}.xixi-installer-progress progress::-webkit-progress-value{background:var(--settings-accent)}
+.xixi-installer-progress small{line-height:1.7}.xixi-installer-error{color:var(--settings-accent)!important}
+@media(min-width:801px) and (max-height:700px){
+  .xixi-model-modes{margin:8px 0}
+  :is(.p0,.app-shell) .xixi-settings .xixi-model-modes button{padding:8px 10px}
+  :is(.p0,.app-shell) .xixi-settings .xixi-model-cloud-row select{padding:6px 9px}
+  .xixi-model-cloud-row{padding-bottom:6px}.xixi-model-thinking-row{padding-top:6px}
+  .xixi-model-stream,.xixi-model-context-budget{margin-top:6px;padding-top:6px}.xixi-model-actions{margin-top:8px}
+}

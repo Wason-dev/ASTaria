@@ -1,0 +1,94 @@
+.home-workspace {
+  --workspace-content-top: 88px;
+  --workspace-content-width: 1320px;
+  --workspace-heading-size: 24px;
+  --workspace-heading-line: 32px;
+}
+
+/* One content edge and title baseline beneath the shared ASTaria navigation. */
+:is(.p0,.app-shell) .home-workspace :is(.workbench,.planner,.xixi-settings,.xc-page,.free-time-page) > .workspace-page-viewport {
+  top: var(--workspace-content-top);
+  padding-top: 0;
+  padding-inline: 0;
+  scrollbar-gutter: stable both-edges;
+}
+:is(.p0,.app-shell) .home-workspace .workspace-page-viewport > :is(div,section).workspace-page-container {
+  width: min(var(--workspace-content-width), calc(100% - 2 * var(--home-left,34px)));
+  max-width: var(--workspace-content-width);
+  margin-top: 0;
+  margin-inline: auto;
+}
+
+:is(.p0,.app-shell) .home-workspace header.workspace-heading {
+  flex: none;
+  align-items: start;
+  min-height: var(--workspace-heading-line);
+  gap: 16px 24px;
+  padding: 0;
+  margin: 0 0 16px;
+}
+:is(.p0,.app-shell) .home-workspace .workspace-heading-copy {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 18px;
+  min-width: 0;
+}
+:is(.p0,.app-shell) .home-workspace .workspace-heading > .workspace-heading-copy > .workspace-heading-title {
+  flex: none;
+  margin: 0;
+  font-size: var(--workspace-heading-size);
+  line-height: var(--workspace-heading-line);
+  font-weight: 450;
+  letter-spacing: -.02em;
+  white-space: nowrap;
+  outline: none;
+}
+:is(.p0,.app-shell) .home-workspace .workspace-heading > .workspace-heading-copy > .workspace-heading-description {
+  margin: 0;
+  max-width: none;
+  color: var(--workspace-heading-muted);
+  font-size: 11px;
+  line-height: 18px;
+}
+.workbench { --workspace-heading-muted: var(--wb-muted) }
+.planner { --workspace-heading-muted: var(--pl-muted) }
+.xixi-settings { --workspace-heading-muted: var(--settings-muted) }
+.xc-page { --workspace-heading-muted: var(--xc-muted) }
+.free-time-page { --workspace-heading-muted: var(--ft-muted) }
+
+/* Workbench and free-time summaries use one size and layout contract. */
+.home-workspace .workspace-metrics { display:flex; align-items:center; flex:none; gap:24px; margin:0 0 3px; line-height:1.6 }
+.home-workspace .workspace-metrics>div { display:flex; flex-direction:column-reverse; gap:3px; padding-left:18px; border-left:1px solid var(--metrics-line) }
+.home-workspace .workspace-metrics dt { color:var(--metrics-muted); font-size:10px; line-height:16px; white-space:nowrap }
+.home-workspace .workspace-metrics dd { margin:0; color:var(--metrics-ink); font-size:calc(var(--wb-font,13px) + 7px); font-weight:350; line-height:1.2; font-variant-numeric:tabular-nums; white-space:nowrap }
+.home-workspace .workspace-metrics dd small { color:var(--metrics-muted); font-size:10px; font-weight:400 }
+@media (max-width:760px) {
+  .home-workspace .workspace-metrics { gap:12px }
+  .home-workspace .workspace-metrics>div { padding-left:10px }
+}
+@media (max-width:600px) {
+  .home-workspace .workspace-metrics { flex-wrap:wrap; gap:8px 20px; width:100% }
+  .home-workspace .workspace-metrics>div { flex-direction:row; align-items:baseline; gap:8px; padding-left:14px }
+  .home-workspace .workspace-metrics>div:first-child { border-left:0; padding-left:0 }
+  .home-workspace .workspace-metrics dt { font-size:9px; line-height:1.6 }
+  .home-workspace .workspace-metrics dd { font-size:16px }
+}
+
+/* Preserve the calendar's existing horizontal date and action composition. */
+:is(.p0,.app-shell) .home-workspace .planner .workspace-heading {
+  align-items: center;
+  gap: 18px;
+}
+:is(.p0,.app-shell) .home-workspace .planner .workspace-heading-copy { align-self:start }
+
+@media (max-width: 700px) {
+  .home-workspace {
+    --workspace-content-top: 72px;
+    --workspace-heading-size: 22px;
+    --workspace-heading-line: 30px;
+  }
+  :is(.p0,.app-shell) .home-workspace header.workspace-heading { gap: 10px 16px; margin-bottom: 14px }
+  :is(.p0,.app-shell) .home-workspace .planner .workspace-heading { gap: 10px 6px }
+}

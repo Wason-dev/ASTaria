@@ -54,6 +54,12 @@ test('same conversation picks up each newly saved voice in the actual provider r
       assert.ok(prompt.includes(`本轮表达风格：${label}`))
       assert.equal((prompt.match(/本轮表达风格：/g) ?? []).length, 1)
       if (personality !== 'high') assert.doesNotMatch(prompt, /笨蛋/)
+      if (personality === 'high') {
+        assert.match(prompt, /办妥事情后的轻快/)
+        assert.match(prompt, /压到一小时了/)
+        assert.match(prompt, /用户只是说累了，没有要求改安排/)
+      } else assert.doesNotMatch(prompt, /压到一小时了|今天的电量不够/)
+      assert.ok(prompt.indexOf('本轮表达风格：') > prompt.indexOf('# 先做事，再解释'))
       assert.match(prompt, /工具回执是唯一的完成依据/)
       assert.deepEqual(request.tools, requests[0].tools)
     }

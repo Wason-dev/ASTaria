@@ -1,7 +1,10 @@
 import { agendaDate, localDay, shiftDay } from '../home/agenda.ts'
+import { TASK_RECEIPT_CAPABILITIES } from '../domain/receiptCapabilities.ts'
+
+export const DEADLINE_TIME_SHORTCUTS = TASK_RECEIPT_CAPABILITIES.deadline.timeShortcuts
 
 export function deadlineShortcuts(now: Date) {
-  return ['今天', '明天', '后天'].map((label, days) => ({ label, date: localDay(shiftDay(now, days)) }))
+  return TASK_RECEIPT_CAPABILITIES.deadline.dateShortcuts.map((label, days) => ({ label, date: localDay(shiftDay(now, days)) }))
 }
 
 export function deadlineParts(due?: string) {

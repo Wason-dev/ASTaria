@@ -27,3 +27,10 @@ export function mergeConversation(current: ConversationState | null, next: Conve
   const hasEarlier = (current.oldestSeq ?? Infinity) < (next.oldestSeq ?? Infinity)
   return { ...next, messages, companionActions, ...(hasEarlier ? { oldestSeq: current.oldestSeq, hasOlder: current.hasOlder } : {}) }
 }
+
+/** Replace the whole visible action, including receipts cached by older clients. */
+export function mergeOperationReceipt(current: ConversationState | null, operation: Operation): ConversationState | null {
+  if (!current) return current
+  const related = new Set([operation.id, ...(operation.relatedOperationIds ?? [])])
+  return { ...current, operations: [...current.operations.filter(item => !related.has(item.id)), operation] }
+}

@@ -8,7 +8,7 @@ import { usePeriodMotion } from './usePeriodMotion'
 
 type Props = {
   state: PlannerState; tasks: Task[]; selected: string; anchor: Date; now: Date; direction: number; mode?: 'week' | 'day'
-  onSelect: (date: string) => void; onRoutine: (routine: Routine, date: string) => void; onTask: (id: string) => void
+  onSelect: (date: string) => void; onRoutine: (routine: Routine, date: string) => void; onTask: (id: string, blockId?: string, date?: string) => void
 }
 type Slot = { key: string; start: number; end: number; kind: Routine['kind'] | 'plan'; routine?: Routine; block?: PlanBlock; task?: Task }
 type PlacedSlot = Slot & { lane: number; lanes: number }
@@ -135,14 +135,14 @@ export function TimetableBoard({ state, tasks, selected, anchor, now, direction,
               const density: SlotDensity = slot.end - slot.start < 20 ? 'tiny' : slot.end - slot.start < 40 ? 'short' : slot.end - slot.start < 60 ? 'medium' : 'regular'
               const isAvailable = slot.kind === 'available'
               const coverage = isAvailable ? availableLabelCoverage(slot, slots, density, scale.position) : null
-              const dayOverride = slot.routine ? state.dayOverrides?.[day] : undefined
-              const activate = () => slot.routine ? onRoutine(slot.routine, day) : slot.task && onTask(slot.task.id)
-              const label = `${kindLabels[slot.kind]}，${title}，${range}${slot.routine?.location ? `，${slot.routine.location}` : ''}`
+              const dayOverride = slot.routine && !slot.routine.sourceDate ? state.dayOverrides?.[day] : undefined
+              const activate = () => slot.routine ? onRoutine(slot.routine, day) : slot.task && onTask(slot.task.id, slot.block?.id, day)
+              const label = `${slot.routine?.sourceDate ? '单日活动' : kindLabels[slot.kind]}，${title}，${range}${slot.routine?.location ? `，${slot.routine.location}` : ''}`
               const actionLabel = dayOverride ? `${label}，临时按周${sourceWeekdays[dayOverride.sourceWeekday]}课表，编辑来源每周安排` : `${isAvailable ? '编辑' : ''}${label}`
               return isAvailable ? <button key={slot.key} type="button" className="pl-slot" data-kind="available" data-density={density} data-override={Boolean(dayOverride)} data-title-covered={coverage?.title} data-time-covered={coverage?.time} style={slotStyle(slot)} onClick={activate} aria-label={actionLabel} title={actionLabel}>
                 <strong>{title}</strong><small className="pl-slot-time">{range}</small>
               </button> : <button key={slot.key} type="button" className="pl-slot" data-kind={slot.kind} data-density={density} data-done={slot.task?.status === 'done'}
-                data-override={Boolean(dayOverride)} data-conflict={Boolean(slot.block && capacity.conflicts.includes(slot.block.id))} style={slotStyle(slot)} onClick={activate} aria-label={actionLabel} title={actionLabel}>
+                data-override={Boolean(dayOverride)} data-conflict={Boolean((slot.block && capacity.conflicts.includes(slot.block.id)) || (slot.routine && capacity.conflicts.includes(slot.routine.id)))} style={slotStyle(slot)} onClick={activate} aria-label={actionLabel} title={actionLabel}>
                 <small className="pl-slot-time">{range}</small><strong>{title}</strong>{slot.routine?.location && <small className="pl-slot-location">{slot.routine.location}</small>}
                 {slot.block?.locked && <span className="pl-slot-locked" aria-label="时间已锁定">◇</span>}
               </button>

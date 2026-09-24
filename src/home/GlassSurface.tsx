@@ -2,18 +2,19 @@ import { createContext, useContext, useId, useLayoutEffect, useMemo, useRef, use
 import type { CSSProperties } from 'react'
 import { glassDisplacement, HOME_GLASS } from './glass'
 
-export type GlassMaterial = { transmission: number; blur: number; rim: number; shadow: number }
+export type GlassMaterial = { transmission: number; blur: number; rim: number; shadow: number; reflection?: number }
 type Props = { width: number; height: number; radius: number; progress?: number; material?: GlassMaterial; responsive?: boolean }
 
 /** A departing panel releases its live background sampling in the same React commit. */
 export const GlassSamplingContext = createContext(true)
 
 export function MeasuredGlassSurface({ radius, progress = 0, material, settleResize = false }: Pick<Props, 'radius' | 'progress' | 'material'> & { settleResize?: boolean }) {
+  const sampling = useContext(GlassSamplingContext)
   const host = useRef<HTMLSpanElement>(null)
   const [size, setSize] = useState(() => settleResize ? { width: 320, height: 640 } : { width: 1, height: 1 })
   useLayoutEffect(() => {
     const element = host.current
-    if (!element) return
+    if (!element || !sampling) return
     let timer: ReturnType<typeof setTimeout> | undefined
     const measure = () => {
       // Layout dimensions exclude entry/exit transforms on the panel.
@@ -31,7 +32,7 @@ export function MeasuredGlassSurface({ radius, progress = 0, material, settleRes
     observer.observe(element)
     measure()
     return () => { observer.disconnect(); clearTimeout(timer) }
-  }, [settleResize])
+  }, [sampling, settleResize])
   return <span ref={host} className="home-glass-measure" aria-hidden="true">
     <GlassSurface width={size.width} height={size.height} radius={radius} progress={progress} material={material} responsive={settleResize} />
   </span>
@@ -44,14 +45,16 @@ export function GlassSurface({ width, height, radius, progress = 0, material, re
   // Chromium composites SVG backdrop filters over the existing WebGL canvas.
   // Other engines keep the same transparent material with a 2px blur fallback.
   const svgBackdrop = /Chrome|Chromium|Edg\//.test(navigator.userAgent)
-  const map = useMemo(() => svgBackdrop ? glassDisplacement(width, height, radius) : '', [width, height, radius, svgBackdrop])
+  // Hidden retained pages can change size with the window or their data. They
+  // must not allocate/encode a displacement canvas until sampling resumes.
+  const map = useMemo(() => sampling && svgBackdrop ? glassDisplacement(width, height, radius) : '', [width, height, radius, sampling, svgBackdrop])
   const ready = sampling && Boolean(map)
   const transmission = material?.transmission ?? HOME_GLASS.pillTransmission + (HOME_GLASS.chatTransmission - HOME_GLASS.pillTransmission) * progress
   const blur = material?.blur ?? HOME_GLASS.blur
   const style = {
     '--glass-tint': 1 - transmission / 100,
     '--glass-rim': (material?.rim ?? HOME_GLASS.rim) / 100,
-    '--glass-reflection': HOME_GLASS.reflection / 100,
+    '--glass-reflection': (material?.reflection ?? HOME_GLASS.reflection) / 100,
     '--glass-shadow': (material?.shadow ?? HOME_GLASS.shadow) / 100,
     backdropFilter: sampling ? ready ? `url("#${id}")` : `blur(${blur}px)` : 'none',
     WebkitBackdropFilter: sampling ? ready ? `url("#${id}")` : `blur(${blur}px)` : 'none',

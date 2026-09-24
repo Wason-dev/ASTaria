@@ -131,7 +131,7 @@ test('flow changes long band filaments without moving the horizon or group ancho
   h.run(30)
   assert.deepEqual(h.geometry, geometry); assert.deepEqual(h.positions, positions)
   assert.notDeepEqual(strokeSnapshot(h), paths)
-  assert.ok(h.canvas.context.strokes.some(stroke => stroke.width === 22 && stroke.points.length === 225))
+  assert.ok(h.canvas.context.strokes.some(stroke => stroke.width === DEFAULT_HORIZON_TUNING.thickness && stroke.points.length === 225))
   assert.ok(h.canvas.context.strokes.filter(stroke => stroke.points.length > 20 && stroke.width <= 1.3).length > 40)
   assert.deepEqual([...h.positions.keys()], h.state.groups.filter(group => group.day === 0).map(group => group.id))
   assert.equal(h.canvases.length, 2, 'only the transparent overlay and cached halo; the homepage provides the sky')

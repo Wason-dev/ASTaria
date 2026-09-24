@@ -10,7 +10,7 @@ export type HorizonTuning = {
 }
 
 export const DEFAULT_HORIZON_TUNING: HorizonTuning = {
-  height: .62, curvature: .16, thickness: 22, brightness: 1,
+  height: .62, curvature: .16, thickness: 12, brightness: .8,
   glow: .8, flow: .8, wave: .5, exitSeconds: 2.6,
 }
 export const HORIZON_LIMITS: Record<keyof HorizonTuning, readonly [number, number]> = {

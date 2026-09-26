@@ -14,6 +14,7 @@ export type HorizonVisual = {
   groups: readonly OrbitGroup[]; day: OrbitDay; tuning: HorizonTuning; reduced: boolean; reveal: number
   pointer: HorizonPoint | null; dragging: { id: string; x: number; y: number } | null
   dropTarget: { day: OrbitDay; index: number } | null; expanded: string | null
+  working?: { itemIds: readonly string[] } | null
 }
 
 const clamp = (n: number, low = 0, high = 1) => Math.min(high, Math.max(low, n))
@@ -102,6 +103,9 @@ export class HorizonCanvas {
   private materialDrift = spring(0)
   private materialDestination = 0
   private groupVisibility = 1
+  private workTime = 0
+  private workLight = 0
+  private workFocus = spring(.5)
 
   constructor(
     canvas: HTMLCanvasElement, getState: () => HorizonVisual,
@@ -346,6 +350,29 @@ export class HorizonCanvas {
     this.onPositions(positions, projection)
   }
 
+  /** A moving highlight follows the existing curved limb; its cycle is not progress. */
+  private workScan(state: HorizonVisual, projection: HorizonProjection, dt: number) {
+    this.workLight = state.reduced ? Number(Boolean(state.working)) : clamp(this.workLight + (state.working ? 1 : -1) * dt * 3)
+    if (this.workLight <= 0) return
+    if (!state.reduced) this.workTime += dt
+    const anchors = horizonGroupPositions(state.groups, state.day, projection)
+    const matched = state.groups.filter(group => group.tasks.some(task => state.working?.itemIds.includes(task.id)))
+      .map(group => anchors.get(group.id)?.t).filter((value): value is number => value !== undefined)
+    const target = matched.length ? matched.reduce((sum, value) => sum + value, 0) / matched.length
+      : state.reduced ? .5 : .5 + .34 * Math.sin(this.workTime * .6)
+    this.workFocus = state.reduced ? spring(target) : springStep(this.workFocus, target, dt, 5, 1)
+    const center = this.workFocus.value, span = matched.length ? .07 : .11
+    const a = this.point(center - span), b = this.point(center + span)
+    const c = this.context, gradient = c.createLinearGradient(a.x, a.y, b.x, b.y)
+    gradient.addColorStop(0, '#f0d4a000'); gradient.addColorStop(.5, '#fff1cf'); gradient.addColorStop(1, '#f0d4a000')
+    c.save(); c.globalCompositeOperation = 'screen'; c.lineCap = 'round'
+    this.path(center - span, center + span)
+    c.strokeStyle = gradient; c.lineWidth = Math.max(12, state.tuning.thickness * 1.4)
+    c.globalAlpha = this.workLight * clamp(state.reveal) * .14; c.stroke()
+    c.lineWidth = 2.8; c.globalAlpha = this.workLight * clamp(state.reveal) * .8; c.stroke()
+    c.restore()
+  }
+
   private groupStrand(motion: GroupMotion, anchor: HorizonPoint, t: number, state: HorizonVisual, fade: number) {
     if (fade <= 0) return
     const c = this.context, lift = clamp(motion.lift.value)
@@ -403,7 +430,7 @@ export class HorizonCanvas {
     c.setTransform(this.ratio, 0, 0, this.ratio, 0, 0)
     c.globalAlpha = 1; c.globalCompositeOperation = 'source-over'
     c.clearRect(0, 0, this.width, this.height)
-    this.ribbon(state, projection); this.groups(state, projection, dt)
+    this.ribbon(state, projection); this.groups(state, projection, dt); this.workScan(state, projection, dt)
     if (!this.disposed && !document.hidden) this.frame = requestAnimationFrame(this.render)
   }
 }

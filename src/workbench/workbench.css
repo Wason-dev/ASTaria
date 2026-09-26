@@ -1,5 +1,5 @@
-.home-scene-ui { position: absolute; inset: 0; visibility: visible; transition: visibility 0s, opacity 260ms; opacity: 1 }
-.home-workspace[data-page=workbench] .home-scene-ui { visibility: hidden; opacity: 0; transition: visibility 0s 260ms, opacity 260ms; pointer-events: none }
+.home-scene-ui { position: absolute; inset: 0; visibility: visible; transition: visibility 0s, opacity 760ms cubic-bezier(.2,.7,.2,1); opacity: 1 }
+.home-workspace[data-page=workbench] .home-scene-ui { visibility: hidden; opacity: 0; transition: visibility 0s 760ms, opacity 760ms cubic-bezier(.2,.7,.2,1); pointer-events: none }
 .p0[data-night=false] { color-scheme: light; color: #30343a; --p0-fg: #30343a; --p0-muted: #6e7278; --p0-line: #353a451c; --p0-accent: #626b75 }
 .p0[data-night=false] .p0-whisper { visibility: hidden }
 .p0[data-night=false] .home-menu { --home-menu-shadow: 0 6px 18px #20252d12 }

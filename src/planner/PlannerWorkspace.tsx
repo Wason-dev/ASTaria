@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import type { Task } from '../domain/task'
-import { weekSchedule, WEEKDAYS } from '../domain/schedule'
 import { localDay, shiftDay, shiftMonth } from '../home/agenda'
 import { GlassSamplingContext, MeasuredGlassSurface } from '../home/GlassSurface'
 import { WorkspaceHeading } from '../ui/WorkspaceHeading'
@@ -14,7 +13,7 @@ import { TimetableBoard } from './TimetableBoard'
 import { PlannerOverview } from './PlannerOverview'
 import { RoutineBrowser } from './RoutineBrowser'
 import { PlannerIcon as Icon } from './PlannerIcon'
-import { CreateTaskDialog, DayEventDialog, PlannerDialog, RoutineDialog, TaskPlanDialog } from './PlannerDialogs'
+import { CreateTaskDialog, DayEventDialog, RoutineDialog, TaskPlanDialog } from './PlannerDialogs'
 import type { DayEvent, Routine, PlannerAction } from './types'
 import './planner.css'
 import './planner-glass.css'
@@ -40,12 +39,11 @@ export function PlannerWorkspace({ active, initialMode = 'week', tasks, tasksLoa
   const [dayEvent, setDayEvent] = useState<DayEvent | null>(null)
   const [taskSelection, setTaskSelection] = useState<{ taskId: string; blockId?: string; date?: string } | null>(null)
   const openTask = (taskId: string, blockId?: string, date?: string) => setTaskSelection({ taskId, blockId, date })
-  const [creating, setCreating] = useState(false), [importing, setImporting] = useState(false), [routinesOpen, setRoutinesOpen] = useState(false)
+  const [creating, setCreating] = useState(false), [routinesOpen, setRoutinesOpen] = useState(false)
   const [actionError, setActionError] = useState('')
-  const [importDone, setImportDone] = useState(false)
   const heading = useRef<HTMLHeadingElement>(null)
   useEffect(() => {
-    if (!active) { setRoutine(null); setDayEvent(null); setTaskSelection(null); setCreating(false); setImporting(false); setRoutinesOpen(false); return }
+    if (!active) { setRoutine(null); setDayEvent(null); setTaskSelection(null); setCreating(false); setRoutinesOpen(false); return }
     heading.current?.focus({ preventScroll: true })
   }, [active])
   const select = (date: string) => {
@@ -79,14 +77,6 @@ export function PlannerWorkspace({ active, initialMode = 'week', tasks, tasksLoa
     setDirection(['month', 'week', 'day'].indexOf(next) >= ['month', 'week', 'day'].indexOf(mode) ? 1 : -1)
     setMode(next); setAnchor(parseDay(selected))
   }
-  const loadLegacy = async () => {
-    const imported: Routine[] = WEEKDAYS.flatMap((day, index) => weekSchedule(day).map(slot => ({
-      id: `legacy-${index+1}-${slot.period}`, title: slot.period === '午休' ? '午休' : slot.subject === '—' ? '晨间准备' : slot.subject,
-      kind: slot.period === '午休' || slot.kind === 'blank' ? 'break' as const : slot.kind === 'free' ? 'available' as const : 'class' as const,
-      weekdays: [index+1], start: slot.start, end: slot.end, location: '学校', items: [], enabled: true,
-    })))
-    try { await act({ type: 'import-routines', routines: imported }); setImportDone(true); onNotice('已载入旧课表，请核对课程和空课；晚自习保留') } catch { /* Dialog keeps the error visible. */ }
-  }
   return <GlassSamplingContext.Provider value={active}><section ref={root} className="planner" data-mode={mode} data-selected-date={selected} data-layout={layoutMode} data-active={active} data-theme={palette.theme} data-bg-blur={palette.backgroundBlur > 0 ? 'on' : 'off'} style={style} aria-label={title} aria-hidden={!active} inert={!active}>
     <div className="pl-background" /><div className="pl-scroll workspace-page-viewport"><div className="pl-container workspace-page-container">
       <WorkspaceHeading className="pl-page-header" copyClassName="pl-page-title" title={title} description="此刻到接下来，要做的事都有安排" headingRef={heading}>
@@ -99,7 +89,7 @@ export function PlannerWorkspace({ active, initialMode = 'week', tasks, tasksLoa
       {(planner.error || tasksError) && <p className="pl-error" role="alert">{planner.error || tasksError}<button onClick={() => { void planner.refresh(); onRefresh() }}>重新读取</button></p>}
       {!state && <div className="pl-empty">{planner.loading ? '正在读取日程' : '日程暂不可用'}</div>}
       {state && <>
-        {view === 'timetable' && !state.timetableConfirmed && <div className="pl-setup"><span>核对课程和可用时间 · 默认含晚自习与周末 09:00–22:00，可在每周安排中调整</span><div><button onClick={() => { setImportDone(false); setImporting(true) }}>载入旧课表</button><button onClick={() => setRoutine({ value: 'new' })}>自己录入</button><button disabled={planner.saving} onClick={() => void safeAct({ type: 'import-routines', routines: [] }, '已确认每周安排')}>已核对完成</button></div></div>}
+        {view === 'timetable' && !state.timetableConfirmed && <div className="pl-setup"><span>添加固定安排和可用时间，完成后确认每周安排</span><div><button onClick={() => setRoutine({ value: 'new' })}>自己录入</button><button disabled={planner.saving} onClick={() => void safeAct({ type: 'import-routines', routines: [] }, '已确认每周安排')}>已核对完成</button></div></div>}
         {pane(<PlannerOverview view={view} selected={selected} anchor={anchor} now={now} state={state} tasks={tasks} saving={planner.saving} error={actionError}
           onMoveDay={amount => select(localDay(shiftDay(parseDay(selected), amount)))} onTask={openTask} onDayEvent={setDayEvent} onCreate={() => setCreating(true)} onAct={safeAct} />, `pl-overview ${view === 'calendar' ? 'pl-calendar-summary' : 'pl-day-panel'}`)}
         <div className="pl-layout">
@@ -124,7 +114,6 @@ export function PlannerWorkspace({ active, initialMode = 'week', tasks, tasksLoa
     {dayEvent && state && <DayEventDialog key={dayEvent.id} event={dayEvent} state={state} act={act} onClose={() => setDayEvent(null)} onNotice={onNotice} />}
     {selectedTask && state && <TaskPlanDialog key={`${selectedTask.id}:${taskSelection?.blockId ?? ''}`} task={selectedTask} state={state} selected={taskSelection?.date ?? selected} initialBlockId={taskSelection?.blockId} act={act} onClose={() => setTaskSelection(null)} onNotice={onNotice} onRefresh={onRefresh} />}
     {creating && <CreateTaskDialog selected={selected} onClose={() => setCreating(false)} onRefresh={onRefresh} onNotice={onNotice} />}
-    {importing && <PlannerDialog title="载入旧课表" onClose={() => setImporting(false)} busy={planner.saving} closeRequested={importDone}><p>项目里保存着一份周一到周五的旧课表，载入后请核对课程、空课和时间</p><p className="pl-muted">午休会作为休息保留；已有晚自习和自行添加的安排都会保留</p><div className="pl-import-preview">{WEEKDAYS.map(day => <div key={day}><strong>{day}</strong><span>{weekSchedule(day).filter(slot => slot.kind !== 'free' && slot.kind !== 'blank' && slot.period !== '午休').map(slot => slot.subject).join(' · ')}</span></div>)}</div>{actionError && <p className="pl-error" role="alert">{actionError}</p>}<button className="pl-primary" disabled={planner.saving} onClick={() => void loadLegacy()}>载入并核对</button></PlannerDialog>}
     {routinesOpen && state && <RoutineBrowser routines={state.routines} selectedDate={selected} onClose={() => setRoutinesOpen(false)}
       onEdit={item => { setRoutinesOpen(false); setRoutine({ value: item }) }}
       onAdd={weekday => { setRoutinesOpen(false); setRoutine({ value: 'new', initialWeekday: weekday }) }} />}

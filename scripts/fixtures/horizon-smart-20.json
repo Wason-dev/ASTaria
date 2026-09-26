@@ -1,0 +1,212 @@
+{
+  "meta": {
+    "name": "horizon-smart-20",
+    "purpose": "固定 seed 的 3 日 × 20 项随机候选任务，用于人工/离线核验智能分类与分组表现",
+    "seed": 20260926,
+    "rng": "mulberry32 + Fisher-Yates",
+    "reproducible": true,
+    "generatedOn": "2026-09-26",
+    "itemCount": 20,
+    "dayCount": 3,
+    "minuteChoices": [
+      15,
+      20,
+      25,
+      30,
+      40
+    ],
+    "areas": [
+      "math",
+      "physics",
+      "english",
+      "chinese",
+      "projects",
+      "life"
+    ],
+    "energies": [
+      "deep",
+      "light"
+    ],
+    "method": [
+      "1. 固定 seed 20260926 初始化 mulberry32，所有随机性只来自该序列。",
+      "2. 题材池按 area 分桶，每桶先取标 must 的语义对照组条目，再按 Fisher-Yates 洗牌抽取补足配额（english 4 / projects 4 / math 3 / physics 2 / chinese 3 / life 4）。",
+      "3. 逐项抽时长：deep 从 [40,40,40,30,30,25] 抽，light 从 [15,15,20,20,25,30] 抽，取值集合为 [15,20,25,30,40]。",
+      "4. 洗牌后贪心投放日期：优先放入「项数最少、总时长最少」且满足「每日 ≤7 项、总时长 ≤240 分钟」的一天；单次不可行则用同一 rng 继续下一次尝试。",
+      "5. 通过自检后按 day 顺序重排，并分配中性 id t01–t20。"
+    ],
+    "poolSize": 28,
+    "attempts": 1,
+    "note": "本文件只含候选任务与生成信息，不含模型分组结果，也不含验收期望；验收约束与语义观察点见 /tmp/astaria-horizon-smart-20-notes.md，不传给模型。"
+  },
+  "items": [
+    {
+      "id": "t01",
+      "title": "雅思核心词汇 List 9 快速过筛",
+      "area": "english",
+      "energy": "light",
+      "minutes": 30,
+      "day": 0,
+      "goal": "雅思7分冲刺"
+    },
+    {
+      "id": "t02",
+      "title": "大学物理电磁学高斯定理例题精做",
+      "area": "physics",
+      "energy": "deep",
+      "minutes": 25,
+      "day": 0
+    },
+    {
+      "id": "t03",
+      "title": "短片《夏日回声》配乐备选试听标注",
+      "area": "projects",
+      "energy": "light",
+      "minutes": 25,
+      "day": 0,
+      "goal": "完成短片《夏日回声》"
+    },
+    {
+      "id": "t04",
+      "title": "线性代数特征值与特征向量习题",
+      "area": "math",
+      "energy": "deep",
+      "minutes": 40,
+      "day": 0
+    },
+    {
+      "id": "t05",
+      "title": "短片《夏日回声》第三幕分镜重画",
+      "area": "projects",
+      "energy": "deep",
+      "minutes": 25,
+      "day": 0,
+      "goal": "完成短片《夏日回声》"
+    },
+    {
+      "id": "t06",
+      "title": "晚上十一点前放下手机准备睡觉",
+      "area": "life",
+      "energy": "light",
+      "minutes": 20,
+      "day": 0
+    },
+    {
+      "id": "t07",
+      "title": "图书馆还书与续借",
+      "area": "life",
+      "energy": "light",
+      "minutes": 15,
+      "day": 0
+    },
+    {
+      "id": "t08",
+      "title": "概率论公式卡片默写",
+      "area": "math",
+      "energy": "light",
+      "minutes": 25,
+      "day": 1
+    },
+    {
+      "id": "t09",
+      "title": "交换申请个人陈述中文初稿",
+      "area": "chinese",
+      "energy": "deep",
+      "minutes": 40,
+      "day": 1,
+      "goal": "完成海外交换申请"
+    },
+    {
+      "id": "t10",
+      "title": "课程论文提纲：方言与身份认同",
+      "area": "chinese",
+      "energy": "deep",
+      "minutes": 40,
+      "day": 1
+    },
+    {
+      "id": "t11",
+      "title": "古诗文默写自查（《劝学》《师说》）",
+      "area": "chinese",
+      "energy": "light",
+      "minutes": 25,
+      "day": 1
+    },
+    {
+      "id": "t12",
+      "title": "雅思听力 Section 3 精听并整理同义替换",
+      "area": "english",
+      "energy": "deep",
+      "minutes": 30,
+      "day": 1,
+      "goal": "雅思7分冲刺"
+    },
+    {
+      "id": "t13",
+      "title": "羽毛球场预约与球友时间确认",
+      "area": "life",
+      "energy": "light",
+      "minutes": 30,
+      "day": 1
+    },
+    {
+      "id": "t14",
+      "title": "雅思阅读 Heading 题错因归类",
+      "area": "english",
+      "energy": "deep",
+      "minutes": 30,
+      "day": 2,
+      "goal": "雅思7分冲刺"
+    },
+    {
+      "id": "t15",
+      "title": "晨跑 5 公里配速记录",
+      "area": "life",
+      "energy": "light",
+      "minutes": 30,
+      "day": 2
+    },
+    {
+      "id": "t16",
+      "title": "短片《夏日回声》粗剪时间线整理",
+      "area": "projects",
+      "energy": "deep",
+      "minutes": 40,
+      "day": 2,
+      "goal": "完成短片《夏日回声》"
+    },
+    {
+      "id": "t17",
+      "title": "交换申请作品集目录与页序排定",
+      "area": "projects",
+      "energy": "light",
+      "minutes": 30,
+      "day": 2,
+      "goal": "完成海外交换申请"
+    },
+    {
+      "id": "t18",
+      "title": "概率论第七章假设检验错题重做",
+      "area": "math",
+      "energy": "deep",
+      "minutes": 30,
+      "day": 2
+    },
+    {
+      "id": "t19",
+      "title": "物理光学干涉条纹预习笔记",
+      "area": "physics",
+      "energy": "light",
+      "minutes": 20,
+      "day": 2
+    },
+    {
+      "id": "t20",
+      "title": "交换申请个人陈述英文润色",
+      "area": "english",
+      "energy": "deep",
+      "minutes": 40,
+      "day": 2,
+      "goal": "完成海外交换申请"
+    }
+  ]
+}

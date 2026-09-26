@@ -27,7 +27,6 @@ import type { PlannerPage } from '../planner/PlannerWorkspace'
 import type { ResponseEffectSettings, ResponsePhase } from '../prototype/responseEffects'
 import type { RenderProfile, RenderScene } from '../prototype/renderProfile'
 import { usePreferences, notificationsAllowed } from '../xixi/preferences'
-import { StringStudio } from '../xixi/StringStudio'
 import { OrbitStudio } from '../xixi/OrbitStudio'
 import { FreeTimePanel } from '../xixi/FreeTimePanel'
 import { useXixiNotice } from '../xixi/useXixiNotice'
@@ -69,10 +68,8 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
   const started = useRef(false)
   const [stringsOpen, setStringsOpen] = useState(false)
   const stringsOpener = useRef<HTMLElement | null>(null)
-  const [orbitPreview, setOrbitPreview] = useState(true)
   const [stringCovered, setStringCovered] = useState(false)
   const [previewPhase, setPreviewPhase] = useState<ResponsePhase | null>(null)
-  const previewTimers = useRef<Array<ReturnType<typeof setTimeout>>>([])
   useEffect(() => {
     onThemeChange(appearance.value.theme === 'dark')
   }, [appearance.value.theme, onThemeChange])
@@ -82,19 +79,18 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
   const chat = useXixiConversation(() => { data.retry(); notifyLocalDataChange() }, setNotification)
   useEffect(() => { onResponseEffect(preferences.value.effect) }, [preferences.value.effect, onResponseEffect])
   useEffect(() => { onRenderProfile(preferences.value.render?.profile ?? 'full', page === 'home' ? 'home' : 'workspace') }, [preferences.value.render?.profile, page, onRenderProfile])
-  useEffect(() => { onResponsePhase(previewPhase ?? chat.responsePhase) }, [previewPhase, chat.responsePhase, onResponsePhase])
-  useEffect(() => () => { previewTimers.current.forEach(clearTimeout); onResponsePhase('idle') }, [onResponsePhase])
+  useEffect(() => { onResponsePhase(page === 'settings' ? previewPhase ?? chat.responsePhase : chat.responsePhase) }, [page, previewPhase, chat.responsePhase, onResponsePhase])
+  useEffect(() => () => onResponsePhase('idle'), [onResponsePhase])
+  useEffect(() => { if (page !== 'settings') setPreviewPhase(null) }, [page])
   useEffect(() => {
     if (!preferences.loaded) return
     const value = preferences.value
     appearance.setValue(current => ({ ...current, theme: value.theme, ...(value.glass === 'soft' ? { blur: 6 } : { blur: 0 }), font: value.density === 'comfortable' ? 14 : 13, gap: value.density === 'comfortable' ? 12 : 8 }))
     if (!started.current) { started.current = true; setPage(value.startupPage === 'companion' ? 'free-time' : value.startupPage) }
   }, [preferences.loaded, preferences.value.theme, preferences.value.glass, preferences.value.density])
-  const stopPreview = () => { previewTimers.current.forEach(clearTimeout); previewTimers.current = []; setPreviewPhase(null) }
-  const previewEffect = () => {
-    stopPreview(); setPreviewPhase('thinking')
-    previewTimers.current = [setTimeout(() => setPreviewPhase('replying'), 3200), setTimeout(() => setPreviewPhase('idle'), 7200), setTimeout(() => setPreviewPhase(null), 10500)]
-  }
+  const stopPreview = useCallback(() => setPreviewPhase(null), [])
+  const previewEffect = useCallback(() => setPreviewPhase('thinking'), [])
+  const changePreviewPhase = useCallback((phase: ResponsePhase) => setPreviewPhase(current => current === null ? null : phase), [])
   // Old scenario receipts lead to the new home for optional plans.
   useEffect(() => {
     const open = () => changePage('free-time')
@@ -242,7 +238,6 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
     focusAfterTransition.current = false
     clearTimeout(menuTimer.current)
     stringsOpener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    setOrbitPreview(true)
     setMenuOpen(false); setStringCovered(true); setStringsOpen(true)
   }, [])
   const closeStrings = useCallback(() => {
@@ -343,7 +338,7 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
   const chatVisible = progress > .35
 
   return <div ref={root} className="home-workspace" data-spatial-ui data-string-covered={stringCovered} data-theme={appearance.value.theme} data-chat-open={chatOpen} data-page={page} data-grid={preferences.value.grid} data-card-edges={preferences.value.cardEdges ?? 'both'} data-motion={preferences.value.effect.motion} data-effect-preview={previewPhase !== null}>
-    <nav ref={nav} className="home-nav" aria-label="ASTaria 导航" data-menu-open={menuOpen}
+    <nav ref={nav} className="home-nav" aria-label="ASTaria 导航" data-menu-open={menuOpen} inert={previewPhase !== null} aria-hidden={previewPhase !== null}
       onPointerEnter={event => { if (event.pointerType !== 'touch') { clearTimeout(menuTimer.current); menuOpenedByHover.current = !menuOpen; setMenuOpen(true) } }}
       onPointerLeave={() => { menuTimer.current = setTimeout(() => { if (!nav.current?.contains(document.activeElement)) setMenuOpen(false) }, 180) }}
       onFocus={() => clearTimeout(menuTimer.current)}
@@ -467,10 +462,8 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
     <Workbench active={page === 'workbench'} appearance={appearance} data={data} now={now} onCapture={() => changePage('home', true)} onNotice={setNotification} chat={chat} onSettings={openSettings} />
     <PlannerWorkspace active={page === 'schedule'} tasks={data.tasks} tasksLoading={data.loading} tasksError={data.loadError} now={now} appearance={appearance} onNotice={setNotification} onRefresh={data.retry} />
     {(freeTimeMounted || page === 'free-time') && <FreeTimePanel active={page === 'free-time' && !stringCovered} today={today} theme={preferences.value.theme} grid={preferences.value.grid} glass={preferences.value.glass} onOpenStrings={openStrings} onChanged={freeTimeChanged} onNotice={setNotification} />}
-    {settingsOpen && <LocalSettings initialTab={settingsTab} onClose={closeSettings} onSaved={chat.refreshStatus} onPreviewEffect={previewEffect} onStopPreview={stopPreview} previewPhase={previewPhase} />}
-    {stringsOpen && (orbitPreview
-      ? <OrbitStudio onReveal={() => setStringCovered(false)} onClose={closeStrings} onSelected={setNotification} onExisting={() => setOrbitPreview(false)} />
-      : <StringStudio onReveal={() => setStringCovered(false)} onClose={closeStrings} onSaved={message => { data.retry(); void chat.refresh(); setNotification(message) }} />)}
+    {settingsOpen && <LocalSettings initialTab={settingsTab} onClose={closeSettings} onSaved={chat.refreshStatus} onPreviewEffect={previewEffect} onPreviewPhaseChange={changePreviewPhase} onStopPreview={stopPreview} previewPhase={previewPhase} />}
+    {stringsOpen && <OrbitStudio onReveal={() => setStringCovered(false)} onClose={closeStrings} onSaved={message => { data.retry(); void chat.refresh(); setNotification(message) }} />}
     {selectedId && <TaskDialog task={selectedTask} saving={data.saving} onClose={closeTask} onStatus={data.setStatus} />}
   </div>
 }

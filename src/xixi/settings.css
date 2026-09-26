@@ -5,7 +5,7 @@
 .xixi-settings-background::after{content:"";position:absolute;inset:0;background-image:linear-gradient(to right,#c3c9d510 1px,transparent 1px),linear-gradient(to bottom,#c3c9d510 1px,transparent 1px);background-size:48px 48px}
 .xixi-settings[data-theme=light] .xixi-settings-background::after{background-image:linear-gradient(to right,#7891a414 1px,transparent 1px),linear-gradient(to bottom,#7891a414 1px,transparent 1px)}
 .xixi-settings[data-grid=false] .xixi-settings-background::after{display:none}
-.xixi-settings-scroll{position:absolute;inset:64px 0 0;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable;padding:12px 32px 24px;box-sizing:border-box;scrollbar-width:thin;scrollbar-color:#d5bb8b50 transparent}
+.xixi-settings-scroll{position:absolute;inset:64px 0 0;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable;padding:12px 32px 24px;box-sizing:border-box;scrollbar-width:thin;scrollbar-color:#d5bb8b50 transparent;opacity:1;visibility:visible;transition:opacity .24s ease,visibility 0s}
 .xixi-settings-container{max-width:1440px;margin:0 auto}
 .xixi-settings-page-header,.xixi-settings-shell{animation:settings-page-in .32s ease both}
 .xixi-settings-page-header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:14px}
@@ -36,6 +36,16 @@
 .xixi-settings-content[data-section="外观与动画"]>section{padding-top:6px}
 .xixi-settings-content[data-section="外观与动画"] .xixi-setting-row{padding:10px 0}
 .xixi-settings-content>.xixi-render-section{grid-column:1/-1}
+.xixi-appearance-columns{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:32px;align-items:stretch;padding-top:6px;min-width:0}
+.xixi-appearance-space{display:grid;gap:16px;min-width:0}
+.xixi-appearance-space>section{min-width:0}
+.xixi-appearance-space>.xixi-horizon-settings{padding-top:12px;border-top:1px solid var(--settings-line)}
+.xixi-appearance-space .xixi-horizon-setting{display:grid;gap:2px;padding:6px 0}
+.xixi-appearance-space .xixi-horizon-setting-control{width:100%;max-width:none}
+.xixi-appearance-response{display:flex;flex-direction:column;min-width:0}
+.xixi-appearance-response>.xixi-effect-options{margin:0 0 12px}
+.xixi-appearance-response-controls{display:flex;flex:1;flex-direction:column;justify-content:space-between}
+.xixi-appearance-preview{grid-column:1/-1;justify-content:flex-end;margin-top:2px;font-size:10px;color:var(--settings-muted)}
 .xixi-settings .xixi-render-options{grid-template-columns:repeat(5,minmax(0,1fr));margin:10px 0 6px}
 :is(.p0,.app-shell) .xixi-settings .xixi-render-options button{min-height:60px;padding:10px 12px}
 :is(.p0,.app-shell) .xixi-settings .xixi-render-note{font-size:11px;margin:5px 0 0}
@@ -119,31 +129,28 @@
 .xixi-settings-feedback{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:24px;margin-top:12px;padding-top:8px;border-top:1px solid var(--settings-line);font-size:11px;color:var(--settings-accent)}
 :is(.p0,.app-shell) .xixi-settings .xixi-file-label{position:relative;display:inline-flex;align-items:center;border:1px solid var(--settings-line);border-radius:12px;padding:7px 11px;font-size:11px;margin:0;cursor:pointer;overflow:hidden}
 .xixi-file-label input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer}.xixi-import-confirm{margin-top:16px;padding:12px;border:1px solid #d8bb7960;border-radius:14px}.xixi-import-confirm button{margin-right:7px}
-.xixi-preview-dock{position:fixed;left:max(24px,calc((100vw - 1320px)/2));bottom:28px;width:340px;max-width:calc(100vw - 32px);isolation:isolate;border-radius:24px;pointer-events:auto}
-.xixi-preview-content{position:relative;z-index:1;display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;padding:16px;animation:settings-dock-in .24s ease both}
-.xixi-preview-content>span{width:100%;text-align:center;font-size:11px;color:var(--settings-accent)}.xixi-preview-content>div{display:flex;gap:7px;width:100%;justify-content:center}.xixi-preview-content button[aria-pressed=true]{border-color:var(--settings-accent);background:#d8bb7924}
+.xixi-preview-dock{position:fixed;left:max(24px,calc((100vw - 1320px)/2));bottom:28px;width:max-content;max-width:calc(100vw - 32px);isolation:isolate;border-radius:24px;pointer-events:none;opacity:0;visibility:hidden;transform:translateY(8px);transition:opacity .24s ease,transform .24s ease,visibility 0s .24s}
+.xixi-preview-content{position:relative;z-index:1;display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;padding:14px}
 .xixi-settings[data-previewing=true]{pointer-events:none}
-.xixi-settings[data-preview-state=entering] :is(.xixi-settings-page-header,.xixi-settings-shell){animation:settings-page-out .24s ease both}
-.xixi-settings[data-preview-state=active] .xixi-settings-scroll{visibility:hidden;pointer-events:none}
-.xixi-settings[data-preview-state=entering] .xixi-settings-panel .home-glass-surface,.xixi-settings[data-preview-state=active] .xixi-settings-panel .home-glass-surface{opacity:0;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;box-shadow:none!important;transition:none}
-.xixi-settings[data-preview-state=entering] .xixi-settings-background,.xixi-settings[data-preview-state=active] .xixi-settings-background{opacity:0}
-.xixi-settings[data-preview-state=leaving] .xixi-preview-content{animation:settings-dock-out .18s ease both}
-.xixi-settings[data-preview-state=leaving] .xixi-preview-dock .home-glass-surface,.xixi-settings[data-closing=true] .home-glass-surface{backdrop-filter:none!important;-webkit-backdrop-filter:none!important;box-shadow:none!important;opacity:0;transition:none}
+.xixi-settings[data-previewing=true] .xixi-settings-scroll{opacity:0;visibility:hidden;pointer-events:none;transition:opacity .24s ease,visibility 0s .24s}
+.xixi-settings[data-previewing=true] .xixi-settings-background{opacity:0}
+.xixi-settings[data-previewing=true] .xixi-preview-dock{opacity:1;visibility:visible;pointer-events:auto;transform:none;transition:opacity .24s ease,transform .24s ease,visibility 0s}
+.xixi-settings[data-closing=true] .home-glass-surface{backdrop-filter:none!important;-webkit-backdrop-filter:none!important;box-shadow:none!important;opacity:0;transition:none}
 .xixi-settings[data-closing=true]{pointer-events:none}.xixi-settings[data-closing=true] .xixi-settings-background{opacity:0;transition:none}.xixi-settings[data-closing=true] :is(.xixi-settings-page-header,.xixi-settings-shell){animation:settings-page-out .18s ease both}
 .xixi-settings-scroll::-webkit-scrollbar,.xixi-settings-tabs::-webkit-scrollbar{width:7px;height:5px}.xixi-settings-scroll::-webkit-scrollbar-thumb,.xixi-settings-tabs::-webkit-scrollbar-thumb{background:#d5bb8b50;border:2px solid transparent;background-clip:padding-box;border-radius:8px}
 @keyframes settings-page-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 @keyframes settings-page-out{to{opacity:0;transform:translateY(6px)}}
 @keyframes settings-content-in{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
-@keyframes settings-dock-in{from{opacity:0;transform:translateY(12px) scale(.97)}to{opacity:1;transform:none}}
-@keyframes settings-dock-out{to{opacity:0;transform:translateY(10px) scale(.98)}}
 @media(max-width:800px){.xixi-settings-scroll{padding:20px 22px 48px}.xixi-settings-page-header{align-items:flex-start;margin-bottom:16px}.xixi-settings-page-header>div{flex-direction:column;align-items:flex-start;gap:2px}.xixi-settings-page-header>div>span{display:none}.xixi-settings-shell{padding:15px 20px 20px}.xixi-settings-content{grid-template-columns:minmax(0,1fr);gap:16px}.xixi-settings-content>section+section{padding-top:22px;border-top:1px solid var(--settings-line)}}
 @media(min-width:801px) and (max-height:800px){.xixi-settings-scroll{padding-top:4px;padding-bottom:16px}.xixi-settings-page-header{margin-bottom:10px}.xixi-settings-tabs{margin-bottom:4px;padding-bottom:8px}.xixi-settings-content[data-section="外观与动画"]{gap:6px 28px}.xixi-settings-content[data-section="外观与动画"] .xixi-setting-row{padding:8px 0}.xixi-settings-feedback{margin-top:8px}}
 @media(min-width:801px) and (max-height:800px){.xixi-settings-content[data-section="通知"]>section{padding-top:8px}.xixi-operation-filters{margin:6px 0 10px}.xixi-operation-list{gap:7px}.xixi-operation-list>li{padding:8px 12px;row-gap:3px}.xixi-operation-history .xixi-settings-pagination{margin-top:8px}:is(.p0,.app-shell) .xixi-settings .xixi-operation-body>p{-webkit-line-clamp:1}}
 @media(max-width:800px){.xixi-settings .xixi-render-options{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:800px){.xixi-appearance-columns{grid-template-columns:minmax(0,1fr);gap:24px}.xixi-appearance-space{gap:20px}.xixi-appearance-response{padding-top:20px;border-top:1px solid var(--settings-line)}.xixi-appearance-preview{justify-content:flex-start}.xixi-appearance-space .xixi-horizon-settings-grid{grid-template-columns:repeat(2,minmax(0,1fr));column-gap:24px}}
+@media(max-width:600px){.xixi-appearance-space .xixi-horizon-settings-grid{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:1000px) and (min-width:801px){.xixi-settings-content[data-section="析熙"],.xixi-settings-content[data-section="通知"]{gap:24px;grid-template-columns:repeat(2,minmax(0,1fr))}.xixi-assistant-preferences .xixi-setting-row{gap:12px;flex-wrap:wrap}.xixi-assistant-preferences .xixi-setting-row>div:last-child{max-width:100%}.xixi-operation-filters{gap:2px}:is(.p0,.app-shell) .xixi-settings .xixi-operation-filters button{padding:5px 7px}}
 @media(max-width:800px){.xixi-settings-content[data-section="析熙"],.xixi-settings-content[data-section="通知"]{grid-template-columns:minmax(0,1fr);gap:20px}.xixi-memory-settings{margin-top:20px}.xixi-operation-list>li{column-gap:10px;padding:12px}.xixi-operation-filters{margin-bottom:12px}}
 @media(max-width:600px){.xixi-settings-scroll{padding:14px 16px 40px}.xixi-settings-page-header{margin-bottom:15px}:is(.p0,.app-shell) .xixi-settings h2{font-size:21px}.xixi-settings-shell{padding:13px 16px 18px}.xixi-setting-row{gap:12px;flex-wrap:wrap}.xixi-setting-row>div:last-child{max-width:100%}.xixi-setting-row:has(.xixi-inline-form)>div:first-child{flex-basis:100%}.xixi-settings-tabs{gap:3px}.xixi-settings-tabs button{padding:7px 9px}.xixi-preview-dock{left:12px;right:12px;bottom:16px;width:auto;max-width:none;max-height:40dvh}.xixi-preview-content{padding:14px}.xixi-settings-page-header p{font-size:10px}}
-@media(prefers-reduced-motion:reduce){.xixi-settings-page-header,.xixi-settings-shell,.xixi-settings-content,.xixi-preview-content,.xixi-settings[data-preview-state=leaving] .xixi-preview-content,.xixi-settings[data-closing=true] :is(.xixi-settings-page-header,.xixi-settings-shell){animation:none}.xixi-settings-scroll,.xixi-settings-background,:is(.p0,.app-shell) .xixi-settings button,.xixi-toggle span{transition:none}}
+@media(prefers-reduced-motion:reduce){.xixi-settings-page-header,.xixi-settings-shell,.xixi-settings-content,.xixi-settings[data-closing=true] :is(.xixi-settings-page-header,.xixi-settings-shell){animation:none}.xixi-settings .xixi-settings-scroll,.xixi-settings .xixi-preview-dock,.xixi-settings-background,:is(.p0,.app-shell) .xixi-settings button,.xixi-toggle span{transition:none}}
 @media(min-width:801px) and (max-height:650px){
   .xixi-settings-scroll{padding-bottom:8px}
   .xixi-settings-page-header{margin-bottom:4px}

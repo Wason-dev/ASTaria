@@ -110,13 +110,13 @@ export function previewTasks(now: Date): Task[] {
   const afterDays = (count: number) => { const date = new Date(now); date.setDate(date.getDate() + count); return localDay(date) }
   const base: Task = { id: '', title: '', area: null, source: 'manual', inbox: false, leadDays: 3, importance: 2, energy: 'deep', context: ['anywhere'], status: 'todo', createdAt: stamp, updatedAt: stamp, deletedAt: null }
   return [
-    { ...base, id: 'preview-physics', title: '整理物理实验报告', area: 'phy2', due: new Date(now.getTime() + 3 * 60 * 60_000).toISOString(), fuzzyWindow: 'today', estimateMin: 70, notes: '先复核实验数据，再写出误差分析和结论' },
+    { ...base, id: 'preview-physics', title: '整理物理实验报告', area: 'physics', due: new Date(now.getTime() + 3 * 60 * 60_000).toISOString(), fuzzyWindow: 'today', estimateMin: 70, notes: '先复核实验数据，再写出误差分析和结论' },
     { ...base, id: 'preview-reading', title: '读完今天的英文材料', area: 'english', due: today, fuzzyWindow: 'today', estimateMin: 35, notes: '标出论点和支持它的两条证据' },
     { ...base, id: 'preview-math', title: '把两道错题重新做一遍', area: 'math', fuzzyWindow: 'today', estimateMin: 25, notes: '先不看答案，保留完整过程' },
-    { ...base, id: 'preview-project', title: '梳理个人项目的下一步', area: 'project-moss', estimateMin: 20, notes: '只选一个今天能够推进的小步骤' },
+    { ...base, id: 'preview-project', title: '梳理个人项目的下一步', area: 'projects', estimateMin: 20, notes: '只选一个今天能够推进的小步骤' },
     { ...base, id: 'preview-future', title: '准备明天的小组讨论', due: localDay(tomorrow), startAt: localDay(tomorrow), estimateMin: 30 },
     { ...base, id: 'preview-overdue', title: '补交社团活动记录', due: afterDays(-1), estimateMin: 15, notes: '核对活动时间和参与记录' },
-    { ...base, id: 'preview-week', title: '整理项目阶段进展', due: afterDays(5), startAt: afterDays(3), estimateMin: 45, area: 'project-moss' },
+    { ...base, id: 'preview-week', title: '整理项目阶段进展', due: afterDays(5), startAt: afterDays(3), estimateMin: 45, area: 'projects' },
     { ...base, id: 'preview-done', title: '整理课堂笔记', status: 'done', doneAt: stamp },
   ]
 }

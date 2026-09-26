@@ -102,9 +102,11 @@ test('same request replays durably without a second model call or operation, inc
 
 test('simultaneous retries share one model call and atomic result', async t => {
   const f = fixture(t)
-  let release, calls = 0
-  const svc = service(f, async () => { calls++; await new Promise(resolve => { release = resolve }); return completion(candidate()) }), input = request(svc)
+  let release, entered, calls = 0
+  const started = new Promise(resolve => { entered = resolve })
+  const svc = service(f, async () => { calls++; await new Promise(resolve => { release = resolve; entered() }); return completion(candidate()) }), input = request(svc)
   const first = svc.apply(input), second = svc.apply(input)
+  await started
   release()
   assert.equal((await first).operation.id, (await second).operation.id)
   assert.equal(calls, 1)

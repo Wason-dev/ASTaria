@@ -105,10 +105,14 @@ function routinesOn(state, date) {
   const routines = state.dayOverrides?.[date]?.routines ?? state.routines.filter(routine => routine.weekdays.includes(new Date(`${date}T12:00:00`).getDay()))
   return [...routines, ...(state.dayEvents ?? []).filter(event => event.date === date).map(event => ({ ...event, kind: 'class', enabled: true }))]
 }
+export function horizonGroupValue(input) {
+  if (input.horizonGroupId === undefined && input.horizonGroupTitle === undefined) return {}
+  return { horizonGroupId: identifier(input.horizonGroupId, '弦轨组标识'), horizonGroupTitle: text(input.horizonGroupTitle, '弦轨组名称', 160) }
+}
 function blockValue(input) {
-  knownKeys(input, ['id', 'taskId', 'date', 'start', 'end', 'locked'], '任务安排')
+  knownKeys(input, ['id', 'taskId', 'date', 'start', 'end', 'locked', 'horizonGroupId', 'horizonGroupTitle'], '任务安排')
   timeRange(input.start, input.end)
-  return { id: identifier(input.id), taskId: identifier(input.taskId, '任务标识'), date: day(input.date), start: input.start, end: input.end, locked: boolean(input.locked, '锁定状态') }
+  return { id: identifier(input.id), taskId: identifier(input.taskId, '任务标识'), date: day(input.date), start: input.start, end: input.end, locked: boolean(input.locked, '锁定状态'), ...horizonGroupValue(input) }
 }
 function detailsValue(input) {
   knownKeys(input, ['items', 'preparation', 'needsSubmission', 'submittedAt'], '任务准备')
@@ -367,6 +371,9 @@ export function createPlannerStore({ db, transaction, getTask, listTasks, now = 
         case 'save-block': {
           const block = blockValue(action.block)
           const index = state.blocks.findIndex(item => item.id === block.id), previous = state.blocks[index]
+          // Older calendar forms do not know about grouping. Moving a block there
+          // must not silently discard the user's saved membership.
+          if (previous && block.horizonGroupId === undefined) Object.assign(block, horizonGroupValue(previous))
           const samePlacement = previous && ['taskId', 'date', 'start', 'end'].every(key => previous[key] === block[key])
           if (previous?.locked && !(samePlacement && !block.locked)) fail('先解锁这段安排，再修改时间或任务', 409)
           // Unlock must remain possible after external task edits introduce a conflict.

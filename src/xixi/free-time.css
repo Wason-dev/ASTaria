@@ -147,10 +147,12 @@
 
 /* Keep the scroll viewport opaque: fading it on departure asks the browser to
    composite the entire scrolling page as one opacity layer at navigation.
-   Sampling stops in the same commit; only the smaller content/rim layers and
-   the flat backdrop fade. The retained page keeps its drafts and scroll. */
+   Sampling stops in the same commit; only the smaller content/rim layers fade.
+   The retained page keeps its drafts and scroll. Settings supplies its own
+   backdrop immediately, so hand it over without stacking both dark overlays. */
+.home-workspace[data-page=settings] .free-time-page[data-active=false] .free-time-background { visibility:hidden }
 .free-time-page[data-active=false] .free-time-viewport { pointer-events:none }
-.free-time-page[data-active=false] :is(.free-time-background,.free-time-pane-content,.free-time-pane>.home-glass-measure),
+.free-time-page[data-active=false] :is(.free-time-pane-content,.free-time-pane>.home-glass-measure),
 .free-time-page[data-active=false] .free-time-container>:not(.free-time-layout) { opacity:0; transition:opacity 200ms ease; pointer-events:none }
 .free-time-page[data-active=false] * { animation:none!important }
 .free-time-page[data-active=true] :is(.free-time-header,.free-time-pane-content,.free-time-feedback) { animation:free-time-page-arrive 480ms cubic-bezier(.2,.7,.2,1) both }

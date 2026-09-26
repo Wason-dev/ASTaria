@@ -1,0 +1,25 @@
+name: Source Checks
+
+on:
+  push:
+    branches: [main, feature/settings-local-model]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.19.0
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build:desktop
+      - run: node scripts/third-party-notices.mjs
+      - run: git diff --exit-code -- THIRD_PARTY_NOTICES.txt

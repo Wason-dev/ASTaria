@@ -10,6 +10,7 @@ type PendingMessage = { requestId: string; conversationId: string; text: string;
 type OutgoingMessage = PendingMessage & { delivery: 'sending' | 'failed' }
 const SELECTED_KEY = 'astaria-xixi-conversation-v1'
 const PENDING_KEY = 'astaria-xixi-pending-v1'
+const MODEL_NOT_CONNECTED = '先在设置里连接 API 或本地模型，写下的内容会留在这里'
 
 function selectedConversation() { try { return sessionStorage.getItem(SELECTED_KEY) || null } catch { return null } }
 function pendingRequests(): PendingMessage[] {
@@ -24,6 +25,8 @@ export function useXixiConversation(onTasksChanged: () => void, onNotice: (messa
   const [conversation, setConversation] = useState<ConversationState | null>(null)
   const [outgoing, setOutgoing] = useState<OutgoingMessage[]>(restoredOutgoing)
   const [status, setStatus] = useState<LocalStatus | null>(null)
+  const currentStatus = useRef<LocalStatus | null>(null)
+  const statusRevision = useRef(0)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [error, setError] = useState('')
@@ -75,11 +78,17 @@ export function useXixiConversation(onTasksChanged: () => void, onNotice: (messa
   }, [])
 
   const refreshStatus = useCallback(async () => {
+    const requestRevision = ++statusRevision.current
     try {
       const next = await localApi<LocalStatus>('/status')
-      if (mounted.current) setStatus(next)
+      if (!mounted.current || requestRevision !== statusRevision.current) return
+      currentStatus.current = next
+      setStatus(next)
+      if (next.configured) setError(previous => previous === MODEL_NOT_CONNECTED ? '' : previous)
     } catch {
-      if (mounted.current) setStatus(null)
+      if (!mounted.current || requestRevision !== statusRevision.current) return
+      currentStatus.current = null
+      setStatus(null)
     }
   }, [])
 
@@ -116,6 +125,7 @@ export function useXixiConversation(onTasksChanged: () => void, onNotice: (messa
     return () => {
       mounted.current = false
       revision.current += 1
+      statusRevision.current += 1
       clearInterval(poll)
       activeTransport.current?.controller.abort()
       activeTransport.current = null
@@ -129,7 +139,17 @@ export function useXixiConversation(onTasksChanged: () => void, onNotice: (messa
     const content = text.trim()
     if (!content || busy.current || retractInFlight.current) return false
     if (!conversation) { setError('先连接本机服务，读取对话后再发给我'); return false }
-    if (!status?.configured) { setError('先在设置里连接 API 或本地模型，写下的内容会留在这里'); return false }
+    if (!currentStatus.current?.configured) {
+      // A provider switch or a temporary status failure must not make a cached
+      // "not configured" result block chat until the app is restarted.
+      busy.current = true
+      try { await refreshStatus() } finally { busy.current = false }
+      if (!mounted.current || selectedId.current !== conversation.conversationId) return false
+      if (!currentStatus.current?.configured) {
+        setError(currentStatus.current ? MODEL_NOT_CONNECTED : '本机服务暂时无法连接，请稍后重试，写下的内容会留在这里')
+        return false
+      }
+    }
     let request: PendingMessage
     let retrying = false
     try {
@@ -233,7 +253,7 @@ export function useXixiConversation(onTasksChanged: () => void, onNotice: (messa
         if (mounted.current) { setSending(false); setStream(null); setResponsePhase('idle') }
       }
     }
-  }, [conversation, status?.configured, acceptRetractions, interruptedReasoning])
+  }, [conversation, refreshStatus, acceptRetractions, interruptedReasoning])
 
   const retryMessage = useCallback(async (requestId: string) => {
     const request = outgoing.find(item => item.requestId === requestId)

@@ -161,7 +161,10 @@ test('history pagination returns newest by default and traverses all older raw r
 })
 
 test('chat receipts close after a committed write and undo restores state', async t => {
-  const args = { tasks: [{ title: '物理报告', due: '2026-09-25', estimateMin: 120 }] }
+  // This HTTP service uses the wall clock; a fixed DDL eventually becomes past
+  // and turns this create-and-schedule receipt into a create-only receipt.
+  const due = new Date(); due.setDate(due.getDate() + 7)
+  const args = { tasks: [{ title: '物理报告', due: localDay(due), estimateMin: 120 }] }
   const f = await fixture(t, { responses: [toolCall('create_tasks', args), new Error(`provider dumped ${SECRET}`), toolCall('create_tasks', args), reply('记好了')] })
   const input = chatInput()
   const first = await f.request('/chat', input)

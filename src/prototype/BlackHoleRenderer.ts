@@ -2,10 +2,11 @@ import * as THREE from 'three'
 import { vertexShader, fragmentShader } from './shaders'
 import { createGeodesicLut } from './geodesics'
 import { SelectiveBloom } from './postprocessing'
+import { createBinaryTypography } from './binaryTypography'
 import { StarInfall } from './StarInfall'
 import { AdaptiveQualityController } from './adaptiveQuality'
 import type { AdaptiveQuality } from './adaptiveQuality'
-import { ResponseEffectController } from './responseEffects'
+import { DEFAULT_BINARY_EFFECT, ResponseEffectController } from './responseEffects'
 import { DECISION_EFFECT_EVENT, DECISION_EXIT_EVENT, DECISION_EXIT_MS, DecisionEffectController, getDecisionEffect } from './decisionEffect'
 import type { DecisionEffectDetail } from './decisionEffect'
 import type { ResponseEffectSettings, ResponsePhase } from './responseEffects'
@@ -191,6 +192,7 @@ export class BlackHoleRenderer {
   private readonly bloom: SelectiveBloom
   private readonly geodesicsTexture: THREE.DataTexture
   private readonly terminationTexture: THREE.DataTexture
+  private readonly binaryTypography = createBinaryTypography()
   private readonly resizeObserver: ResizeObserver
   private readonly motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
   private readonly resolution = new THREE.Vector2(1, 1)
@@ -227,6 +229,8 @@ export class BlackHoleRenderer {
   private targetFps = 60
   private renderedFrames = 0
   private simulationTime = 0
+  private binaryFlowRate = DEFAULT_BINARY_EFFECT.flowSpeed
+  private binaryFlowOffset = 0
   private night = 0
   private nightTarget = 0
   private nightVelocity = 0
@@ -290,6 +294,15 @@ export class BlackHoleRenderer {
         uDoppler: { value: 1 },
         uQuality: { value: TIERS.ultra.level },
         uStars: { value: this.target.texture },
+        uBinaryEnabled: { value: 0 },
+        uBinaryTypography: { value: this.binaryTypography },
+        uBinaryDensity: { value: DEFAULT_BINARY_EFFECT.density },
+        uBinaryBrightness: { value: 0.42 },
+        uBinaryVisibleFraction: { value: DEFAULT_BINARY_EFFECT.visibleFraction },
+        uBinarySparkFrequency: { value: DEFAULT_BINARY_EFFECT.sparkFrequency },
+        uBinarySparkBrightness: { value: DEFAULT_BINARY_EFFECT.sparkBrightness },
+        uBinaryFlowSpeed: { value: DEFAULT_BINARY_EFFECT.flowSpeed },
+        uBinaryFlowOffset: { value: 0 },
         uBurst: { value: -100 },
         uPointer: { value: new THREE.Vector2(0, 0) },
         uGeodesics: { value: this.geodesicsTexture },
@@ -538,6 +551,7 @@ export class BlackHoleRenderer {
     this.infall.dispose()
     this.geodesicsTexture.dispose()
     this.terminationTexture.dispose()
+    this.binaryTypography.dispose()
     this.scene.clear()
     this.starScene.clear()
     this.renderer.dispose()
@@ -645,6 +659,29 @@ export class BlackHoleRenderer {
     this.material.uniforms.uResponseTime.value = state.time
     this.material.uniforms.uResponseMotion.value = state.reducedMotion ? 0 : 1
     this.responseWeights.set(...state.weights)
+    const binary = state.settings.binary ?? DEFAULT_BINARY_EFFECT
+    const uniforms = this.material.uniforms
+    uniforms.uBinaryEnabled.value = state.binaryAmount
+    uniforms.uBinaryDensity.value = binary.density
+    // A single visible intensity control governs both disk light and digits.
+    uniforms.uBinaryBrightness.value = { gentle: .42, standard: .7, vivid: 1 }[state.settings.intensity]
+    uniforms.uBinaryVisibleFraction.value = binary.visibleFraction
+    uniforms.uBinarySparkFrequency.value = state.reducedMotion ? 0 : binary.sparkFrequency
+    uniforms.uBinarySparkBrightness.value = binary.sparkBrightness
+    const flowRate = state.reducedMotion ? 0 : binary.flowSpeed
+    // Full response motion may be explicitly chosen while ambient motion is
+    // reduced. Integrate that phase from this frame's existing delta as well.
+    if (!this.ambientIsRunning() && !state.reducedMotion && !this.paused && state.binaryAmount > 0) {
+      this.binaryFlowOffset += Math.max(0, Math.min(delta, .1)) * .018 * this.binaryFlowRate
+    }
+    if (flowRate !== this.binaryFlowRate) {
+      // Rebase the same uTime phase when tuning/freeze changes; never jump to
+      // a different patch of the sphere or start another animation clock.
+      this.binaryFlowOffset += this.simulationTime * .018 * (this.binaryFlowRate - flowRate)
+      this.binaryFlowRate = flowRate
+    }
+    uniforms.uBinaryFlowSpeed.value = flowRate
+    uniforms.uBinaryFlowOffset.value = this.binaryFlowOffset
   }
 
   private decisionMotionIsReduced() {

@@ -23,12 +23,18 @@ function run(file, args, input = '') {
   })
 }
 
-export function createKeychain(dataDirectory) {
+export function createKeychain(dataDirectory, { binaryPath } = {}) {
   let preparation
-  const binary = join(dataDirectory, 'bin', 'astaria-keychain')
+  const binary = binaryPath ?? join(dataDirectory, 'bin', 'astaria-keychain')
   const source = fileURLToPath(new URL('./native/keychain.m', import.meta.url))
   const prepare = () => preparation ??= (async () => {
     if (process.platform !== 'darwin') throw new Error('当前密钥存储支持 macOS 钥匙串')
+    // Desktop builds ship a signed helper; end users do not need clang/Xcode.
+    if (binaryPath) {
+      const bundled = await stat(binary)
+      if (!bundled.isFile() || !(bundled.mode & 0o111)) throw new Error('应用内钥匙串助手不可用，请重新安装 ASTaria')
+      return
+    }
     await mkdir(join(dataDirectory, 'bin'), { recursive: true, mode: 0o700 })
     const compiled = await stat(binary).catch(() => null)
     if (!compiled || compiled.mtimeMs < (await stat(source)).mtimeMs) {

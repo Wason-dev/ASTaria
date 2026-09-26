@@ -11,7 +11,7 @@ export type HorizonTuning = {
 
 export const DEFAULT_HORIZON_TUNING: HorizonTuning = {
   height: .62, curvature: .16, thickness: 12, brightness: .8,
-  glow: .8, flow: .8, wave: .5, exitSeconds: 2.6,
+  glow: .8, flow: .8, wave: .5, exitSeconds: 4,
 }
 export const HORIZON_LIMITS: Record<keyof HorizonTuning, readonly [number, number]> = {
   height: [.38, .78], curvature: [.04, .4], thickness: [8, 52],
@@ -27,9 +27,9 @@ export function normalizeHorizonTuning(value: unknown): HorizonTuning {
   return next
 }
 const STORAGE_KEY = 'astaria-event-horizon-appearance-v1'
-export function readHorizonTuning(): HorizonTuning {
+export function readHorizonTuning(options: { strict?: boolean } = {}): HorizonTuning {
   try { return normalizeHorizonTuning(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null')) }
-  catch { return { ...DEFAULT_HORIZON_TUNING } }
+  catch (error) { if (options.strict) throw error; return { ...DEFAULT_HORIZON_TUNING } }
 }
 export function saveHorizonTuning(value: HorizonTuning): boolean {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(normalizeHorizonTuning(value))); return true }

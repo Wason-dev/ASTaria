@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { createDatabase } from '../server/database.mjs'
-import { getPreferences, savePreferences } from '../server/preferences.mjs'
+import { DEFAULT_BINARY_EFFECT, getPreferences, savePreferences } from '../server/preferences.mjs'
 
 test('preferences persist on the local database, validate values and reject stale writes', () => {
   const db = createDatabase(':memory:')
@@ -30,6 +30,43 @@ test('preferences written before render profiles gain the full visual default', 
     delete legacy.render
     db.setPreference('app', legacy)
     assert.deepEqual(getPreferences(db).render, { profile: 'full' })
+  } finally { db.close() }
+})
+
+test('legacy binary preferences gain defaults and remain editable with legacy or normalized expectations', () => {
+  const db = createDatabase(':memory:')
+  try {
+    for (const useLegacyExpected of [true, false]) {
+      const legacy = structuredClone(getPreferences(db))
+      delete legacy.effect.binary
+      db.setPreference('app', legacy)
+      const migrated = getPreferences(db)
+      assert.deepEqual(migrated.effect.binary, DEFAULT_BINARY_EFFECT)
+      const next = structuredClone(migrated)
+      next.effect.binary = { enabled: false, density: 0, emberBrightness: 0.03, visibleFraction: 0.005, sparkFrequency: 0, sparkBrightness: 0.2, flowSpeed: 0.4 }
+      assert.deepEqual(savePreferences(db, { expected: useLegacyExpected ? legacy : migrated, value: next }), next)
+      assert.deepEqual(getPreferences(db).effect.binary, next.effect.binary)
+    }
+  } finally { db.close() }
+})
+
+test('binary preference validation rejects malformed values without changing saved settings', () => {
+  const db = createDatabase(':memory:')
+  try {
+    const current = getPreferences(db)
+    const invalidValues = [null, [], false, { unknown: 1 }, { enabled: 0 }]
+    for (const key of Object.keys(DEFAULT_BINARY_EFFECT).filter(key => key !== 'enabled')) {
+      for (const value of [-0.01, 1.01, NaN, Infinity, '0.1', null]) invalidValues.push({ [key]: value })
+    }
+    for (const binary of invalidValues) {
+      const value = structuredClone(current)
+      value.effect.binary = binary
+      assert.throws(() => savePreferences(db, { expected: current, value }))
+      assert.deepEqual(getPreferences(db), current)
+    }
+    const partial = structuredClone(current)
+    partial.effect.binary = { enabled: false }
+    assert.deepEqual(savePreferences(db, { expected: current, value: partial }).effect.binary, { ...DEFAULT_BINARY_EFFECT, enabled: false })
   } finally { db.close() }
 })
 

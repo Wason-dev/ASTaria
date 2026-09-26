@@ -2,7 +2,8 @@ import { createHash } from 'node:crypto'
 import { validateModelSettings } from './modelSettings.mjs'
 import { validateRouteJudgment } from './routeAnalysis.mjs'
 import { ValidationError, knownKeys, identifier, text, object, choice, dateTime, day, clockTime, taskInput, questionOptions, validateMemory } from './validation.mjs'
-import { dayEventValue, validateDayEvents } from './planner.mjs'
+import { dayEventValue, validateDayEvents, horizonGroupValue } from './planner.mjs'
+import { BACKUP_MAX_BYTES, BACKUP_EXPORT_TOO_LARGE, BACKUP_IMPORT_TOO_LARGE, backupByteLength, serializeBackup } from '../src/xixi/backupLimits.ts'
 
 const columns = {
   areas: ['id', 'document'], tasks: ['id', 'document'], events: ['id', 'document'], availability: ['id', 'document'], assignments: ['id', 'document'],
@@ -22,21 +23,23 @@ const optionalStamp = value => { if (value != null) stamp(value) }
 const ids = value => array(value).forEach(item => identifier(item))
 const parse = (value, label = '备份记录') => { try { return JSON.parse(value) } catch { fail(`${label}无法解析`) } }
 function block(value) {
-  knownKeys(value, ['id', 'taskId', 'title', 'date', 'start', 'end', 'locked'])
+  knownKeys(value, ['id', 'taskId', 'title', 'date', 'start', 'end', 'locked', 'horizonGroupId', 'horizonGroupTitle'])
   identifier(value.id); identifier(value.taskId); day(value.date); clockTime(value.start); clockTime(value.end)
   if (value.start >= value.end) fail('备份时间段无效')
   if (value.locked !== undefined) bool(value.locked)
   if (value.title !== undefined) text(value.title, '任务名', 160)
+  horizonGroupValue(value)
 }
 // Read-only snapshots may clip an older exact startAt placement at midnight;
 // this is not a new editable planner block and cannot be adopted as a plan.
 function snapshotBlock(value) {
-  knownKeys(value, ['id', 'taskId', 'title', 'date', 'start', 'end', 'locked'])
+  knownKeys(value, ['id', 'taskId', 'title', 'date', 'start', 'end', 'locked', 'horizonGroupId', 'horizonGroupTitle'])
   identifier(value.id); identifier(value.taskId); day(value.date); clockTime(value.start)
   if (value.end !== '24:00') clockTime(value.end)
   if (value.start >= value.end) fail('备份事实时间段无效')
   if (value.locked !== undefined) bool(value.locked)
   if (value.title !== undefined) text(value.title, '任务名', 160)
+  horizonGroupValue(value)
 }
 function source(value) {
   knownKeys(value, ['kind', 'messageId', 'evidence', 'actionId'])
@@ -213,14 +216,16 @@ export function createBackupStore({ db, transaction, validate }) {
     return transaction(() => {
       if (running()) throw new ValidationError('析熙还在处理消息，请等回复结束再备份', 409)
       const tables = Object.fromEntries(Object.entries(columns).map(([table, fields]) => [table, db.prepare(`SELECT ${fields.join(',')} FROM ${table}`).all().filter(row => table !== 'state' || stateAllowed(row.key))]))
-      return { format: 'astaria-backup', version: 1, createdAt: new Date().toISOString(), tables, checksum: checksum(tables) }
+      const backup = { format: 'astaria-backup', version: 1, createdAt: new Date().toISOString(), tables, checksum: checksum(tables) }
+      if (backupByteLength(serializeBackup(backup)) > BACKUP_MAX_BYTES) throw new ValidationError(BACKUP_EXPORT_TOO_LARGE, 413)
+      return backup
     })
   }
   function importData(input) {
     knownKeys(input, ['format', 'version', 'createdAt', 'tables', 'checksum'], '备份')
     if (input.format !== 'astaria-backup' || input.version !== 1) fail('不是支持的 ASTaria 备份')
     stamp(input.createdAt)
-    if (Buffer.byteLength(JSON.stringify(input)) > 32 * 1024 * 1024) fail('备份超过 32MB')
+    if (backupByteLength(serializeBackup(input)) > BACKUP_MAX_BYTES) throw new ValidationError(BACKUP_IMPORT_TOO_LARGE, 413)
     knownKeys(input.tables, Object.keys(columns), '备份数据表')
     if (Object.keys(input.tables).length !== Object.keys(columns).length || checksum(input.tables) !== input.checksum) fail('备份缺失或校验不一致')
     for (const [table, fields] of Object.entries(columns)) {

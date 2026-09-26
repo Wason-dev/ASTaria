@@ -8,7 +8,7 @@ import { createDatabase } from '../server/database.mjs'
 import { validateTaskDraft, validateTaskPatch, day, dateTime, DomainError } from '../server/validation.mjs'
 
 const timestamp = '2026-09-18T03:00:00.000Z'
-const draft = (title = '物理报告') => ({ title, source: 'manual', area: 'phy2', inbox: false, leadDays: 3, importance: 2, energy: 'deep', context: ['anywhere'], status: 'todo' })
+const draft = (title = '物理报告') => ({ title, source: 'manual', area: 'physics', inbox: false, leadDays: 3, importance: 2, energy: 'deep', context: ['anywhere'], status: 'todo' })
 const taskDocument = (id = 'task-1', overrides = {}) => ({ ...draft(), id, createdAt: timestamp, updatedAt: timestamp, deletedAt: null, ...overrides })
 const withDatabase = fn => () => {
   const db = createDatabase(':memory:')
@@ -23,7 +23,7 @@ test('task CRUD protects identity, supports nullable patch fields and indexed fi
   assert.equal(saved.id, task.id)
   assert.equal(saved.createdAt, task.createdAt)
   assert.ok(saved.doneAt)
-  assert.equal(db.listTasks({ area: 'phy2', status: 'done', inbox: false }).length, 1)
+  assert.equal(db.listTasks({ area: 'physics', status: 'done', inbox: false }).length, 1)
   assert.equal(db.listTasks({ status: 'todo' }).length, 0)
   const cleared = db.updateTask(task.id, { status: 'todo', due: null, startAt: null })
   assert.equal(cleared.doneAt, undefined)
@@ -73,7 +73,7 @@ test('calendar ranges and availability remain local-date values', withDatabase(d
 test('area rename and custom creation preserve distinct identity', withDatabase(db => {
   const area = db.createArea('科研', 'deep')
   assert.equal(db.renameArea(area.id, '研究').name, '研究')
-  assert.equal(db.listAreas().length, 14)
+  assert.equal(db.listAreas().length, 8)
   assert.throws(() => db.renameArea('missing', '研究'), /找不到/u)
 }))
 
@@ -98,12 +98,12 @@ test('invalid migration rolls back the entire batch', withDatabase(db => {
 
 test('legacy category names replace generated defaults once and preserve subsequent edits', withDatabase(db => {
   db.listAreas()
-  const legacy = { id: 'phy2', name: '我的物理', defaultEnergy: 'deep', createdAt: timestamp, updatedAt: timestamp, deletedAt: null }
+  const legacy = { id: 'physics', name: '我的物理', defaultEnergy: 'deep', createdAt: timestamp, updatedAt: timestamp, deletedAt: null }
   assert.equal(db.importLegacy({ areas: [legacy] }).areas, 1)
-  assert.equal(db.listAreas().find(area => area.id === 'phy2').name, '我的物理')
-  db.renameArea('phy2', '新分类名称')
+  assert.equal(db.listAreas().find(area => area.id === 'physics').name, '我的物理')
+  db.renameArea('physics', '新分类名称')
   assert.equal(db.importLegacy({ areas: [legacy] }).areas, 0)
-  assert.equal(db.listAreas().find(area => area.id === 'phy2').name, '新分类名称')
+  assert.equal(db.listAreas().find(area => area.id === 'physics').name, '新分类名称')
   db.renameArea('math', '自己改的数学')
   assert.equal(db.importLegacy({ areas: [{ ...legacy, id: 'math', name: '旧数学' }] }).areas, 0)
   assert.equal(db.listAreas().find(area => area.id === 'math').name, '自己改的数学')
@@ -112,7 +112,7 @@ test('legacy category names replace generated defaults once and preserve subsequ
 test('transaction nesting rolls back outer errors and rejects async work', withDatabase(db => {
   assert.throws(() => db.transaction(() => { db.createTask(draft()); db.transaction(() => db.createArea('临时')); throw new Error('rollback') }), /rollback/u)
   assert.equal(db.listTasks().length, 0)
-  assert.equal(db.listAreas().length, 13)
+  assert.equal(db.listAreas().length, 7)
   assert.throws(() => db.transaction(async () => db.createTask(draft())), /同步/u)
   assert.equal(db.listTasks().length, 0)
   assert.throws(() => db.transaction(() => { db.createTask(draft()); return Promise.resolve() }), /异步/u)

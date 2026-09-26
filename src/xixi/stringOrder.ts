@@ -1,6 +1,7 @@
 export type StringItem = {
   id: string; taskId: string; title: string; date: string; start: string; end: string
   durationMin: number; due?: string; movable: boolean; reason?: string
+  needsReschedule?: boolean
 }
 export type StringSnapshot = {
   date: string; days: number; revision: number; snapshotKey: string; asOf: string; items: StringItem[]

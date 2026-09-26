@@ -6,6 +6,7 @@ import { setStringFlight } from '../prototype/stringFlight'
 import { notifyLocalDataChange } from '../stores/migration'
 import { LocalApiError, localApi } from './api'
 import { usePreferences } from './preferences'
+import type { Preferences } from './preferences'
 import { StringCanvas } from './stringCanvas'
 import type { StringPoint, StringVisualState } from './stringCanvas'
 import { arrangeStringItems, moveStringItem, stringGeometry } from './stringOrder'
@@ -272,10 +273,10 @@ function StringStylePreview({ style }: { style: StringStyle }) {
 }
 
 /** An invitation inside 余时, not another item in the global navigation. */
-export function StringInvitation({ onEnter }: { onEnter: () => void }) {
+export function StringInvitation({ onEnter, glass }: { onEnter: () => void; glass: Preferences['glass'] }) {
   const paint = useId().replaceAll(':', '')
-  return <button type="button" className="string-invitation" onClick={onEnter} aria-label="进入弦轨，预览事件视界">
-    <MeasuredGlassSurface radius={20} material={{ transmission: 100, blur: 0, rim: 40, shadow: 0, reflection: 10 }} />
+  return <button type="button" className="string-invitation" onClick={onEnter} aria-label="进入弦轨，事件视界">
+    <MeasuredGlassSurface radius={20} material={{ transmission: 100, blur: glass === 'soft' ? 6 : 0, rim: 40, shadow: 0, reflection: 10 }} />
     <span className="string-invitation-art string-invitation-orbits" aria-hidden="true"><svg viewBox="0 0 240 100">
       <defs>
         <linearGradient id={`${paint}-light`} x1="15%" y1="0%" x2="75%" y2="100%"><stop stopColor="#c5a269" stopOpacity="0" /><stop offset=".36" stopColor="#b89052" stopOpacity=".15" /><stop offset=".63" stopColor="#e9c68f" stopOpacity=".68" /><stop offset=".8" stopColor="#fff0cd" /><stop offset="1" stopColor="#9e7337" stopOpacity=".1" /></linearGradient>
@@ -290,7 +291,7 @@ export function StringInvitation({ onEnter }: { onEnter: () => void }) {
         </g>)}
       </g>
     </svg></span>
-    <span className="string-invitation-copy"><span>弦轨 <small>事件视界 · 视觉预览</small></span><span>沿着光，让今天慢慢展开</span></span>
+    <span className="string-invitation-copy"><span>弦轨 <small>事件视界</small></span><span>沿着光，让今天慢慢展开</span></span>
     <span className="string-invitation-link">进入轨道 <span aria-hidden="true">↗</span></span>
   </button>
 }

@@ -13,7 +13,7 @@ export type DayTemplateOverride = { date: string; sourceWeekday: number; routine
 export type WeekdayRoutineReplacement = {
   routineId: string; title: string; kind: RoutineKind; location?: string; items?: string[]
 }
-export type PlanBlock = { id: string; taskId: string; date: string; start: string; end: string; locked: boolean }
+export type PlanBlock = { id: string; taskId: string; date: string; start: string; end: string; locked: boolean; horizonGroupId?: string; horizonGroupTitle?: string }
 export type TaskPreparation = {
   items: string[]; preparation: string; needsSubmission: boolean; submittedAt: string | null
 }

@@ -15,8 +15,8 @@ export default defineConfig(({ mode }) => ({
       registerType: 'autoUpdate',
       // Design previews must not reopen an older cached build. Publish the
       // retirement worker for existing registrations without registering anew.
-      injectRegister: mode === 'design-preview' ? false : 'auto',
-      selfDestroying: mode === 'design-preview',
+      injectRegister: ['design-preview', 'desktop'].includes(mode) ? false : 'auto',
+      selfDestroying: ['design-preview', 'desktop'].includes(mode),
       includeAssets: ['favicon.png', 'apple-touch-icon.png', 'astaria-icon-1024.png'],
       manifest: {
         name: 'ASTaria',

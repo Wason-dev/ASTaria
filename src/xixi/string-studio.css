@@ -1,4 +1,4 @@
-.home-workspace[data-string-covered=true] > :is(.home-nav,.home-clock,.home-notification) { opacity:0; pointer-events:none; transition:opacity 300ms ease }
+.home-workspace[data-string-covered=true] > :is(.home-nav,.home-clock,.home-notification) { opacity:0; pointer-events:none; transition:opacity 760ms cubic-bezier(.2,.7,.2,1) }
 .p0:has(.string-studio) > .p0-whisper { opacity:0 }
 .p0 .string-studio {
   --string-darkness:0; --string-reveal:0;

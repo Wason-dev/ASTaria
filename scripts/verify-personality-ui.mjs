@@ -68,6 +68,8 @@ const tab = async label => { await textClick('.xixi-settings-tabs button', label
 const selected = (label, description) => `document.querySelectorAll('.xixi-personality-options button[aria-pressed=true]').length===1&&document.querySelector('.xixi-personality-options button[aria-pressed=true]').textContent===${JSON.stringify(label)}&&document.querySelector('.xixi-personality-options').closest('.xixi-setting-row').querySelector('small').textContent===${JSON.stringify(description)}`
 const unrelated = preferences => { const copy = structuredClone(preferences); delete copy.assistant.personality; return copy }
 const baseline = unrelated(fixture)
+const baselineTasks = db.listTasks()
+const baselinePlanner = db.getPlanner()
 
 try {
   await mkdir(output, { recursive: true })
@@ -111,8 +113,8 @@ try {
   await send('Emulation.setDeviceMetricsOverride', { width: 1366, height: 768, deviceScaleFactor: 1, mobile: false })
   await send('Page.navigate', { url: base }); await wait('!!window.__ASTARIA_P0__&&!!document.querySelector(".home-current-title:not(:disabled)")')
   await openSettings()
-  await check('fresh settings default to high personality with the matching description', selected('高', '小得意，有点小腹黑，温柔认真'))
-  for (const [index, value, label, description] of [[1, 'low', '低', '简洁温和'], [2, 'medium', '中', '自然俏皮'], [3, 'high', '高', '小得意，有点小腹黑，温柔认真']]) {
+  await check('fresh settings default to high personality with the matching description', selected('高', '有主见，嘴硬一点，做事认真'))
+  for (const [index, value, label, description] of [[1, 'low', '低', '简洁温和'], [2, 'medium', '中', '自然俏皮'], [3, 'high', '高', '有主见，嘴硬一点，做事认真']]) {
     await click(`.xixi-personality-options button:nth-child(${index})`)
     await wait(`${selected(label, description)}&&!document.querySelector('.xixi-personality-options button').disabled`)
     await check(`${value}: UI selection persists to isolated SQLite`, getPreferences(db).assistant.personality === value)
@@ -139,15 +141,18 @@ try {
   await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: false }); await delay(400)
   await check('390px light layout has no horizontal overflow', `(()=>{const s=document.querySelector('.xixi-settings-scroll'),p=document.querySelector('.xixi-settings-panel').getBoundingClientRect();return s.scrollWidth<=s.clientWidth+1&&p.left>=0&&p.right<=innerWidth&&document.documentElement.scrollWidth<=innerWidth})()`)
   await evaluate("document.querySelector('.xixi-personality-options').scrollIntoView({block:'center',inline:'nearest'});true"); await delay(200)
-  await check('390px light personality control and all three buttons remain visible and inside the viewport', `(()=>{const buttons=[...document.querySelectorAll('.xixi-personality-options button')];return buttons.length===3&&buttons.every(e=>{const r=e.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight})})()`)
-  await check('light narrow layout still shows the saved high personality', selected('高', '小得意，有点小腹黑，温柔认真'))
+  await check('390px light personality control and all three buttons remain visible and inside the viewport', `(()=>{const buttons=[...document.querySelectorAll('.xixi-setting-row .xixi-personality-options button')];return buttons.length===3&&buttons.every(e=>{const r=e.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight})})()`)
+  await check('light narrow layout still shows the saved high personality', selected('高', '有主见，嘴硬一点，做事认真'))
   await check('scrolling settings cannot paint content across global navigation', `(()=>{const viewport=document.querySelector('.xixi-settings-scroll').getBoundingClientRect(),nav=document.querySelector('.home-brand').getBoundingClientRect();return viewport.top>=nav.bottom+6})()`)
   await shot('light-390x844')
   await evaluate("document.querySelector('.xixi-settings-scroll').scrollTop=0;true"); await delay(200)
   await check('light narrow settings header keeps one brand mark and starts below global navigation', `(()=>{const localBrand=document.querySelector('.xixi-settings-page-header>div>span'),title=document.querySelector('.xixi-settings-page-header h2'),global=document.querySelector('.home-brand').getBoundingClientRect(),heading=title.getBoundingClientRect();return !localBrand&&heading.top>=global.bottom+6})()`)
   await shot('light-390x844-header')
   await check('personality changes and layout checks make zero model calls', providerCalls === 0)
-  await check('the only mutating API calls were preference saves', requests.filter(request => request.method !== 'GET').every(request => request.path === '/api/preferences'))
+  await check('writes are limited to preference saves and the normal free-time ensure on page load', requests.filter(request => request.method !== 'GET').every(request => ['/api/preferences', '/api/companion/free-time/ensure'].includes(request.path)))
+  assert.deepEqual(db.listTasks(), baselineTasks, 'settings checks must not change tasks')
+  assert.deepEqual(db.getPlanner(), baselinePlanner, 'settings checks must not change the planner')
+  await check('preference saves and empty free-time ensure leave tasks and planner unchanged', true)
   await check('browser raised no runtime exceptions', errors.length === 0)
   await writeFile(join(output, 'results.json'), JSON.stringify({ checks, layouts, requests, blockedRequests, errors, providerCalls }, null, 2))
   console.log(`PASS ${checks.length} isolated personality UI checks\nArtifacts: ${output}`)

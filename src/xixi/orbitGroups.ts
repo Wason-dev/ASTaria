@@ -4,6 +4,7 @@ export type OrbitTask = {
   id: string
   title: string
   minutes: number
+  needsReschedule?: boolean
 }
 
 export type OrbitGroup = {

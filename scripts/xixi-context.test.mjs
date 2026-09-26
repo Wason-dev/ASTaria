@@ -26,11 +26,12 @@ function fixture(t, responses = []) {
 const toolResults = request => request.messages.filter(message => message.role === 'tool').map(message => JSON.parse(message.content))
 const contextData = request => JSON.parse(request.messages.find(message => message.content?.startsWith('当前环境与数据库资料')).content.split('\n').slice(1).join('\n'))
 
-test('prompt uses positive warm persona and facts anchor midnight in the local timezone', async t => {
+test('prompt keeps a caring persona with the default high voice and facts anchor midnight in the local timezone', async t => {
   const f = fixture(t)
   await f.xixi.chat(input('早'))
   const prompt = f.requests[0].messages[0].content
-  assert.match(prompt, /笨蛋/)
+  assert.match(prompt, /本轮表达风格：高/)
+  assert.match(prompt, /嘴硬只是语气转折/)
   assert.match(prompt, /温柔/)
   const context = contextData(f.requests[0])
   assert.equal(context.now, '2026-09-17T16:30:00.000Z')
@@ -127,18 +128,18 @@ test('current database facts override old chat and changes can be undone', async
 
 test('focused task receives its latest bounded notes and classification dictionary without unrelated notes', async t => {
   const f = fixture(t)
-  const selected = f.db.createTask({ title: '物理报告', notes: '旧备注', area: 'phy2', energy: 'deep', context: ['library'], fuzzyWindow: 'this-week' })
+  const selected = f.db.createTask({ title: '物理报告', notes: '旧备注', area: 'physics', energy: 'deep', context: ['library'], fuzzyWindow: 'this-week' })
   f.db.createTask({ title: '其他事项', notes: '不相关的完整备注不应默认发出' })
   f.db.updateTask(selected.id, { notes: '最新分析要求：' + '甲'.repeat(1400) })
   await f.xixi.chat(input('帮我看这一项', { context: { timezone: 'Asia/Shanghai', page: 'workbench', taskId: selected.id } }))
   const context = contextData(f.requests[0])
   assert.match(context.selectedTask.notes, /^最新分析要求：/)
   assert.equal(context.selectedTask.notes.length, 1000)
-  assert.equal(context.selectedTask.area, 'phy2')
+  assert.equal(context.selectedTask.area, 'physics')
   assert.equal(context.selectedTask.energy, 'deep')
   assert.deepEqual(context.selectedTask.context, ['library'])
   assert.equal(context.selectedTask.fuzzyWindow, 'this-week')
-  assert.ok(context.areas.some(area => area.id === 'phy2' && area.name === 'Phy2' && area.defaultEnergy === 'deep'))
+  assert.ok(context.areas.some(area => area.id === 'physics' && area.name === '物理' && area.defaultEnergy === 'deep'))
   assert.ok(context.tasks.every(task => task.notes === undefined))
   assert.doesNotMatch(JSON.stringify(f.requests[0]), /不相关的完整备注不应默认发出/)
   assert.ok(contextUnits(f.requests[0].messages) + contextUnits(XIXI_TOOLS) <= HARD_INPUT_UNITS)

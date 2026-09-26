@@ -57,13 +57,13 @@ export function OrbitTuningPanel({ value, onChange, look, onLook, disabled }: Pr
       <input id={`orbit-tune-${item.key}`} type="range" min={min} max={max} step={item.step} value={value[item.key]} onChange={event => update(item.key, Number(event.target.value))} />
     </div>
   })
-  return <aside className="orbit-tuning" data-open={open} aria-label="外观与调试">
+  return <aside className="orbit-tuning" data-open={open} aria-label="外观">
     <button type="button" className="orbit-tuning-toggle" aria-expanded={open} aria-controls="orbit-tuning-controls" disabled={disabled} onClick={() => setOpen(v => !v)}>
       <svg width="14" height="14" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" /><path d="M7 3v4m7 1v4m-9 1v4" stroke="currentColor" strokeWidth="2" /></svg>
-      外观与调试 <span>{open ? '−' : '+'}</span>
+      外观 <span>{open ? '−' : '+'}</span>
     </button>
     {open && <div className="orbit-tuning-controls" id="orbit-tuning-controls" inert={disabled}>
-      <header><strong>外观</strong><p>实时预览 · 自动记住</p></header>
+      <header><strong>外观</strong><p>自动记住</p></header>
       <div className="orbit-look-options" role="group" aria-label="选择轨道风格">{ORBIT_LOOKS.map(option => <button type="button" key={option.id} aria-pressed={look === option.id} onClick={() => onLook(option.id)}>{option.name}</button>)}</div>
       <div className="orbit-tuning-presets" aria-label="盘面预设">{ORBIT_TUNING_PRESETS.map(preset => <button type="button" key={preset.id} onClick={() => { onChange({ ...preset.value }); onLook(preset.id === 'home' ? 'accretion' : 'minimal'); setMessage('') }}>{preset.name}</button>)}</div>
       <details open><summary>几何与弧度</summary><div>{controls(GEOMETRY)}</div></details>

@@ -3,35 +3,37 @@ import type { ReactNode } from 'react'
 import { localApi } from './api'
 import type { LocalStatus, Memory, Operation } from './types'
 import type { PlannerState } from '../planner/types'
-import type { ResponseEffectSettings, ResponsePhase } from '../prototype/responseEffects'
+import { normalizeBinaryEffect } from '../prototype/responseEffects'
+import type { BinaryEffectSettings, ResponseEffectSettings, ResponsePhase } from '../prototype/responseEffects'
 import { DEFAULT_PREFERENCES, publishPreferences, usePreferences } from './preferences'
 import type { Preferences } from './preferences'
 import { notifyLocalDataChange } from '../stores/migration'
 import { GlassSamplingContext, MeasuredGlassSurface } from '../home/GlassSurface'
 import { WorkspaceHeading } from '../ui/WorkspaceHeading'
 import { ModelConnection } from './ModelConnection'
+import { HorizonTuningPanel } from './HorizonTuningPanel'
+import { BACKUP_MAX_BYTES, BACKUP_EXPORT_TOO_LARGE, BACKUP_IMPORT_TOO_LARGE, backupByteLength, serializeBackup } from './backupLimits'
 import './settings.css'
 
 const TABS = ['通用', '析熙', '时间安排', '通知', '外观与动画', '数据'] as const
 const PERSONALITY_LEVELS = [
   { value: 'low', label: '低', description: '简洁温和' },
   { value: 'medium', label: '中', description: '自然俏皮' },
-  { value: 'high', label: '高', description: '小得意，有点小腹黑，温柔认真' },
+  { value: 'high', label: '高', description: '有主见，嘴硬一点，做事认真' },
 ] as const
 type Tab = typeof TABS[number]
 type Props = {
   onClose: () => void; onSaved: () => void | Promise<void>
   onEffectChange?: (value: ResponseEffectSettings) => void; onPreviewEffect?: () => void; onStopPreview?: () => void
-  previewPhase?: ResponsePhase | null; initialTab?: Tab
+  onPreviewPhaseChange?: (phase: ResponsePhase) => void; previewPhase?: ResponsePhase | null; initialTab?: Tab
 }
-export function LocalSettings({ onClose, onSaved, onEffectChange, onPreviewEffect, onStopPreview, previewPhase, initialTab = '析熙' }: Props) {
+export function LocalSettings({ onClose, onSaved, onEffectChange, onPreviewEffect, onStopPreview, onPreviewPhaseChange, previewPhase, initialTab = '析熙' }: Props) {
   const page = useRef<HTMLElement>(null)
   const scroll = useRef<HTMLDivElement>(null)
   const previewDock = useRef<HTMLDivElement>(null)
   const previewTrigger = useRef<HTMLElement | null>(null)
   const savedScroll = useRef(0)
-  const [previewState, setPreviewState] = useState<'closed' | 'entering' | 'active' | 'leaving'>('closed')
-  const [retainedPhase, setRetainedPhase] = useState<ResponsePhase>('thinking')
+  const wasPreviewing = useRef(false)
   const closeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const saving = useRef(false)
   const [closing, setClosing] = useState(false)
@@ -65,26 +67,14 @@ export function LocalSettings({ onClose, onSaved, onEffectChange, onPreviewEffec
   }, [])
   const previewVisible = previewPhase != null
   useLayoutEffect(() => {
-    if (previewVisible) {
-      savedScroll.current = scroll.current?.scrollTop ?? 0
-      previewTrigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
-      setPreviewState('entering')
-      const timer = setTimeout(() => setPreviewState('active'), matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 240)
-      const frame = requestAnimationFrame(() => previewDock.current?.querySelector<HTMLElement>('button')?.focus({ preventScroll: true }))
-      return () => { clearTimeout(timer); cancelAnimationFrame(frame) }
-    }
-    if (previewState !== 'closed') {
-      setPreviewState('leaving')
+    if (wasPreviewing.current === previewVisible) return
+    wasPreviewing.current = previewVisible
+    if (previewVisible) previewDock.current?.querySelector<HTMLElement>('button')?.focus({ preventScroll: true })
+    else {
       if (scroll.current) scroll.current.scrollTop = savedScroll.current
-      const timer = setTimeout(() => {
-        setPreviewState('closed')
-        if (scroll.current) scroll.current.scrollTop = savedScroll.current
-        if (previewTrigger.current?.isConnected) previewTrigger.current.focus({ preventScroll: true })
-      }, matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 180)
-      return () => clearTimeout(timer)
+      if (previewTrigger.current?.isConnected) previewTrigger.current.focus({ preventScroll: true })
     }
   }, [previewVisible])
-  useEffect(() => { if (previewPhase != null) setRetainedPhase(previewPhase) }, [previewPhase])
   const close = () => {
     if (saving.current || closing) return
     onStopPreview?.(); setClosing(true)
@@ -112,6 +102,8 @@ export function LocalSettings({ onClose, onSaved, onEffectChange, onPreviewEffec
     setPreferences(saved); publishPreferences(saved); onEffectChange?.(saved.effect)
   }, '设置已保存，同一台电脑的浏览器共用')
   const effect = (patch: Partial<ResponseEffectSettings>) => { const next = { ...preferences.effect, ...patch }; void savePreferences({ ...preferences, effect: next }) }
+  const binary = normalizeBinaryEffect(preferences.effect.binary)
+  const changeBinary = (patch: Partial<BinaryEffectSettings>) => effect({ binary: { ...binary, ...patch } })
   const renderProfile = (profile: Preferences['render']['profile']) => { void savePreferences({ ...preferences, render: { profile } }) }
   const saveRoutine = (id: string, start: string, end: string) => {
     const routine = planner?.routines.find(item => item.id === id)
@@ -120,23 +112,39 @@ export function LocalSettings({ onClose, onSaved, onEffectChange, onPreviewEffec
   }
   const exportData = () => action(async () => {
     const backup = await localApi('/data/export')
-    const url = URL.createObjectURL(new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' }))
+    const json = serializeBackup(backup)
+    if (backupByteLength(json) > BACKUP_MAX_BYTES) throw new Error(BACKUP_EXPORT_TOO_LARGE)
+    const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }))
     const link = document.createElement('a'); link.href = url; link.download = `ASTaria-backup-${new Date().toLocaleDateString('en-CA')}.json`; link.click()
     setTimeout(() => URL.revokeObjectURL(url), 30000)
   }, '备份已下载，不包含 API Key')
-  const shownPhase = previewPhase ?? retainedPhase
-  const previewing = previewVisible || previewState === 'leaving'
+  const selectBackup = async (file: File) => {
+    setImportFile(null); setNotice('')
+    try {
+      if (file.size > BACKUP_MAX_BYTES) throw new Error(BACKUP_IMPORT_TOO_LARGE)
+      let value: unknown
+      try { value = JSON.parse(await file.text()) }
+      catch { throw new Error('无法读取该备份，请选择 ASTaria 导出的 JSON 文件') }
+      if (backupByteLength(serializeBackup(value)) > BACKUP_MAX_BYTES) throw new Error(BACKUP_IMPORT_TOO_LARGE)
+      setImportFile({ name: file.name, value }); setError('')
+    } catch (reason) { setError(reason instanceof Error ? reason.message : '无法读取该备份，请选择 ASTaria 导出的 JSON 文件') }
+  }
+  const beginPreview = () => {
+    savedScroll.current = scroll.current?.scrollTop ?? 0
+    previewTrigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    onPreviewEffect?.()
+  }
   const personality = preferences.assistant.personality ?? 'high'
   const memoryPageCount = Math.max(1, Math.ceil(memories.length / 3))
   const shownMemoryPage = Math.min(memoryPage, memoryPageCount - 1)
   const glass = { transmission: 70, blur: preferences.glass === 'soft' ? 6 : 0, rim: 40, shadow: 30 }
-  return <section ref={page} className="xixi-settings" data-theme={preferences.theme} data-grid={preferences.grid} data-closing={closing} data-previewing={previewing} data-preview-state={previewState} aria-label="设置">
+  return <section ref={page} className="xixi-settings" data-theme={preferences.theme} data-grid={preferences.grid} data-closing={closing} data-previewing={previewVisible} aria-label="设置">
     <div className="xixi-settings-background" aria-hidden="true" />
     <div ref={scroll} className="xixi-settings-scroll workspace-page-viewport" inert={previewVisible || closing} aria-hidden={previewVisible || closing}>
     <div className="xixi-settings-container workspace-page-container">
     <WorkspaceHeading className="xixi-settings-page-header" title="设置" description="按你的节奏，照顾每一天" titleId="xixi-settings-title"><button type="button" className="xixi-settings-close" aria-label="返回上一页" disabled={busy} onClick={close}><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m9.5 3-5 5 5 5M5 8h8" /></svg><span>返回</span></button></WorkspaceHeading>
     <div className="xixi-settings-panel">
-    <GlassSamplingContext.Provider value={!closing && !previewVisible}><MeasuredGlassSurface radius={24} material={glass} /></GlassSamplingContext.Provider>
+    <GlassSamplingContext.Provider value={!closing}><MeasuredGlassSurface radius={24} material={glass} /></GlassSamplingContext.Provider>
     <div className="xixi-settings-shell">
     <nav className="xixi-settings-tabs" aria-label="设置分区">{TABS.map(item => <button key={item} type="button" aria-current={tab === item ? 'page' : undefined} onClick={() => { setTab(item); onStopPreview?.(); scroll.current?.scrollTo({ top: 0 }) }}>{item}</button>)}</nav>
     <div className="xixi-settings-content" data-section={tab} key={tab}>
@@ -168,18 +176,29 @@ export function LocalSettings({ onClose, onSaved, onEffectChange, onPreviewEffec
         </div>
         <p className="xixi-render-note">首页与聊天按所选帧率运行，其他页面最高 60 FPS。高刷受屏幕刷新率与设备性能限制。</p>
       </section>
-      <section><h3>玻璃与空间</h3><Row title="界面外观" note="首页、聊天和工作台使用同一外观"><select aria-label="界面外观" disabled={!ready || busy} value={preferences.theme} onChange={event => void savePreferences({ ...preferences, theme: event.target.value as 'dark' | 'light' })}><option value="dark">深色</option><option value="light">浅色</option></select></Row><Toggle title="背景网格" disabled={!ready || busy} checked={preferences.grid} onChange={grid => void savePreferences({ ...preferences, grid })} /><Row title="玻璃质感"><select aria-label="玻璃质感" disabled={!ready || busy} value={preferences.glass} onChange={event => void savePreferences({ ...preferences, glass: event.target.value as 'clear' | 'soft' })}><option value="clear">通透</option><option value="soft">柔和 · 6px 磨砂</option></select></Row><Row title="卡片装饰线"><select aria-label="卡片装饰线" disabled={!ready || busy} value={preferences.cardEdges ?? 'both'} onChange={event => void savePreferences({ ...preferences, cardEdges: event.target.value as Preferences['cardEdges'] })}><option value="both">左右对称</option><option value="left">仅左侧</option><option value="none">隐藏</option></select></Row><Row title="信息密度"><select aria-label="信息密度" disabled={!ready || busy} value={preferences.density} onChange={event => void savePreferences({ ...preferences, density: event.target.value as 'compact' | 'comfortable' })}><option value="compact">小巧</option><option value="comfortable">舒展</option></select></Row></section>
-      <section><h3>析熙的回应</h3><div className="xixi-effect-options" role="group" aria-label="黑洞回应特效">{([['tide', '光潮', '光在盘面里呼吸'], ['filaments', '弦光', '沿曲线舒展的光丝'], ['stardust', '引星', '星尘汇聚成光'], ['off', '关闭', '保留原本的黑洞']] as const).map(([style, title, description]) => <button key={style} type="button" aria-pressed={preferences.effect.style === style} disabled={!ready || busy} onClick={() => effect({ style })}><strong>{title}</strong><small>{description}</small></button>)}</div><Row title="光效强度"><select aria-label="光效强度" value={preferences.effect.intensity} disabled={!ready || busy} onChange={event => effect({ intensity: event.target.value as ResponseEffectSettings['intensity'] })}><option value="gentle">轻柔</option><option value="standard">标准</option><option value="vivid">鲜明</option></select></Row><Row title="动态偏好"><select aria-label="动态偏好" value={preferences.effect.motion} disabled={!ready || busy} onChange={event => effect({ motion: event.target.value as ResponseEffectSettings['motion'] })}><option value="system">跟随系统</option><option value="reduced">减弱动态</option><option value="full">完整动态</option></select></Row><div className="xixi-settings-actions"><button type="button" disabled={preferences.effect.style === 'off'} onClick={onPreviewEffect}>预览思考与回复</button>{previewPhase != null && <button type="button" onClick={onStopPreview}>结束预览</button>}<span role="status">{previewPhase === 'thinking' ? '思考 · 正在汇聚' : previewPhase === 'replying' ? '回复 · 光流舒展' : previewPhase === 'idle' ? '余光正在平息' : '无需调用 AI'}</span></div></section>
+      <div className="xixi-appearance-columns">
+        <div className="xixi-appearance-space">
+          <section><h3>玻璃与空间</h3><Row title="界面外观" note="首页、聊天和工作台使用同一外观"><select aria-label="界面外观" disabled={!ready || busy} value={preferences.theme} onChange={event => void savePreferences({ ...preferences, theme: event.target.value as 'dark' | 'light' })}><option value="dark">深色</option><option value="light">浅色</option></select></Row><Toggle title="背景网格" disabled={!ready || busy} checked={preferences.grid} onChange={grid => void savePreferences({ ...preferences, grid })} /><Row title="玻璃质感"><select aria-label="玻璃质感" disabled={!ready || busy} value={preferences.glass} onChange={event => void savePreferences({ ...preferences, glass: event.target.value as 'clear' | 'soft' })}><option value="clear">通透</option><option value="soft">柔和 · 6px 磨砂</option></select></Row><Row title="卡片装饰线"><select aria-label="卡片装饰线" disabled={!ready || busy} value={preferences.cardEdges ?? 'both'} onChange={event => void savePreferences({ ...preferences, cardEdges: event.target.value as Preferences['cardEdges'] })}><option value="both">左右对称</option><option value="left">仅左侧</option><option value="none">隐藏</option></select></Row><Row title="信息密度"><select aria-label="信息密度" disabled={!ready || busy} value={preferences.density} onChange={event => void savePreferences({ ...preferences, density: event.target.value as 'compact' | 'comfortable' })}><option value="compact">小巧</option><option value="comfortable">舒展</option></select></Row></section>
+          <HorizonTuningPanel disabled={!ready || busy} />
+        </div>
+        <section className="xixi-appearance-response"><h3>析熙的回应</h3><div className="xixi-effect-options" role="group" aria-label="黑洞回应特效">{([['tide', '光潮', '光在盘面里呼吸'], ['filaments', '弦光', '沿曲线舒展的光丝'], ['stardust', '引星', '星尘汇聚成光'], ['off', '关闭', '保留原本的黑洞']] as const).map(([style, title, description]) => <button key={style} type="button" aria-pressed={preferences.effect.style === style} disabled={!ready || busy} onClick={() => effect({ style })}><strong>{title}</strong><small>{description}</small></button>)}</div>
+        <div className="xixi-appearance-response-controls">
+          <Row title="特效强度"><select aria-label="特效强度" value={preferences.effect.intensity} disabled={!ready || busy} onChange={event => effect({ intensity: event.target.value as ResponseEffectSettings['intensity'] })}><option value="gentle">轻柔</option><option value="standard">标准</option><option value="vivid">鲜明</option></select></Row><Row title="动态偏好"><select aria-label="动态偏好" value={preferences.effect.motion} disabled={!ready || busy} onChange={event => effect({ motion: event.target.value as ResponseEffectSettings['motion'] })}><option value="system">跟随系统</option><option value="reduced">减弱动态</option><option value="full">完整动态</option></select></Row>
+          <Toggle title="思考时显示数字" note="只在析熙思考时出现，回答开始后淡出" checked={binary.enabled} disabled={!ready || busy} onChange={enabled => changeBinary({ enabled })} />
+        </div>
+        </section>
+      </div>
+      <div className="xixi-settings-actions xixi-appearance-preview"><button type="button" disabled={!ready || busy || (preferences.effect.style === 'off' && !binary.enabled)} onClick={beginPreview}>预览思考与回复</button><span>无需调用 AI</span></div>
     </>}
-    {tab === '数据' && <section><h3>留在你身边</h3><Row title="本机数据库" note="同一台电脑的浏览器共用，不是跨设备同步"><span>{status?.storage ?? '正在连接'}</span></Row><Row title="API Key"><span>macOS 钥匙串</span></Row><p className="xixi-settings-note">备份包含个人事项、对话与记忆，请保存在你信任的位置，密钥始终不包含在内</p><div className="xixi-settings-actions"><button type="button" disabled={busy || !ready} onClick={() => void exportData()}>导出备份</button><label className="xixi-file-label">选择备份<input aria-label="选择备份文件" type="file" accept="application/json,.json" disabled={busy} onChange={async event => { const file = event.target.files?.[0]; if (!file) return; try { if (file.size > 32 * 1024 * 1024) throw new Error('备份过大'); setImportFile({ name: file.name, value: JSON.parse(await file.text()) }); setError('') } catch { setError('无法读取该备份，请选择 ASTaria 导出的 JSON 文件') } event.target.value = '' }} /></label></div>{importFile && <div className="xixi-import-confirm"><p>{importFile.name}</p><p>恢复会替换当前数据库中的事项、对话和记忆，先导出当前备份再继续。历史变更保留但不能再撤销，旧方案需要重新推演</p><button type="button" disabled={busy} onClick={() => void action(async () => { await localApi('/data/import', { backup: importFile.value, confirmed: true }); setImportFile(null); notifyLocalDataChange(); const value = await localApi<Preferences>('/preferences'); publishPreferences(value) }, '备份已恢复，请刷新页面重新读取对话')}>确认恢复此备份</button><button type="button" onClick={() => setImportFile(null)}>取消</button></div>}<p className="xixi-settings-note">删除单段对话在对话菜单中操作；更正和遗忘记忆在「析熙」中操作</p></section>}
+    {tab === '数据' && <section><h3>留在你身边</h3><Row title="本机数据库" note="同一台电脑的浏览器共用，不是跨设备同步"><span>{status?.storage ?? '正在连接'}</span></Row><Row title="API Key"><span>macOS 钥匙串</span></Row><p className="xixi-settings-note">备份包含个人事项、对话与记忆，请保存在你信任的位置，密钥始终不包含在内</p><div className="xixi-settings-actions"><button type="button" disabled={busy || !ready} onClick={() => void exportData()}>导出备份</button><label className="xixi-file-label">选择备份<input aria-label="选择备份文件" type="file" accept="application/json,.json" disabled={busy} onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void selectBackup(file) }} /></label></div>{importFile && <div className="xixi-import-confirm"><p>{importFile.name}</p><p>恢复会替换当前数据库中的事项、对话和记忆，先导出当前备份再继续。历史变更保留但不能再撤销，旧方案需要重新推演</p><button type="button" disabled={busy} onClick={() => void action(async () => { await localApi('/data/import', { backup: importFile.value, confirmed: true }); setImportFile(null); notifyLocalDataChange(); const value = await localApi<Preferences>('/preferences'); publishPreferences(value) }, '备份已恢复，请刷新页面重新读取对话')}>确认恢复此备份</button><button type="button" onClick={() => setImportFile(null)}>取消</button></div>}<p className="xixi-settings-note">删除单段对话在对话菜单中操作；更正和遗忘记忆在「析熙」中操作</p></section>}
     </div>
     <footer className="xixi-settings-feedback" aria-live="polite">{busy ? '正在保存' : error || notice || '设置保存在这台电脑上'}{error && <button type="button" onClick={() => void action(async () => {}, '已重新读取')}>重新读取</button>}</footer>
     </div>
     </div></div></div>
-    {previewing && <div ref={previewDock} className="xixi-preview-dock" inert={!previewVisible} aria-hidden={!previewVisible}>
-      <GlassSamplingContext.Provider value={previewVisible && !closing}><MeasuredGlassSurface radius={24} material={glass} /></GlassSamplingContext.Provider>
-      <div className="xixi-preview-content"><span role="status">{shownPhase === 'thinking' ? '思考 · 正在汇聚' : shownPhase === 'replying' ? '回复 · 光流舒展' : '余光正在平息'}</span><div>{([['tide', '光潮'], ['filaments', '弦光'], ['stardust', '引星']] as const).map(([style, label]) => <button type="button" key={style} disabled={!ready || busy} aria-pressed={preferences.effect.style === style} onClick={() => effect({ style })}>{label}</button>)}</div><button type="button" onClick={onPreviewEffect}>再看一次</button><button type="button" onClick={onStopPreview}>返回设置</button></div>
-    </div>}
+    <div ref={previewDock} className="xixi-preview-dock" inert={!previewVisible || closing} aria-hidden={!previewVisible || closing}>
+      <GlassSamplingContext.Provider value={!closing}><MeasuredGlassSurface radius={24} material={glass} /></GlassSamplingContext.Provider>
+      <div className="xixi-preview-content"><div className="xixi-personality-options" role="group" aria-label="预览回应状态">{([['thinking', '思考'], ['replying', '回复'], ['idle', '静止']] as const).map(([phase, label]) => <button type="button" key={phase} aria-pressed={previewPhase === phase} onClick={() => onPreviewPhaseChange?.(phase)}>{label}</button>)}</div><button type="button" onClick={onStopPreview}>返回设置</button></div>
+    </div>
   </section>
 }
 
@@ -215,7 +234,7 @@ function PageControls({ label, page, pageCount, disabled, onPage }: { label: str
   return <nav className="xixi-settings-pagination" aria-label={`${label}翻页`}><span aria-live="polite">{page + 1} / {pageCount}</span><button type="button" disabled={disabled || page === 0} aria-label={`${label}上一页`} onClick={() => onPage(page - 1)}>上一页</button><button type="button" disabled={disabled || page + 1 >= pageCount} aria-label={`${label}下一页`} onClick={() => onPage(page + 1)}>下一页</button></nav>
 }
 function Row({ title, note, children }: { title: string; note?: string; children: ReactNode }) { return <div className="xixi-setting-row"><div><strong>{title}</strong>{note && <small>{note}</small>}</div><div>{children}</div></div> }
-function Toggle({ title, checked, disabled, onChange }: { title: string; checked: boolean; disabled: boolean; onChange: (value: boolean) => void }) { return <Row title={title}><button className="xixi-toggle" type="button" role="switch" aria-label={title} aria-checked={checked} disabled={disabled} onClick={() => onChange(!checked)}><span /></button></Row> }
+function Toggle({ title, note, checked, disabled, onChange }: { title: string; note?: string; checked: boolean; disabled: boolean; onChange: (value: boolean) => void }) { return <Row title={title} note={note}><button className="xixi-toggle" type="button" role="switch" aria-label={title} aria-checked={checked} disabled={disabled} onClick={() => onChange(!checked)}><span /></button></Row> }
 function NumberRow({ title, value, min, max, disabled, onSave }: { title: string; value: number; min: number; max: number; disabled: boolean; onSave: (value: number) => void }) {
   const [draft, setDraft] = useState(String(value)); useEffect(() => setDraft(String(value)), [value])
   return <Row title={title}><form className="xixi-inline-form" onSubmit={event => { event.preventDefault(); onSave(Number(draft)) }}><input type="number" aria-label={title} min={min} max={max} required value={draft} disabled={disabled} onChange={event => setDraft(event.target.value)} /><span>分钟</span><button disabled={disabled || Number(draft) === value}>保存</button></form></Row>

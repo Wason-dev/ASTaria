@@ -10,12 +10,15 @@ import { createXixi } from './xixi.mjs'
 import { createCompanion } from './companion.mjs'
 import { createRouteAnalysis } from './routeAnalysis.mjs'
 import { createStringOrder } from './stringOrder.mjs'
+import { createHorizonOrder } from './horizonOrder.mjs'
+import { createHorizonGrouping } from './horizonGroups.mjs'
 import { createFreeTime } from './freeTime.mjs'
 import { getPreferences, savePreferences } from './preferences.mjs'
 import { normalizeAssistantProtocol } from './provider-protocol.mjs'
 import { toggleTaskStep } from './taskSteps.mjs'
 import { publicOperation, publicOperations } from './operationReceipts.mjs'
 import { ValidationError, object, identifier, knownKeys } from './validation.mjs'
+import { BACKUP_IMPORT_REQUEST_MAX_BYTES, BACKUP_IMPORT_TOO_LARGE } from '../src/xixi/backupLimits.ts'
 
 export const DATA_DIRECTORY = join(homedir(), 'Library', 'Application Support', 'ASTaria')
 const localAddresses = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
@@ -43,9 +46,11 @@ export function validateRequest(req) {
 async function body(req) {
   let size = 0
   const chunks = []
+  const importingBackup = req.url?.split('?')[0] === '/api/data/import'
+  const limit = importingBackup ? BACKUP_IMPORT_REQUEST_MAX_BYTES : 4 * 1024 * 1024
   for await (const chunk of req) {
     size += chunk.length
-    if (size > (req.url?.split('?')[0] === '/api/data/import' ? 32 : 4) * 1024 * 1024) throw new ValidationError('一次提交的内容过多', 413)
+    if (size > limit) throw new ValidationError(importingBackup ? BACKUP_IMPORT_TOO_LARGE : '一次提交的内容过多', 413)
     chunks.push(chunk)
   }
   try { return object(JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}')) }
@@ -63,6 +68,8 @@ export function createLocalService({ db = createDatabase(join(DATA_DIRECTORY, 'a
   const companion = createCompanion({ db })
   const routeAnalysis = createRouteAnalysis({ db, companion, complete: completion })
   const stringOrder = createStringOrder({ db, complete: completion })
+  const horizonOrder = createHorizonOrder({ db, complete: completion })
+  const horizonGrouping = createHorizonGrouping({ list: horizonOrder.list, complete: completion })
   const freeTime = createFreeTime({ db })
   const localModelInstaller = createLocalModelInstaller({ fetcher })
   const state = (id = db.getActiveConversation().id, before) => {
@@ -155,6 +162,7 @@ export function createLocalService({ db = createDatabase(join(DATA_DIRECTORY, 'a
       if (path === '/data/export') return db.exportData()
       if (path === '/companion') return companion.listState({ ...(url.searchParams.get('date') ? { date: url.searchParams.get('date') } : {}), ...(url.searchParams.get('days') ? { days: Number(url.searchParams.get('days')) } : {}) })
       if (path === '/companion/string-order') return stringOrder.list({ date: url.searchParams.get('date') || undefined })
+      if (path === '/companion/horizon-order') return horizonOrder.list({ date: url.searchParams.get('date') || undefined })
       if (path === '/planner') return db.getPlanner()
       if (path === '/conversation/reasoning') {
         const conversationId = identifier(url.searchParams.get('conversationId'), '对话标识')
@@ -214,6 +222,14 @@ export function createLocalService({ db = createDatabase(join(DATA_DIRECTORY, 'a
       if (path === '/companion/decision') return companion.previewDecision(input)
       if (path === '/companion/route') return completionScope.run(selectedCompletion(), () => routeAnalysis.analyze(input))
       if (path === '/companion/string-order') return completionScope.run(selectedCompletion(), () => stringOrder.apply(input))
+      if (path === '/companion/horizon-order') {
+        const onEvent = req.headers.accept?.includes('text/event-stream') ? startStream?.() : undefined
+        return completionScope.run(selectedCompletion(), () => horizonOrder.apply(input, { onEvent }))
+      }
+      if (path === '/companion/horizon-groups') {
+        const onEvent = req.headers.accept?.includes('text/event-stream') ? startStream?.() : undefined
+        return completionScope.run(selectedCompletion(), () => horizonGrouping.suggest(input, { onEvent }))
+      }
       if (path === '/companion/scenario/apply') { knownKeys(input, ['id', 'expectedVersion']); const result = companion.applyScenario(input.id, { expectedVersion: input.expectedVersion }); return { ...result, operation: result.operation ? publicOperation(result.operation, db) : null } }
       if (path === '/companion/scenario/discard') { knownKeys(input, ['id', 'expectedVersion']); return companion.discardScenario(input.id, { expectedVersion: input.expectedVersion }) }
       const correction = path.match(/^\/memories\/([^/]+)\/correct$/)
@@ -296,6 +312,7 @@ export function createLocalService({ db = createDatabase(join(DATA_DIRECTORY, 'a
     throw new ValidationError('找不到这个本机接口', 404)
   }
 
+  const pendingRequests = new Set()
   const middleware = (req, res, next) => {
     if (!(req.url === '/api' || req.url?.startsWith('/api/'))) return next()
     res.setHeader('Content-Type', 'application/json; charset=utf-8')
@@ -319,19 +336,25 @@ export function createLocalService({ db = createDatabase(join(DATA_DIRECTORY, 'a
       res.once('close', () => clearInterval(heartbeat))
       return send
     }
-    Promise.resolve().then(() => dispatch(req, startStream)).then(result => {
+    const pending = Promise.resolve().then(() => dispatch(req, startStream)).then(result => {
       if (streaming) { send({ type: 'result', result }); res.end() }
       else res.end(JSON.stringify(result ?? null))
     }).catch(error => {
       const message = error instanceof ValidationError || error instanceof ProviderError ? error.message : '本机操作未完成，请稍后重试；密钥问题可检查系统钥匙串授权'
-      if (streaming) { send({ type: 'error', error: message }); res.end() }
+      if (streaming) { send({ type: 'error', error: message, status: error instanceof ValidationError ? error.status : 503 }); res.end() }
       else {
         res.statusCode = error instanceof ValidationError ? error.status : 503
         res.end(JSON.stringify({ error: message }))
       }
     }).finally(() => clearInterval(heartbeat))
+    pendingRequests.add(pending)
+    pending.finally(() => pendingRequests.delete(pending)).catch(() => {})
   }
-  return { middleware, close: () => { localModelInstaller.close(); db.close() } }
+  return {
+    middleware,
+    whenIdle: () => Promise.allSettled([...pendingRequests]),
+    close: () => { localModelInstaller.close(); db.close() },
+  }
 }
 
 export function localServicePlugin() {

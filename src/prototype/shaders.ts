@@ -22,6 +22,15 @@ uniform float uLens;
 uniform float uDoppler;
 uniform float uQuality;
 uniform sampler2D uStars;
+uniform float uBinaryEnabled;
+uniform sampler2D uBinaryTypography;
+uniform float uBinaryDensity;
+uniform float uBinaryBrightness;
+uniform float uBinaryVisibleFraction;
+uniform float uBinarySparkFrequency;
+uniform float uBinarySparkBrightness;
+uniform float uBinaryFlowSpeed;
+uniform float uBinaryFlowOffset;
 uniform float uBurst;
 uniform sampler2D uGeodesics;
 uniform sampler2D uTermination;
@@ -303,6 +312,42 @@ vec3 sky(vec3 direction, vec2 p) {
   return mix(paper,night,smoothstep(.05,.95,uNight));
 }
 
+vec3 binaryInterior(vec2 image, float imageRadius) {
+  if (uBinaryEnabled <= .00001 || uBinaryDensity <= 0.0) return vec3(0.0);
+  vec2 uv = rotate(uRoll)*image/max(imageRadius,.0001);
+  float radius = length(uv);
+  if (radius >= .99) return vec3(0.0);
+  float rimFade = 1.0-smoothstep(.79,.99,radius);
+  float motion = (uTime*.018*uBinaryFlowSpeed+uBinaryFlowOffset)*170.0;
+  // Screen-aligned columns each own one fixed depth. Interleaving the focal
+  // planes avoids the moire from drawing seven grids on top of one another.
+  float columnScale = mix(14.0,29.0,uBinaryDensity);
+  float column = floor(uv.x*columnScale);
+  float layer = floor(hash(vec2(column,35.8))*7.0);
+  float depth = .58+layer*.235;
+  vec2 coords = vec2(uv.x*columnScale,
+                     uv.y*9.0*depth+motion*(.72+depth*.42)+layer*3.19);
+  vec2 cell = floor(coords);
+  vec2 key = cell+vec2(layer*63.4,layer*31.7);
+  float digit = step(.5,hash(key+19.8));
+  vec2 glyphSize = vec2(min(.96,.46*columnScale/(8.0*depth)),.50);
+  vec2 glyphUv = (fract(coords)-.5)/glyphSize+.5;
+  float inside = step(0.0,glyphUv.x)*step(glyphUv.x,1.0)
+    *step(0.0,glyphUv.y)*step(glyphUv.y,1.0);
+  float blurRow = layer < 1.0 ? 3.0 : layer < 2.0 ? 2.0 : layer < 6.0 ? 0.0 : 1.0;
+  vec2 atlasUv = vec2((digit+clamp(glyphUv.x,.02,.98))*.5,
+                      (3.0-blurRow+clamp(glyphUv.y,.02,.98))*.25);
+  float glyph = texture2D(uBinaryTypography,atlasUv).a*inside;
+  float footprint = max(fwidth(coords.x)/glyphSize.x,fwidth(coords.y)/glyphSize.y);
+  float resolved = 1.0-smoothstep(.20,.48,footprint);
+  // A constant, near-black neutral gray; only the glyph position animates.
+  float brightness = .00052;
+  float depthFade = mix(.32,.95,smoothstep(.6,1.4,depth));
+  float light = glyph*resolved*brightness*depthFade;
+  float strength = mix(.42,2.8,pow(uBinaryBrightness,1.5));
+  return vec3(light*strength*rimFade*uBinaryEnabled);
+}
+
 // Continue the existing R=30 transfer orbit from a nearer inward-looking
 // observer. Eight-point Gauss integration of dphi/du reuses the same LUT:
 // rotating its reference basis preserves the actual equatorial crossings.
@@ -443,6 +488,12 @@ void main() {
   float cameraScale = cameraDistance/uCameraRadius*sqrt((1.0-1.0/uCameraRadius)/(1.0-1.0/cameraDistance));
   vec3 background = sky(normalize(ray),p*cameraScale);
   vec3 horizon = mix(vec3(.014,.012,.01),vec3(.00002),uNight);
+  // Only the glyph strokes emit. The black sphere, disk lighting, camera and
+  // postprocessing stay intact, and foreground disk transmission still occludes.
+  float shadowSine = uCriticalImpact*sqrt(1.0-1.0/cameraDistance)/cameraDistance;
+  float shadowImageRadius = 30.0*shadowSine/sqrt(max(.00001,1.0-shadowSine*shadowSine));
+  float binaryRadius = uLens > .5 ? shadowImageRadius : 30.0/sqrt(cameraDistance*cameraDistance-1.0);
+  horizon += binaryInterior(p,binaryRadius);
   color += transmission*mix(background,horizon,swallowed);
   // A subpixel SDF ring has a sharp threshold and a separate decaying
   // scattering shoulder. The radius is the critical impact parameter.
@@ -469,8 +520,6 @@ void main() {
   // As the observer settles at the edge, adapt exposure away from the limb.
   // Keep the same moving disk/stellar field, with quiet space for the labels;
   // the near-horizon strands retain their original photographic brightness.
-  float shadowSine = uCriticalImpact*sqrt(1.0-1.0/cameraDistance)/cameraDistance;
-  float shadowImageRadius = 30.0*shadowSine/sqrt(max(.00001,1.0-shadowSine*shadowSine));
   float limbDistance = abs(length(screen)-shadowImageRadius)/scale;
   float edgeExposure = mix(.065,1.0,exp(-pow(limbDistance/.10,2.0)));
   finalColor = mix(finalColor,clamp(finalColor,vec3(0.0),vec3(1.0))*edgeExposure,uFlightEdgeFocus);

@@ -13,10 +13,8 @@ import {
 
 const SEED_AREAS = [
   ['math', '数学', 'deep'], ['chinese', '语文', 'deep'], ['english', '英语', 'deep'],
-  ['l-and-l', 'L&L', 'deep'], ['business', '商务', 'deep'], ['phy2', 'Phy2', 'deep'],
-  ['agentic-ai', 'AgenticAI', 'deep'], ['sat', 'SAT', 'deep'], ['words', '单词', 'light'],
-  ['project-moss', '个人项目：MOSS', 'deep'], ['project-psec', '个人项目：PSEC-WEB', 'deep'],
-  ['project-vfx', '个人项目：VFX', 'deep'], ['cas', 'CAS', 'light'],
+  ['physics', '物理', 'deep'], ['work', '工作', 'deep'],
+  ['life', '生活', 'light'], ['projects', '项目', 'deep'],
 ]
 const now = () => new Date().toISOString()
 const nextTimestamp = previous => {

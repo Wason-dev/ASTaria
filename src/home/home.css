@@ -2,8 +2,8 @@
 .home-workspace :is(button, textarea, .home-menu, dialog) { pointer-events: auto }
 .p0 .home-black-hole-entry { position: absolute; z-index: 0; box-sizing: border-box; border: 1px solid transparent; border-radius: 50%; padding: 0; opacity: 0; pointer-events: none !important; cursor: pointer; transition: opacity 180ms ease, border-color 180ms ease, box-shadow 180ms ease; }
 .home-current, .home-morph { z-index: 1; }
-.home-workspace[data-string-covered=true] > .home-scene-ui { opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 380ms ease, visibility 0s 380ms; }
-.p0:has(.home-workspace[data-string-covered=true]) > .p0-whisper { opacity: 0; transition: opacity 380ms ease; }
+.home-workspace[data-string-covered=true] > .home-scene-ui { opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 760ms cubic-bezier(.2,.7,.2,1), visibility 0s 760ms; }
+.p0:has(.home-workspace[data-string-covered=true]) > .p0-whisper { opacity: 0; transition: opacity 760ms cubic-bezier(.2,.7,.2,1); }
 .home-black-hole-entry[data-visible=true] { pointer-events: auto !important; }
 .home-black-hole-entry[data-visible=true]:hover, .home-black-hole-entry[data-visible=true]:focus-visible { opacity: 1; border-color: rgb(224 177 92 / .34); box-shadow: 0 0 0 5px rgb(224 177 92 / .06), 0 0 18px rgb(224 177 92 / .14); outline: none; }
 .home-black-hole-entry[data-visible=true]:focus-visible::after, .home-black-hole-entry[data-visible=true]:hover::after { content: '进入弦轨'; position: absolute; left: 50%; top: calc(100% + 8px); transform: translateX(-50%); white-space: nowrap; color: rgb(238 234 227 / .72); font-size: 10px; font-weight: 400; letter-spacing: .12em; text-shadow: 0 1px 5px #000; pointer-events: none; }
@@ -163,5 +163,8 @@
 .home-workspace[data-grid=false] :is(.wb-background,.pl-background)::after{display:none}
 .home-workspace[data-motion=reduced] :is(.wb-enter,.pl-period-page,.home-input-flash){animation-duration:1ms!important;transition-duration:1ms!important}
 .p0 .home-notification-content{border:0;background:transparent;color:inherit;font:inherit;cursor:pointer;width:100%;text-align:left}
+.home-workspace[data-page=settings]>:is(.home-nav,.home-clock){transition:opacity .24s ease,visibility 0s,width 280ms cubic-bezier(.2,.7,.2,1)}
 .home-workspace[data-effect-preview=true]>:is(.home-scene-ui,.workbench,.planner,.home-nav,.home-clock,.home-notification){visibility:hidden!important;opacity:0!important;pointer-events:none!important}
+.home-workspace[data-effect-preview=true]>:is(.home-nav,.home-clock){transition:opacity .24s ease,visibility 0s .24s,width 280ms cubic-bezier(.2,.7,.2,1)}
 .home-workspace[data-effect-preview=true]>:is(.home-scene-ui,.workbench,.planner) .home-glass-surface{backdrop-filter:none!important;-webkit-backdrop-filter:none!important;box-shadow:none!important}
+@media(prefers-reduced-motion:reduce){.home-workspace[data-page=settings]>:is(.home-nav,.home-clock){transition:none}}

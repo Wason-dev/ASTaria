@@ -26,14 +26,17 @@ async function readJSON(response, label, maxBytes = 512 * 1024) {
 }
 
 export function createCompletion(keychain, fetcher = fetch, getModel = () => MODEL, getSettings) {
-  return async (payload, { onDelta } = {}) => {
+  return async (payload, { onDelta, signal, purpose } = {}) => {
     const settings = getSettings?.()
     const local = settings?.provider === 'local'
     const label = local ? '本地模型' : 'DeepSeek'
     const model = local ? settings.local.model : getModel()
     if (!model || (!local && !MODELS.some(option => option.id === model))) throw new ProviderError('请在设置中选择有效模型')
     const endpoint = local ? `${localEndpoint(settings.local.baseUrl)}/chat/completions` : ENDPOINT
-    const reasoningEffort = settings?.reasoningEffort ?? DEFAULT_REASONING_EFFORT
+    const configuredEffort = settings?.reasoningEffort ?? DEFAULT_REASONING_EFFORT
+    // A constrained review of an already feasible three-day plan needs only
+    // light reasoning. This request-local cap never mutates chat preferences.
+    const reasoningEffort = ['horizon-order', 'horizon-grouping'].includes(purpose) && ['high', 'max'].includes(configuredEffort) ? 'low' : configuredEffort
     if (!local && !REASONING_EFFORTS.includes(reasoningEffort)) throw new ProviderError('请在设置中选择有效的思考深度')
     const thinkingEnabled = !local && reasoningEffort !== 'off'
     // max_tokens includes reasoning. A short-answer budget of 1800 would cut
@@ -54,7 +57,9 @@ export function createCompletion(keychain, fetcher = fetch, getModel = () => MOD
     let response
     try {
       response = await fetcher(endpoint, {
-        method: 'POST', redirect: 'error', signal: AbortSignal.timeout(thinkingEnabled ? 300_000 : local ? 180_000 : 75_000),
+        method: 'POST', redirect: 'error', signal: signal
+          ? AbortSignal.any([signal, AbortSignal.timeout(thinkingEnabled ? 300_000 : local ? 180_000 : 75_000)])
+          : AbortSignal.timeout(thinkingEnabled ? 300_000 : local ? 180_000 : 75_000),
         headers,
         // DeepSeek's OpenAI-compatible API exposes both the thinking toggle and
         // effort control. Keep these fields off local providers because Ollama

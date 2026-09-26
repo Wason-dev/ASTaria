@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ASTaria · 三圆交集图标生成器</title>
+<style>
+:root{color-scheme:dark;--line:#303540;--text:#eef0f3;--muted:#a5aab5;--accent:#d5b77b}*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(circle at 50% 35%,#20242d,#111318 60%);color:var(--text);font:14px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif}main{width:min(1180px,calc(100% - 32px));margin:24px auto 40px}.top{margin-bottom:18px}.top h1{font-size:20px;margin:0}.top p{margin:4px 0 0;color:var(--muted)}.layout{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:18px}.preview{min-height:650px;border:1px solid var(--line);border-radius:24px;background:#fff;display:grid;place-items:center;overflow:hidden;box-shadow:0 18px 60px #0006}.preview svg{width:min(82%,680px);height:auto;display:block}.controls{background:#171a20;border:1px solid var(--line);border-radius:20px;padding:18px}.control{padding:0 0 16px;margin:0 0 16px;border-bottom:1px solid #292d35}.label{display:flex;justify-content:space-between;margin-bottom:8px}.label span:last-child{color:var(--accent)}input[type=range]{width:100%;accent-color:var(--accent)}input[type=color]{width:100%;height:38px;border:1px solid var(--line);border-radius:9px;background:transparent;padding:3px}.buttons{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}button{border:1px solid #4a4f5b;background:#252a33;color:var(--text);padding:10px 12px;border-radius:10px;cursor:pointer}button:hover{border-color:var(--accent)}.hint{color:var(--muted);font-size:12px;margin:12px 0 0}@media(max-width:820px){.layout{grid-template-columns:1fr}.preview{min-height:55vh}}
+</style></head><body><main><div class="top"><h1>三圆两两交集 · 生成器</h1><p>只保留恰好属于两个圆的区域，中央三重交集始终挖空。</p></div><div class="layout"><section class="preview" id="preview"></section><aside class="controls">
+<div class="control"><div class="label"><span>圆半径</span><span id="radiusValue"></span></div><input id="radius" type="range" min="120" max="360" value="280"></div>
+<div class="control"><div class="label"><span>圆心间距</span><span id="distanceValue"></span></div><input id="distance" type="range" min="180" max="680" value="460"></div>
+<div class="control"><div class="label"><span>整体旋转</span><span id="rotationValue"></span></div><input id="rotation" type="range" min="0" max="360" value="60"></div>
+<div class="control"><div class="label"><span>图形颜色</span><span id="fillValue"></span></div><input id="fill" type="color" value="#22252b"></div>
+<div class="control"><div class="label"><span>背景颜色</span><span id="bgValue"></span></div><input id="bg" type="color" value="#ffffff"></div>
+<div class="buttons"><button id="downloadSvg">导出 SVG</button><button id="downloadPng">导出 PNG</button></div><p class="hint">圆心间距越大，花瓣越细长；半径控制整体尺寸。导出的 SVG 是纯矢量。</p></aside></div></main>
+<script>
+const $=id=>document.getElementById(id),state={radius:280,distance:460,rotation:60,fill:'#22252b',bg:'#ffffff'},center=512;
+let pngBlob=null,pngVersion=0;
+function circles(){const d=state.distance;return[{x:center,y:center-d/Math.sqrt(3)},{x:center-d/2,y:center+d/(2*Math.sqrt(3))},{x:center+d/2,y:center+d/(2*Math.sqrt(3))}]}
+function circle(c){return '<circle cx="'+c.x.toFixed(3)+'" cy="'+c.y.toFixed(3)+'" r="'+state.radius+'"/>'}
+function svgMarkup(){const[a,b,c]=circles(),mask=(id,x)=>'<mask id="'+id+'" maskUnits="userSpaceOnUse"><path fill="white" d="M0 0h1024v1024H0z"/><circle cx="'+x.x.toFixed(3)+'" cy="'+x.y.toFixed(3)+'" r="'+state.radius+'" fill="black"/></mask>';return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"><defs><clipPath id="ca">'+circle(a)+'</clipPath><clipPath id="cb">'+circle(b)+'</clipPath>'+mask('na',a)+mask('nb',b)+mask('nc',c)+'</defs><path fill="'+state.bg+'" d="M0 0h1024v1024H0z"/><g fill="'+state.fill+'" transform="rotate('+state.rotation+' 512 512)"><g clip-path="url(#ca)" mask="url(#nc)">'+circle(b)+'</g><g clip-path="url(#ca)" mask="url(#nb)">'+circle(c)+'</g><g clip-path="url(#cb)" mask="url(#na)">'+circle(c)+'</g></g></svg>'}
+function render(){
+  // Keep all three equal circles intersecting, including after reducing radius.
+  const maxDistance=Math.min(680,state.radius*2-1);
+  state.distance=Math.min(state.distance,maxDistance);
+  $('distance').max=maxDistance;
+  $('distance').value=state.distance;
+  ['radius','distance','rotation'].forEach(k=>$(k+'Value').textContent=state[k]+(k==='rotation'?'°':' px'));
+  $('fillValue').textContent=state.fill;
+  $('bgValue').textContent=state.bg;
+  $('preview').style.background=state.bg;
+  $('preview').innerHTML=svgMarkup();
+  preparePng();
+}
+['radius','distance','rotation'].forEach(k=>$(k).addEventListener('input',e=>{state[k]=+e.target.value;render()}));
+['fill','bg'].forEach(k=>$(k).addEventListener('input',e=>{state[k]=e.target.value;render()}));
+['radius','distance','rotation','fill','bg'].forEach(k=>$(k).setAttribute('aria-label',$(k).previousElementSibling.firstElementChild.textContent));
+function save(name,blob){
+  const a=document.createElement('a'),url=URL.createObjectURL(blob);
+  a.href=url;a.download=name;document.body.append(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+$('downloadSvg').onclick=()=>save('astaria-pairwise-icon.svg',new Blob([svgMarkup()],{type:'image/svg+xml'}));
+function preparePng(){
+  const i=new Image(),button=$('downloadPng'),version=++pngVersion;
+  pngBlob=null;button.textContent='生成 PNG…';button.disabled=true;
+  const failed=()=>{if(version===pngVersion){button.textContent='PNG 生成失败';button.disabled=true;}};
+  i.onload=()=>{
+    if(version!==pngVersion)return;
+    try{
+      const c=document.createElement('canvas');c.width=c.height=1024;
+      c.getContext('2d').drawImage(i,0,0,1024,1024);
+      c.toBlob(blob=>{
+        if(version!==pngVersion)return;
+        if(!blob){failed();return;}
+        pngBlob=blob;button.textContent='导出 PNG';button.disabled=false;
+      },'image/png');
+    }catch(error){failed();}
+  };
+  i.onerror=failed;
+  i.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svgMarkup().replace('viewBox=', 'width="1024" height="1024" viewBox='));
+}
+$('downloadPng').onclick=()=>{if(pngBlob)save('astaria-pairwise-icon.png',pngBlob);};
+render();
+</script></body></html>

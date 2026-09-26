@@ -1,0 +1,72 @@
+.horizon-editor-layer { position:absolute; inset:0; z-index:12; display:grid; place-items:center; padding:74px 32px 42px; box-sizing:border-box; pointer-events:auto; background:transparent; opacity:var(--horizon-ui-reveal,1) }
+/* Keep the live backdrop available during arrival and after the animation ends. */
+.horizon-group-editor { position:relative; isolation:isolate; width:min(880px,100%); max-height:100%; display:flex; flex-direction:column; box-sizing:border-box; border:1px solid #ffffff24; border-radius:20px; overflow:hidden; background:transparent; color:#eeebe4; transition:border-color 220ms; animation:horizon-editor-arrive .32s ease }
+.horizon-group-editor:hover { border-color:#d5bd8a66 }
+.horizon-group-editor>.home-glass-measure { position:absolute; inset:0; z-index:0; pointer-events:none }
+.horizon-group-editor>:not(.home-glass-measure) { position:relative; z-index:1 }
+.horizon-group-editor .home-glass-surface { background:transparent }
+.horizon-editor-heading { display:flex; flex:none; align-items:center; justify-content:space-between; gap:24px; padding:25px 28px 20px }
+.horizon-editor-heading small { display:block; color:#aaa9a3; font-size:10px; letter-spacing:.17em }
+.horizon-editor-heading h2 { margin:8px 0 9px; color:#f0ede5; font-size:19px; font-weight:400; letter-spacing:.1em }
+.horizon-editor-heading p { margin:0; color:#adaca6; font-size:11px; line-height:1.7 }
+.p0 .horizon-editor-done { display:flex; gap:15px; align-items:center; flex:none; padding:11px 14px; border:1px solid #ffffff24; border-radius:13px; background:transparent; color:#dfdcd5; font-size:12px; cursor:pointer; white-space:nowrap }
+.horizon-editor-days { display:flex; gap:5px; flex:none; padding:0 28px; border-bottom:1px solid #ffffff1c }
+.p0 .horizon-editor-days button { display:flex; align-items:center; justify-content:center; gap:13px; position:relative; min-width:105px; padding:12px 16px; border:0; border-radius:0; background:transparent; color:#b2b1aa; font-size:12px; cursor:pointer }
+.horizon-editor-days button small { color:#888985; font-size:10px }
+.horizon-editor-days button::after { position:absolute; content:''; bottom:-1px; left:16px; right:16px; height:1px; background:#e7e3d7; opacity:0; transition:opacity 180ms }
+.p0 .horizon-editor-days button[aria-pressed=true] { color:#f0ede5 }
+.horizon-editor-days button[aria-pressed=true]::after { opacity:1 }
+.horizon-editor-days button[aria-pressed=true] small { color:#c0beb7 }
+.horizon-editor-scroll { flex:1; min-height:0; overflow:auto; overscroll-behavior:contain; scrollbar-color:#ffffff40 transparent; scrollbar-width:thin; padding:8px 28px 20px }
+.horizon-editor-group { margin-top:12px; padding:16px 0 5px; border:0; border-radius:0; background:transparent; outline-offset:3px }
+.horizon-editor-group+.horizon-editor-group { border-top:1px solid #ffffff20 }
+.horizon-editor-group:focus { outline:1px solid #d5bd8a66 }
+.horizon-editor-group-head { display:flex; flex-wrap:wrap; align-items:center; gap:10px 14px; padding-bottom:12px }
+.horizon-editor-number { color:#969592; font-size:10px; font-variant-numeric:tabular-nums; letter-spacing:.09em }
+.horizon-editor-name { display:flex; align-items:center; gap:9px; flex:1; min-width:150px }
+.horizon-editor-name>span { color:#999894; font-size:10px; white-space:nowrap }
+.p0 .horizon-editor-name input { min-width:0; width:100%; box-sizing:border-box; padding:6px 4px; background:transparent; border:0; border-bottom:1px solid transparent; border-radius:0; color:#efebe2; font-family:inherit; font-size:13px; font-weight:400; line-height:1.5; transition:border-color .2s }
+.p0 .horizon-editor-name input:hover,.p0 .horizon-editor-name input:focus { border-bottom-color:#c8ad73a8 }
+.horizon-editor-count { color:#a6a49f; font-size:10px; white-space:nowrap; font-variant-numeric:tabular-nums }
+.horizon-editor-count i { margin:0 4px; font-style:normal; color:#777671 }
+.horizon-editor-select { display:inline-flex; max-width:100%; min-width:0 }
+.p0 .horizon-editor-select select { max-width:180px; width:100%; padding:8px 24px 8px 10px; box-sizing:border-box; border:1px solid transparent; border-radius:9px; background:transparent; color:#bebbb5; font-family:inherit; font-size:11px; line-height:1.4; text-overflow:ellipsis; cursor:pointer; color-scheme:dark }
+.p0 .horizon-editor-select select:hover:not(:disabled),.p0 .horizon-editor-select select:focus-visible { border-color:#c4aa7760; color:#e6d5b2 }
+.p0 .horizon-editor-select option,.p0 .horizon-editor-select optgroup { background:#232323; color:#e2dfd7 }
+.p0 .horizon-editor-select option:disabled { color:#83817d }
+.p0 .horizon-editor-merge select { max-width:150px; color:#bebbb5 }
+.horizon-editor-tasks { padding:0; margin:0; list-style:none }
+.horizon-editor-tasks li { display:flex; align-items:center; justify-content:space-between; gap:16px; min-height:57px; padding:10px 0; box-sizing:border-box; border-top:1px solid #ffffff12 }
+.horizon-editor-task-copy { min-width:0 }
+.horizon-editor-task-copy strong { display:block; color:#e5e2d9; font-size:12px; font-weight:400; line-height:1.6; overflow-wrap:anywhere }
+.horizon-editor-task-copy>span { display:flex; flex-wrap:wrap; gap:8px; margin-top:4px; color:#a29f99; font-size:10px; line-height:1.5 }
+.horizon-editor-task-copy em { font-style:normal; color:#c0b396 }
+.horizon-editor-task-actions { display:flex; align-items:center; flex:none; gap:8px }
+.p0 .horizon-editor-split { padding:8px 10px; border:1px solid transparent; border-radius:9px; background:transparent; color:#bdbab4; font-size:11px; cursor:pointer; white-space:nowrap }
+.p0 .horizon-editor-split:hover { border-color:#c4aa7760; color:#e6d5b2 }
+.p0 .horizon-group-editor :is(button,select,input):focus-visible { outline:1px solid #d4b777; outline-offset:3px }
+.p0 .horizon-group-editor :is(button,select,input):disabled { cursor:default; opacity:.4 }
+.p0 .horizon-editor-done:hover { border-color:#cfb88680; color:#f0e2c8 }
+.horizon-editor-footer { display:flex; flex:none; justify-content:space-between; align-items:center; gap:18px; padding:14px 28px 17px; border-top:1px solid #ffffff1c; font-size:10px; line-height:1.65 }
+.horizon-editor-footer p { margin:0; color:#b2afa8 }
+.horizon-editor-footer p[data-error=true] { color:#e2b594 }
+.horizon-editor-footer>span { flex:none; color:#99968f; font-variant-numeric:tabular-nums }
+.horizon-editor-empty { padding:38px 15px; color:#b5b2aa; font-size:12px; text-align:center; line-height:1.8 }
+@keyframes horizon-editor-arrive { from { transform:translateY(10px) } to { transform:translateY(0) } }
+@media(max-width:700px) {
+  .horizon-editor-layer { padding:60px 14px 24px }
+  .horizon-editor-heading { padding:20px 18px 16px; gap:14px }
+  .horizon-editor-heading h2 { font-size:17px }
+  .horizon-editor-heading p { max-width:250px }
+  .horizon-editor-days { padding:0 14px }
+  .p0 .horizon-editor-days button { min-width:92px; padding:11px }
+  .horizon-editor-scroll { padding:3px 14px 14px }
+  .horizon-editor-group { padding:12px 0 3px }
+  .horizon-editor-count { margin-left:auto }
+  .horizon-editor-merge { margin-left:24px }
+  .horizon-editor-tasks li { align-items:flex-start; gap:9px; flex-direction:column; padding:11px 0 }
+  .horizon-editor-task-actions { width:100%; justify-content:flex-end }
+  .horizon-editor-footer { padding:12px 18px 15px }
+}
+@media(max-height:560px) { .horizon-editor-layer { padding:16px 24px } .horizon-editor-heading { padding:14px 24px 10px } .horizon-editor-heading h2 { margin:5px 0 } .horizon-editor-heading p { display:none } }
+@media(prefers-reduced-motion:reduce) { .horizon-group-editor { animation:none } }

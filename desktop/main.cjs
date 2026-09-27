@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, shell, session, Menu } = require('electron')
+const { app, BrowserWindow, dialog, shell, session, Menu, screen } = require('electron')
 const path = require('node:path')
 const { pathToFileURL } = require('node:url')
 const { randomBytes } = require('node:crypto')
@@ -11,6 +11,7 @@ let service
 let quitting = false
 let appOrigin
 let nativeWindowButtonsVisible = false
+let nativeWindowButtonsPoll
 const smokeTest = process.argv.includes('--smoke-test')
 // The acceptance run must never open the user's SQLite file or Keychain.
 const smokeDirectory = smokeTest ? mkdtempSync(path.join(app.getPath('temp'), 'astaria-smoke-')) : null
@@ -88,10 +89,12 @@ async function start() {
     show: false,
     backgroundColor: '#050608',
     title: 'ASTaria',
-    // Let AppKit reveal the native buttons on hover; keep full-size content,
-    // the transparent drag strip and native fullscreen behavior.
+    // Keep full-size content and control the native buttons ourselves. The
+    // built-in customButtonsOnHover hit area can hide the buttons as soon as
+    // the pointer crosses onto a traffic light, especially with a draggable
+    // renderer strip over the top edge.
     ...(process.platform === 'darwin' ? {
-      titleBarStyle: 'customButtonsOnHover',
+      titleBarStyle: 'hidden',
       trafficLightPosition: { x: 12, y: 8 },
     } : {}),
     webPreferences: {
@@ -102,21 +105,46 @@ async function start() {
       allowRunningInsecureContent: false,
     },
   })
-  // customButtonsOnHover does not reliably reveal AppKit traffic lights in a
-  // native fullscreen Space. Keep them available while fullscreen, then
-  // restore the quiet hover-only chrome when returning to windowed mode.
   if (process.platform === 'darwin') {
     const setNativeWindowButtons = visible => {
+      if (!window || window.isDestroyed() || nativeWindowButtonsVisible === visible) return
       nativeWindowButtonsVisible = visible
       window.setWindowButtonVisibility(visible)
     }
-    // customButtonsOnHover does not reliably reveal AppKit traffic lights in
-    // a native fullscreen Space. Keep them available while fullscreen, then
-    // restore the quiet hover-only chrome when returning to windowed mode.
+    const pointerIsOverTrafficLights = () => {
+      if (!window || window.isDestroyed() || window.isFullScreen()) return false
+      const bounds = window.getBounds()
+      const pointer = screen.getCursorScreenPoint()
+      return pointer.x >= bounds.x && pointer.x <= bounds.x + 92
+        && pointer.y >= bounds.y && pointer.y <= bounds.y + 42
+    }
+    let hideTimer
+    const trackNativeWindowButtons = () => {
+      if (!window || window.isDestroyed() || window.isFullScreen()) return
+      if (pointerIsOverTrafficLights()) {
+        clearTimeout(hideTimer)
+        setNativeWindowButtons(true)
+        return
+      }
+      if (nativeWindowButtonsVisible && !hideTimer) {
+        hideTimer = setTimeout(() => {
+          hideTimer = undefined
+          if (!pointerIsOverTrafficLights()) setNativeWindowButtons(false)
+        }, 220)
+      }
+    }
+    setNativeWindowButtons(false)
+    nativeWindowButtonsPoll = setInterval(trackNativeWindowButtons, 50)
     window.on('enter-full-screen', () => setNativeWindowButtons(true))
-    window.on('leave-full-screen', () => setNativeWindowButtons(false))
+    window.on('leave-full-screen', () => {
+      clearTimeout(hideTimer)
+      setNativeWindowButtons(false)
+    })
     window.on('enter-html-full-screen', () => setNativeWindowButtons(true))
-    window.on('leave-html-full-screen', () => setNativeWindowButtons(false))
+    window.on('leave-html-full-screen', () => {
+      clearTimeout(hideTimer)
+      setNativeWindowButtons(false)
+    })
     // Expose only a smoke-test probe; this is never enabled in normal builds.
     if (smokeTest) window.__astariaNativeWindowButtonsVisible = () => nativeWindowButtonsVisible
   }
@@ -138,7 +166,11 @@ async function start() {
     }
   })
   window.once('ready-to-show', () => window?.show())
-  window.on('closed', () => { window = null })
+  window.on('closed', () => {
+    if (nativeWindowButtonsPoll) clearInterval(nativeWindowButtonsPoll)
+    nativeWindowButtonsPoll = undefined
+    window = null
+  })
   window.webContents.on('render-process-gone', () => {
     dialog.showErrorBox('ASTaria 页面已停止', '本机数据仍保存在数据库中。请退出后重新打开 ASTaria。')
   })

@@ -1,0 +1,36 @@
+node_modules
+dist
+dist-ssr
+dev-dist
+*.local
+.DS_Store
+npm-debug.log*
+yarn-error.log*
+
+# DeepSeek Harness dispatch state: local audit chain and signing identity.
+# These files are machine-specific and must never enter the repository.
+.dsh-dispatch/
+.dsh-queue/
+desktop-builds/
+.env
+.env.*
+!.env.example
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.db
+*.db-shm
+*.db-wal
+
+# Local review captures and raster design references are not distributable sources.
+artifacts/
+design/**/*.png
+
+# Local planning and publication records.
+.local-publication/
+PROJECT_ROADMAP.md
+PUBLIC_READINESS.md
+BETA_REVIEW.md
+FIRST_BETA_PLAN.md
+design/icon-generator.html
+design/icon-pairwise-reference.svg

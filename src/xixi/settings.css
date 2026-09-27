@@ -1,0 +1,166 @@
+.xixi-settings{--settings-ink:#eeeae3;--settings-muted:#aaa9a3;--settings-line:#ffffff12;--settings-control:#ffffff06;--settings-accent:#d8bb79;position:absolute;inset:0;z-index:2;width:100%;height:100%;color:var(--settings-ink);font-size:13px;line-height:1.65;pointer-events:auto;isolation:isolate}
+.xixi-settings[data-theme=light]{--settings-ink:#30343a;--settings-muted:#626b75;--settings-line:#4146501c;--settings-control:#fafbfc80;--settings-accent:#917139}
+.xixi-settings-background{position:absolute;inset:0;pointer-events:none;background:#0006;transition:opacity .24s ease}
+.xixi-settings[data-theme=light] .xixi-settings-background{background:#fcfdff99}
+.xixi-settings-background::after{content:"";position:absolute;inset:0;background-image:linear-gradient(to right,#c3c9d510 1px,transparent 1px),linear-gradient(to bottom,#c3c9d510 1px,transparent 1px);background-size:48px 48px}
+.xixi-settings[data-theme=light] .xixi-settings-background::after{background-image:linear-gradient(to right,#7891a414 1px,transparent 1px),linear-gradient(to bottom,#7891a414 1px,transparent 1px)}
+.xixi-settings[data-grid=false] .xixi-settings-background::after{display:none}
+.xixi-settings-scroll{position:absolute;inset:64px 0 0;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable;padding:12px 32px 24px;box-sizing:border-box;scrollbar-width:thin;scrollbar-color:#d5bb8b50 transparent;opacity:1;visibility:visible;transition:opacity .24s ease,visibility 0s}
+.xixi-settings-container{max-width:1440px;margin:0 auto}
+.xixi-settings-page-header,.xixi-settings-shell{animation:settings-page-in .32s ease both}
+.xixi-settings-page-header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:14px}
+.xixi-settings-page-header>div{display:flex;align-items:baseline;gap:18px;min-width:0}
+.xixi-settings-page-header>div>span{font-size:10px;letter-spacing:.13em;color:var(--settings-muted)}
+:is(.p0,.app-shell) .xixi-settings h2{font-size:23px;font-weight:500;letter-spacing:.04em;margin:3px 0;outline:none}
+:is(.p0,.app-shell) .xixi-settings h3{font-size:13px;font-weight:600;margin:0 0 8px}
+:is(.p0,.app-shell) .xixi-settings p{font-size:12px;color:var(--settings-muted);margin:9px 0;overflow-wrap:anywhere}
+.xixi-settings-page-header p{font-size:11px;margin:0}
+.xixi-settings-panel{position:relative;isolation:isolate;min-width:0;border-radius:24px}
+.xixi-settings-panel>.home-glass-measure,.xixi-preview-dock>.home-glass-measure{position:absolute;inset:0;pointer-events:none;border-radius:inherit;overflow:hidden}
+:is(.p0,.app-shell) .xixi-settings .home-glass-surface{background:rgb(8 10 14 / .56)}
+:is(.p0,.app-shell) .xixi-settings[data-theme=light] .home-glass-surface{background:rgb(250 251 252 / var(--glass-tint))}
+.xixi-settings-shell{position:relative;z-index:1;padding:14px 24px 16px;min-width:0}
+.xixi-settings-tabs{display:flex;gap:5px;overflow-x:auto;overscroll-behavior-x:contain;margin:0 0 10px;padding:3px 0 12px;scrollbar-width:thin;scrollbar-color:#d5bb8b50 transparent}
+:is(.p0,.app-shell) .xixi-settings button{font:inherit;font-size:11px;border:1px solid var(--settings-line);background:var(--settings-control);color:var(--settings-ink);border-radius:12px;padding:7px 11px;cursor:pointer;transition:background .2s,border-color .2s,transform .2s;line-height:1.5}
+:is(.p0,.app-shell) .xixi-settings button:hover{background:#d8bb791c;border-color:#d8bb7960}
+:is(.p0,.app-shell) .xixi-settings button:focus-visible,:is(.p0,.app-shell) .xixi-settings :is(input,select,textarea):focus-visible{outline:2px solid var(--settings-accent);outline-offset:3px}
+:is(.p0,.app-shell) .xixi-settings button:disabled{opacity:.4;cursor:default}
+:is(.p0,.app-shell) .xixi-settings .xixi-settings-close{display:flex;align-items:center;gap:6px;flex:none;background:transparent;border-color:transparent}
+.xixi-settings-close svg{display:block;width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}
+:is(.p0,.app-shell) .xixi-settings-tabs button{white-space:nowrap;border-color:transparent;background:transparent;color:var(--settings-muted)}
+:is(.p0,.app-shell) .xixi-settings-tabs button[aria-current=page]{color:var(--settings-accent);border-color:#d8bb794f;background:#d8bb7914}
+.xixi-settings-content{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px 36px;align-items:start;overflow:visible;min-width:0;animation:settings-content-in .23s ease both}
+.xixi-settings-content>section{min-width:0;padding:14px 0 0}
+.xixi-settings-content>section:only-child{grid-column:1/-1}
+.xixi-settings-content[data-section="外观与动画"]{gap:10px 32px}
+.xixi-settings-content[data-section="外观与动画"]>section{padding-top:6px}
+.xixi-settings-content[data-section="外观与动画"] .xixi-setting-row{padding:10px 0}
+.xixi-settings-content>.xixi-render-section{grid-column:1/-1}
+.xixi-appearance-columns{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:32px;align-items:stretch;padding-top:6px;min-width:0}
+.xixi-appearance-space{display:grid;gap:16px;min-width:0}
+.xixi-appearance-space>section{min-width:0}
+.xixi-appearance-space>.xixi-horizon-settings{padding-top:12px;border-top:1px solid var(--settings-line)}
+.xixi-appearance-space .xixi-horizon-setting{display:grid;gap:2px;padding:6px 0}
+.xixi-appearance-space .xixi-horizon-setting-control{width:100%;max-width:none}
+.xixi-appearance-response{display:flex;flex-direction:column;min-width:0}
+.xixi-appearance-response>.xixi-effect-options{margin:0 0 12px}
+.xixi-appearance-response-controls{display:flex;flex:1;flex-direction:column;justify-content:space-between}
+.xixi-appearance-preview{grid-column:1/-1;justify-content:flex-end;margin-top:2px;font-size:10px;color:var(--settings-muted)}
+.xixi-settings .xixi-render-options{grid-template-columns:repeat(5,minmax(0,1fr));margin:10px 0 6px}
+:is(.p0,.app-shell) .xixi-settings .xixi-render-options button{min-height:60px;padding:10px 12px}
+:is(.p0,.app-shell) .xixi-settings .xixi-render-note{font-size:11px;margin:5px 0 0}
+.xixi-settings-content[data-section="外观与动画"] .xixi-effect-options:not(.xixi-render-options){margin:10px 0}
+:is(.p0,.app-shell) .xixi-settings-content[data-section="外观与动画"] .xixi-effect-options:not(.xixi-render-options) button{min-height:58px;padding:9px 12px}
+.xixi-setting-row{display:flex;align-items:center;justify-content:space-between;gap:24px;padding:14px 0;border-bottom:1px solid var(--settings-line);font-size:12px}
+.xixi-setting-row>div{min-width:0}.xixi-setting-row>div:first-child{flex:1}.xixi-setting-row>div:last-child{max-width:60%}
+.xixi-setting-row strong{font-size:12px;font-weight:500}.xixi-setting-row small{display:block;margin-top:4px;line-height:1.6}
+:is(.p0,.app-shell) .xixi-settings small{font-size:10px;color:var(--settings-muted)}
+.xixi-settings-section-title,.xixi-settings-actions{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.xixi-settings-section-title h3{margin:0}
+.xixi-settings-actions{justify-content:flex-start;flex-wrap:wrap;margin-top:12px}
+:is(.p0,.app-shell) .xixi-settings label{font-size:11px;display:block;margin:12px 0 6px}
+:is(.p0,.app-shell) .xixi-settings :is(input,select,textarea){display:block;box-sizing:border-box;max-width:100%;background:var(--settings-control);color:var(--settings-ink);border:1px solid var(--settings-line);border-radius:12px;padding:9px 11px;font:inherit;font-size:12px;outline:none;color-scheme:dark}
+:is(.p0,.app-shell) .xixi-settings[data-theme=light] :is(input,select,textarea){color-scheme:light}
+:is(.p0,.app-shell) .xixi-settings input{width:100%}:is(.p0,.app-shell) .xixi-settings textarea{width:100%;min-height:80px;resize:vertical}
+:is(.p0,.app-shell) .xixi-settings .xixi-setting-row select{margin:0;padding:7px 9px;max-width:230px;font-size:12px}
+:is(.p0,.app-shell) .xixi-settings select option{background:#1c2023;color:#eeeae3}:is(.p0,.app-shell) .xixi-settings[data-theme=light] select option{background:#fafbfc;color:#30343a}
+:is(.p0,.app-shell) .xixi-settings .xixi-settings-note{font-size:10px;line-height:1.8}
+:is(.p0,.app-shell) .xixi-settings .xixi-toggle{width:34px;height:20px;border-radius:12px;padding:2px;background:#ffffff16;display:block}
+.xixi-toggle span{display:block;width:14px;height:14px;background:#afafab;border-radius:50%;transition:transform .2s,background .2s}
+.xixi-toggle[aria-checked=true] span{transform:translateX(12px);background:#e4cb90}
+:is(.p0,.app-shell) .xixi-settings .xixi-toggle[aria-checked=true]{background:#d8bb7933;border-color:#d8bb7970}
+.xixi-personality-options{display:inline-flex;gap:3px;padding:3px;border:1px solid var(--settings-line);border-radius:14px;background:var(--settings-control)}
+:is(.p0,.app-shell) .xixi-settings .xixi-personality-options button{min-width:36px;padding:5px 10px;border-color:transparent;border-radius:10px;background:transparent}
+:is(.p0,.app-shell) .xixi-settings .xixi-personality-options button[aria-pressed=true]{color:var(--settings-accent);border-color:#d8bb7960;background:#d8bb791c;box-shadow:inset 0 0 0 1px #d8bb7912}
+.xixi-inline-form{display:flex;align-items:center;gap:6px;font-size:11px;flex-wrap:wrap}
+:is(.p0,.app-shell) .xixi-settings .xixi-inline-form input{width:75px;padding:6px;font-size:12px}
+:is(.p0,.app-shell) .xixi-settings .xixi-inline-form input[type=time]{width:99px}
+.xixi-setting-row:has(input[type=time]){flex-wrap:wrap;gap:8px}.xixi-setting-row:has(input[type=time])>div:first-child{flex-basis:100%}.xixi-setting-row:has(input[type=time])>div:last-child{max-width:100%}
+.xixi-effect-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:14px 0}
+:is(.p0,.app-shell) .xixi-settings .xixi-effect-options button{text-align:left;padding:12px;min-width:0;min-height:66px}
+.xixi-effect-options strong{display:block;font-weight:500;font-size:13px}.xixi-effect-options small{display:block;line-height:1.5;margin-top:5px}
+:is(.p0,.app-shell) .xixi-settings .xixi-effect-options button[aria-pressed=true]{border-color:#d8bb79b3;box-shadow:inset 0 0 0 1px #d8bb793b;background:#d8bb7917}
+.xixi-memory-list{padding:0;list-style:none;max-height:none;overflow:visible}.xixi-memory-list li{display:flex;align-items:flex-start;gap:12px;padding:12px 0;border-bottom:1px solid var(--settings-line)}.xixi-memory-list li>div{flex:1;min-width:0}.xixi-memory-list p{margin:0;color:var(--settings-ink);white-space:pre-wrap;overflow-wrap:anywhere}.xixi-memory-list details{font-size:10px;color:var(--settings-muted);margin-top:5px}.xixi-memory-list summary{cursor:pointer}.xixi-memory-list blockquote{margin:6px 0;white-space:pre-wrap;overflow-wrap:anywhere}.xixi-memory-list button{flex:none}
+.xixi-memory-actions{display:flex;gap:5px;flex-direction:column}
+.xixi-settings-content[data-section="析熙"]{grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:24px 40px}
+.xixi-assistant-preferences .xixi-setting-row{padding:11px 0}
+.xixi-memory-settings{margin-top:22px}
+.xixi-memory-manager{margin-top:14px;border-top:1px solid var(--settings-line);padding-top:12px;min-width:0}
+.xixi-memory-manager>summary{display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer;list-style:none;font-size:12px;color:var(--settings-ink);padding:4px 0}
+.xixi-memory-manager>summary::-webkit-details-marker{display:none}
+.xixi-memory-manager>summary::after{content:"⌄";color:var(--settings-accent);transition:transform .2s;flex:none}
+.xixi-memory-manager[open]>summary::after{transform:rotate(180deg)}
+.xixi-memory-manager>summary>small{margin-left:auto}
+.xixi-memory-manager .xixi-memory-list{margin:6px 0;padding:0}
+.xixi-memory-manager .xixi-memory-list li>div.xixi-memory-actions{flex:none}
+.xixi-memory-manager summary:focus-visible,.xixi-operation-list summary:focus-visible{outline:2px solid var(--settings-accent);outline-offset:3px;border-radius:5px}
+.xixi-settings-content[data-section="通知"]{grid-template-columns:minmax(240px,.72fr) minmax(0,1.4fr);gap:24px 40px}
+.xixi-notification-preferences .xixi-setting-row{padding:12px 0}
+.xixi-operation-history>.xixi-settings-section-title{min-height:32px}
+:is(.p0,.app-shell) .xixi-operation-history>.xixi-settings-section-title h3{margin:0}
+.xixi-operation-filters{display:flex;flex-wrap:wrap;gap:5px;margin:12px 0 14px}
+:is(.p0,.app-shell) .xixi-settings .xixi-operation-filters button{display:inline-flex;align-items:center;gap:7px;padding:5px 10px;border-color:transparent;background:transparent;color:var(--settings-muted);border-radius:20px}
+:is(.p0,.app-shell) .xixi-settings .xixi-operation-filters button[aria-pressed=true]{color:var(--settings-accent);background:#d8bb7917;border-color:#d8bb794a}
+.xixi-operation-filters button>span{font-size:10px;font-variant-numeric:tabular-nums;opacity:.8}
+.xixi-operation-list{display:grid;gap:9px;padding:0;margin:0;list-style:none}
+.xixi-operation-list>li{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:16px;row-gap:5px;padding:12px 15px;border:1px solid var(--settings-line);border-radius:16px;background:linear-gradient(115deg,#ffffff06,transparent 70%);min-width:0}
+.xixi-operation-list>li[data-state="未读"]{border-color:#d8bb793b;background:linear-gradient(115deg,#d8bb790a,transparent 70%)}
+.xixi-operation-meta{display:flex;align-items:center;gap:9px;grid-column:1;min-width:0;font-size:10px;color:var(--settings-muted);font-variant-numeric:tabular-nums}
+.xixi-operation-state{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.xixi-operation-state::before{content:"";width:5px;height:5px;border-radius:50%;background:currentColor;opacity:.45}
+.xixi-operation-list>li[data-state="未读"] .xixi-operation-state{color:var(--settings-accent)}
+.xixi-operation-list>li[data-state="未读"] .xixi-operation-state::before{opacity:1}
+.xixi-operation-list>li[data-state="已撤销"] .xixi-operation-state::before{background:transparent;border:1px solid currentColor;box-sizing:border-box}
+.xixi-operation-body{grid-column:1;min-width:0}
+:is(.p0,.app-shell) .xixi-settings .xixi-operation-body>p{color:var(--settings-ink);font-size:12px;line-height:1.55;margin:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.xixi-operation-body>details{font-size:10px;color:var(--settings-muted);margin-top:5px}
+.xixi-operation-body>details>summary{cursor:pointer;width:fit-content;line-height:1.4}
+.xixi-operation-body>details>div{margin-top:8px;padding-top:6px;border-top:1px solid var(--settings-line)}
+:is(.p0,.app-shell) .xixi-settings .xixi-operation-body>details p{font-size:11px;margin:4px 0 8px;color:var(--settings-ink);white-space:pre-wrap}
+.xixi-operation-body>details ul{padding-left:16px;margin:6px 0;line-height:1.8;overflow-wrap:anywhere}
+.xixi-operation-body>details small{display:block;margin-top:6px}
+:is(.p0,.app-shell) .xixi-settings .xixi-operation-undo{grid-column:2;grid-row:1/3;align-self:start;padding:5px 9px;font-size:10px;background:transparent;white-space:nowrap}
+.xixi-operation-empty{padding:48px 20px;text-align:center;border:1px dashed var(--settings-line);border-radius:16px;color:var(--settings-muted)}
+.xixi-operation-empty strong{font-size:12px;font-weight:500}
+:is(.p0,.app-shell) .xixi-settings .xixi-operation-empty p{font-size:11px;margin:8px 0 0}
+.xixi-settings-pagination{display:flex;align-items:center;justify-content:flex-end;gap:7px;margin-top:12px;color:var(--settings-muted);font-size:10px;font-variant-numeric:tabular-nums}
+.xixi-settings-pagination>span{margin-right:auto}
+:is(.p0,.app-shell) .xixi-settings .xixi-settings-pagination button{padding:5px 10px}
+.xixi-settings-feedback{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:24px;margin-top:12px;padding-top:8px;border-top:1px solid var(--settings-line);font-size:11px;color:var(--settings-accent)}
+:is(.p0,.app-shell) .xixi-settings .xixi-file-label{position:relative;display:inline-flex;align-items:center;border:1px solid var(--settings-line);border-radius:12px;padding:7px 11px;font-size:11px;margin:0;cursor:pointer;overflow:hidden}
+.xixi-file-label input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer}.xixi-import-confirm{margin-top:16px;padding:12px;border:1px solid #d8bb7960;border-radius:14px}.xixi-import-confirm button{margin-right:7px}
+.xixi-preview-dock{position:fixed;left:max(24px,calc((100vw - 1320px)/2));bottom:28px;width:max-content;max-width:calc(100vw - 32px);isolation:isolate;border-radius:24px;pointer-events:none;opacity:0;visibility:hidden;transform:translateY(8px);transition:opacity .24s ease,transform .24s ease,visibility 0s .24s}
+.xixi-preview-content{position:relative;z-index:1;display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;padding:14px}
+.xixi-settings[data-previewing=true]{pointer-events:none}
+.xixi-settings[data-previewing=true] .xixi-settings-scroll{opacity:0;visibility:hidden;pointer-events:none;transition:opacity .24s ease,visibility 0s .24s}
+.xixi-settings[data-previewing=true] .xixi-settings-background{opacity:0}
+.xixi-settings[data-previewing=true] .xixi-preview-dock{opacity:1;visibility:visible;pointer-events:auto;transform:none;transition:opacity .24s ease,transform .24s ease,visibility 0s}
+.xixi-settings[data-closing=true] .home-glass-surface{backdrop-filter:none!important;-webkit-backdrop-filter:none!important;box-shadow:none!important;opacity:0;transition:none}
+.xixi-settings[data-closing=true]{pointer-events:none}.xixi-settings[data-closing=true] .xixi-settings-background{opacity:0;transition:none}.xixi-settings[data-closing=true] :is(.xixi-settings-page-header,.xixi-settings-shell){animation:settings-page-out .18s ease both}
+.xixi-settings-scroll::-webkit-scrollbar,.xixi-settings-tabs::-webkit-scrollbar{width:7px;height:5px}.xixi-settings-scroll::-webkit-scrollbar-thumb,.xixi-settings-tabs::-webkit-scrollbar-thumb{background:#d5bb8b50;border:2px solid transparent;background-clip:padding-box;border-radius:8px}
+@keyframes settings-page-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@keyframes settings-page-out{to{opacity:0;transform:translateY(6px)}}
+@keyframes settings-content-in{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+@media(max-width:800px){.xixi-settings-scroll{padding:20px 22px 48px}.xixi-settings-page-header{align-items:flex-start;margin-bottom:16px}.xixi-settings-page-header>div{flex-direction:column;align-items:flex-start;gap:2px}.xixi-settings-page-header>div>span{display:none}.xixi-settings-shell{padding:15px 20px 20px}.xixi-settings-content{grid-template-columns:minmax(0,1fr);gap:16px}.xixi-settings-content>section+section{padding-top:22px;border-top:1px solid var(--settings-line)}}
+@media(min-width:801px) and (max-height:800px){.xixi-settings-scroll{padding-top:4px;padding-bottom:16px}.xixi-settings-page-header{margin-bottom:10px}.xixi-settings-tabs{margin-bottom:4px;padding-bottom:8px}.xixi-settings-content[data-section="外观与动画"]{gap:6px 28px}.xixi-settings-content[data-section="外观与动画"] .xixi-setting-row{padding:8px 0}.xixi-settings-feedback{margin-top:8px}}
+@media(min-width:801px) and (max-height:800px){.xixi-settings-content[data-section="通知"]>section{padding-top:8px}.xixi-operation-filters{margin:6px 0 10px}.xixi-operation-list{gap:7px}.xixi-operation-list>li{padding:8px 12px;row-gap:3px}.xixi-operation-history .xixi-settings-pagination{margin-top:8px}:is(.p0,.app-shell) .xixi-settings .xixi-operation-body>p{-webkit-line-clamp:1}}
+@media(max-width:800px){.xixi-settings .xixi-render-options{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:800px){.xixi-appearance-columns{grid-template-columns:minmax(0,1fr);gap:24px}.xixi-appearance-space{gap:20px}.xixi-appearance-response{padding-top:20px;border-top:1px solid var(--settings-line)}.xixi-appearance-preview{justify-content:flex-start}.xixi-appearance-space .xixi-horizon-settings-grid{grid-template-columns:repeat(2,minmax(0,1fr));column-gap:24px}}
+@media(max-width:600px){.xixi-appearance-space .xixi-horizon-settings-grid{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:1000px) and (min-width:801px){.xixi-settings-content[data-section="析熙"],.xixi-settings-content[data-section="通知"]{gap:24px;grid-template-columns:repeat(2,minmax(0,1fr))}.xixi-assistant-preferences .xixi-setting-row{gap:12px;flex-wrap:wrap}.xixi-assistant-preferences .xixi-setting-row>div:last-child{max-width:100%}.xixi-operation-filters{gap:2px}:is(.p0,.app-shell) .xixi-settings .xixi-operation-filters button{padding:5px 7px}}
+@media(max-width:800px){.xixi-settings-content[data-section="析熙"],.xixi-settings-content[data-section="通知"]{grid-template-columns:minmax(0,1fr);gap:20px}.xixi-memory-settings{margin-top:20px}.xixi-operation-list>li{column-gap:10px;padding:12px}.xixi-operation-filters{margin-bottom:12px}}
+@media(max-width:600px){.xixi-settings-scroll{padding:14px 16px 40px}.xixi-settings-page-header{margin-bottom:15px}:is(.p0,.app-shell) .xixi-settings h2{font-size:21px}.xixi-settings-shell{padding:13px 16px 18px}.xixi-setting-row{gap:12px;flex-wrap:wrap}.xixi-setting-row>div:last-child{max-width:100%}.xixi-setting-row:has(.xixi-inline-form)>div:first-child{flex-basis:100%}.xixi-settings-tabs{gap:3px}.xixi-settings-tabs button{padding:7px 9px}.xixi-preview-dock{left:12px;right:12px;bottom:16px;width:auto;max-width:none;max-height:40dvh}.xixi-preview-content{padding:14px}.xixi-settings-page-header p{font-size:10px}}
+@media(prefers-reduced-motion:reduce){.xixi-settings-page-header,.xixi-settings-shell,.xixi-settings-content,.xixi-settings[data-closing=true] :is(.xixi-settings-page-header,.xixi-settings-shell){animation:none}.xixi-settings .xixi-settings-scroll,.xixi-settings .xixi-preview-dock,.xixi-settings-background,:is(.p0,.app-shell) .xixi-settings button,.xixi-toggle span{transition:none}}
+@media(min-width:801px) and (max-height:650px){
+  .xixi-settings-scroll{padding-bottom:8px}
+  .xixi-settings-page-header{margin-bottom:4px}
+  .xixi-settings-shell{padding-top:8px;padding-bottom:8px}
+  .xixi-settings-content[data-section="析熙"]>section{padding-top:2px}
+  .xixi-assistant-preferences .xixi-setting-row{padding:6px 0;gap:10px}
+  .xixi-assistant-preferences .xixi-setting-row small{margin-top:2px;line-height:1.4}
+  .xixi-assistant-preferences .xixi-memory-settings{margin-top:8px;padding-top:0}
+  :is(.p0,.app-shell) .xixi-assistant-preferences p{margin:4px 0;line-height:1.5}
+  :is(.p0,.app-shell) .xixi-assistant-preferences h3{margin-bottom:4px}
+  .xixi-assistant-preferences .xixi-memory-manager{margin-top:6px;padding-top:6px}
+  .xixi-settings-feedback{margin-top:4px;padding-top:4px;min-height:20px}
+}

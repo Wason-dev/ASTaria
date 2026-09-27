@@ -1,0 +1,12 @@
+.horizon-task-pages { position:absolute; left:50%; bottom:137px; translate:-50% 0; display:flex; align-items:center; gap:14px; pointer-events:auto; color:#bfa983 }
+.horizon-task-pages>span { display:flex; align-items:center; gap:14px }
+.horizon-task-page-range { min-width:76px; text-align:center; font-size:11px; letter-spacing:.08em; font-variant-numeric:tabular-nums }
+.p0 .horizon-task-pages button { position:relative; display:grid; place-items:center; width:40px; height:40px; padding:0; border:1px solid #d1b17a44; border-radius:20px; background:transparent; color:#e0cba5; cursor:pointer; overflow:hidden; transition:border-color 220ms,color 220ms,opacity 220ms }
+.horizon-task-pages button>.home-glass-measure { position:absolute; inset:0; pointer-events:none }
+.horizon-task-pages button>:not(.home-glass-measure) { position:relative; z-index:1 }
+.horizon-task-pages .home-glass-surface { background:transparent }
+.p0 .horizon-task-pages button:hover:not(:disabled),.p0 .horizon-task-pages button:focus-visible { color:#fff0cf; border-color:#ead1a39c }
+.p0 .horizon-task-pages button:disabled { opacity:.3; cursor:default }
+.horizon-group-detail .horizon-task-caption strong { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:3; overflow:hidden; overflow-wrap:anywhere }
+@media(max-width:520px) { .horizon-group-detail .horizon-task-caption { width:120px } }
+@media(max-height:520px) and (min-width:600px) { .horizon-task-pages { bottom:112px } }

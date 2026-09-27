@@ -1,0 +1,179 @@
+/* Decision controls share the workbench material; the horizon stays open to space. */
+.xc-page[data-studio=true] .xc-page-background { background:linear-gradient(180deg,#06090e55,transparent 42%,#06090e20) }
+.xc-page[data-studio=true] .xc-page-background::after { opacity:.18 }
+.xc-page[data-studio=true][data-theme=light] .xc-page-background { background:linear-gradient(180deg,#f7faff77,transparent 44%,#f7faff20) }
+:is(.p0,.app-shell) .xc-page[data-studio=true] .xc-dialog { width:min(1420px,calc(100% - 64px)); margin:4px auto 0 }
+.xc-page[data-studio=true] .xc-header { padding:0 0 12px }
+.xc-page[data-studio=true] .xc-scroll { padding:0 }
+.decision-studio { display:flex; flex-direction:column; gap:12px; min-width:0; min-height:calc(100dvh - 230px) }
+.decision-plate { position:relative; isolation:isolate; min-width:0; border:1px solid var(--xc-line); border-radius:20px; }
+.xc-page .decision-plate>.xc-glass-content { position:relative; z-index:1; animation:none; min-width:0 }
+.xc-page[data-studio=true] .decision-control>.xc-glass-content { padding:14px 18px }
+.decision-control-top { display:grid; grid-template-columns:minmax(180px,1.5fr) 144px minmax(180px,1fr) minmax(150px,.85fr); align-items:end; gap:18px }
+.decision-control-top label { display:flex; flex-direction:column; min-width:0; gap:5px; color:var(--xc-muted); font-size:10px; letter-spacing:.02em }
+:is(.p0,.app-shell) .xc-dialog .decision-subject select { font-size:15px; font-weight:500; padding:6px 30px 6px 0; border:0; border-radius:0; background:transparent; max-width:100%; width:100% }
+:is(.p0,.app-shell) .xc-dialog .decision-date input { width:100%; padding:6px 8px; height:33px; background:transparent }
+:is(.p0,.app-shell) .xc-dialog .decision-history select { width:100%; max-width:100%; font-size:11px; padding:7px; height:33px; background:transparent }
+.decision-recurrence { margin:0; padding:0; border:0; min-width:0 }
+.decision-recurrence legend { color:var(--xc-muted); font-size:10px; margin-bottom:5px }
+.decision-recurrence>div { display:flex; align-items:center; gap:4px; }
+:is(.p0,.app-shell) .xc-dialog .decision-recurrence button { flex:1; min-height:33px; padding:6px 7px; font-size:11px; border-color:transparent; background:transparent; white-space:nowrap }
+:is(.p0,.app-shell) .xc-dialog .decision-recurrence button[aria-pressed=true] { border-color:#d5bb8b60; background:#d5bb8b12; color:var(--xc-gold) }
+.decision-paths { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin-top:13px }
+:is(.p0,.app-shell) .xc-dialog .decision-paths button { padding:10px 14px; min-width:0; border-radius:12px; justify-content:flex-start; text-align:left; gap:12px; border-color:transparent; background:#ffffff04 }
+.decision-path-number { font-family:ui-monospace,monospace; color:var(--xc-muted); font-size:11px; opacity:.7 }
+.decision-paths strong { display:block; font-size:13px; font-weight:500 }
+.decision-paths small { display:block; font-size:10px; margin-top:2px; color:var(--xc-muted) }
+.decision-path-mark { width:5px; height:5px; border-radius:50%; background:transparent; margin-left:auto; flex:none }
+:is(.p0,.app-shell) .xc-dialog .decision-paths button[aria-pressed=true] { border-color:#d5bb8b85; box-shadow:inset 0 0 0 1px #d5bb8b25; background:linear-gradient(110deg,#d5bb8b15,#d5bb8b03) }
+.decision-paths [aria-pressed=true] .decision-path-mark { background:var(--xc-gold); box-shadow:0 0 12px #d5bb8b55 }
+.decision-stage { display:grid; grid-template-columns:minmax(0,1fr) 342px; gap:30px; flex:1; min-height:276px; }
+.decision-space { display:flex; flex-direction:column; align-items:flex-start; min-width:0; padding:14px 5px 10px 12px; position:relative; }
+:is(.p0,.app-shell) .xc-dialog .decision-space-heading h3 { font-size:clamp(22px,2.4vw,36px); font-weight:350; line-height:1.3; letter-spacing:-.025em; margin:5px 0 9px; text-shadow:0 2px 18px #0004 }
+.decision-space-heading p { font-size:12px; color:var(--xc-body); max-width:380px; overflow-wrap:anywhere; text-shadow:0 1px 8px #0008 }
+:is(.p0,.app-shell) .xc-dialog .decision-compare { margin-top:15px; border:1px solid var(--xc-line); border-radius:999px; padding:8px 13px; color:var(--xc-body); background:#080a0e24; font-size:11px; touch-action:none; user-select:none }
+:is(.p0,.app-shell) .xc-dialog .decision-compare[aria-pressed=true] { color:var(--xc-gold); border-color:var(--xc-gold); background:#d5bb8b18 }
+.decision-space-foot { position:relative; margin-top:auto; padding-top:68px; max-width:510px; text-shadow:0 2px 12px #000a; }
+.decision-space-foot p { color:var(--xc-body); font-size:12px; line-height:1.8 }
+.decision-space-foot small { display:block; color:var(--xc-muted); font-size:9px; margin-top:7px; letter-spacing:.02em }
+.decision-space-foot { border-radius:16px; background:radial-gradient(ellipse at left bottom,#080a0e80,transparent 78%); }
+.xc-page[data-theme=light] .decision-space-foot { background:radial-gradient(ellipse at left bottom,#f7faffdd,transparent 90%); }
+.decision-caption-dot { display:block; width:18px; height:2px; background:var(--xc-gold); margin-bottom:10px }
+.decision-result { align-self:stretch }
+.xc-page[data-studio=true] .decision-result>.xc-glass-content { padding:17px 20px; display:flex; flex-direction:column; gap:12px }
+.decision-result header { display:flex; gap:12px; justify-content:space-between; align-items:center }
+:is(.p0,.app-shell) .xc-dialog .decision-result h3 { font-size:14px; margin-top:3px; font-weight:500 }
+.decision-status { font-size:9px; color:var(--xc-muted); padding:4px 7px; border:1px solid var(--xc-line); border-radius:999px; white-space:nowrap }
+.decision-main-metric { display:flex; flex-direction:column; gap:2px; cursor:default }
+.decision-main-metric>span { font-size:10px; color:var(--xc-muted) }
+.decision-main-metric>strong { font-size:29px; font-weight:350; line-height:1.35; letter-spacing:-.03em; color:var(--xc-ink); font-variant-numeric:tabular-nums }
+.decision-main-metric>small { font-size:9px; color:var(--xc-muted) }
+.decision-deltas { display:grid; grid-template-columns:1fr 1fr; gap:15px; margin:0; padding:0 }
+.decision-deltas dt { font-size:10px; color:var(--xc-muted) }
+.decision-deltas dd { font-size:15px; font-weight:400; margin:3px 0 0; font-variant-numeric:tabular-nums }
+.decision-comparison-bars { display:flex; flex-direction:column; gap:5px }
+.decision-comparison-bars>div { display:grid; grid-template-columns:40px minmax(0,1fr) auto; gap:8px; align-items:center; color:var(--xc-muted); font-size:9px }
+.decision-comparison-bars i { height:3px; border-radius:3px; background:#ffffff10; overflow:hidden }
+.decision-comparison-bars b { display:block; height:100%; background:#93a4b1aa; transition:width 140ms ease; border-radius:3px }
+.decision-comparison-bars [data-candidate=true] b { background:var(--xc-gold) }
+.decision-comparison-bars small { font-size:9px; min-width:56px; text-align:right }
+.decision-evidence { font-size:11px; color:var(--xc-body); line-height:1.7 }
+:is(.p0,.app-shell) .xc-dialog .decision-evidence h4 { font-size:10px; color:var(--xc-muted); margin-bottom:5px }
+.decision-evidence ol { display:flex; align-items:center; gap:6px 12px; flex-wrap:wrap; list-style:none; padding:0; margin:0 0 5px; }
+.decision-evidence li { padding:3px 0; font-size:10px; white-space:nowrap; }
+.decision-evidence li time { font-variant-numeric:tabular-nums; color:var(--xc-gold) }
+.decision-evidence li>span { white-space:nowrap; text-overflow:ellipsis; overflow:hidden }
+.decision-evidence>small { display:block; font-size:9px; color:var(--xc-muted) }
+:is(.p0,.app-shell) .xc-dialog .decision-risk { color:#dbad8a; font-size:10px; line-height:1.7; margin-top:6px; }
+.xc-page[data-studio=true] .decision-timeline>.xc-glass-content { padding:12px 18px }
+.decision-scrub-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; font-size:10px; color:var(--xc-muted) }
+.decision-scrub-heading output { color:var(--xc-gold); font-variant-numeric:tabular-nums }
+:is(.p0,.app-shell) .xc-dialog .decision-timeline input[type=range] { width:100%; display:block; height:16px; padding:0; margin:6px 0 0; background:transparent; border:0; cursor:ew-resize; touch-action:pan-y; }
+.decision-timeline input[type=range] { appearance:none; -webkit-appearance:none; }
+.decision-timeline input[type=range]::-webkit-slider-runnable-track { height:3px; background:var(--xc-line); border-radius:3px }
+.decision-timeline input[type=range]::-webkit-slider-thumb { appearance:none; -webkit-appearance:none; width:12px; height:12px; margin-top:-4.5px; border:0; border-radius:50%; background:var(--xc-gold); box-shadow:0 0 0 4px #d5bb8b13; }
+.decision-timeline input[type=range]::-moz-range-track { height:3px; background:var(--xc-line); border-radius:3px }
+.decision-timeline input[type=range]::-moz-range-thumb { width:12px; height:12px; border:0; border-radius:50%; background:var(--xc-gold); }
+.decision-time-marks { display:flex; justify-content:space-between; margin:0 -6px }
+:is(.p0,.app-shell) .xc-dialog .decision-time-marks button { border:0; padding:3px 6px; background:none; color:var(--xc-muted); font-size:10px }
+:is(.p0,.app-shell) .xc-dialog .decision-time-marks button[aria-pressed=true] { color:var(--xc-gold) }
+.decision-action-row { display:flex; align-items:center; gap:9px; margin-top:9px; }
+.decision-action-note { flex:1; min-width:0; font-size:10px; color:var(--xc-muted) }
+.decision-action-note>label { display:flex; align-items:center; gap:7px }
+:is(.p0,.app-shell) .xc-dialog .decision-action-note input { width:65px; height:30px; padding:4px 7px; }
+:is(.p0,.app-shell) .xc-dialog .decision-details-toggle { border-color:transparent; background:none; font-size:10px }
+:is(.p0,.app-shell) .xc-dialog :is(.decision-create,.decision-apply) { border-radius:999px; padding:9px 17px; min-width:156px; font-size:12px; background:linear-gradient(120deg,#d5bb8b2a,#d5bb8b10); border-color:#d5bb8b77; }
+.decision-detail-reveal { display:grid; grid-template-rows:0fr; margin-top:-12px; transition:grid-template-rows 250ms ease; }
+.decision-detail-reveal>div { min-height:0; overflow:hidden; }
+.decision-detail-reveal[data-open=true] { grid-template-rows:1fr; margin-top:0; }
+.xc-page[data-studio=true] .decision-details>.xc-glass-content { padding:20px }
+.decision-details header { display:flex; justify-content:space-between; gap:16px }
+.decision-details header span { font-size:10px; color:var(--xc-muted) }
+.decision-detail-columns { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:28px; margin:15px 0; }
+.decision-detail-columns ol { list-style:none; padding:0; margin:10px 0; columns:2 200px }
+.decision-detail-columns li { display:flex; flex-direction:column; gap:2px; padding:6px 0; break-inside:avoid; overflow-wrap:anywhere; font-size:12px }
+.decision-detail-columns time { color:var(--xc-gold); font-size:10px }
+.decision-details :is(p,ul) { font-size:11px; color:var(--xc-muted); line-height:1.8; }
+.decision-details ul { padding-left:18px }
+.xc-page[data-theme=light] .decision-space :is(h3,p,small) { text-shadow:none }
+.xc-page[data-theme=light] .decision-paths button { background:#fafbfc22 }
+:is(.p0,.app-shell) .xc-page[data-theme=light] .decision-compare { background:#fafbfc45; }
+:is(.p0,.app-shell) .xc-page[data-theme=light] .decision-risk { color:#976743; }
+.xc-page[data-theme=light] .decision-comparison-bars i { background:#55627018 }
+@media(min-width:1100px) and (max-height:850px) {
+  .decision-studio { min-height:calc(100dvh - 230px); gap:10px }
+  .xc-page[data-studio=true] .xc-header { padding-bottom:8px }
+  :is(.p0,.app-shell) .xc-page[data-studio=true] .xc-header h2 { font-size:21px }
+  .xc-page[data-studio=true] .decision-control>.xc-glass-content { padding:11px 16px }
+  .decision-paths { margin-top:10px }
+  :is(.p0,.app-shell) .xc-dialog .decision-paths button { padding:8px 11px }
+  .decision-stage { min-height:235px; }
+  .xc-page[data-studio=true] .decision-result>.xc-glass-content { padding:13px 18px; display:grid; grid-template-columns:1fr 1fr; gap:8px }
+  .decision-result :is(header,.decision-evidence,.decision-comparison-bars) { grid-column:1/-1 }
+  .decision-deltas { align-self:center; gap:8px }
+  .decision-deltas dd { font-size:13px }
+  .decision-main-metric>strong { font-size:25px }
+  .decision-space { padding-top:8px; }
+  .decision-space-foot { padding-top:38px }
+  .xc-page[data-studio=true] .decision-timeline>.xc-glass-content { padding:9px 16px }
+  .decision-detail-reveal { margin-top:-10px }
+}
+@media(max-width:1000px) {
+  :is(.p0,.app-shell) .xc-page[data-studio=true] .xc-dialog { width:calc(100% - 36px) }
+  .decision-control-top { grid-template-columns:minmax(0,1fr) 144px; gap:12px 18px }
+  .decision-stage { grid-template-columns:minmax(0,1fr) 300px; gap:15px }
+  .decision-paths small { display:none }
+  :is(.p0,.app-shell) .xc-dialog .decision-paths button { gap:8px; padding:10px }
+  .decision-paths strong { font-size:12px }
+}
+@media(max-width:700px) {
+  :is(.p0,.app-shell) .xc-page[data-studio=true] .xc-dialog { width:calc(100% - 28px); margin-top:8px }
+  .decision-studio { min-height:0 }
+  .xc-page[data-studio=true] .decision-control>.xc-glass-content { padding:12px }
+  .decision-control-top { grid-template-columns:minmax(0,1fr) 128px; gap:10px }
+  .decision-subject { grid-column:1/-1 }
+  .decision-history { grid-column:1/-1 }
+  .decision-stage { grid-template-columns:minmax(0,1fr); gap:12px }
+  .decision-space { min-height:280px; padding:14px 5px }
+  .decision-space-foot { padding-top:70px; }
+  .xc-page[data-studio=true] .decision-result>.xc-glass-content { display:grid; grid-template-columns:1fr 1fr; gap:12px; padding:16px }
+  .decision-result :is(header,.decision-evidence,.decision-comparison-bars) { grid-column:1/-1 }
+  .decision-deltas { align-self:center; gap:8px }
+  .decision-paths { gap:5px }
+  .decision-path-number { display:none }
+  :is(.p0,.app-shell) .xc-dialog .decision-paths button { gap:4px; padding:9px 7px }
+  .decision-paths strong { font-size:11px }
+  .decision-action-row { flex-wrap:wrap; }
+  .decision-action-note { flex-basis:100% }
+  :is(.p0,.app-shell) .xc-dialog :is(.decision-create,.decision-apply) { margin-left:auto; min-width:135px }
+  .decision-scrub-heading { flex-wrap:wrap; gap:3px }
+  .decision-detail-columns { grid-template-columns:1fr; }
+}
+@media(prefers-reduced-motion:reduce) { .decision-detail-reveal,.decision-comparison-bars b { transition:none } }
+
+/* First soften the glass edge, then fade its content while the camera retreats.
+   No ancestor becomes translucent until live sampling has been released. */
+.xc-page .xc-scroll { opacity:1; transition:opacity var(--decision-content-duration,1560ms) cubic-bezier(.4,0,.2,1) }
+.xc-page .xc-scroll .home-glass-measure { opacity:1; transition:opacity var(--decision-glass-release,240ms) ease-out }
+.xc-page[data-leaving=true] .xc-scroll { opacity:0; transition-delay:var(--decision-glass-release,240ms); pointer-events:none }
+.xc-page[data-leaving=true] .xc-scroll .home-glass-measure { opacity:0 }
+.xc-page :is(.xc-header,.xc-page-background) { transition:opacity var(--decision-exit-duration,1800ms) cubic-bezier(.4,0,.2,1) }
+.xc-page[data-exiting=true] :is(.xc-header,.xc-page-background) { opacity:0; transition-duration:var(--decision-reveal-duration,480ms) }
+.xc-page[data-exiting=true] { pointer-events:none }
+.xc-page[data-covered=true] { visibility:hidden; pointer-events:none }
+.xc-page[data-motion=reduced] :is(.xc-scroll,.xc-header,.xc-page-background,.home-glass-measure) { transition:none }
+@media(prefers-reduced-motion:reduce) {
+  .xc-page :is(.xc-scroll,.xc-header,.xc-page-background,.home-glass-measure) { transition:none }
+}
+
+/* Fade readable content in at the camera's pace without moving glass parents. */
+.xc-page[data-studio=true] .decision-plate>.xc-glass-content,
+.xc-page[data-studio=true] :is(.decision-space-heading,.decision-compare,.decision-space-foot) {
+  animation:decision-content-arrive var(--decision-enter-duration,1800ms) cubic-bezier(.18,0,.18,1) backwards;
+}
+.xc-page[data-leaving=true] .decision-studio :is(.xc-glass-content,.decision-space-heading,.decision-compare,.decision-space-foot) { animation-play-state:paused }
+@keyframes decision-content-arrive { from { opacity:0 } }
+.xc-page[data-motion=reduced][data-studio=true] .decision-studio :is(.xc-glass-content,.decision-space-heading,.decision-compare,.decision-space-foot) { animation:none }
+@media(prefers-reduced-motion:reduce) {
+  .xc-page[data-studio=true] .decision-studio :is(.xc-glass-content,.decision-space-heading,.decision-compare,.decision-space-foot) { animation:none }
+}

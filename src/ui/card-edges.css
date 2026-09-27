@@ -1,0 +1,27 @@
+/* Only the existing side accents on small content plates are configurable.
+   Structural dividers, focus outlines and available-period gold frames keep
+   their own geometry. Colours continue to describe the kind/state of a card. */
+.home-workspace .pl-slot[data-kind=class] { --card-edge-color:#b9b5ab88; --card-edge-rim:transparent }
+.home-workspace .pl-slot[data-kind=plan] { --card-edge-color:#91a9b9aa; --card-edge-rim:#91a9b91a }
+.home-workspace .pl-slot[data-kind=break] { --card-edge-color:#a5aaa65c; --card-edge-rim:transparent }
+.home-workspace .planner[data-theme=light] .pl-slot[data-kind=class] { --card-edge-color:#8b887f }
+.home-workspace .planner[data-theme=light] .pl-slot[data-kind=plan] { --card-edge-color:#697f8e }
+.home-workspace :is(.pl-calendar-entry,.pl-week-entry) { --card-edge-color:#9faebb99; --card-edge-rim:var(--pl-plate-line) }
+.home-workspace :is(.pl-calendar-entry,.pl-week-entry):is([data-kind=deadline],[data-kind=both]) { --card-edge-color:#d4b57b99 }
+.home-workspace .pl-overview :is(.pl-day-task,.pl-calendar-summary-task,.pl-preparation) { --card-edge-color:#c5b38b66; --card-edge-rim:transparent }
+.home-workspace .pl-overview :is(.pl-day-task,.pl-calendar-summary-task)[data-done=true] { --card-edge-color:#91af9b88 }
+.home-workspace .task-stack-card { --card-edge-color:color-mix(in srgb,var(--stack-accent) 65%,transparent); --card-edge-rim:var(--stack-line) }
+.home-workspace .task-stack-card[data-done=true] { --card-edge-color:#9db7a6 }
+.home-workspace .xc-deadlines>div { --card-edge-color:#d5bb8b80; --card-edge-rim:transparent }
+
+.p0 .home-workspace[data-card-edges] :is(.pl-slot[data-kind=class],.pl-slot[data-kind=plan],.pl-slot[data-kind=break],.pl-calendar-entry,.pl-week-entry,.pl-overview .pl-day-task,.pl-overview .pl-calendar-summary-task,.pl-overview .pl-preparation,.task-stack-card,.xc-deadlines>div) {
+  border-left:2px solid var(--card-edge-color);
+  border-right:2px solid var(--card-edge-color);
+}
+.p0 .home-workspace[data-card-edges=left] :is(.pl-slot[data-kind=class],.pl-slot[data-kind=plan],.pl-slot[data-kind=break],.pl-calendar-entry,.pl-week-entry,.pl-overview .pl-day-task,.pl-overview .pl-calendar-summary-task,.pl-overview .pl-preparation,.task-stack-card,.xc-deadlines>div) {
+  border-right:1px solid var(--card-edge-rim);
+}
+.p0 .home-workspace[data-card-edges=none] :is(.pl-slot[data-kind=class],.pl-slot[data-kind=plan],.pl-slot[data-kind=break],.pl-calendar-entry,.pl-week-entry,.pl-overview .pl-day-task,.pl-overview .pl-calendar-summary-task,.pl-overview .pl-preparation,.task-stack-card,.xc-deadlines>div) {
+  border-left:1px solid var(--card-edge-rim);
+  border-right:1px solid var(--card-edge-rim);
+}

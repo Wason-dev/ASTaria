@@ -1,0 +1,89 @@
+.wb-input-shell {
+  position: relative;
+  isolation: isolate;
+  flex: none;
+  border-radius: 14px;
+  background: #ffffff80;
+  box-shadow: inset 0 0 0 1px #76828e36;
+  transition: background 180ms ease, box-shadow 180ms ease;
+}
+.wb-input-shell:focus-within {
+  background: #ffffffa6;
+  box-shadow: inset 0 0 0 1px #8a77597a;
+}
+.wb-input-shell:has(textarea:focus-visible) { box-shadow: inset 0 0 0 1.5px #776346a6 }
+.p0 .wb-xixi .wb-input-textarea {
+  position: relative;
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 86px;
+  max-height: 200px;
+  resize: vertical;
+  padding: 11px 13px;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: #303941;
+  font-family: inherit;
+  font-size: var(--wb-font);
+  line-height: 1.8;
+  caret-color: #96733b;
+  box-shadow: none;
+  outline: none;
+}
+.p0 .wb-xixi .wb-input-textarea:is(:focus, :focus-visible) { outline: none; box-shadow: none }
+.p0 .wb-xixi .wb-input-textarea::placeholder { color: #6d7883; opacity: 1 }
+@media (max-width: 600px) {
+  .p0 .wb-xixi .wb-input-textarea { font-size: 16px }
+}
+.wb-input-shell .home-input-flash {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  animation: wb-input-flash 440ms ease-out both;
+}
+.wb-input-shell :is(.home-input-rim, .home-input-glow) {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+.wb-input-shell .home-input-rim {
+  padding: 2px;
+  background: linear-gradient(115deg, #bd945b 0%, #fff2d0 23%, #e9c285 49%, #c9a268 73%, #f6dfb0 100%);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+}
+.wb-input-shell .home-input-glow {
+  inset: -2px;
+  filter: blur(5px) drop-shadow(0 0 4px #c59d5666);
+}
+.wb-input-shell .home-input-glow::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 4px;
+  background: linear-gradient(115deg, #d4ac6f, #fff0ce 28%, #d9b26c 65%, #f5dfb3);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+}
+@keyframes wb-input-flash {
+  0% { opacity: 0 }
+  14% { opacity: .95 }
+  38% { opacity: .65 }
+  100% { opacity: 0 }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wb-input-shell { transition: none }
+  .wb-input-shell .home-input-flash { animation: none; display: none }
+}
+@media (forced-colors: active) {
+  .wb-input-shell { background: Canvas; box-shadow: none }
+  .wb-input-shell .home-input-flash { display: none }
+  .p0 .wb-xixi .wb-input-textarea { background: Canvas; color: CanvasText; outline: 1px solid CanvasText; caret-color: auto }
+  .p0 .wb-xixi .wb-input-textarea:is(:focus, :focus-visible) { outline: 2px solid Highlight; outline-offset: 0 }
+  .p0 .wb-xixi .wb-input-textarea::placeholder { color: GrayText }
+}

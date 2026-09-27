@@ -1,0 +1,184 @@
+/* The outer panes sample the scene. Inner plates use translucent, bevelled
+   surfaces so scrolling does not stack dozens of live backdrop filters. */
+.planner {
+  --pl-plate: linear-gradient(125deg, #ffffff08, transparent 38%, #ffffff03 76%, #ffffff07), rgb(8 10 14 / var(--pl-inner-tint));
+  --pl-plate-hover: linear-gradient(125deg, #ffffff0c, transparent 42%, #d5bb8b08), rgb(8 10 14 / var(--pl-inner-tint));
+  --pl-plate-line: #e1ded526;
+  --pl-plate-shadow: inset 0 1px 0 rgb(255 255 255 / calc(var(--pl-rim) * .3)), inset 0 -1px 0 #ffffff06, 0 3px 10px #00000012;
+  --pl-ease: cubic-bezier(.22,.72,.22,1);
+}
+.planner[data-theme=light] {
+  --pl-plate: linear-gradient(125deg, #ffffff24, transparent 42%, #ffffff10), rgb(250 251 252 / var(--pl-inner-tint));
+  --pl-plate-hover: linear-gradient(125deg, #ffffff38, transparent 42%, #d5bb8b0c), rgb(250 251 252 / var(--pl-inner-tint));
+  --pl-plate-line: #4146501c;
+  --pl-plate-shadow: inset 0 1px 0 rgb(255 255 255 / calc(var(--pl-rim) * .9)), inset 0 -1px 0 #35414a08, 0 3px 10px #252d3909;
+}
+
+/* Use the workbench palette and veil; stacking blue fills was hiding the scene. */
+.planner[data-theme=dark] { --pl-ink:#eeeae3; --pl-body:#d4d0c9; --pl-muted:#bcc0c7; --pl-line:#e1ded526; --pl-gold:#d5bb8b; --pl-well:#080a0e14 }
+.planner[data-theme=light] { --pl-ink:#30343a; --pl-body:#55616b; --pl-muted:#626b75; --pl-line:#4146501c; --pl-gold:#a58752; --pl-well:#fafbfc18 }
+.planner[data-theme=dark] .pl-background { background:rgb(0 0 0 / calc(var(--pl-bg-opacity) * .68)) }
+.planner[data-theme=light] .pl-background { background:rgb(252 253 255 / var(--pl-bg-opacity)) }
+.planner .pl-background::after { content:''; position:absolute; inset:0; pointer-events:none; background-image:linear-gradient(to right,#c3c9d510 1px,transparent 1px),linear-gradient(to bottom,#c3c9d510 1px,transparent 1px); background-size:36px 36px; opacity:.65 }
+.planner[data-theme=light] .pl-background::after { background-image:linear-gradient(to right,#7891a414 1px,transparent 1px),linear-gradient(to bottom,#7891a414 1px,transparent 1px) }
+.p0 .planner[data-theme=dark] .pl-glass .home-glass-surface { background:rgb(8 10 14 / var(--glass-tint)) }
+.p0 .planner[data-theme=light] .pl-glass .home-glass-surface { background:rgb(250 251 252 / var(--glass-tint)) }
+.planner .pl-container { margin:max(12px,calc(var(--pl-top) - 76px)) auto 24px }
+.planner .pl-glass { border-color:transparent; box-shadow:0 8px 28px rgb(0 0 0 / var(--pl-shadow)) }
+.planner[data-theme=light] .pl-glass { box-shadow:0 8px 28px rgb(37 45 57 / var(--pl-shadow)) }
+.planner[data-theme] .pl-glass-content { text-shadow:none }
+.planner .pl-page-header h2 { font-size:calc(var(--pl-font) + 12px); font-weight:450; letter-spacing:-.025em }
+.planner .pl-eyebrow { font-size:calc(var(--pl-font) - 2px); letter-spacing:.08em }
+.planner .pl-life-section h4 { color:var(--pl-body) }
+.planner .pl-capacity-bar i,.planner .pl-calendar-capacity-track>span { background:#d5bb8b8c }
+.planner .pl-legend i[data-kind=plan] { background:#91a9b9 }
+.planner .pl-checklist strong { color:var(--pl-ink) }
+.p0 .planner .pl-scroll { scrollbar-gutter:stable both-edges }
+
+/* Three real columns: no text or controls sit behind the chat glass. Keep the
+   third track present at zero width so opening and closing share one motion. */
+.planner .pl-container { transition:width 340ms var(--pl-ease) }
+.planner .pl-layout,.planner .pl-layout[data-chat=true] {
+  grid-template-columns:minmax(0,1fr) 310px 0px;
+  gap:0;
+  transition:grid-template-columns 340ms var(--pl-ease);
+}
+.planner .pl-layout>.pl-day-panel,.planner .pl-layout>.pl-calendar-summary { margin-left:14px }
+.pl-chat-column { min-width:0; min-height:0; overflow:hidden; padding-left:0; transition:padding-left 340ms var(--pl-ease); display:flex }
+.pl-chat-column[data-settled=true] { overflow:visible }
+.planner .pl-layout[data-chat-open=true] { grid-template-columns:minmax(0,1fr) 264px 324px }
+.planner .pl-layout[data-chat-open=true]>.pl-chat-column { padding-left:14px }
+.planner .pl-layout .pl-chat {
+  position:relative; inset:auto; flex:1; width:100%; min-width:0; height:100%;
+  opacity:1; transform:none; animation:none; transition:none;
+}
+.planner .pl-layout[data-chat-open=false] .pl-chat { pointer-events:none; opacity:1; transform:none }
+.planner .pl-layout .pl-chat>.home-glass-measure { background:transparent }
+.planner .pl-chat>.pl-glass-content { min-width:278px; padding:18px; animation:pl-chat-content-in 320ms var(--pl-ease) both }
+.planner .pl-layout[data-chat-open=false] .pl-chat>.pl-glass-content { animation:pl-chat-content-out 200ms ease both }
+.planner .pl-chat .xixi-conversation { min-height:80px; max-height:none; font-size:var(--pl-font); line-height:1.8; padding:12px; margin:4px 0 10px; border:1px solid var(--pl-plate-line); border-radius:16px; background:var(--pl-plate); box-shadow:var(--pl-plate-shadow) }
+.pl-chat-header { border-bottom:1px solid var(--pl-line); padding-bottom:12px }
+.pl-chat-header>strong { display:flex; gap:8px; align-items:center }
+.pl-chat-header>strong::before { content:''; width:5px; height:5px; border-radius:50%; background:var(--pl-gold); box-shadow:0 0 10px #d6bb8566 }
+.planner .pl-chat-compose { margin-top:auto; padding-top:12px; gap:8px; flex:none }
+.planner .pl-chat .wb-input-shell { background:var(--pl-plate); box-shadow:var(--pl-plate-shadow); border:1px solid var(--pl-plate-line) }
+.planner .pl-chat .wb-input-textarea { min-height:76px; max-height:140px; resize:none }
+.planner .pl-chat .xixi-receipt { background:var(--pl-plate) }
+
+/* Small glass plates: a rim, an upper reflection and a restrained shadow. */
+.planner :is(.pl-capacity,.pl-life-section,.pl-calendar-summary-focus) {
+  position:relative; background:var(--pl-plate); border:1px solid var(--pl-plate-line);
+  border-radius:16px; box-shadow:var(--pl-plate-shadow); padding:14px; margin:0 0 10px;
+}
+.planner .pl-calendar-summary .pl-life-section { padding-top:14px }
+.planner .pl-side-scroll,.planner .pl-calendar-summary-scroll { padding:2px 8px 8px 2px }
+.planner .pl-day-panel>.pl-glass-content,.planner .pl-calendar-summary>.pl-glass-content { padding:16px 10px 14px 14px }
+.planner :is(.pl-side-scroll,.pl-calendar-summary-scroll)>:last-child { margin-bottom:0 }
+.planner :is(.pl-day-task,.pl-preparation,.pl-calendar-summary-task,.pl-checklist li,.pl-week-entry) {
+  border:1px solid var(--pl-plate-line); border-radius:10px; background:var(--pl-plate);
+  box-shadow:var(--pl-plate-shadow); padding:9px 10px; margin:6px 0;
+  transition:background 200ms,border-color 200ms,box-shadow 200ms,transform 200ms var(--pl-ease);
+}
+.planner :is(.pl-day-task,.pl-preparation,.pl-calendar-summary-task,.pl-week-entry):hover {
+  background:var(--pl-plate-hover); border-color:#c4b18c66; box-shadow:var(--pl-plate-shadow),0 0 14px #cfbd9010; transform:translateY(-1px);
+}
+.planner .pl-checklist li { padding:9px 8px }
+.planner .pl-capacity-hero strong { font-size:27px }
+.planner .pl-capacity-detail { font-size:10px; line-height:1.6 }
+.planner .pl-free-slots>span { background:var(--pl-plate); border-color:var(--pl-plate-line); box-shadow:inset 0 1px 0 #ffffff0d; border-radius:6px; font-size:10px }
+.planner .pl-life-section h4 { font-size:12px }
+.planner .pl-calendar-summary-focus strong { font-size:23px }
+.planner .pl-setup { background:var(--pl-plate); box-shadow:var(--pl-plate-shadow); border-color:var(--pl-plate-line) }
+
+.planner .pl-calendar-grid { gap:6px; border:0; padding:2px }
+.p0 .planner .pl-calendar-day {
+  border:1px solid transparent; border-radius:12px; background:var(--pl-plate);
+  box-shadow:0 2px 8px #00000008; transition:background 220ms,border-color 220ms,box-shadow 220ms,transform 220ms var(--pl-ease);
+}
+.p0 .planner .pl-calendar-day:is(:hover,:focus-visible) { border-color:#c8b18b70; background:var(--pl-plate-hover); box-shadow:var(--pl-plate-shadow),0 0 14px #cdb77f15 }
+.p0 .planner .pl-calendar-day:hover { transform:translateY(-1px) }
+.p0 .planner .pl-calendar-day[aria-pressed=true] { border-color:#c8b18b99; background:var(--pl-plate-hover); box-shadow:var(--pl-plate-shadow),inset 0 0 18px #ceb37a16 }
+.planner[data-theme] .pl-calendar-entry { border:1px solid var(--pl-plate-line); border-left:2px solid #9faebb99; background:#8c9eb714; color:var(--pl-ink); box-shadow:inset 0 1px 0 #ffffff0e; border-radius:5px }
+.planner[data-theme] .pl-calendar-entry[data-kind=deadline] { color:var(--pl-gold); border-left-color:#d4b57b99; background:#cdb07916 }
+.planner .pl-week-grid { gap:7px }
+.planner .pl-week-day { background:var(--pl-plate); border:1px solid transparent; border-radius:14px; box-shadow:0 2px 8px #00000008; padding:7px }
+.planner .pl-week-entry { border-left:2px solid #9faebb88 }
+.planner .pl-week-entry[data-kind=deadline] { border-left-color:#d4b57b99 }
+.planner .pl-week-day[data-selected=true] { border-color:#c8b18b88 }
+
+.planner[data-theme] .pl-timetable-heading { gap:0; background:none; border-radius:0 }
+.planner .pl-timetable-date {
+  position:relative; margin:0 3px; background:transparent; border:1px solid transparent;
+  border-radius:12px; box-shadow:none; overflow:hidden;
+  transition:background 260ms,border-color 260ms,box-shadow 260ms,transform 260ms var(--pl-ease);
+}
+.planner .pl-timetable-date:hover { background:var(--pl-plate-hover); transform:translateY(-1px) }
+.planner .pl-timetable-date[data-today=true] { background:var(--pl-plate); border-color:#c8b18b40 }
+.planner .pl-timetable-date[aria-pressed=true] { background:var(--pl-plate-hover); border-color:#c8b18b88; box-shadow:var(--pl-plate-shadow),0 0 15px #d4b97c17 }
+.planner .pl-timetable-heading .pl-timetable-capacity { background:transparent; border:1px solid transparent; box-shadow:none }
+.planner .pl-timetable-capacity b { display:flex; justify-content:center; flex-wrap:wrap; column-gap:3px; row-gap:0; font-size:11px }
+.planner .pl-timetable-capacity b>span { white-space:nowrap }
+.planner .pl-day-column { border-left-color:transparent; border-radius:9px; transition:background-color 300ms,box-shadow 300ms }
+.planner .pl-day-column[data-selected=true] { background-color:#dcc49507; box-shadow:none }
+.planner .pl-timetable-lines>span { border-top-color:#e1ded50e }
+.planner[data-theme=light] .pl-timetable-lines>span { border-top-color:#41465010 }
+.planner .pl-slot { box-shadow:inset 0 1px 0 #ffffff25,inset 0 -1px 0 #0003,0 2px 5px #0002; background-image:linear-gradient(120deg,#ffffff13,transparent 48%,#cad9e20a); border-radius:7px }
+.p0 .planner .pl-slot[data-kind=plan] { background:var(--pl-plate); border-color:#91a9b91a; border-left:2px solid #91a9b9aa; box-shadow:0 2px 7px #0000000c; color:var(--pl-ink) }
+.p0 .planner .pl-slot[data-kind=class] { background:var(--pl-plate); border:1px solid transparent; border-left:2px solid #b9b5ab88; box-shadow:0 2px 7px #0000000c; color:var(--pl-ink) }
+.p0 .planner .pl-slot[data-kind=break] { background:var(--pl-plate); border:1px solid transparent; border-left:2px solid #a5aaa65c; box-shadow:none; color:var(--pl-muted) }
+.p0 .planner[data-theme=light] .pl-slot[data-kind=plan] { border-left-color:#697f8e }
+.p0 .planner[data-theme=light] .pl-slot[data-kind=class] { border-left-color:#8b887f }
+.planner .pl-slot[data-kind=available][data-title-covered=true]>strong,
+.planner .pl-slot[data-kind=available][data-time-covered=true]>.pl-slot-time { visibility:hidden }
+.p0 .planner button.pl-slot:hover { background-color:#7a8ea053; border-color:#c4b78b99; box-shadow:inset 0 1px 0 #ffffff55,0 0 12px #d0be9217 }
+/* The whole available period is the edit target. Draw the extra rim inward
+   so stronger gold never shifts a short slot away from its time geometry. */
+.p0 .planner button.pl-slot[data-kind=available] {
+  --pl-available-rim:#cbb17ca6; z-index:0; border:1px solid var(--pl-available-rim);
+  color:var(--pl-gold); background:linear-gradient(120deg,#e2cc990b,transparent 58%);
+  box-shadow:inset 0 0 0 1px var(--pl-available-rim); cursor:pointer;
+  transition:border-color 180ms,box-shadow 180ms,background-color 180ms;
+}
+.p0 .planner[data-theme=light] button.pl-slot[data-kind=available] { --pl-available-rim:#947640a6 }
+.p0 .planner button.pl-slot[data-kind=available]:is(:hover,:focus-visible) {
+  --pl-available-rim:#dfc38e; background-color:#cbb17c10; outline:none;
+  border-color:var(--pl-available-rim); box-shadow:inset 0 0 0 1px var(--pl-available-rim),0 0 12px #d5bb8b24;
+}
+.p0 .planner[data-theme=light] button.pl-slot[data-kind=available]:is(:hover,:focus-visible) { --pl-available-rim:#876326 }
+@media(forced-colors:active) {
+  .p0 .planner button.pl-slot[data-kind=available]:focus-visible { outline:2px solid Highlight; outline-offset:-3px }
+}
+
+/* Date feedback animates light/content, never the background sampling pane. */
+.pl-timetable-date::before { content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none; border:1px solid #e7cf9e88; opacity:0 }
+.pl-timetable-date[aria-pressed=true]::before { animation:pl-date-glint 520ms ease-out }
+.pl-day-column::after { content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none; background:linear-gradient(180deg,#edcc8d18,transparent 25%); opacity:0; z-index:4 }
+.pl-day-column[data-selected=true]::after { animation:pl-column-light 540ms var(--pl-ease) }
+.planner .pl-day-header h3 { animation:pl-date-content 300ms var(--pl-ease) both }
+.planner :is(.pl-side-scroll,.pl-calendar-summary-scroll) { animation:pl-date-content 300ms var(--pl-ease) both }
+@keyframes pl-date-glint { 0% { opacity:0 } 28% { opacity:1 } 100% { opacity:0 } }
+@keyframes pl-column-light { 0% { opacity:0; transform:translateY(-10px) } 30% { opacity:1 } 100% { opacity:0; transform:translateY(20px) } }
+@keyframes pl-date-content { from { opacity:0; transform:translateX(calc(var(--pl-direction,1) * 16px)) } to { opacity:1; transform:translateX(0) } }
+@keyframes pl-chat-content-in { from { opacity:0; transform:translateX(12px) } to { opacity:1; transform:translateX(0) } }
+@keyframes pl-chat-content-out { to { opacity:0; transform:translateX(8px) } }
+@media(min-width:1100px) {
+  .planner[data-chat-open=true] .pl-container { width:min(max(var(--pl-width),1520px),calc(100% - 2 * var(--home-left))) }
+}
+@media(max-width:1099px) {
+  .planner .pl-layout,.planner .pl-layout[data-chat=true],.planner .pl-layout[data-chat-open=true] { grid-template-columns:minmax(0,1fr) 280px; height:auto }
+  .planner .pl-chat-column { grid-column:1 / -1; display:grid; grid-template-rows:0fr; padding:0; transition:grid-template-rows 340ms var(--pl-ease),margin-top 340ms }
+  .planner .pl-layout[data-chat-open=true]>.pl-chat-column { grid-template-rows:1fr; padding:0; margin-top:14px }
+  .planner .pl-layout .pl-chat { position:relative; inset:auto; width:100%; min-height:0; height:auto; overflow:hidden }
+  .planner .pl-chat>.pl-glass-content { min-width:0; max-height:580px; padding:18px }
+  .planner .pl-chat .xixi-conversation { min-height:180px; max-height:300px }
+}
+@media(max-width:850px) {
+  .planner .pl-layout,.planner .pl-layout[data-chat=true],.planner .pl-layout[data-chat-open=true] { grid-template-columns:minmax(0,1fr) }
+  .planner .pl-layout>.pl-day-panel,.planner .pl-layout>.pl-calendar-summary { margin:14px 0 0 }
+  .planner .pl-calendar-grid { gap:4px }
+  .planner .pl-calendar-day { border-radius:9px }
+}
+@media(prefers-reduced-motion:reduce) {
+  .planner :is(.pl-container,.pl-layout,.pl-chat-column,.pl-timetable-date,.pl-day-column) { transition:none }
+  .planner :is(.pl-day-header h3,.pl-side-scroll,.pl-calendar-summary-scroll,.pl-chat>.pl-glass-content),.pl-timetable-date::before,.pl-day-column::after { animation:none!important }
+}

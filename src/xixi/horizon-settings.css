@@ -1,0 +1,15 @@
+.xixi-settings-content>.xixi-horizon-settings{grid-column:1/-1;border-top:1px solid var(--settings-line);margin-top:10px}
+.xixi-horizon-settings-fields{min-width:0;margin:0;padding:0;border:0}
+.xixi-horizon-settings-legend{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.xixi-horizon-settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 32px}
+.xixi-horizon-setting{display:flex;align-items:center;justify-content:space-between;gap:24px;padding:10px 0;border-bottom:1px solid var(--settings-line)}
+:is(.p0,.app-shell) .xixi-settings .xixi-horizon-setting>label{margin:0;font-size:12px;font-weight:500}
+.xixi-horizon-setting-control{display:flex;align-items:center;gap:10px;width:230px;max-width:60%;min-width:0}
+.xixi-horizon-setting-value{flex:none;width:4.5ch;color:var(--settings-muted);font-size:11px;font-variant-numeric:tabular-nums;text-align:right}
+:is(.p0,.app-shell) .xixi-settings .xixi-horizon-setting-control>input[type=range]{flex:1;min-width:0;accent-color:var(--settings-accent);height:22px;margin:0;padding:0;border:0;border-radius:0;background:transparent;cursor:pointer}
+.xixi-horizon-settings-fields:disabled .xixi-horizon-setting{opacity:.45}
+:is(.p0,.app-shell) .xixi-settings .xixi-horizon-settings-fields:disabled input{cursor:default}
+.xixi-horizon-settings-feedback{display:flex;align-items:center;gap:12px;margin-top:10px;color:var(--settings-accent);font-size:11px}
+.xixi-horizon-settings-feedback[data-error=true]{color:var(--settings-ink)}
+@media(max-width:800px){.xixi-horizon-settings-grid{grid-template-columns:minmax(0,1fr);gap:0}}
+@media(max-width:600px){.xixi-horizon-setting{gap:12px}.xixi-horizon-settings .xixi-settings-section-title{flex-wrap:wrap;gap:0 10px}.xixi-horizon-settings-feedback{align-items:flex-start;flex-wrap:wrap}}

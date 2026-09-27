@@ -1,0 +1,21 @@
+.p0 {
+  position: fixed; inset: 0; isolation: isolate; overflow: hidden;
+  background: #050506; color: #eeeae3; color-scheme: dark;
+  font-family: Inter, "Helvetica Neue", "PingFang SC", sans-serif;
+  --p0-fg: #eeeae3; --p0-muted: #b9b6af; --p0-panel: rgba(12, 13, 16, .8);
+  --p0-line: rgba(225, 222, 213, .15); --p0-accent: #d9d4ca; --home-left: 34px;
+}
+.p0-universe { position: absolute; inset: 0; z-index: -1 }
+.p0-universe canvas { display: block; width: 100%; height: 100% }
+.p0 button, .p0 input, .p0 textarea { font: inherit; color: inherit }
+.p0 button { border: 0; background: transparent; cursor: pointer }
+.p0 button:disabled { opacity: .45; cursor: default }
+.p0 :is(button, input, textarea, select):focus-visible { outline: 1px solid var(--p0-accent); outline-offset: 4px; box-shadow: none }
+.p0-whisper { position: absolute; left: var(--home-left); bottom: 24px; margin: 0; font-size: 11px; letter-spacing: .19em; color: var(--p0-muted); pointer-events: none }
+.p0-error { position: absolute; right: 22px; top: 22px; max-width: min(280px, calc(100% - 140px)); max-height: 100px; overflow: auto; border: 1px solid var(--p0-line); border-radius: 12px; padding: 12px; background: #17181b }
+.p0-error h2 { font-size: 15px; font-weight: 400; margin: 0 0 10px }
+.p0-error p { font-size: 12px; line-height: 1.7; overflow-wrap: anywhere }
+.p0-error button { font-size: 12px; text-decoration: underline }
+.p0-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0 }
+@media (max-width: 600px) { .p0 { --home-left: 22px } .p0-whisper { bottom: 21px } }
+@media (pointer: fine) { .p0-universe { cursor: none } }

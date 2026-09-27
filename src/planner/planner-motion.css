@@ -1,0 +1,74 @@
+/* Match the workbench's light response. Live backdrop surfaces and their
+   ancestors stay opaque and stationary while content/rims do the moving. */
+.planner { --pl-motion-ease:cubic-bezier(.16,.8,.25,1); --pl-pointer-wash:rgb(255 243 217 / .09); --pl-pointer-rim:#fff4dccc; --pl-pulse:#d5bb8b88 }
+.planner[data-theme=light] { --pl-pointer-wash:rgb(255 255 255 / .3); --pl-pointer-rim:#ffffffed; --pl-pulse:#a5875288 }
+.planner[data-active=true] .pl-scroll { opacity:1; transform:none; transition:none }
+.planner[data-active=false] .pl-scroll { transition:opacity 180ms ease }
+.planner[data-active=true] .pl-glass-content { animation:none }
+.planner[data-entering=true] :is(.pl-page-header,.pl-setup) { animation:pl-content-arrive 300ms var(--pl-motion-ease) both }
+.planner[data-entering=true] .pl-glass>.home-glass-measure .home-glass-surface { animation:pl-glass-arrive 280ms var(--pl-motion-ease) both }
+.planner[data-entering=true] .pl-glass>.home-glass-measure .home-glass-surface::after { animation:pl-rim-arrive 320ms ease both }
+.planner[data-entering=true] :is(.pl-board-toolbar,.pl-day-header,.pl-legend) { animation:pl-content-arrive 300ms var(--pl-motion-ease) 40ms both }
+.planner[data-entering=true] :is(.pl-calendar-day,.pl-week-day,.pl-timetable-date) { animation:pl-content-arrive 280ms var(--pl-motion-ease) 70ms backwards }
+.planner[data-entering=true] :is(.pl-calendar-day,.pl-week-day,.pl-timetable-date):nth-child(3n + 2) { animation-delay:110ms }
+.planner[data-entering=true] :is(.pl-calendar-day,.pl-week-day,.pl-timetable-date):nth-child(3n) { animation-delay:140ms }
+.planner[data-entering=true] :is(.pl-side-scroll,.pl-calendar-summary-scroll)>section { animation:pl-content-arrive 280ms var(--pl-motion-ease) 70ms backwards }
+.planner[data-entering=true] :is(.pl-side-scroll,.pl-calendar-summary-scroll)>section:nth-child(2) { animation-delay:110ms }
+.planner[data-entering=true] :is(.pl-side-scroll,.pl-calendar-summary-scroll)>section:nth-child(n + 3) { animation-delay:140ms }
+
+/* Closing first detaches sampling in React, then the same ancestor fades the
+   tint, rim, hover, text and shadow together while the layout gives space back. */
+.planner .pl-layout .pl-chat { transition:opacity 200ms ease; transform:none }
+.planner .pl-layout[data-chat-open=true] .pl-chat { opacity:1; transition:none }
+.planner .pl-layout[data-chat-open=false] .pl-chat { opacity:0; transform:none }
+.planner .pl-layout[data-chat-open=true] .pl-chat>.pl-glass-content { animation:pl-chat-content-in 240ms var(--pl-motion-ease) 90ms both }
+.planner .pl-layout[data-chat-open=false] .pl-chat>.pl-glass-content { animation:pl-chat-content-out 180ms ease both }
+
+/* Only the closest hovered plate receives light; no stacked glow on its parents. */
+.planner :is(.pl-week-entry,.pl-day-task,.pl-calendar-summary-task,.pl-month-deadline,.pl-preparation,.pl-checklist li,.pl-capacity,.pl-life-section,.pl-calendar-summary-focus,.pl-primary,.pl-secondary,.pl-icon-button) { position:relative }
+.planner :is(.pl-calendar-day,.pl-slot,.pl-week-entry,.pl-day-task,.pl-calendar-summary-task,.pl-month-deadline,.pl-preparation,.pl-checklist li,.pl-capacity,.pl-life-section,.pl-calendar-summary-focus,.pl-glass,.pl-primary,.pl-secondary,.pl-icon-button)::before {
+  content:''; position:absolute; inset:0; pointer-events:none; border-radius:inherit; opacity:0; z-index:2;
+  background:radial-gradient(circle 120px at var(--pl-pointer-x,50%) var(--pl-pointer-y,50%),var(--pl-pointer-wash),transparent 72%);
+  transition:opacity 180ms ease;
+}
+.planner :is(.pl-calendar-day,.pl-timetable-date,.pl-slot,.pl-week-entry,.pl-day-task,.pl-calendar-summary-task,.pl-month-deadline,.pl-preparation,.pl-checklist li,.pl-capacity,.pl-life-section,.pl-calendar-summary-focus,.pl-glass,.pl-primary,.pl-secondary,.pl-icon-button)::after {
+  content:''; position:absolute; inset:0; padding:1px; pointer-events:none; border-radius:inherit; opacity:0; z-index:3;
+  background:radial-gradient(circle 100px at var(--pl-pointer-x,50%) var(--pl-pointer-y,50%),var(--pl-pointer-rim),#d5bb8b70 35%,transparent 76%);
+  mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0); mask-composite:exclude;
+  transition:opacity 180ms ease;
+}
+.p0 .planner [data-hovered=true]::before,.p0 .planner [data-hovered=true]::after,
+.planner :is(.pl-calendar-day,.pl-timetable-date,.pl-slot,.pl-week-entry,.pl-day-task,.pl-calendar-summary-task,.pl-month-deadline,.pl-preparation,.pl-primary,.pl-secondary,.pl-icon-button):focus-visible::after { opacity:1 }
+.planner :is(button,input,textarea):focus-visible { outline:1px solid #d5bb8bb3; outline-offset:2px }
+.planner[data-theme=light] :is(button,input,textarea):focus-visible { outline-color:#93784c9c }
+.planner .pl-glass-content { z-index:4 }
+.planner :is(.pl-calendar-day,.pl-timetable-date,.pl-slot,.pl-week-entry,.pl-day-task,.pl-calendar-summary-task,.pl-month-deadline,.pl-preparation,.pl-capacity,.pl-life-section,.pl-calendar-summary-focus)>:is(strong,small,h4,p,div,ul,button,header),
+.planner :is(.pl-timetable-date,.pl-checklist li,.pl-primary,.pl-secondary,.pl-icon-button)>*,
+.planner .pl-calendar-date,.planner .pl-calendar-entries { position:relative; z-index:4 }
+.planner .pl-calendar-capacity { z-index:4 }
+.planner .pl-calendar-date>small { position:static; margin-left:auto }
+.p0 .planner :is(.pl-calendar-day,.pl-timetable-date,.pl-day-task,.pl-calendar-summary-task,.pl-month-deadline,.pl-preparation,.pl-week-entry) {
+  transition:background 220ms,border-color 220ms,box-shadow 220ms,transform 220ms var(--pl-motion-ease);
+}
+.p0 .planner :is(.pl-calendar-day,.pl-timetable-date,.pl-day-task,.pl-calendar-summary-task,.pl-month-deadline,.pl-preparation,.pl-week-entry)[data-hovered=true] {
+  transform:translateY(-1.5px); border-color:#d5bb8b60; box-shadow:var(--pl-plate-shadow),0 6px 16px #00000012,0 0 14px #d5bb8b10;
+}
+.p0 .planner :is(.pl-calendar-day,.pl-timetable-date,.pl-day-task,.pl-calendar-summary-task,.pl-month-deadline,.pl-preparation):active { transform:translateY(0); transition-duration:90ms }
+/* A timed event never lifts away from the time that its top edge represents. */
+.p0 .planner .pl-slot[data-hovered=true] { border-color:#d5bb8b88; box-shadow:var(--pl-plate-shadow),0 0 12px #d5bb8b20 }
+.planner :is(.pl-day-task,.pl-calendar-summary-task,.pl-month-deadline,.pl-week-entry,.pl-calendar-entry,.pl-slot,.pl-check)[data-status-pulse=true],
+.planner .pl-checklist li:has(.pl-check[data-status-pulse=true]) { animation:pl-status-confirm 580ms var(--pl-motion-ease) }
+.planner .pl-calendar-summary-task[data-done=true] .pl-calendar-summary-rail { background:#a3c1ae; transition:background 280ms }
+
+@keyframes pl-content-arrive { from { opacity:0; transform:translateY(7px) } to { opacity:1; transform:translateY(0) } }
+@keyframes pl-glass-arrive { from { background-color:transparent; box-shadow:none } }
+@keyframes pl-rim-arrive { from { opacity:0 } to { opacity:1 } }
+@keyframes pl-status-confirm { 0% { box-shadow:inset 0 0 0 1px transparent } 24% { box-shadow:inset 0 0 0 1px var(--pl-pulse),0 0 20px #d5bb8b26 } 100% { box-shadow:inset 0 0 0 1px transparent } }
+
+@media(prefers-reduced-motion:reduce) {
+  .p0 .planner :is(.pl-calendar-day,.pl-timetable-date,.pl-day-task,.pl-calendar-summary-task,.pl-month-deadline,.pl-preparation,.pl-week-entry):hover { transform:none }
+  .p0 .planner [data-hovered=true]::before,.p0 .planner [data-hovered=true]::after { opacity:0 }
+  .planner .pl-layout .pl-chat { transition:none }
+  .planner :is(.pl-glass,.pl-glass-content,.home-glass-surface,.pl-page-header,.pl-setup,.pl-board-toolbar,.pl-day-header,.pl-legend,.pl-calendar-day,.pl-week-day,.pl-timetable-date,.pl-side-scroll>section,.pl-calendar-summary-scroll>section),
+  .planner .home-glass-surface::after,.planner [data-status-pulse=true] { animation:none!important }
+}

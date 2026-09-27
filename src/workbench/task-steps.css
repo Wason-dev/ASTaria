@@ -1,0 +1,55 @@
+.wb-task-steps { display: flex; flex-direction: column; min-height: 0; flex: 1 }
+.wb-steps-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex: none }
+.wb-steps-heading h3 { margin: 0; font-size: calc(var(--wb-font) + 2px); font-weight: 500; letter-spacing: .015em }
+.wb-steps-heading output { color: var(--wb-gold); font-size: calc(var(--wb-font) + 1px); font-variant-numeric: tabular-nums }
+.wb-steps-heading output > span:not(.p0-sr-only) { color: var(--wb-muted); font-size: calc(var(--wb-font) - 1px) }
+.wb-steps-progress { flex: none; height: 3px; margin-top: 14px; border-radius: 3px; overflow: hidden; background: color-mix(in srgb, var(--wb-gold) 15%, transparent) }
+.wb-steps-progress > span { display: block; height: 100%; width: 100%; transform-origin: left; background: var(--wb-gold); border-radius: inherit; transition: transform 360ms cubic-bezier(.2,.8,.2,1) }
+.wb-steps-next { flex: none; padding: 14px 0 12px; border-bottom: 1px solid var(--wb-line) }
+.wb-steps-next > span { font-size: calc(var(--wb-font) - 2px); color: var(--wb-gold) }
+.wb-steps-next p { margin: 5px 0 0; line-height: 1.65; font-size: var(--wb-font); overflow-wrap: anywhere }
+.wb-steps-next[data-complete=true] p { color: var(--wb-gold) }
+.wb-steps-list { flex: 1; min-height: 0; list-style: none; padding: 8px 0; margin: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--wb-gold) 30%, transparent) transparent; overscroll-behavior: contain }
+.wb-steps-list > li { border-radius: 10px; transition: background-color 240ms }
+.wb-steps-list > li + li { margin-top: 2px }
+.wb-steps-list > li[data-completed=true] { background: color-mix(in srgb, var(--wb-gold) 6%, transparent) }
+.wb-steps-list label { display: grid; grid-template-columns: 19px minmax(0, 1fr); gap: 10px; padding: 10px 7px; cursor: pointer; align-items: start }
+.wb-steps-list label:has(input:disabled) { cursor: default }
+.p0 .wb-steps-list input[type=checkbox] { appearance: none; position: relative; width: 18px; height: 18px; padding: 0; margin: 1px 0 0; border: 1px solid color-mix(in srgb, var(--wb-gold) 55%, transparent); border-radius: 5px; background: transparent; cursor: inherit; transition: background-color 220ms, border-color 220ms, transform 220ms }
+.p0 .wb-steps-list input[type=checkbox]::after { content: ''; position: absolute; width: 8px; height: 4px; top: 4px; left: 4px; border-left: 1.5px solid #352d20; border-bottom: 1.5px solid #352d20; transform: rotate(-45deg) scale(0); transition: transform 200ms cubic-bezier(.2,.8,.2,1) }
+.p0 .wb-steps-list input[type=checkbox]:checked { background: var(--wb-gold); border-color: var(--wb-gold); transform: scale(1.03) }
+.p0 .wb-steps-list input[type=checkbox]:checked::after { transform: rotate(-45deg) scale(1) }
+.p0 .wb-steps-list input[type=checkbox]:focus-visible { outline: 2px solid var(--wb-gold); outline-offset: 4px }
+.wb-step-copy { display: block; min-width: 0 }
+.wb-step-title { display: flex; align-items: baseline; gap: 7px; line-height: 1.55; transition: color 220ms }
+.wb-step-title strong { font-weight: 450; overflow-wrap: anywhere }
+.wb-step-number { color: var(--wb-gold); font-size: calc(var(--wb-font) - 3px); flex: none; font-variant-numeric: tabular-nums }
+.wb-step-detail { display: block; margin-top: 4px; color: var(--wb-muted); font-size: calc(var(--wb-font) - 1px); line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere }
+.wb-steps-list > li[data-completed=true] .wb-step-title { color: var(--wb-muted) }
+.wb-steps-list > li[data-saving=true] { background: color-mix(in srgb, var(--wb-gold) 9%, transparent) }
+.wb-steps-footer { display: flex; align-items: center; justify-content: space-between; flex: none; gap: 10px; padding-top: 10px; color: var(--wb-muted); font-size: calc(var(--wb-font) - 2px) }
+.wb-steps-pages { display: flex; align-items: center; gap: 8px }
+.wb-steps-pages > span { font-variant-numeric: tabular-nums; white-space: nowrap }
+.p0 .wb-steps-pages button { padding: 5px 6px; color: inherit; font-size: inherit; border-radius: 6px }
+.p0 .wb-steps-pages button:enabled:hover { background: color-mix(in srgb, var(--wb-gold) 10%, transparent); color: var(--wb-gold) }
+.p0 .wb-steps-pages button:disabled { opacity: .4; cursor: default }
+.p0 .wb-steps-pages button:focus-visible { outline: 2px solid var(--wb-gold); outline-offset: 2px }
+.wb-steps-save { white-space: nowrap }
+.wb-steps-error { flex: none; margin: 10px 0 0; font-size: calc(var(--wb-font) - 1px); line-height: 1.65; color: #b26c53; overflow-wrap: anywhere }
+.workbench[data-theme=dark] .wb-steps-error { color: #edb6a4 }
+.wb-steps-empty { display: flex; flex: 1; flex-direction: column; align-items: flex-start; justify-content: center; min-height: 250px; padding-block: 24px; gap: 14px }
+.wb-steps-empty-mark { font-size: 27px; color: var(--wb-gold) }
+.wb-steps-empty p { margin: 0; line-height: 1.9 }
+.wb-steps-empty small { max-width: 28em; font-size: calc(var(--wb-font) - 1px); line-height: 1.75; color: var(--wb-muted) }
+.wb-steps-empty .wb-action { margin-top: 5px }
+@media (max-width: 900px) {
+  .wb-steps-list { overflow: visible }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wb-steps-progress > span,.wb-steps-list > li,.wb-step-title,.p0 .wb-steps-list input[type=checkbox],.p0 .wb-steps-list input[type=checkbox]::after { transition: none }
+}
+@media (forced-colors: active) {
+  .p0 .wb-steps-list input[type=checkbox] { appearance: auto }
+  .p0 .wb-steps-list input[type=checkbox]::after { display: none }
+  .wb-steps-progress > span { background: Highlight }
+}

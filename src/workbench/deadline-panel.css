@@ -1,0 +1,56 @@
+.workbench .wb-deadline-timeline { box-sizing: border-box; min-width: 0 }
+.workbench .wb-deadline-timeline.wb-ddl-embedded { padding: 0; border: 0; box-shadow: none; background: none }
+.workbench .wb-ddl-content { min-width: 0 }
+.workbench .wb-deadline-timeline .wb-ddl-heading { margin-bottom: 18px }
+.workbench .wb-ddl-timeline-window { position: relative; min-width: 0; overflow: clip; transition: height 320ms cubic-bezier(.2,.8,.2,1) }
+.workbench .wb-ddl-timeline-track { display: grid; grid-auto-flow: column; grid-auto-columns: var(--wb-ddl-node-width); grid-template-rows: auto auto auto; column-gap: var(--wb-ddl-node-gap); row-gap: 0; list-style: none; padding: 0; margin: 0; transition: transform 380ms cubic-bezier(.2,.8,.2,1); will-change: transform }
+/* Shared rows keep the date, card edges and disclosure buttons aligned even
+   when one title wraps or the foremost task has a longer recommendation. */
+.workbench .wb-ddl-timeline-track .wb-ddl-item { position: relative; display: grid; grid-template-rows: subgrid; grid-row: 1 / span 3; width: var(--wb-ddl-node-width); min-width: 0; padding: 0; border-top: 0; opacity: 1; visibility: visible; transition: visibility 0s }
+.workbench .wb-ddl-timeline-track .wb-ddl-item[data-offpage=true] { visibility: hidden; pointer-events: none; transition: visibility 0s 380ms }
+.workbench .wb-ddl-node-date { display: block; margin: 0 0 22px; color: #616e75; font-size: calc(var(--wb-font) - 2px); line-height: 18px; font-variant-numeric: tabular-nums; white-space: nowrap }
+.workbench .wb-ddl-timeline-track .wb-ddl-item::before { content: ''; position: absolute; top: 28px; left: 0; width: calc(100% + var(--wb-ddl-node-gap)); height: 1px; background: linear-gradient(90deg, #a38c6142, #9ca8ae38); pointer-events: none }
+.workbench .wb-ddl-timeline-track .wb-ddl-item:last-child::before { width: 100% }
+.workbench .wb-ddl-node-dot { position: absolute; left: 0; top: 25px; width: 7px; height: 7px; border: 1px solid var(--ddl-dot); border-radius: 50%; background: #fafbfb; box-shadow: 0 0 0 3px #fafbfb70; z-index: 1 }
+.workbench .wb-ddl-item:is([data-urgency=overdue],[data-urgency=urgent]) .wb-ddl-node-dot { background: var(--ddl-dot) }
+.p0 .workbench .wb-ddl-timeline-track .wb-ddl-select { box-sizing: border-box; min-width: 0; height: 100%; padding: 12px 46px 12px 12px; gap: 8px }
+.workbench .wb-ddl-timeline-track .wb-ddl-copy { gap: 5px }
+.workbench .wb-ddl-timeline-track .wb-ddl-copy strong { color: #303a42; font-weight: 550 }
+.workbench .wb-ddl-meta { align-items: center; gap: 3px 10px }
+.workbench .wb-ddl-meta .wb-ddl-effort { display: inline-flex; align-items: center; gap: 4px; line-height: 1.6 }
+.workbench .wb-ddl-meta .wb-icon { width: 12px; height: 12px; flex: none; color: #7e8589 }
+.workbench .wb-ddl-card { position: relative; min-width: 0 }
+.workbench .wb-ddl-details { min-width: 0; padding-top: 0 }
+.p0 .workbench .wb-ddl-card .wb-ddl-reason-toggle.wb-icon-button { position: absolute; right: 10px; top: 10px; margin: 0; z-index: 5 }
+/* Use the empty space alongside the icon; a tooltip above obscures deadline advice. */
+.workbench .wb-ddl-reason-toggle.wb-icon-button .wb-tooltip { left: auto; right: calc(100% + 8px); top: 50%; bottom: auto; transform: translateY(calc(-50% + 3px)) }
+.workbench .wb-ddl-reason-toggle.wb-icon-button:is(:hover,:focus-visible) .wb-tooltip { transform: translateY(-50%) }
+.workbench .wb-ddl-timeline-track .wb-ddl-evidence ul { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 6px; list-style: none; margin: 5px 0 3px; padding: 0; background: none; color: var(--wb-body, #626b75); line-height: 1.65 }
+.workbench .wb-ddl-timeline-track .wb-ddl-evidence li { min-width: 0; margin: 0; padding: 8px; border: 1px solid var(--wb-line); border-radius: 9px; background: var(--wb-evidence-fill, #ffffff24); box-shadow: inset 0 1px 0 #ffffff18; overflow-wrap: anywhere }
+.workbench .wb-ddl-evidence-label { display: flex; align-items: center; gap: 4px; color: var(--wb-muted, #737b82); font-size: calc(var(--wb-font) - 3px); line-height: 1.5 }
+.workbench .wb-ddl-evidence-label .wb-icon { width: 11px; height: 11px; color: var(--wb-gold, #9a835a) }
+.workbench .wb-ddl-evidence li p { margin: 4px 0 0 }
+.workbench .wb-ddl-timeline-track .wb-ddl-expanded-advice { margin: 4px 0 7px; padding: 8px 9px; border-left: 2px solid #b3a07750; border-radius: 0 8px 8px 0; background: var(--wb-evidence-fill, #ffffff24); font-size: calc(var(--wb-font) - 2px) }
+.p0 .workbench[data-theme=dark] .wb-ddl-evidence { --wb-evidence-fill: #ffffff05 }
+.p0 .workbench[data-theme=dark] .wb-ddl-timeline-track .wb-ddl-evidence ul { background: none }
+.workbench .wb-ddl-pager { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; margin-top: 12px; padding-top: 10px; border-top: 1px solid #71889c16 }
+.workbench .wb-ddl-page-controls { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 10px; margin-left: auto; width: max-content }
+.workbench .wb-ddl-page-status { color: #4a5a65; font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap }
+.workbench .wb-ddl-page-status > span { color: #879096 }
+.workbench .wb-ddl-page-alert { color: #827049; font-size: 10px; line-height: 1.5 }
+.workbench .wb-ddl-page-alert[data-urgency=overdue] { color: #974f3d }
+.p0 .workbench :is(.wb-ddl-page-prev,.wb-ddl-page-next) { box-sizing: border-box; display: inline-flex; flex: 0 0 40px; justify-content: center; align-items: center; width: 40px; height: 40px; min-width: 40px; min-height: 40px; padding: 0; border-radius: 50%; background: linear-gradient(145deg, #ffffff80, #ffffff30); color: #455c6c; border: 1px solid #71889c35; box-shadow: inset 0 1px 0 #ffffffc2, 0 2px 7px #34424f08; transition: color 180ms, background-color 180ms, border-color 180ms, box-shadow 180ms }
+.workbench :is(.wb-ddl-page-prev,.wb-ddl-page-next) > .wb-icon { width: 20px; height: 20px; stroke-width: 1.7 }
+.p0 .workbench :is(.wb-ddl-page-prev,.wb-ddl-page-next):enabled:is(:hover,:focus-visible) { color: #7b592c; border-color: #ad8a4f75; background-color: #ffffff75; box-shadow: inset 0 1px 0 #ffffffd9, 0 3px 10px #a7854520 }
+.p0 .workbench :is(.wb-ddl-page-prev,.wb-ddl-page-next):enabled:active { background-color: #efe6d366; box-shadow: inset 0 1px 5px #88714218 }
+.workbench .wb-ddl-page-prev > .wb-icon { transform: rotate(90deg) }
+.workbench .wb-ddl-page-next > .wb-icon { transform: rotate(-90deg) }
+.workbench :is(.wb-ddl-page-prev,.wb-ddl-page-next):disabled { opacity: .35; cursor: default }
+.workbench .wb-ddl-page-next .wb-tooltip { left: auto; right: 0; transform: translateY(3px) }
+.workbench .wb-ddl-page-next:is(:hover,:focus-visible) .wb-tooltip { transform: translateY(0) }
+@media (pointer: coarse) {
+  .p0 .workbench :is(.wb-ddl-page-prev,.wb-ddl-page-next) { flex-basis: 44px; width: 44px; height: 44px; min-width: 44px; min-height: 44px }
+}
+@media (prefers-reduced-motion: reduce) {
+  .workbench :is(.wb-ddl-timeline-window,.wb-ddl-timeline-track,.wb-ddl-item,.wb-ddl-evidence) { transition-duration: .01ms !important }
+}

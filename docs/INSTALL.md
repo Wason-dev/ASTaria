@@ -1,7 +1,7 @@
 # macOS beta 安装
 
 ```text
-ASTaria 0.1.0-beta.1 · 小范围内测
+ASTaria 0.1.0-beta.2 · 小范围内测
 
 系统要求：macOS 13 或更新版本，Apple Silicon（M 系列芯片）。不支持 Intel Mac。
 此包采用 ad-hoc 签名，未经 Apple 公证；不是正式公开发行版。

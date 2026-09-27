@@ -15,16 +15,25 @@ export function createWorkOrder(input, previous = null, clock = () => new Date()
   const save = () => { order.version += 1; order.updatedAt = clock(); return structuredClone(order) }
   return {
     get value() { return order },
-    step(toolCallId, name) {
+    step(toolCallId, name, operationId) {
       const existing = order.steps.find(step => step.toolCallId === toolCallId)
-      if (existing) return existing
-      const step = { id: `${order.requestId}:${order.steps.length + 1}`, toolCallId, name, status: 'running' }
+      if (existing) {
+        if (operationId && !existing.operationId) { existing.operationId = operationId; save() }
+        return existing
+      }
+      const step = { id: `${order.requestId}:${order.steps.length + 1}`, toolCallId, name, status: 'running',
+        ...(operationId ? { operationId } : {}) }
       order.steps.push(step); save(); return step
     },
     commit(step, operation) {
       step.status = 'committed'; step.operationId = operation?.id
       delete step.error
-      order.failures = order.failures.filter(failure => failure.stepId !== step.id)
+      // A corrected call has a new call ID but commits the same intended write.
+      const recovered = new Set([step.id])
+      for (const previous of order.steps) if (operation?.id && previous.status === 'failed' && previous.operationId === operation.id) {
+        previous.status = 'recovered'; previous.resolvedByStepId = step.id; recovered.add(previous.id)
+      }
+      order.failures = order.failures.filter(failure => !recovered.has(failure.stepId))
       order.commits = [...new Map(order.commits.concat({ stepId: step.id, operationId: operation?.id, summary: operation?.summary }).filter(item => item.operationId).map(item => [item.operationId, item])).values()]
       order.status = 'running'; save()
     },

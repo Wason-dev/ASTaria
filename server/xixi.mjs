@@ -370,11 +370,20 @@ function compactOperation(operation) {
     changes: operation.changes.map(change => ({ table: change.table, id: change.id,
       after: change.table === 'tasks' ? taskView(change.after) : change.after ? memoryView(change.after) : null })) }
 }
+function publicExecutionIssue(reason) {
+  if (reason.includes('调课依据需为当前或相邻确认')) return '有一步日程修改没能核对你之前的要求，因此没有保存'
+  if (reason.includes('先用 read_planner 读取这些日期')) return '后续安排需要核对当天的最新日程，尚未保存'
+  return reason.replace(/\b(?:read_planner|read_weekly_timetable|plan_tasks|save_day_events|ask_user)\b/gu, toolName => ({
+    read_planner: '日程读取', read_weekly_timetable: '课表读取', plan_tasks: '任务安排',
+    save_day_events: '活动记录', ask_user: '提问',
+  })[toolName])
+}
 function committedReceiptText(summaries, execution, cancelledSummaries = []) {
   const unique = [...new Set(summaries.filter(Boolean))]
   const unresolved = [...new Set([execution?.pending, execution?.interrupted, ...(execution?.failures ?? []).map(item => item.error),
-    ...[...(execution?.scheduleRequirements ?? []), ...(execution?.eventRequirements ?? [])].filter(item => item.status === 'pending').map(item => item.reason)].filter(Boolean))]
-  const saved = unique.length ? `${unresolved.length ? '本轮写入记录' : '已保存'}：\n${unique.map(summary => `- ${summary}`).join('\n')}\n${unresolved.length ? '当前仍未完成或后来变化的部分见下方。' : '以上是刚刚实际写入的结果。'}` : '本次没有保存新的变更。'
+    ...[...(execution?.scheduleRequirements ?? []), ...(execution?.eventRequirements ?? [])].filter(item => item.status === 'pending').map(item => item.reason)]
+    .filter(Boolean).map(publicExecutionIssue))]
+  const saved = unique.length ? `${unresolved.length ? '已保存的部分' : '已保存'}：\n${unique.map(summary => `- ${summary}`).join('\n')}` : '本次没有保存新的变更。'
   const cancelled = [...new Set(cancelledSummaries.filter(Boolean))]
   return `${saved}${cancelled.length ? `\n\n已撤销，保持撤销后的状态：\n${cancelled.map(summary => `- ${summary}`).join('\n')}` : ''}${unresolved.length ? `\n\n尚未完成：\n${unresolved.map(reason => `- ${reason}`).join('\n')}` : ''}`
 }
@@ -950,6 +959,13 @@ export function createXixi({ db, complete, now = () => new Date() }) {
     return stableId(input.requestId, name, clean)
   }
 
+  function attemptedOperationId(input, call) {
+    try {
+      const args = JSON.parse(call.function.arguments)
+      return operationId(input, call.function.name, plainObject(args, '工具参数'))
+    } catch { return undefined }
+  }
+
   function executeTool(call, input, userMessageId) {
     db.assertTurnWritable(input.requestId)
     const definition = XIXI_TOOLS.find(item => item.function.name === call.function?.name)?.function
@@ -1399,7 +1415,12 @@ export function createXixi({ db, complete, now = () => new Date() }) {
     // Reconstruct obligations even when the process stopped after the durable
     // tool receipt but before its work-order checkpoint, then verify live data.
     for (const message of db.listMessages(input.conversationId, { limit: 160, forContext: true })) {
-      if (message.requestId !== input.requestId || message.role !== 'tool') continue
+      if (message.requestId !== input.requestId) continue
+      for (const call of message.toolCalls ?? []) {
+        const step = workOrder.value.steps.find(item => item.toolCallId === call.id)
+        if (step?.status === 'failed') workOrder.step(call.id, step.name, attemptedOperationId(input, call))
+      }
+      if (message.role !== 'tool') continue
       try { const outcome = JSON.parse(message.content); if (outcome.ok !== false) {
         registerSchedule(outcome.scheduling)
         registerSavedPlans(outcome.savedPlans)
@@ -1417,6 +1438,10 @@ export function createXixi({ db, complete, now = () => new Date() }) {
       if (events.length || actions.some(action => action.type === 'delete-day-event')) {
         if (!workOrder.value.commits.some(commit => commit.operationId === operation.id)) workOrder.commit(workOrder.step(`operation:${operation.id}`, 'saved_day_events'), operation)
       }
+    }
+    for (const operation of existingOperations) {
+      const step = workOrder.value.steps.find(item => item.status === 'committed' && item.operationId === operation.id)
+      if (step) workOrder.commit(step, operation)
     }
     refreshScheduleProgress()
     checkpoint()
@@ -1451,7 +1476,7 @@ export function createXixi({ db, complete, now = () => new Date() }) {
       }
       if (unresolved.length > MAX_CALLS) throw new Error('TOOL_LIMIT')
       for (const { call, sourceMessageIds } of unresolved) {
-        const step = workOrder.step(call.id, call.function?.name ?? 'unknown')
+        const step = workOrder.step(call.id, call.function?.name ?? 'unknown', attemptedOperationId(input, call))
         let outcome
         try { outcome = await performTool(call, sourceMessageIds) }
         catch (error) { outcome = { ok: false, error: safeToolError(error) } }
@@ -1538,7 +1563,7 @@ export function createXixi({ db, complete, now = () => new Date() }) {
           content: clipped(message.content, 8000), reasoningContent: message.reasoning_content, toolCalls: calls, taskId: input.context.taskId, sourceMessageIds: modelContext.sourceMessageIds })
         emit({ type: 'phase', phase: 'executing' })
         for (const call of calls) {
-          const step = workOrder.step(call.id, call.function?.name ?? 'unknown')
+          const step = workOrder.step(call.id, call.function?.name ?? 'unknown', attemptedOperationId(input, call))
           let outcome
           try { outcome = await performTool(call, modelContext.sourceMessageIds) }
           catch (error) { outcome = { ok: false, error: safeToolError(error) } }

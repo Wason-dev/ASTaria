@@ -10,6 +10,7 @@ let desktopServer
 let service
 let quitting = false
 let appOrigin
+let nativeWindowButtonsVisible = false
 const smokeTest = process.argv.includes('--smoke-test')
 // The acceptance run must never open the user's SQLite file or Keychain.
 const smokeDirectory = smokeTest ? mkdtempSync(path.join(app.getPath('temp'), 'astaria-smoke-')) : null
@@ -101,6 +102,24 @@ async function start() {
       allowRunningInsecureContent: false,
     },
   })
+  // customButtonsOnHover does not reliably reveal AppKit traffic lights in a
+  // native fullscreen Space. Keep them available while fullscreen, then
+  // restore the quiet hover-only chrome when returning to windowed mode.
+  if (process.platform === 'darwin') {
+    const setNativeWindowButtons = visible => {
+      nativeWindowButtonsVisible = visible
+      window.setWindowButtonVisibility(visible)
+    }
+    // customButtonsOnHover does not reliably reveal AppKit traffic lights in
+    // a native fullscreen Space. Keep them available while fullscreen, then
+    // restore the quiet hover-only chrome when returning to windowed mode.
+    window.on('enter-full-screen', () => setNativeWindowButtons(true))
+    window.on('leave-full-screen', () => setNativeWindowButtons(false))
+    window.on('enter-html-full-screen', () => setNativeWindowButtons(true))
+    window.on('leave-html-full-screen', () => setNativeWindowButtons(false))
+    // Expose only a smoke-test probe; this is never enabled in normal builds.
+    if (smokeTest) window.__astariaNativeWindowButtonsVisible = () => nativeWindowButtonsVisible
+  }
   session.defaultSession.webRequest.onBeforeSendHeaders({ urls: [`${url}*`] }, (details, callback) => {
     if (details.webContentsId !== window?.webContents.id) { callback({ cancel: true }); return }
     // The capability lives only in the main process, never in renderer code,
@@ -118,7 +137,7 @@ async function start() {
       externalLink(target)
     }
   })
-  window.once('ready-to-show', () => { if (!smokeTest) window?.show() })
+  window.once('ready-to-show', () => window?.show())
   window.on('closed', () => { window = null })
   window.webContents.on('render-process-gone', () => {
     dialog.showErrorBox('ASTaria 页面已停止', '本机数据仍保存在数据库中。请退出后重新打开 ASTaria。')
@@ -132,7 +151,7 @@ async function start() {
 }
 
 if (primaryInstance) app.whenReady().then(start).catch(error => {
-  if (smokeTest) { console.error('ASTARIA_SMOKE_FAILED', error.code ?? error.name); app.exit(1); return }
+  if (smokeTest) { console.error('ASTARIA_SMOKE_FAILED', error.stack ?? error.code ?? error.name); app.exit(1); return }
   dialog.showErrorBox('ASTaria 无法启动', error.code === 'EADDRINUSE'
     ? '本机 5199 端口被占用。请关闭占用该端口的程序后重试。'
     : '无法启动本机服务或读取应用资源。请重新安装 ASTaria；原有数据库不会被删除。')

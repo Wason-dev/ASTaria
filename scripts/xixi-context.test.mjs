@@ -60,7 +60,7 @@ test('failed provider reply closes committed actions with one local receipt and 
   const first = await f.xixi.chat(request)
   assert.equal(first.status, 'completed')
   assert.equal(first.operations.length, 2)
-  assert.match(first.messages.at(-1).content, /实际写入/)
+  assert.match(first.messages.at(-1).content, /^已保存：/u)
   assert.doesNotMatch(JSON.stringify(first), /secret-provider-body/)
   const retry = await f.xixi.chat(request)
   assert.equal(retry.status, 'completed')

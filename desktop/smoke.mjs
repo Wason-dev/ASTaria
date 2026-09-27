@@ -31,9 +31,10 @@ export async function runDesktopSmoke(window, directory) {
   })()`)
   if (!check.nodeIntegration) throw new Error('Renderer Node integration must be disabled')
   if (process.platform === 'darwin') {
-    // Electron exposes this inspection hook for native-window tests. Keep it
-    // in the isolated smoke run; production uses AppKit's hover tracking only.
-    if (typeof window._getWindowButtonVisibility !== 'function' || window._getWindowButtonVisibility())
+    // The main process owns this probe; production only uses AppKit's native
+    // traffic-light controls and never exposes it to the renderer.
+    if (typeof window.__astariaNativeWindowButtonsVisible !== 'function'
+      || window.__astariaNativeWindowButtonsVisible())
       throw new Error('Native window buttons must start hidden until hovered')
     if (!window.isClosable() || !window.isMinimizable() || !window.isFullScreenable())
       throw new Error('Hover controls must retain native close, minimize and fullscreen actions')
@@ -61,11 +62,22 @@ export async function runDesktopSmoke(window, directory) {
     const minimum = await inspectChrome()
     window.setBounds(bounds)
     await window.webContents.executeJavaScript('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
-    if (window._getWindowButtonVisibility()) throw new Error('Resizing must not reveal native window buttons')
+    if (window.__astariaNativeWindowButtonsVisible()) throw new Error('Resizing must not reveal native window buttons')
     const nativeButtons = window.getWindowButtonPosition()
     if (nativeButtons?.x !== 12 || nativeButtons?.y !== 8) throw new Error('Native window button position changed')
+    window.setFullScreen(true)
+    for (let attempt = 0; attempt < 20 && !window.__astariaNativeWindowButtonsVisible(); attempt++)
+      await new Promise(resolve => setTimeout(resolve, 100))
+    if (!window.isFullScreen() || !window.__astariaNativeWindowButtonsVisible())
+      throw new Error(`Fullscreen must reveal native window buttons (isFullScreen=${window.isFullScreen()}, visible=${window.__astariaNativeWindowButtonsVisible()})`)
+    window.setFullScreen(false)
+    for (let attempt = 0; attempt < 20 && window.__astariaNativeWindowButtonsVisible(); attempt++)
+      await new Promise(resolve => setTimeout(resolve, 100))
+    if (window.isFullScreen() || window.__astariaNativeWindowButtonsVisible())
+      throw new Error('Leaving fullscreen must restore hidden native window buttons')
     check.windowChrome = { fullSizeContent: true, initial, minimum, nativeButtons,
-      nativeButtonsHiddenByDefault: true, nativeWindowActionsAvailable: true }
+      nativeButtonsHiddenByDefault: true, nativeWindowActionsAvailable: true,
+      fullscreenRevealsNativeButtons: true, fullscreenRestoresHoverMode: true }
   }
   await writeFile(join(directory, 'home.png'), (await window.webContents.capturePage()).toPNG())
   const report = { ...check, directory, passed: true, checkedAt: new Date().toISOString() }

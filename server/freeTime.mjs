@@ -22,13 +22,20 @@ const stateOf = db => {
 }
 const requiredCount = (goal, date) => goal.minPerWeek || (goal.targetDate && goal.targetDate >= date && goal.targetDate <= datesFrom(date, 14).at(-1)
   ? 4 : goal.priority === 'high' ? 3 : goal.priority === 'low' ? 1 : 2)
+const taskAvailable = task => task && !task.deletedAt && ['todo', 'doing'].includes(task.status)
+const schedulingStatus = (db, goal) => {
+  if (goal.status === 'paused') return 'paused'
+  if (!goal.taskId) return 'active'
+  const task = db.getTask(goal.taskId)
+  return !task || task.deletedAt ? 'missing' : taskAvailable(task) ? 'active' : task.status
+}
 
 /** Read actual blocks and explicit check-ins. A past planned slot is never
  * counted as completed merely because its clock time has passed. */
 export function freeTimeState(db, { date = localDay(new Date()), days = 7, now = new Date() } = {}) {
   const value = stateOf(db), dates = datesFrom(date, days), planner = db.getPlanner()
   const goals = value.freeTimeGoals.filter(goal => goalValid(db, goal))
-  const byTask = new Map(goals.filter(goal => goal.taskId).map(goal => [goal.taskId, goal]))
+  const byTask = new Map(goals.filter(goal => goal.taskId && taskAvailable(db.getTask(goal.taskId))).map(goal => [goal.taskId, goal]))
   const history = new Map(value.freeTimeHistory.map(item => [item.sessionId, item]))
   const freeTimeSessions = planner.blocks.filter(block => byTask.has(block.taskId) && dates.includes(block.date) && !db.getTask(block.taskId)?.deletedAt)
     .map(block => ({ ...block, goalId: byTask.get(block.taskId).id, title: byTask.get(block.taskId).title, completed: history.has(block.id) }))
@@ -39,7 +46,8 @@ export function freeTimeState(db, { date = localDay(new Date()), days = 7, now =
     const completedIds = new Set(completed.map(item => item.sessionId))
     const fulfilled = completed.filter(item => item.minutes >= goal.sessionMin).length + scheduled.filter(item => !completedIds.has(item.id) && minutes(item) >= goal.sessionMin && atTime(item.date, item.end) > now.getTime()).length
     const required = requiredCount(goal, date)
-    return { goalId: goal.id, scheduledCount: scheduled.length, completedCount: completed.length,
+    return { goalId: goal.id, schedulingStatus: schedulingStatus(db, goal), taskUpdatedAt: goal.taskId ? db.getTask(goal.taskId)?.updatedAt ?? null : null,
+      scheduledCount: scheduled.length, completedCount: completed.length,
       scheduledMin: scheduled.reduce((sum, item) => sum + minutes(item), 0), completedMin: completed.reduce((sum, item) => sum + item.minutes, 0),
       required, remainingCount: goal.status === 'paused' ? 0 : Math.max(0, required - fulfilled), shortSessionCount: scheduled.filter(item => minutes(item) < goal.sessionMin).length }
   })
@@ -63,7 +71,7 @@ export function createFreeTime({ db, now = () => new Date() }) {
       if (replay) {
         if (replay.undoneAt) fail('这次余时安排已经撤销，请重新发起安排', 409)
         const state = freeTimeState(db, { date, now: at })
-        return { operation: replay, sessions: state.freeTimeSessions, progress: state.freeTimeProgress, goals: stateOf(db).freeTimeGoals.filter(goal => goalValid(db, goal)), shortfalls: [] }
+        return { operation: replay, sessions: state.freeTimeSessions, addedSessions: [], progress: state.freeTimeProgress, goals: stateOf(db).freeTimeGoals.filter(goal => goalValid(db, goal)), shortfalls: [] }
       }
       const value = stateOf(db), planner = db.getPlanner(), tasks = db.listTasks(), working = structuredClone(planner)
       const goals = value.freeTimeGoals.filter(goal => goal.status === 'active' && goalValid(db, goal))
@@ -74,7 +82,7 @@ export function createFreeTime({ db, now = () => new Date() }) {
         const required = requiredCount(goal, date)
         let task = goal.taskId ? db.getTask(goal.taskId) : null
         if (goal.taskId && (!task || task.deletedAt || !['todo', 'doing'].includes(task.status))) {
-          shortfalls.push({ goalId: goal.id, title: goal.title, required, scheduled: 0, reason: '关联学习事项已完成、放下或移除，先恢复事项后再安排' }); continue
+          shortfalls.push({ goalId: goal.id, title: goal.title, required, scheduled: 0, reason: '关联事项已完成、放下或移除，请在目标卡片中选择「恢复并安排」' }); continue
         }
         const completed = value.freeTimeHistory.filter(item => item.goalId === goal.id && dates.includes(item.date))
         const completedIds = new Set(completed.map(item => item.sessionId))
@@ -128,7 +136,24 @@ export function createFreeTime({ db, now = () => new Date() }) {
       // app after undoing it must not silently recreate its time blocks.
       if (date === localDay(at)) db.setPreference('free-time-daily', { date, completedAt: at.toISOString() })
       const state = freeTimeState(db, { date, now: at })
-      return { sessions: state.freeTimeSessions, progress: state.freeTimeProgress, goals: stateOf(db).freeTimeGoals.filter(goal => goalValid(db, goal)), shortfalls, operation }
+      return { sessions: state.freeTimeSessions, addedSessions: actions.map(action => action.block), progress: state.freeTimeProgress, goals: stateOf(db).freeTimeGoals.filter(goal => goalValid(db, goal)), shortfalls, operation }
+    })
+  }
+
+  // An explicit goal restart permits new sessions. Never revive the old task:
+  // its dropped slots may now overlap work scheduled while it was inactive.
+  function resume(input) {
+    knownKeys(input, ['id', 'expectedVersion', 'expectedTaskUpdatedAt', 'date'], '恢复余时目标')
+    return db.transaction(() => {
+      const value = stateOf(db), goal = value.freeTimeGoals.find(item => item.id === identifier(input.id))
+      if (!goal || !goalValid(db, goal)) fail('这个余时目标已不存在，请重新读取', 409)
+      if (!Number.isSafeInteger(input.expectedVersion) || goal.version !== input.expectedVersion) fail('目标已在其他窗口修改，请重新读取后再恢复', 409)
+      const task = goal.taskId ? db.getTask(goal.taskId) : null
+      if ((task?.updatedAt ?? null) !== input.expectedTaskUpdatedAt) fail('关联事项已在其他窗口修改，请重新读取后再恢复', 409)
+      if (goal.taskId && !taskAvailable(task)) delete goal.taskId
+      goal.status = 'active'; goal.version += 1; goal.updatedAt = new Date(now()).toISOString()
+      db.saveCompanionState(value)
+      return schedule({ date: input.date })
     })
   }
 
@@ -162,7 +187,7 @@ export function createFreeTime({ db, now = () => new Date() }) {
       return { ...result, ensured: true, date }
     })
   }
-  return { schedule, ensureDaily, completeSession, state: (input = {}) => {
+  return { schedule, resume, ensureDaily, completeSession, state: (input = {}) => {
     knownKeys(input, ['date', 'days'], '读取余时')
     const date = day(input.date ?? localDay(new Date(now()))), days = input.days ?? 7
     if (!Number.isInteger(days) || days < 1 || days > 31) fail('余时查看天数应在1–31之间')

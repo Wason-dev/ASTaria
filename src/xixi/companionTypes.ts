@@ -48,7 +48,7 @@ export type FreeTimeGoal = {
 }
 
 export type FreeTimeSession = { id: string; goalId: string; taskId: string; title: string; date: string; start: string; end: string; locked: boolean; completed: boolean }
-export type FreeTimeProgress = { goalId: string; scheduledCount: number; completedCount: number; scheduledMin: number; completedMin: number; required: number; remainingCount: number; shortSessionCount: number }
+export type FreeTimeProgress = { goalId: string; schedulingStatus: 'active' | 'paused' | 'dropped' | 'done' | 'missing'; taskUpdatedAt: string | null; scheduledCount: number; completedCount: number; scheduledMin: number; completedMin: number; required: number; remainingCount: number; shortSessionCount: number }
 
 export type ScenarioPlan = { id: string; taskId: string; title: string; date: string; start: string; end: string }
 export type DecisionStrategy = 'today' | 'split' | 'defer' | 'model'

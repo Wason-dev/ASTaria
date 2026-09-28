@@ -9,12 +9,13 @@ import { localApi } from './api'
 import type { Preferences } from './preferences'
 import type { CompanionState, FreeTimeGoal, Wish } from './companionTypes'
 import { StringInvitation } from './StringStudio'
+import { FREE_TIME_STATUS_LABEL, freeTimeScheduleNotice } from './freeTimeScheduleResult'
+import type { FreeTimePlanResult as PlanResult } from './freeTimeScheduleResult'
 import './free-time.css'
 
 type Props = { onChanged: () => void | Promise<void>; onNotice: (message: string) => void; active?: boolean; onOpenStrings: () => void; today: string; theme: Preferences['theme']; grid: boolean; glass: Preferences['glass'] }
 type Draft = { title: string; priority: FreeTimeGoal['priority']; minPerWeek: string; sessionMin: string; sessionMax: string; targetDate: string; targetNote: string }
 type Editing = { goal?: FreeTimeGoal; wish?: Wish; draft: Draft }
-type PlanResult = { sessions: Array<{ id: string }>; shortfalls: Array<{ goalId: string; title: string; required: number; scheduled: number; reason: string }>; operation: { id: string } | null }
 const PRIORITIES = { high: '优先', normal: '普通', low: '顺带' } as const
 const PAGE_SIZE = 4
 const EMPTY_DRAFT: Draft = { title: '', priority: 'normal', minPerWeek: '3', sessionMin: '20', sessionMax: '40', targetDate: '', targetNote: '' }
@@ -91,8 +92,24 @@ export const FreeTimePanel = memo(function FreeTimePanel({ onChanged, onNotice, 
   }
   const reschedule = () => execute(async () => {
     const result = await schedule()
-    announce(result.shortfalls.length ? '已安排可用空档，未满足的频率已列出' : result.operation ? '余时安排已写入日程，休息也已留出' : '当前安排已经覆盖，无需重复添加')
+    showScheduleResult(result)
     try { await synchronize() } catch (reason) { setError(`安排已保存，页面同步遇到问题：${errorText(reason)}`) }
+  })
+  const showScheduleResult = (result: PlanResult) => {
+    announce(freeTimeScheduleNotice(result))
+    const firstDate = result.addedSessions.map(session => session.date).sort()[0]
+    if (firstDate) { setPeriod(firstDate === today ? 'today' : 'week'); setDate(firstDate); setPlanPage(0) }
+  }
+  const resumeGoal = (goal: FreeTimeGoal) => execute(async () => {
+    const item = state?.freeTimeProgress.find(value => value.goalId === goal.id)
+    if (!item) throw new Error('目标状态尚未读取，请重新读取后再恢复')
+    const result = await localApi<PlanResult>('/companion/free-time/resume', {
+      id: goal.id, expectedVersion: goal.version, expectedTaskUpdatedAt: item.taskUpdatedAt, date: today,
+    })
+    setShortfalls(result.shortfalls)
+    if (result.operation) setLatestOperation(result.operation.id)
+    showScheduleResult(result)
+    try { await synchronize() } catch (reason) { setError(`目标已恢复，页面同步遇到问题：${errorText(reason)}`) }
   })
   const edit = (goal: FreeTimeGoal) => setEditing({ goal, draft: { title: goal.title, priority: goal.priority, minPerWeek: String(goal.minPerWeek), sessionMin: String(goal.sessionMin), sessionMax: String(goal.sessionMax), targetDate: goal.targetDate ?? '', targetNote: goal.targetNote ?? '' } })
   const save = (draft: Draft) => execute(async () => {
@@ -159,6 +176,7 @@ export const FreeTimePanel = memo(function FreeTimePanel({ onChanged, onNotice, 
   const sessions = state?.freeTimeSessions ?? []
   const weekMinutes = sessions.reduce((sum, session) => sum + minuteValue(session.end) - minuteValue(session.start), 0)
   const progress = state?.freeTimeProgress ?? []
+  const isScheduling = (goal: FreeTimeGoal) => goal.status === 'active' && progress.find(item => item.goalId === goal.id)?.schedulingStatus === 'active'
   const remaining = progress.reduce((sum, item) => sum + item.remainingCount, 0)
   const shownDay = state?.timeline.find(day => day.date === date)
   const shownSessions = sessions.filter(session => session.date === date)
@@ -170,7 +188,7 @@ export const FreeTimePanel = memo(function FreeTimePanel({ onChanged, onNotice, 
   return <GlassSamplingContext.Provider value={active}><section className="free-time-page" data-active={active} data-theme={theme} data-grid={grid} aria-labelledby={`${id}-title`} aria-hidden={!active} inert={!active}>
     <div className="free-time-background" aria-hidden="true" />
     <div className="free-time-viewport workspace-page-viewport"><div className="free-time-container workspace-page-container">
-      <WorkspaceHeading className="free-time-header" title="余时" description="想推进的事，在合适的空档继续" titleId={`${id}-title`} headingRef={heading}><dl className="workspace-metrics free-time-metrics"><div><dt>自动安排中</dt><dd>{goals.filter(goal => goal.status === 'active').length}<small> 项</small></dd></div><div><dt>未来七天已安排</dt><dd>{minutesLabel(weekMinutes).split(/(\d+)/).filter(Boolean).map((part, index) => /\d/.test(part) ? <span key={index}>{part}</span> : <small key={index}>{part}</small>)}</dd></div><div><dt>最低频率待满足</dt><dd>{remaining}<small> 次</small></dd></div></dl></WorkspaceHeading>
+      <WorkspaceHeading className="free-time-header" title="余时" description="想推进的事，在合适的空档继续" titleId={`${id}-title`} headingRef={heading}><dl className="workspace-metrics free-time-metrics"><div><dt>自动安排中</dt><dd>{goals.filter(isScheduling).length}<small> 项</small></dd></div><div><dt>未来七天已安排</dt><dd>{minutesLabel(weekMinutes).split(/(\d+)/).filter(Boolean).map((part, index) => /\d/.test(part) ? <span key={index}>{part}</span> : <small key={index}>{part}</small>)}</dd></div><div><dt>最低频率待满足</dt><dd>{remaining}<small> 次</small></dd></div></dl></WorkspaceHeading>
       <StringInvitation onEnter={onOpenStrings} glass={glass} />
       <div className="free-time-layout">
         <Pane className="free-time-goals" blur={glass === 'soft' ? 6 : 0}><header className="free-time-pane-heading"><div className="free-time-tabs" role="group" aria-label="余时目标分类"><button type="button" aria-pressed={tab === 'goals'} onClick={() => { setTab('goals'); setEditing(null); setWishEditing(null) }}>目标 <small>{goals.length}</small></button><button type="button" aria-pressed={tab === 'considering'} onClick={() => { setTab('considering'); setEditing(null); setWishEditing(null) }}>待考虑 <small>{wishes.length}</small></button></div><button className="free-time-primary" type="button" onClick={() => { setWishEditing(null); setEditing({ draft: EMPTY_DRAFT }) }} disabled={busy}>＋ 添加目标</button></header>
@@ -180,7 +198,8 @@ export const FreeTimePanel = memo(function FreeTimePanel({ onChanged, onNotice, 
             <div className="free-time-list-region">{loading && !state ? <Empty title="正在读取目标" /> : !state ? <Empty title="余时暂时无法读取" detail="请用下方重试重新连接本机服务。" /> : total === 0 ? <Empty title={filter ? '没有匹配的目标' : tab === 'goals' ? '给想做的事一点时间' : '暂时没有待考虑的事'} detail={filter ? '试试别的关键词。' : tab === 'goals' ? '单词、数学复习、FRC 学习，都可以从这里开始。' : '聊天中提到的愿望可以先留在这里，准备好后再加入安排。'} /> : tab === 'goals' ? <ul className="free-time-goal-list">{visibleGoals.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE).map(goal => {
               const item = progress.find(value => value.goalId === goal.id)
               const lastFeedback = state?.freeTimeFeedback?.find(value => value.goalId === goal.id)
-              return <li key={goal.id} data-status={goal.status} data-priority={goal.priority}><div className="free-time-goal-title"><strong>{goal.title}</strong><span>{goal.status === 'paused' ? '已暂停' : PRIORITIES[goal.priority]}</span></div><div className="free-time-goal-meta"><span>{goal.minPerWeek ? `每周至少 ${goal.minPerWeek} 次` : '不设最低频率'}</span><span>{goal.sessionMin}–{goal.sessionMax} 分钟 / 次</span></div>{(goal.targetNote || goal.targetDate) && <p className="free-time-goal-note">{goal.targetDate && `${dayLabel(goal.targetDate)} · `}{goal.targetNote || '阶段目标日期'}</p>}{lastFeedback?.nextStep && <p className="free-time-goal-note">下次继续：{lastFeedback.nextStep}</p>}<footer><span>{item ? `已安排 ${item.scheduledCount} 次${item.completedCount ? ` · 已完成 ${item.completedCount} 次` : ''}` : '还没有安排'}</span><div className="free-time-goal-actions"><button className="free-time-primary" type="button" disabled={busy} onClick={() => edit(goal)}>调整 <span aria-hidden="true">↗</span></button><button className="free-time-secondary" type="button" disabled={busy} onClick={() => void updateStatus(goal, goal.status === 'active' ? 'paused' : 'active')}>{goal.status === 'active' ? '暂停' : '恢复'}</button>{removing === goal.id ? <><span className="free-time-remove-note">取消未开始、未固定的安排</span><button className="free-time-secondary free-time-remove-confirm" type="button" disabled={busy} onClick={() => void updateStatus(goal, 'deleted')}>确认移除</button><button className="free-time-secondary" type="button" onClick={() => setRemoving(null)}>保留</button></> : <button className="free-time-secondary" type="button" disabled={busy} onClick={() => setRemoving(goal.id)}>移除</button>}</div></footer></li>
+              const goalState = item?.schedulingStatus ?? (goal.status === 'paused' ? 'paused' : 'active')
+              return <li key={goal.id} data-status={goalState} data-priority={goal.priority}><div className="free-time-goal-title"><strong>{goal.title}</strong><span>{goalState === 'active' ? PRIORITIES[goal.priority] : FREE_TIME_STATUS_LABEL[goalState]}</span></div><div className="free-time-goal-meta"><span>{goal.minPerWeek ? `每周至少 ${goal.minPerWeek} 次` : '不设最低频率'}</span><span>{goal.sessionMin}–{goal.sessionMax} 分钟 / 次</span></div>{(goal.targetNote || goal.targetDate) && <p className="free-time-goal-note">{goal.targetDate && `${dayLabel(goal.targetDate)} · `}{goal.targetNote || '阶段目标日期'}</p>}{lastFeedback?.nextStep && <p className="free-time-goal-note">下次继续：{lastFeedback.nextStep}</p>}<footer><span>{goalState !== 'active' && goalState !== 'paused' ? '已停止新增安排，可恢复这个目标' : item ? `已安排 ${item.scheduledCount} 次${item.completedCount ? ` · 已完成 ${item.completedCount} 次` : ''}` : '还没有安排'}</span><div className="free-time-goal-actions"><button className="free-time-primary" type="button" disabled={busy} onClick={() => edit(goal)}>调整 <span aria-hidden="true">↗</span></button><button className="free-time-secondary" type="button" disabled={busy} onClick={() => void (goalState === 'active' ? updateStatus(goal, 'paused') : resumeGoal(goal))}>{goalState === 'active' ? '暂停' : '恢复并安排'}</button>{removing === goal.id ? <><span className="free-time-remove-note">取消未开始、未固定的安排</span><button className="free-time-secondary free-time-remove-confirm" type="button" disabled={busy} onClick={() => void updateStatus(goal, 'deleted')}>确认移除</button><button className="free-time-secondary" type="button" onClick={() => setRemoving(null)}>保留</button></> : <button className="free-time-secondary" type="button" disabled={busy} onClick={() => setRemoving(goal.id)}>移除</button>}</div></footer></li>
             })}</ul> : <ul className="free-time-goal-list">{visibleWishes.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE).map(wish => <li key={wish.id}><div className="free-time-goal-title"><strong>{wish.content}</strong><span>{wish.status === 'paused' ? '已暂停' : wish.status === 'expired' ? '已到期' : '待考虑'}</span></div>{wish.items.length > 0 && <p className="free-time-goal-note">准备：{wish.items.join('、')}</p>}<footer><span>{minutesLabel(wish.minutes)}</span><div className="free-time-goal-actions"><button className="free-time-secondary" type="button" disabled={busy} onClick={() => setWishEditing(wish)}>修改</button>{wish.status !== 'expired' && <button className="free-time-secondary" type="button" disabled={busy} onClick={() => void updateWishStatus(wish)}>{wish.status === 'paused' ? '恢复留意' : '暂停留意'}</button>}<button className="free-time-primary" type="button" disabled={busy} onClick={() => migratedWish(wish)}>加入自动安排 <span aria-hidden="true">↗</span></button></div></footer></li>)}</ul>}</div>
             <Pagination page={currentPage} pages={pages} count={total} onPage={setPage} />
           </>}
@@ -191,10 +210,10 @@ export const FreeTimePanel = memo(function FreeTimePanel({ onChanged, onNotice, 
           <div className="free-time-plan-region">{shownSessions.length ? <ol className="free-time-sessions">{shownSessions.slice(currentPlanPage * 4, (currentPlanPage + 1) * 4).map(session => {
             const rest = state?.freeTimeBreaks?.find(item => item.date === session.date && item.start === session.end)
             return <li key={session.id} data-completed={session.completed}><div className="free-time-session"><time>{session.start}<small>{session.end}</small></time><div><strong>{session.title}</strong><span>{minutesLabel(minuteValue(session.end) - minuteValue(session.start))}{session.locked ? ' · 已固定' : ''}</span></div><button type="button" className="free-time-secondary free-time-complete" disabled={busy || session.completed} onClick={() => void completeSession(session.id)} aria-label={session.completed ? `${session.title}本次已完成` : `完成这次${session.title}`}>{session.completed ? '已完成' : '完成这次'}</button></div>{session.completed && <SessionFeedback sessionId={session.id} saved={state?.freeTimeFeedback?.find(item => item.sessionId === session.id)} busy={busy} onSave={saveFeedback} />}{rest && <div className="free-time-rest"><time>{rest.start}–{rest.end}</time><span>休息与留白 · {minutesLabel(minuteValue(rest.end) - minuteValue(rest.start))}</span></div>}</li>
-          })}</ol> : <Empty title={loading ? '正在读取安排' : '这一天还没有余时安排'} detail={goals.some(goal => goal.status === 'active') ? '让析熙安排后，实际时段会同时出现在这里和日程中。' : '添加一个目标，或恢复已暂停的目标，就可以开始安排。'} />}</div>
+          })}</ol> : <Empty title={loading ? '正在读取安排' : '这一天还没有余时安排'} detail={goals.some(goal => goal.status === 'active') ? '安排会按目标频率分散到未来七天；已放下的目标需先恢复。' : '添加一个目标，或恢复已暂停的目标，就可以开始安排。'} />}</div>
           {sessionPages > 1 && <Pagination page={currentPlanPage} pages={sessionPages} count={shownSessions.length} onPage={setPlanPage} />}
           {opportunity && <details className="free-time-opportunity"><summary>一个合适的机会：{opportunity.title}</summary><p>{opportunity.start}–{opportunity.end} 有候选空档，尚未写入日程。可在「待考虑」中加入自动安排。</p></details>}
-          {shortfalls.length > 0 && <details className="free-time-shortfalls"><summary>{shortfalls.length} 项目标还有频率缺口</summary><ul>{shortfalls.map(item => <li key={item.goalId}><strong>{item.title}</strong><span>已安排 {item.scheduled} / {item.required} 次 · {item.reason}</span></li>)}</ul></details>}
+          {shortfalls.length > 0 && <details className="free-time-shortfalls" open><summary>{shortfalls.length} 项目标还有频率缺口</summary><ul>{shortfalls.map(item => <li key={item.goalId}><strong>{item.title}</strong><span>已安排 {item.scheduled} / {item.required} 次 · {item.reason}</span></li>)}</ul></details>}
           <footer className="free-time-plan-actions"><span>{latestOperation ? <button type="button" disabled={busy} onClick={() => void undoSchedule()}>撤销这次排程</button> : '课程、已占用时段与固定安排优先保留'}</span><button className="free-time-primary" type="button" disabled={busy || loading || !state || !goals.length} onClick={() => void reschedule()}>{busy ? '正在安排…' : '安排余时'}<span aria-hidden="true">↗</span></button></footer>
         </Pane>
       </div>

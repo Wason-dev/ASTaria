@@ -216,6 +216,7 @@ export function createLocalService({ db = createDatabase(join(DATA_DIRECTORY, 'a
       if (path === '/companion/free-time-goal' || path === '/companion/free-time') return companion.saveFreeTimeGoal(input)
       if (path === '/companion/free-time-goal/update' || path === '/companion/free-time/update') return companion.updateFreeTimeGoal(input.id, input)
       if (path === '/companion/free-time/schedule') { const result = freeTime.schedule(input); return { ...result, operation: result.operation ? publicOperation(result.operation, db) : null } }
+      if (path === '/companion/free-time/resume') { const result = freeTime.resume(input); return { ...result, operation: result.operation ? publicOperation(result.operation, db) : null } }
       if (path === '/companion/free-time/ensure') { knownKeys(input, []); const result = freeTime.ensureDaily(); return { ...result, ...(result.operation ? { operation: publicOperation(result.operation, db) } : {}) } }
       if (path === '/companion/free-time/complete') return freeTime.completeSession(input)
       if (path === '/companion/scenario') return companion.previewScenario(input)

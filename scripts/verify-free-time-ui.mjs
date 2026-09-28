@@ -13,6 +13,7 @@ import { createLocalService } from '../server/index.mjs'
 import { createDesktopHandler } from '../desktop/server.mjs'
 import { localDay, shiftDay } from '../src/home/agenda.ts'
 
+const automatic = process.argv.includes('--automatic')
 const directory = await mkdtemp(join(tmpdir(), 'astaria-free-time-ui-'))
 const db = createDatabase(join(directory, 'test.sqlite'))
 const companion = createCompanion({ db }), freeTime = createFreeTime({ db })
@@ -29,6 +30,7 @@ const released = original.sessions.find(session => session.taskId === dropped[0]
 const other = db.createTask({ title: '已有固定事项', estimateMin: 30 })
 edit({ type: 'save-block', block: { id: 'qa-fixed', taskId: other.id, date: released.date, start: released.start, end: released.end, locked: true } })
 const before = db.getPlanner()
+if (automatic) db.setPreference('free-time-daily', { date: today, completedAt: new Date().toISOString() })
 const service = createLocalService({ db, vault: { status: async () => false }, complete: async () => { throw Error('UI QA must not call a model') }, dataDirectory: directory })
 const handler = createDesktopHandler({ root: resolve('dist'), service, token: 'isolated-ui-test-capability-00000000' })
 const server = createServer((req, res) => { req.headers['x-astaria-desktop'] = 'isolated-ui-test-capability-00000000'; void handler(req, res) })
@@ -88,17 +90,17 @@ try {
   await evaluate(`[...document.querySelectorAll('#home-menu button')].find(e=>e.textContent.trim()==='余时').dataset.qaFreeTime='1';true`)
   await click('[data-qa-free-time]')
   await wait('document.querySelectorAll(".free-time-goal-list li").length===4')
-  assert.equal(await evaluate('document.querySelectorAll(".free-time-goal-list li[data-status=dropped]").length'), 3)
-  assert.equal(await evaluate('document.querySelector(".free-time-metrics dd").textContent.trim()'), '1 项')
-  await click('.free-time-plan-actions .free-time-primary')
-  await wait('document.querySelector(".free-time-feedback").textContent.includes("本次没有新增安排")')
-  assert.deepEqual(db.getPlanner(), before, 'zero-placement click does not alter planner')
-  assert.equal(await evaluate('document.querySelector(".free-time-shortfalls").open'), true)
-  await writeFile(join(directory, 'blocked.png'), Buffer.from((await send('Page.captureScreenshot', { format: 'png' })).data, 'base64'))
-  for (let i = 0; i < 3; i++) {
-    await click('.free-time-goal-list li[data-status=dropped] .free-time-secondary')
-    await wait(`document.querySelectorAll('.free-time-goal-list li[data-status=dropped]').length===${2 - i}`)
-    await wait('!document.querySelector(".free-time-plan-actions .free-time-primary").disabled')
+  assert.equal(await evaluate('document.querySelectorAll(".free-time-goal-list li[data-status=active]").length'), 4)
+  assert.equal(await evaluate('document.querySelector(".free-time-metrics dd").textContent.trim()'), '4 项')
+  assert.equal(await evaluate('document.querySelector(".free-time-goal-list").textContent.includes("恢复并安排")'), false)
+  if (automatic) {
+    await wait('[...document.querySelectorAll(".free-time-goal-list li footer")].every(e=>e.textContent.includes("已安排 1 次"))')
+    await click('.free-time-plan [aria-label="查看时间范围"] button:last-child')
+    await click('.free-time-week button:nth-child(2)')
+  } else {
+    assert.deepEqual(db.getPlanner(), before, 'same-day automatic check respects the completed scheduling pass')
+    await click('.free-time-plan-actions .free-time-primary')
+    await wait('document.querySelector(".free-time-feedback").textContent.includes("已新增 3 段余时安排")')
   }
   const restored = freeTime.state({ date: today })
   assert.equal(restored.freeTimeSessions.length, 4, 'three recovered goals plus existing physics have real blocks')
@@ -122,8 +124,9 @@ try {
   const persisted = await evaluate(`fetch('/api/planner',{headers:{'X-ASTaria-Local':'1'}}).then(r=>r.json()).then(p=>p.blocks.map(b=>b.id))`)
   assert.ok(recoveredIds.every(id => persisted.includes(id)), 'planner API returns saved blocks after page reload')
   assert.deepEqual(errors, [])
-  await writeFile(join(directory, 'result.json'), JSON.stringify({ passed: true, recoveredGoals: 3, sessions: 4, duplicateWrites: 0 }, null, 2))
-  console.log(JSON.stringify({ passed: true, directory, recoveredGoals: 3, sessions: 4, duplicateWrites: 0 }))
+  await writeFile(join(directory, 'result.json'), JSON.stringify({ passed: true, automatic, recoveredGoals: 3, sessions: 4, duplicateWrites: 0 }, null, 2))
+  await writeFile(join(directory, 'scheduled.png'), Buffer.from((await send('Page.captureScreenshot', { format: 'png' })).data, 'base64'))
+  console.log(JSON.stringify({ passed: true, automatic, directory, recoveredGoals: 3, sessions: 4, duplicateWrites: 0 }))
 } finally {
   ws?.close(); browser.kill('SIGTERM')
   server.closeAllConnections()

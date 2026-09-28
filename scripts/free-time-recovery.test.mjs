@@ -39,43 +39,90 @@ const request = async (service, path, input) => {
   return new Promise(resolve => service.middleware(req, { statusCode: 200, setHeader() {}, end(body) { resolve({ status: this.statusCode, value: JSON.parse(body) }) } }, () => resolve({ status: 404 })))
 }
 
-test('关联事项放下后历史时段不再计入安排，自动排程与日内补排都不复活旧任务', t => {
+test('关联事项放下后自动续排新建事项，旧事项与旧时段保持原状且不重复', t => {
   const f = fixture(t)
   f.companion.saveFreeTimeGoal({ title: '数学复习', minPerWeek: 2, sessionMin: 30, sessionMax: 30 })
   const first = f.freeTime.schedule({ date: DATE })
-  const taskId = first.goals[0].taskId
+  const oldTaskId = first.goals[0].taskId
   const oldBlocks = structuredClone(f.db.getPlanner().blocks)
   assert.equal(oldBlocks.length, 2)
-  f.db.updateTask(taskId, { status: 'dropped' })
+  f.db.updateTask(oldTaskId, { status: 'dropped' })
 
+  // The stopped task no longer owns executable sessions, but the goal itself is
+  // still scheduled: only its own status decides that.
   const state = f.freeTime.state({ date: DATE })
   assert.equal(state.freeTimeSessions.length, 0)
   const progress = state.freeTimeProgress[0]
-  assert.equal(progress.schedulingStatus, 'dropped')
-  assert.equal(progress.taskUpdatedAt, f.db.getTask(taskId).updatedAt)
+  assert.equal(progress.schedulingStatus, 'active')
+  assert.equal(progress.taskUpdatedAt, f.db.getTask(oldTaskId).updatedAt)
   assert.equal(progress.scheduledCount, 0)
   assert.equal(progress.scheduledMin, 0)
   assert.equal(progress.remainingCount, 2)
   assert.deepEqual(f.db.getPlanner().blocks, oldBlocks)
 
   const automatic = f.freeTime.schedule({ date: DATE })
-  assert.equal(automatic.addedSessions.length, 0)
-  assert.equal(automatic.operation, null)
-  assert.equal(automatic.sessions.length, 0)
-  assert.equal(automatic.shortfalls.length, 1)
-  assert.match(automatic.shortfalls[0].reason, /恢复并安排/)
-  assert.equal(f.db.listTasks().length, 1)
-  assert.equal(f.db.getTask(taskId).status, 'dropped')
-  assert.deepEqual(f.db.getPlanner().blocks, oldBlocks)
+  assert.equal(automatic.shortfalls.length, 0)
+  assert.equal(automatic.addedSessions.length, 2)
+  const newTaskId = automatic.goals[0].taskId
+  assert.notEqual(newTaskId, oldTaskId)
+  assert.equal(f.db.getTask(newTaskId).freeTimeGoalId, automatic.goals[0].id)
+  assert.equal(f.db.getTask(newTaskId).status, 'todo')
+  assert.ok(automatic.addedSessions.every(block => block.taskId === newTaskId))
+  assert.equal(f.db.getTask(oldTaskId).status, 'dropped')
+  assert.equal(f.db.listTasks().length, 2)
 
+  const blocks = f.db.getPlanner().blocks
+  for (const old of oldBlocks) assert.deepEqual(blocks.find(item => item.id === old.id), old)
+  assert.ok(automatic.addedSessions.every(block => !oldBlocks.some(old => old.id === block.id)))
+
+  const again = f.freeTime.schedule({ date: DATE })
+  assert.equal(again.operation, null)
+  assert.equal(again.addedSessions.length, 0)
+  assert.equal(f.db.listTasks().length, 2)
+  assert.deepEqual(again.sessions, automatic.sessions)
+
+  // The next day's pass keeps arranging the same goal, never the old task.
   f.advance('2026-09-23T09:00:00+08:00')
   const daily = f.freeTime.ensureDaily()
   assert.equal(daily.ensured, true)
-  assert.equal(daily.addedSessions.length, 0)
-  assert.equal(daily.operation, null)
-  assert.equal(f.db.listTasks().length, 1)
-  assert.equal(f.db.getTask(taskId).status, 'dropped')
-  assert.deepEqual(f.db.getPlanner().blocks, oldBlocks)
+  assert.equal(f.db.listTasks().length, 2)
+  assert.equal(f.db.getTask(oldTaskId).status, 'dropped')
+  assert.ok(daily.addedSessions.every(block => block.taskId === newTaskId))
+  assert.equal(daily.progress[0].schedulingStatus, 'active')
+  assert.equal(daily.progress[0].remainingCount, 0)
+  for (const old of oldBlocks) assert.deepEqual(f.db.getPlanner().blocks.find(item => item.id === old.id), old)
+})
+
+test('自动续排不会复活已被其他工作占用的旧时段，也不改动占用者', t => {
+  const f = fixture(t)
+  f.companion.saveFreeTimeGoal({ title: '数学复习', minPerWeek: 2, sessionMin: 30, sessionMax: 30 })
+  const first = f.freeTime.schedule({ date: DATE })
+  const oldTaskId = first.goals[0].taskId
+  const oldBlocks = structuredClone(f.db.getPlanner().blocks)
+  f.db.updateTask(oldTaskId, { status: 'dropped' })
+  // A dropped task's history no longer occupies time, so live work can take the
+  // very same window while the goal is stopped.
+  const manual = f.db.createTask({ title: '数学作业', estimateMin: 60 })
+  update(f.db, { type: 'save-block', block: { id: 'taken-window', taskId: manual.id, date: oldBlocks[0].date, start: oldBlocks[0].start, end: oldBlocks[0].end, locked: true } })
+  const taken = structuredClone(f.db.getPlanner().blocks.find(item => item.id === 'taken-window'))
+
+  const automatic = f.freeTime.schedule({ date: DATE })
+  assert.equal(automatic.shortfalls.length, 0)
+  assert.equal(automatic.addedSessions.length, 2)
+  const newTaskId = automatic.goals[0].taskId
+  assert.notEqual(newTaskId, oldTaskId)
+  assert.ok(automatic.addedSessions.every(block => block.taskId === newTaskId))
+  assert.deepEqual(f.db.getPlanner().blocks.find(item => item.id === 'taken-window'), taken)
+  assert.equal(f.db.getTask(oldTaskId).status, 'dropped')
+  for (const old of oldBlocks) assert.deepEqual(f.db.getPlanner().blocks.find(item => item.id === old.id), old)
+  for (const block of automatic.addedSessions) {
+    assert.equal(overlaps(block, taken), false)
+    for (const other of automatic.addedSessions) if (other.id !== block.id) assert.equal(overlaps(block, other), false)
+  }
+  const state = f.freeTime.state({ date: DATE })
+  assert.equal(state.freeTimeProgress[0].schedulingStatus, 'active')
+  assert.equal(state.freeTimeProgress[0].scheduledCount, 2)
+  assert.equal(state.freeTimeProgress[0].remainingCount, 0)
 })
 
 test('显式恢复新建任务与新日程，旧任务保持放下且旧时段不会被重新启用', t => {
@@ -145,8 +192,7 @@ test('暂停的目标恢复后继续沿用原来的关联事项，不重复建�
 })
 
 test('恢复会解绑已经停止的关联事项：dropped、done、deleted 与 missing', t => {
-  const cases = { dropped: 'dropped', done: 'done', deleted: 'missing', missing: 'missing' }
-  for (const [kind, schedulingStatus] of Object.entries(cases)) {
+  for (const kind of ['dropped', 'done', 'deleted', 'missing']) {
     const f = fixture(t)
     f.companion.saveFreeTimeGoal({ title: `余时目标-${kind}`, minPerWeek: 1, sessionMin: 20, sessionMax: 20 })
     const first = f.freeTime.schedule({ date: DATE })
@@ -159,7 +205,9 @@ test('恢复会解绑已经停止的关联事项：dropped、done、deleted 与 
       value.freeTimeGoals = value.freeTimeGoals.map(goal => ({ ...goal, taskId: 'ghost-task' }))
       f.db.saveCompanionState(value)
     }
-    assert.equal(progressNow(f.freeTime).schedulingStatus, schedulingStatus)
+    // A stopped task changes what can be shown, never whether the goal is
+    // scheduled: the goal is still active and stays that way until it is paused.
+    assert.equal(progressNow(f.freeTime).schedulingStatus, 'active')
     const goal = goalNow(f.freeTime), task = f.db.getTask(goal.taskId)
     const resumed = f.freeTime.resume({ id: goal.id, expectedVersion: goal.version, expectedTaskUpdatedAt: task?.updatedAt ?? null, date: DATE })
     assert.notEqual(resumed.goals[0].taskId, taskId)
@@ -226,6 +274,7 @@ test('没有空档时恢复只保存目标，短缺如实报告且不创建孤�
   for (const routine of f.db.getPlanner().routines.filter(item => item.kind === 'available')) update(f.db, { type: 'delete-routine', id: routine.id })
 
   const tasksBefore = f.db.listTasks({ includeDeleted: true }).map(task => task.id)
+  const blocksBefore = structuredClone(f.db.getPlanner().blocks)
   const input = resumeInput(f.freeTime, f.db)
   const resumed = f.freeTime.resume(input)
   assert.equal(resumed.addedSessions.length, 0)
@@ -233,19 +282,65 @@ test('没有空档时恢复只保存目标，短缺如实报告且不创建孤�
   assert.equal(resumed.sessions.length, 0)
   assert.equal(resumed.goals[0].status, 'active')
   assert.equal(resumed.goals[0].version, input.expectedVersion + 1)
-  assert.equal(resumed.goals[0].taskId, undefined)
   assert.equal(resumed.shortfalls.length, 1)
   assert.equal(resumed.shortfalls[0].required, 3)
   assert.equal(resumed.shortfalls[0].scheduled, 0)
   assert.match(resumed.shortfalls[0].reason, /完整学习空档/)
+  assert.doesNotMatch(resumed.shortfalls[0].reason, /恢复并安排/)
 
+  // Without a real slot no replacement task is invented; any retained old
+  // reference remains inactive and the old time blocks stay untouched.
   assert.deepEqual(f.db.listTasks({ includeDeleted: true }).map(task => task.id), tasksBefore)
   assert.equal(f.db.listTasks().some(task => task.freeTimeGoalId === input.id && task.status !== 'dropped'), false)
   assert.equal(f.db.getTask(taskId).status, 'dropped')
+  assert.deepEqual(f.db.getPlanner().blocks, blocksBefore)
+  const linked = resumed.goals[0].taskId ? f.db.getTask(resumed.goals[0].taskId) : null
+  assert.ok(!linked || !['todo', 'doing'].includes(linked.status))
   const progress = progressNow(f.freeTime)
   assert.equal(progress.schedulingStatus, 'active')
-  assert.equal(progress.taskUpdatedAt, null)
   assert.equal(progress.remainingCount, 3)
+})
+
+test('同日旧版 daily 标记只升级补排一次，当前版本撤销后不再被静默重排', t => {
+  const legacy = fixture(t)
+  legacy.companion.saveFreeTimeGoal({ title: '数学复习', minPerWeek: 1, sessionMin: 30, sessionMax: 30 })
+  const first = legacy.freeTime.schedule({ date: DATE })
+  const oldTaskId = first.goals[0].taskId
+  const oldBlocks = structuredClone(legacy.db.getPlanner().blocks)
+  assert.equal(oldBlocks.length, 1)
+  legacy.db.updateTask(oldTaskId, { status: 'dropped' })
+  // Exactly what the previous release recorded: today's pass ran, in a shape
+  // that proves nothing about the goals whose linked task had stopped.
+  legacy.db.setPreference('free-time-daily', { date: DATE, completedAt: `${DATE}T01:05:00.000Z` })
+
+  const upgraded = legacy.freeTime.ensureDaily()
+  assert.equal(upgraded.ensured, true)
+  assert.equal(upgraded.shortfalls.length, 0)
+  assert.equal(upgraded.addedSessions.length, 1)
+  const newTaskId = upgraded.goals[0].taskId
+  assert.notEqual(newTaskId, oldTaskId)
+  assert.equal(upgraded.addedSessions[0].taskId, newTaskId)
+  assert.equal(legacy.db.getTask(oldTaskId).status, 'dropped')
+  for (const old of oldBlocks) assert.deepEqual(legacy.db.getPlanner().blocks.find(item => item.id === old.id), old)
+
+  // The upgrade rewrites today's marker, so the upgrade pass itself runs once.
+  assert.equal(legacy.freeTime.ensureDaily().ensured, false)
+  assert.equal(legacy.db.getPlanner().blocks.length, oldBlocks.length + 1)
+  assert.equal(legacy.db.listTasks().length, 2)
+
+  // A pass recorded by the current version is authoritative: undoing it must
+  // not let the next ensure quietly recreate the same blocks.
+  const current = fixture(t)
+  current.companion.saveFreeTimeGoal({ title: '单词', minPerWeek: 1, sessionMin: 30, sessionMax: 30 })
+  const ensured = current.freeTime.ensureDaily()
+  assert.equal(ensured.ensured, true)
+  assert.equal(ensured.addedSessions.length, 1)
+  current.db.undoOperation(ensured.operation.id)
+  assert.equal(current.db.getPlanner().blocks.length, 0)
+  const repeated = current.freeTime.ensureDaily()
+  assert.equal(repeated.ensured, false)
+  assert.equal(current.db.getPlanner().blocks.length, 0)
+  assert.equal(current.db.listTasks().length, 1)
 })
 
 test('HTTP /companion/free-time/resume 返回新增时段与公开操作回执', async t => {

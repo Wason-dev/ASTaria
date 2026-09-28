@@ -13,5 +13,5 @@ export function freeTimeScheduleNotice(result: FreeTimePlanResult): string {
 }
 
 export const FREE_TIME_STATUS_LABEL = {
-  active: '自动安排中', paused: '已暂停', dropped: '事项已放下', done: '事项已完成', missing: '事项已移除',
+  active: '自动安排中', paused: '已暂停',
 } as const

@@ -23,12 +23,9 @@ const stateOf = db => {
 const requiredCount = (goal, date) => goal.minPerWeek || (goal.targetDate && goal.targetDate >= date && goal.targetDate <= datesFrom(date, 14).at(-1)
   ? 4 : goal.priority === 'high' ? 3 : goal.priority === 'low' ? 1 : 2)
 const taskAvailable = task => task && !task.deletedAt && ['todo', 'doing'].includes(task.status)
-const schedulingStatus = (db, goal) => {
-  if (goal.status === 'paused') return 'paused'
-  if (!goal.taskId) return 'active'
-  const task = db.getTask(goal.taskId)
-  return !task || task.deletedAt ? 'missing' : taskAvailable(task) ? 'active' : task.status
-}
+// A goal is ongoing; completing or dropping one backing task does not pause it.
+const schedulingStatus = goal => goal.status === 'paused' ? 'paused' : 'active'
+const DAILY_POLICY_VERSION = 2
 
 /** Read actual blocks and explicit check-ins. A past planned slot is never
  * counted as completed merely because its clock time has passed. */
@@ -46,7 +43,7 @@ export function freeTimeState(db, { date = localDay(new Date()), days = 7, now =
     const completedIds = new Set(completed.map(item => item.sessionId))
     const fulfilled = completed.filter(item => item.minutes >= goal.sessionMin).length + scheduled.filter(item => !completedIds.has(item.id) && minutes(item) >= goal.sessionMin && atTime(item.date, item.end) > now.getTime()).length
     const required = requiredCount(goal, date)
-    return { goalId: goal.id, schedulingStatus: schedulingStatus(db, goal), taskUpdatedAt: goal.taskId ? db.getTask(goal.taskId)?.updatedAt ?? null : null,
+    return { goalId: goal.id, schedulingStatus: schedulingStatus(goal), taskUpdatedAt: goal.taskId ? db.getTask(goal.taskId)?.updatedAt ?? null : null,
       scheduledCount: scheduled.length, completedCount: completed.length,
       scheduledMin: scheduled.reduce((sum, item) => sum + minutes(item), 0), completedMin: completed.reduce((sum, item) => sum + item.minutes, 0),
       required, remainingCount: goal.status === 'paused' ? 0 : Math.max(0, required - fulfilled), shortSessionCount: scheduled.filter(item => minutes(item) < goal.sessionMin).length }
@@ -81,9 +78,9 @@ export function createFreeTime({ db, now = () => new Date() }) {
       for (const goal of goals) {
         const required = requiredCount(goal, date)
         let task = goal.taskId ? db.getTask(goal.taskId) : null
-        if (goal.taskId && (!task || task.deletedAt || !['todo', 'doing'].includes(task.status))) {
-          shortfalls.push({ goalId: goal.id, title: goal.title, required, scheduled: 0, reason: '关联事项已完成、放下或移除，请在目标卡片中选择「恢复并安排」' }); continue
-        }
+        // Renew only when a real slot is found. Keep the old task and its blocks
+        // inactive: their time may already have been taken by other work.
+        if (!taskAvailable(task)) task = null
         const completed = value.freeTimeHistory.filter(item => item.goalId === goal.id && dates.includes(item.date))
         const completedIds = new Set(completed.map(item => item.sessionId))
         const existing = task ? working.blocks.filter(block => block.taskId === task.id && dates.includes(block.date)) : []
@@ -134,7 +131,7 @@ export function createFreeTime({ db, now = () => new Date() }) {
       }
       // An explicit schedule is also today's scheduling pass. Reopening the
       // app after undoing it must not silently recreate its time blocks.
-      if (date === localDay(at)) db.setPreference('free-time-daily', { date, completedAt: at.toISOString() })
+      if (date === localDay(at)) db.setPreference('free-time-daily', { date, completedAt: at.toISOString(), policyVersion: DAILY_POLICY_VERSION })
       const state = freeTimeState(db, { date, now: at })
       return { sessions: state.freeTimeSessions, addedSessions: actions.map(action => action.block), progress: state.freeTimeProgress, goals: stateOf(db).freeTimeGoals.filter(goal => goalValid(db, goal)), shortfalls, operation }
     })
@@ -180,10 +177,15 @@ export function createFreeTime({ db, now = () => new Date() }) {
   }
   function ensureDaily() {
     const date = localDay(new Date(now())), previous = db.getPreference('free-time-daily')
-    if (previous?.date === date) return { ensured: false, date }
+    if (previous?.date === date) {
+      // Repair the old scheduler's blocked goals once on upgrade. Otherwise
+      // respect today's pass, including a user's subsequent schedule undo.
+      const needsRepair = previous.policyVersion !== DAILY_POLICY_VERSION && stateOf(db).freeTimeGoals
+        .some(goal => goal.status === 'active' && goalValid(db, goal) && goal.taskId && !taskAvailable(db.getTask(goal.taskId)))
+      if (!needsRepair) return { ensured: false, date }
+    }
     return db.transaction(() => {
       const result = schedule({ date })
-      db.setPreference('free-time-daily', { date, completedAt: new Date(now()).toISOString() })
       return { ...result, ensured: true, date }
     })
   }

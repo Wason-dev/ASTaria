@@ -4,6 +4,9 @@ export type RoutineKind = 'class' | 'available' | 'break'
 export type Routine = {
   id: string; title: string; kind: RoutineKind; weekdays: number[]
   start: string; end: string; location: string; items: string[]; enabled: boolean
+  weekCycle?: 'weekly' | 'odd' | 'even'
+  /** Monday of school week 1, explicit for alternating schedules. */
+  weekAnchor?: string
   /** Present only on the read projection of a single-date fixed event. */
   sourceDate?: string
 }

@@ -1,3 +1,4 @@
+import { routineOccursOn } from '../src/planner/weekCycle.ts'
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { ValidationError, taskInput, day, dateTime, clockTime, identifier, text as inputText, questionOptions } from './validation.mjs'
@@ -142,6 +143,7 @@ export const XIXI_TOOLS = [
     date: str('起始日期 YYYY-MM-DD'), offset: { type: 'integer', minimum: 0 }, limit: { type: 'integer', minimum: 1, maximum: 20 },
   }),
   tool('save_free_time_goal', '保存或修改余时长期学习目标并自动安排真实空档；原目标传id和版本，暂停不新增。单次偏好默认20–40分钟，长期只保留一个目标', {
+    fromWishId: str('明确加入余时的来源心愿ID'), expectedWishVersion: { type: 'integer', minimum: 1 },
     id: str('已有目标ID，新增省略'), title: str('长期目标名称'), evidence: str('用户原话依据'),
     priority: { type: 'string', enum: ['high', 'normal', 'low'] }, minPerWeek: { type: 'integer', minimum: 0, maximum: 14 },
     sessionMin: { type: 'integer', minimum: 5, maximum: 720 }, sessionMax: { type: 'integer', minimum: 5, maximum: 720 },
@@ -159,7 +161,9 @@ export const XIXI_TOOLS = [
     materials: { type: 'array', maxItems: 20, items: str('材料名称或用户提供的地址') },
     expectedVersion: { type: 'integer', minimum: 0 }, evidence: str('本轮连续用户原话'),
   }, ['taskId', 'progress', 'obstacle', 'nextStep', 'materials', 'expectedVersion', 'evidence']),
-  tool('remember_wish', '记住明确愿望，独立于待办', {
+  tool('remember_wish', '记住愿望或补充原心愿的澄清结果，已有心愿传id与版本；不新建待办或安排', {
+    id: str('已有心愿ID，更新时必须传'), expectedVersion: { type: 'integer', minimum: 1 },
+    clarification: { type: 'object', additionalProperties: false, properties: { motivation: str('用户确认的原因或想达到的程度，未知省略'), firstStep: str('用户确认的第一小步，未知省略') } },
     content: str('愿望或念头'), evidence: str('本轮连续用户原话'), minutes: { type: 'integer', minimum: 5, maximum: 720 },
     items: { type: 'array', maxItems: 20, items: str('明确所需条件') }, expiresAt: str('带时区有效期'),
   }, ['content', 'evidence']),
@@ -447,12 +451,12 @@ export function createXixi({ db, complete, now = () => new Date() }) {
   }
   function snapshotChanged(state, override) {
     const view = rows => rows.map(({ weekdays, ...r }) => r).sort((a, b) => a.id.localeCompare(b.id))
-    return JSON.stringify(canonical(view(weeklyRows(state, override.sourceWeekday)))) !== JSON.stringify(canonical(view(override.routines)))
+    return JSON.stringify(canonical(view(weeklyRows(state, override.sourceWeekday).filter(r => routineOccursOn(r, override.date, override.sourceWeekday))))) !== JSON.stringify(canonical(view(override.routines)))
   }
   function readWeekly(args) {
     if (!Number.isInteger(args.weekday) || args.weekday < 0 || args.weekday > 6) throw new ValidationError('星期需要0至6')
     const state = db.getPlanner(), all = weeklyRows(state, args.weekday)
-    const routines = boundedRows(all, 64, 2800, r => ({ id: r.id, title: r.title, kind: r.kind, start: r.start, end: r.end, location: r.location, items: r.items.slice(0, 8) }))
+    const routines = boundedRows(all, 64, 2800, r => ({ id: r.id, title: r.title, kind: r.kind, start: r.start, end: r.end, location: r.location, items: r.items.slice(0, 8), ...(r.weekCycle ? { weekCycle: r.weekCycle, weekAnchor: r.weekAnchor } : {}) }))
     return { type: 'weekly_timetable_read', revision: state.revision, weekday: args.weekday, routines,
       dayOverrides: Object.values(state.dayOverrides ?? {}).filter(o => o.sourceWeekday === args.weekday && o.date >= localDay(clock())).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 31)
         .map(o => ({ date: o.date, sourceWeekday: o.sourceWeekday, templateChanged: snapshotChanged(state, o) })) }
@@ -831,6 +835,7 @@ export function createXixi({ db, complete, now = () => new Date() }) {
       { role: 'system', content: `${PERSONA}\n\n${WORKING}\n\n${personalityPrompt(personality)}` },
       { role: 'system', content: `${environmentPrefix}${JSON.stringify({
         page: context.page ?? 'home', taskId: context.taskId ?? null, selectedDate,
+        selectedWish: context.wishId ? companion.listState({ date: todayDate, days: 1 }).wishes.find(wish => wish.id === context.wishId) ?? null : null,
         planner: plannerContext, today: todayContext,
         tasks: facts, selectedTask, areas, taskCount: allTasks.length, moreTasksAvailable: facts.length < allTasks.length,
         companion: companionState ? { handoff,
@@ -1025,7 +1030,7 @@ export function createXixi({ db, complete, now = () => new Date() }) {
         progress: clipped(item.progress, 100), obstacle: clipped(item.obstacle, 80), nextStep: clipped(item.nextStep, 100),
         materials: item.materials.slice(0, 2).map(material => clipped(material, 80)), source: compactSource(item.source) }))
       const wishes = boundedRows(memoryEnabled ? result.wishes : [], 8, 450, item => ({ id: item.id, version: item.version, status: item.status,
-        content: clipped(item.content, 140), minutes: item.minutes, minutesEstimated: item.minutesEstimated, items: item.items.slice(0, 3).map(condition => clipped(condition, 80)),
+        content: clipped(item.content, 140), ...(item.clarification ? { clarification: item.clarification } : {}), minutes: item.minutes, minutesEstimated: item.minutesEstimated, items: item.items.slice(0, 3).map(condition => clipped(condition, 80)),
         expiresAt: item.expiresAt, source: compactSource(item.source) }))
       const scenarios = boundedRows(result.scenarios.slice(-3), 3, 650, item => ({ id: item.id, version: item.version, status: item.status,
         date: item.date, days: item.days, mode: item.mode, plans: item.plans.slice(0, 4), planCount: item.plans.length,
@@ -1641,7 +1646,8 @@ export function createXixi({ db, complete, now = () => new Date() }) {
       const input = { requestId, conversationId, text, context: { timezone,
         ...(context.page ? { page: inputText(context.page, '页面', 50) } : {}),
         ...(context.date !== undefined ? { date: day(context.date, '所选日期') } : {}),
-        ...(context.taskId ? { taskId: identifier(context.taskId) } : {}) } }
+        ...(context.taskId ? { taskId: identifier(context.taskId) } : {}),
+        ...(context.wishId ? { wishId: identifier(context.wishId) } : {}) } }
       const previousLock = locks.get(conversationId)
       const ahead = previousLock && !db.getTurn(previousLock.requestId)?.retractedAt ? previousLock.promise : Promise.resolve()
       const pending = ahead.catch(() => {}).then(() => run(input, onEvent))

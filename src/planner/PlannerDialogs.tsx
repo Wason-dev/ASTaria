@@ -1,3 +1,4 @@
+import { weekStart } from './weekCycle'
 import { useContext, useEffect, useRef, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import type { Task } from '../domain/task'
@@ -90,6 +91,13 @@ export function RoutineDialog({ routine, source, initialWeekday, state, act, onC
       <label>这段时间用来<select value={draft.kind} onChange={e => setDraft({ ...draft, kind: e.target.value as Routine['kind'] })}><option value="class">课程或固定活动 · 占用时间</option><option value="available">空课或自习 · 可以安排任务</option><option value="break">吃饭、休息或通勤 · 留给自己</option></select></label>
       <div className="pl-form-pair"><label>开始<input required type="time" value={draft.start} onChange={e => setDraft({ ...draft, start: e.target.value })} /></label><label>结束<input required type="time" value={draft.end} onChange={e => setDraft({ ...draft, end: e.target.value })} /></label></div>
       <div><span className="pl-label">每周重复</span><div className="pl-weekday-picks" role="group" aria-label="重复星期">{[1,2,3,4,5,6,0].map(day => <button key={day} type="button" aria-pressed={draft.weekdays.includes(day)} onClick={() => setDraft({ ...draft, weekdays: draft.weekdays.includes(day) ? draft.weekdays.filter(d => d !== day) : [...draft.weekdays, day] })}>{['日','一','二','三','四','五','六'][day]}</button>)}</div></div>
+      <div className="pl-form-pair"><label>重复周次<select aria-label="重复周次" value={draft.weekCycle ?? 'weekly'} onChange={e => {
+        const cycle = e.target.value as Routine['weekCycle']
+        if (cycle === 'weekly') { const { weekCycle: _cycle, weekAnchor: _anchor, ...weekly } = draft; setDraft(weekly) }
+        else setDraft({ ...draft, weekCycle: cycle, weekAnchor: draft.weekAnchor ?? weekStart(localDay(new Date())) })
+      }}><option value="weekly">每周</option><option value="odd">单周 · 第1、3、5周…</option><option value="even">双周 · 第2、4、6周…</option></select></label>
+      {draft.weekCycle && draft.weekCycle !== 'weekly' && <label>第1周的周一<input aria-label="第1周的周一" type="date" required value={draft.weekAnchor ?? ''} onChange={e => setDraft({ ...draft, weekAnchor: e.target.value })} /></label>}</div>
+      {draft.weekCycle && draft.weekCycle !== 'weekly' && <p className="pl-muted">周次按你设定的第1周连续计算，跨年也不会重置。单日调课使用目标日期所在周的单双周课表。</p>}
       <label>地点<input maxLength={100} value={draft.location} placeholder="可留空" onChange={e => setDraft({ ...draft, location: e.target.value })} /></label>
       <label>需要携带<input maxLength={500} value={items} placeholder="例如 电脑、充电器，用顿号分隔" onChange={e => setItems(e.target.value)} /></label>
       <label className="pl-checkbox"><input type="checkbox" checked={draft.enabled} onChange={e => setDraft({ ...draft, enabled: e.target.checked })} />启用这项安排</label>

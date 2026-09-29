@@ -74,6 +74,10 @@
 .home-xixi form { flex-shrink: 0; border-top: 1px solid var(--p0-line); padding-top: 10px }
 .home-input-shell { position: relative; isolation: isolate; border-radius: 10px; margin-bottom: 14px; background: #080a0e0a; box-shadow: inset 0 0 0 1px #ffffff12; transition: box-shadow 180ms ease }
 .home-input-shell:focus-within { box-shadow: inset 0 0 0 1px #ffffff24 }
+.home-clarifying-wish { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; padding: 9px 10px; border-bottom: 1px solid var(--p0-line); color: var(--p0-muted); font-size: 11px; line-height: 1.6 }
+.home-clarifying-wish > span { flex: 1 1 160px; overflow-wrap: anywhere }
+.home-clarifying-wish > div { display: flex; gap: 10px; margin-left: auto }
+.home-clarifying-wish button { color: var(--p0-fg); font-size: 10px }
 .home-input-flash { position: absolute; inset: 0; border-radius: inherit; pointer-events: none; animation: home-input-flash 440ms ease-out both }
 .home-input-rim, .home-input-glow { position: absolute; pointer-events: none; inset: 0; border-radius: inherit }
 .home-input-rim { padding: 2px; background: linear-gradient(115deg, #dca252 0%, #fff3d5 22%, #ffdb94 49%, #dbab61 72%, #ffebbf 100%); mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); mask-composite: exclude }

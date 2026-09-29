@@ -82,7 +82,7 @@ export function createCompanion({ db, now = () => new Date() }) {
     })
   }
   function saveWish(input, source) {
-    knownKeys(input, ['id', 'content', 'evidence', 'minutes', 'items', 'expiresAt', 'expectedVersion'], '牵挂')
+    knownKeys(input, ['id', 'content', 'evidence', 'minutes', 'items', 'expiresAt', 'expectedVersion', 'clarification'], '牵挂')
     return db.transaction(() => {
       const value = state(), previous = input.id ? value.wishes.find(item => item.id === identifier(input.id)) : undefined
       const replay = source?.actionId && value.wishes.find(item => item.source.actionId === source.actionId)
@@ -91,14 +91,21 @@ export function createCompanion({ db, now = () => new Date() }) {
       if (previous?.status === 'deleted') fail('这条牵挂已删除', 410)
       version(previous, input.expectedVersion ?? (previous ? undefined : 0))
       const evidence = text(input.evidence, '牵挂原话', 2000)
-      const expiresAt = input.expiresAt == null ? null : dateTime(input.expiresAt, '有效期')
-      if (expiresAt && (!expiresAt.includes('T') || Date.parse(expiresAt) <= clock().getTime())) fail('有效期需要在将来并包含时区')
+      const expiresAt = input.expiresAt === undefined ? previous?.expiresAt ?? null : input.expiresAt === null ? null : dateTime(input.expiresAt, '有效期')
+      if (input.expiresAt !== undefined && expiresAt && (!expiresAt.includes('T') || Date.parse(expiresAt) <= clock().getTime())) fail('有效期需要在将来并包含时区')
       const minutes = number(input.minutes, '希望留出的分钟数', 5, 720, previous?.minutes ?? 30)
       if (!Number.isInteger(minutes)) fail('分钟数需要为整数')
       const stamp = clock().toISOString()
+      let clarification = previous?.clarification
+      if (input.clarification !== undefined) {
+        knownKeys(input.clarification, ['motivation', 'firstStep'], '心愿澄清')
+        clarification = { ...clarification }
+        for (const key of ['motivation', 'firstStep']) if (Object.hasOwn(input.clarification, key)) clarification[key] = text(input.clarification[key], key === 'motivation' ? '想做的原因' : '第一小步', 600, { empty: true })
+      }
       const record = { id: previous?.id ?? randomUUID(), content: text(input.content, '牵挂内容', 600), evidence,
+        ...(clarification ? { clarification } : {}),
         minutes, minutesEstimated: input.minutes === undefined ? (previous?.minutesEstimated ?? true) : false,
-        items: strings(input.items ?? [], '所需条件'), expiresAt,
+        items: strings(input.items ?? previous?.items ?? [], '所需条件'), expiresAt,
         status: previous?.status ?? 'active', version: (previous?.version ?? 0) + 1,
         source: sourceValue(source, evidence), createdAt: previous?.createdAt ?? stamp, updatedAt: stamp }
       value.wishes = [...value.wishes.filter(item => item.id !== record.id), record]

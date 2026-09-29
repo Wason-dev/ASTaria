@@ -96,6 +96,8 @@
 .xixi-memory-manager summary:focus-visible,.xixi-operation-list summary:focus-visible{outline:2px solid var(--settings-accent);outline-offset:3px;border-radius:5px}
 .xixi-settings-content[data-section="通知"]{grid-template-columns:minmax(240px,.72fr) minmax(0,1.4fr);gap:24px 40px}
 .xixi-notification-preferences .xixi-setting-row{padding:12px 0}
+.xixi-notification-options{min-width:0;padding-top:14px}
+.xixi-notification-options>section+section{margin-top:24px;padding-top:20px;border-top:1px solid var(--settings-line)}
 .xixi-operation-history>.xixi-settings-section-title{min-height:32px}
 :is(.p0,.app-shell) .xixi-operation-history>.xixi-settings-section-title h3{margin:0}
 .xixi-operation-filters{display:flex;flex-wrap:wrap;gap:5px;margin:12px 0 14px}

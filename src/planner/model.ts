@@ -1,3 +1,4 @@
+import { routineOccursOn } from './weekCycle.ts'
 import type { Task } from '../domain/task.ts'
 import { agendaDate, localDay } from '../home/agenda.ts'
 import type { CarryItem, DayCapacity, MinuteRange, PlanBlock, PlannerState, Routine } from './types.ts'
@@ -108,7 +109,7 @@ export function routinesForDay(state: PlannerState, date: string): Routine[] {
   const override = state.dayOverrides?.[date]
   const result: Routine[] = []
   for (const routine of override?.routines ?? state.routines) {
-    if (!routine.enabled || (!override && !routine.weekdays.includes(bounds.start.getDay()))) continue
+    if (!routine.enabled || (!override && !routineOccursOn(routine, date))) continue
     const interval = explicitInterval(date, routine.start, routine.end)
     const range = interval && clipRange(interval, date)
     if (range) result.push({ ...routine, weekdays: [...routine.weekdays], items: [...routine.items], start: timeOf(range.start), end: timeOf(range.end) })

@@ -1,3 +1,4 @@
+import { routineOccursOn, weekStart } from '../src/planner/weekCycle.ts'
 import { createHash } from 'node:crypto'
 import { ValidationError, knownKeys, text, identifier, choice, day, dateTime, clockTime } from './validation.mjs'
 
@@ -55,11 +56,15 @@ export function validateDayEvents(events) {
   if (new Set(values.map(event => event.id)).size !== values.length) fail('单日活动标识不可重复')
 }
 function routineValue(input) {
-  knownKeys(input, ['id', 'title', 'kind', 'weekdays', 'start', 'end', 'location', 'items', 'enabled'], '固定安排')
+  knownKeys(input, ['id', 'title', 'kind', 'weekdays', 'start', 'end', 'location', 'items', 'enabled', 'weekCycle', 'weekAnchor'], '固定安排')
   timeRange(input.start, input.end)
+  const cycle = choice(input.weekCycle, ['weekly', 'odd', 'even'], '重复周次', 'weekly')
+  if (cycle !== 'weekly' && (!input.weekAnchor || weekStart(input.weekAnchor) !== input.weekAnchor)) fail('隔周安排需要明确第1周的周一日期')
+  if (input.weekAnchor !== undefined && weekStart(input.weekAnchor) !== input.weekAnchor) fail('基准周需要有效的周一日期')
   if (!Array.isArray(input.weekdays) || !input.weekdays.length || input.weekdays.length > 7 || input.weekdays.some(value => !Number.isInteger(value) || value < 0 || value > 6) || new Set(input.weekdays).size !== input.weekdays.length) fail('星期需要互不重复的 0–6，0 表示周日')
   return {
     id: identifier(input.id), title: text(input.title, '安排名称', 160), kind: choice(input.kind, ['class', 'available', 'break'], '安排类型'),
+    ...(cycle !== 'weekly' ? { weekCycle: cycle, weekAnchor: input.weekAnchor } : {}),
     weekdays: [...input.weekdays].sort((a, b) => a - b), start: input.start, end: input.end,
     location: text(input.location, '地点', 160, { empty: true }), items: strings(input.items, '携带物品'), enabled: boolean(input.enabled, '启用状态'),
   }
@@ -102,7 +107,7 @@ function validateDayOverrides(overrides) {
   }
 }
 function routinesOn(state, date) {
-  const routines = state.dayOverrides?.[date]?.routines ?? state.routines.filter(routine => routine.weekdays.includes(new Date(`${date}T12:00:00`).getDay()))
+  const routines = state.dayOverrides?.[date]?.routines ?? state.routines.filter(routine => routineOccursOn(routine, date))
   return [...routines, ...(state.dayEvents ?? []).filter(event => event.date === date).map(event => ({ ...event, kind: 'class', enabled: true }))]
 }
 export function horizonGroupValue(input) {
@@ -207,7 +212,7 @@ export function createPlannerStore({ db, transaction, getTask, listTasks, now = 
   }
   function validateRoutineOccupancy(routine, state) {
     if (!routine.enabled || routine.kind === 'available') return
-    if (state.blocks.some(block => !state.dayOverrides?.[block.date] && routine.weekdays.includes(new Date(`${block.date}T12:00:00`).getDay()) && occupiesTime(getTask(block.taskId)) && fixedConflicts(routine, block))) fail('固定安排与已有任务时间重叠，请先调整任务安排', 409)
+    if (state.blocks.some(block => !state.dayOverrides?.[block.date] && routineOccursOn(routine, block.date) && occupiesTime(getTask(block.taskId)) && fixedConflicts(routine, block))) fail('固定安排与已有任务时间重叠，请先调整任务安排', 409)
   }
   function validateBlock(block, state, { restoring = false } = {}) {
     const task = requireTask(block.taskId, !restoring)
@@ -242,18 +247,13 @@ export function createPlannerStore({ db, transaction, getTask, listTasks, now = 
     const today = localToday()
     const affected = Object.entries(state.dayOverrides).filter(([date, override]) => date >= today && weekdays.has(override.sourceWeekday))
     if (!affected.length) return
-    const snapshots = new Map()
-    for (const [, override] of affected) {
-      if (!snapshots.has(override.sourceWeekday)) {
-        const routines = state.routines.filter(routine => routine.enabled && routine.weekdays.includes(override.sourceWeekday)).map(routineValue)
-        if (!routines.some(routine => routine.kind === 'class')) fail('请先移除未来的单日调课记录，再删除这个星期的最后一节课程', 409)
-        snapshots.set(override.sourceWeekday, routines)
-      }
-    }
     for (const [date, override] of affected) {
-      state.dayOverrides[date] = { ...override, routines: structuredClone(snapshots.get(override.sourceWeekday)) }
+      const routines = state.routines.filter(routine => routineOccursOn(routine, date, override.sourceWeekday)).map(routineValue)
+      if (!routines.some(routine => routine.kind === 'class')) fail('请先移除未来的单日调课记录，再删除来源周的最后一节课程', 409)
+      state.dayOverrides[date] = { ...override, routines }
     }
   }
+
   function applyPlannerAction(action, expectedRevision, deferBlockValidation = false) {
     if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0) fail('安排版本不正确')
     choice(action?.type, ['save-routine', 'delete-routine', 'import-routines', 'edit-weekday', 'set-day-template', 'remove-day-template', 'save-day-event', 'delete-day-event', 'save-block', 'delete-block', 'save-details', 'check-item'], '安排操作')
@@ -329,10 +329,12 @@ export function createPlannerStore({ db, transaction, getTask, listTasks, now = 
             ]
           })
           if (syncDates.length) {
-            const routines = state.routines.filter(routine => routine.enabled && routine.weekdays.includes(weekday)).map(routineValue)
-            if (!routines.some(routine => routine.kind === 'class')) fail('同步单日调课需要这个星期至少保留一节已启用的课程', 409)
             state.dayOverrides = { ...state.dayOverrides }
-            for (const date of syncDates) state.dayOverrides[date] = { date, sourceWeekday: weekday, routines: structuredClone(routines) }
+            for (const date of syncDates) {
+              const routines = state.routines.filter(routine => routineOccursOn(routine, date, weekday)).map(routineValue)
+              if (!routines.some(routine => routine.kind === 'class')) fail('同步单日调课需要来源周至少保留一节已启用的课程', 409)
+              state.dayOverrides[date] = { date, sourceWeekday: weekday, routines }
+            }
           }
           // Real timetable corrections keep existing tasks intact. Capacity
           // reports any conflicts, and subsequent task placements obey the
@@ -341,7 +343,7 @@ export function createPlannerStore({ db, transaction, getTask, listTasks, now = 
         }
         case 'set-day-template': {
           const date = day(action.date), sourceWeekday = sourceWeekdayValue(action.sourceWeekday)
-          const routines = state.routines.filter(routine => routine.enabled && routine.weekdays.includes(sourceWeekday)).map(routineValue)
+          const routines = state.routines.filter(routine => routineOccursOn(routine, date, sourceWeekday)).map(routineValue)
           if (!routines.some(routine => routine.kind === 'class')) fail('来源星期还没有已启用的课程，请先录入或导入该星期的真实课表，再设置单日调课', 409)
           // Record the actual school day even when an existing task conflicts.
           // The capacity model exposes those conflicts; tasks are never moved.

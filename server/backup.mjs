@@ -59,9 +59,13 @@ function companion(value) {
   }
   unique(value.handoffs, 'taskId')
   for (const item of array(value.wishes, 500)) {
-    knownKeys(item, ['id', 'content', 'evidence', 'minutes', 'minutesEstimated', 'items', 'expiresAt', 'status', 'version', 'source', 'createdAt', 'updatedAt'])
+    knownKeys(item, ['id', 'content', 'evidence', 'minutes', 'minutesEstimated', 'items', 'expiresAt', 'status', 'version', 'source', 'createdAt', 'updatedAt', 'clarification'])
     identifier(item.id); text(item.content, '牵挂', 600); text(item.evidence, '原话', 2000); integer(item.minutes, 5, 720)
     if (item.minutesEstimated !== undefined) bool(item.minutesEstimated)
+    if (item.clarification !== undefined) {
+      knownKeys(item.clarification, ['motivation', 'firstStep'])
+      for (const value of Object.values(item.clarification)) text(value, '心愿澄清', 600, { empty: true })
+    }
     array(item.items, 20).forEach(condition => text(condition, '条件', 300)); optionalStamp(item.expiresAt)
     choice(item.status, ['active', 'paused', 'deleted'], '牵挂状态'); integer(item.version, 1); source(item.source); stamp(item.createdAt); stamp(item.updatedAt)
   }
@@ -175,7 +179,8 @@ function validateDocument(table, document) {
   } else if (table === 'turns') {
     knownKeys(document, ['requestId', 'conversationId', 'text', 'context', 'userMessageId', 'status', 'ownerPid', 'ownerToken', 'createdAt', 'updatedAt', 'error', 'result', 'progress', 'retractedAt'])
     identifier(document.requestId); identifier(document.conversationId); identifier(document.userMessageId); text(document.text, '请求', 16000)
-    knownKeys(document.context, ['timezone', 'page', 'taskId', 'date']); text(document.context.timezone, '时区', 100)
+    knownKeys(document.context, ['timezone', 'page', 'taskId', 'date', 'wishId']); text(document.context.timezone, '时区', 100)
+    if (document.context.wishId !== undefined) identifier(document.context.wishId)
     if (document.context.taskId !== undefined) identifier(document.context.taskId)
     if (document.context.date !== undefined) day(document.context.date)
     if (document.context.page !== undefined) text(document.context.page, '页面', 100)

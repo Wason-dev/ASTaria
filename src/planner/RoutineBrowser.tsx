@@ -1,3 +1,4 @@
+import { weekCycleLabel } from './weekCycle'
 import { useId, useMemo, useState } from 'react'
 import { agendaDate } from '../home/agenda'
 import { PlannerDialog } from './PlannerDialogs'
@@ -46,7 +47,7 @@ export function RoutineBrowser({ routines, selectedDate, onClose, onEdit, onAdd 
           aria-label={`编辑${routine.title}，${routine.start}至${routine.end}，${GROUPS[kind].label}${routine.enabled ? '' : '，已停用'}`}
           onClick={() => setDestination(routine)}>
           <span className="pl-routine-time"><time>{routine.start}</time><time>{routine.end}</time></span>
-          <span className="pl-routine-copy"><strong>{routine.title}</strong><span><small>{GROUPS[kind].label}</small>{routine.location && <small>{routine.location}</small>}{!routine.enabled && <small className="pl-routine-disabled">已停用</small>}</span></span>
+          <span className="pl-routine-copy"><strong>{routine.title}</strong><span><small>{GROUPS[kind].label}</small><small>{weekCycleLabel(routine)}{routine.weekAnchor ? ` · 第1周 ${routine.weekAnchor}` : ''}</small>{routine.location && <small>{routine.location}</small>}{!routine.enabled && <small className="pl-routine-disabled">已停用</small>}</span></span>
           <span className="pl-routine-edit" aria-hidden="true"><Icon name="edit" /></span>
         </button>
       </li>)}</ul> : <p className="pl-routine-group-empty">这一天没有{GROUPS[kind].title}</p>}

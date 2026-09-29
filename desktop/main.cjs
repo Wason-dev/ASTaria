@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, shell, session, Menu, screen, powerMonitor } = require('electron')
+const { app, BrowserWindow, dialog, shell, session, Menu, screen, powerMonitor, net } = require('electron')
 const path = require('node:path')
 const { pathToFileURL } = require('node:url')
 const { randomBytes } = require('node:crypto')
@@ -14,6 +14,7 @@ let quitting = false
 let appOrigin
 let updateTimer
 let updates
+let reminders
 const smokeTest = process.argv.includes('--smoke-test')
 // The acceptance run must never open the user's SQLite file or Keychain.
 const smokeDirectory = smokeTest ? mkdtempSync(path.join(app.getPath('temp'), 'astaria-smoke-')) : null
@@ -66,6 +67,7 @@ async function start() {
   } else {
     service = createLocalService({
       vault: createKeychain(DATA_DIRECTORY, { binaryPath: path.join(resourceRoot, 'bin/astaria-keychain') }),
+      onMutation: () => reminders?.schedule(),
     })
   }
   const pkg = JSON.parse(await readFile(path.join(resourceRoot, 'package.json'), 'utf8'))
@@ -85,9 +87,16 @@ async function start() {
   }
 
   updates = createUpdateService({ current: { ...build, version: pkg.version, platform: process.platform, arch: process.arch },
-    stateFile: updateStateFile, downloadDirectory: path.join(app.getPath('userData'), 'updates'), installer: scheduleInstall, allowNetwork: !smokeTest })
+    fetcher: (url, options) => net.fetch(url, options), stateFile: updateStateFile, downloadDirectory: path.join(app.getPath('userData'), 'updates'), installer: scheduleInstall, allowNetwork: !smokeTest })
+  if (!smokeTest && process.platform === 'darwin') {
+    const { createReminderService, nativeReminderRunner } = await import(pathToFileURL(path.join(resourceRoot, 'desktop/reminders.mjs')).href)
+    reminders = createReminderService({ stateFile: path.join(app.getPath('userData'), 'system-reminders.json'),
+      snapshot: service.reminderSnapshot, run: nativeReminderRunner(path.join(resourceRoot, 'bin/ASTariaReminders.app/Contents/MacOS/astaria-reminders')) })
+    void reminders.initialize()
+    powerMonitor.on('resume', () => reminders.schedule())
+  }
   const token = randomBytes(32).toString('hex')
-  desktopServer = createDesktopServer({ root: path.join(resourceRoot, 'dist'), service, token, updates, port: smokeTest ? 0 : undefined })
+  desktopServer = createDesktopServer({ root: path.join(resourceRoot, 'dist'), service, token, updates, reminders, port: smokeTest ? 0 : undefined })
   const url = await desktopServer.listen()
   appOrigin = new URL(url).origin
   const clipboardWrite = (contents, permission) => {
@@ -169,6 +178,7 @@ async function start() {
     // One delayed startup check, then at most once every six hours while visible.
     // Focus/resume rechecks the cached deadline instead of waking a hidden app.
     const checkUpdates = async () => {
+      reminders?.schedule()
       if (!quitting && window && !window.isDestroyed() && window.isVisible() && !window.isMinimized()) {
         const state = await updates.check()
         if (!quitting && window && !window.isDestroyed()) schedule(state.automatic && state.nextCheckAt

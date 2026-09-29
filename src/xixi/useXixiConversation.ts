@@ -7,7 +7,7 @@ import { advanceChatStream, restoreChatReasoning } from './stream'
 import { sameSnapshot } from '../stores/sameSnapshot.ts'
 import { startVisiblePolling } from '../stores/visiblePolling.ts'
 
-export type XixiContext = { page: 'home' | 'workbench' | 'calendar' | 'timetable'; taskId?: string; date?: string; timezone: string }
+export type XixiContext = { page: 'home' | 'workbench' | 'calendar' | 'timetable'; taskId?: string; wishId?: string; date?: string; timezone: string }
 type PendingMessage = { requestId: string; conversationId: string; text: string; context: XixiContext; createdAt?: string; seq?: number }
 type OutgoingMessage = PendingMessage & { delivery: 'sending' | 'failed' }
 const SELECTED_KEY = 'astaria-xixi-conversation-v1'

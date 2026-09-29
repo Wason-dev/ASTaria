@@ -11,6 +11,7 @@ import { notifyLocalDataChange } from '../stores/migration'
 import { GlassSamplingContext, MeasuredGlassSurface } from '../home/GlassSurface'
 import { WorkspaceHeading } from '../ui/WorkspaceHeading'
 import { ModelConnection } from './ModelConnection'
+import { SystemReminders } from './SystemReminders'
 import { AppUpdates } from './AppUpdates'
 import { HorizonTuningPanel } from './HorizonTuningPanel'
 import { BACKUP_MAX_BYTES, BACKUP_EXPORT_TOO_LARGE, BACKUP_IMPORT_TOO_LARGE, backupByteLength, serializeBackup } from './backupLimits'
@@ -167,7 +168,10 @@ export function LocalSettings({ onClose, onSaved, onEffectChange, onPreviewEffec
       <section><h3>固定可安排时段</h3>{['default-evening-study', 'default-weekend-availability'].map(id => { const routine = planner?.routines.find(item => item.id === id); return routine ? <TimeRange key={`${id}:${planner?.revision}`} title={routine.title} start={routine.start} end={routine.end} disabled={busy} onSave={(start, end) => saveRoutine(id, start, end)} /> : <p key={id}>{id === 'default-evening-study' ? '晚自习' : '周末'}时段已移除，可在日程重新添加</p> })}<p>课程、休息、通勤和其他固定安排，在日程的「每周安排」中维护</p></section>
     </>}
     {tab === '通知' && <>
+      <div className="xixi-notification-options">
       <section className="xixi-notification-preferences"><h3>提醒方式</h3><Toggle title="站内主动通知" checked={preferences.notifications.enabled} disabled={!ready || busy} onChange={enabled => void savePreferences({ ...preferences, notifications: { ...preferences.notifications, enabled } })} /><Toggle title="空闲与牵挂机会" checked={preferences.notifications.opportunities} disabled={!ready || busy} onChange={opportunities => void savePreferences({ ...preferences, notifications: { ...preferences.notifications, opportunities } })} /><TimeRange key={`${preferences.notifications.quietStart}:${preferences.notifications.quietEnd}`} title="免打扰时段" start={preferences.notifications.quietStart} end={preferences.notifications.quietEnd} disabled={!ready || busy} onSave={(quietStart, quietEnd) => void savePreferences({ ...preferences, notifications: { ...preferences.notifications, quietStart, quietEnd } })} /><p>免打扰期间，操作结果仍会保留在变更记录中</p></section>
+      <SystemReminders />
+      </div>
       <OperationHistory operations={operations} busy={busy} onAction={action} />
     </>}
     {tab === '外观与动画' && <>

@@ -9,8 +9,37 @@ import { assetPath, authorizedRequest, createDesktopHandler } from '../desktop/s
 import { createDatabase } from '../server/database.mjs'
 import { createLocalService } from '../server/index.mjs'
 import { createKeychain } from '../server/keychain.mjs'
+import { createReminderService } from '../desktop/reminders.mjs'
+import { getPreferences } from '../server/preferences.mjs'
 
 const token = 'a'.repeat(64)
+
+test('desktop writes refresh real reminder data, and quit flushes before closing SQLite', async t => {
+  const { createDesktopServer } = await import('../desktop/server.mjs')
+  const dir = await mkdtemp(join(tmpdir(), 'astaria-reminder-integration-')), db = createDatabase(':memory:')
+  const native = [], now = new Date(), due = new Date(now.getTime() + 2 * 60 * 60_000).toISOString()
+  const preferences = getPreferences(db)
+  db.setPreference('app', { ...preferences, notifications: { ...preferences.notifications, quietStart: '00:00', quietEnd: '00:00' } })
+  const task = db.createTask({ title: '提醒集成检查', due })
+  let reminders, mutations = 0
+  const service = createLocalService({ db, dataDirectory: dir, vault: { status: async () => false },
+    onMutation: () => { mutations++; reminders.schedule() } })
+  reminders = createReminderService({ stateFile: join(dir, 'reminders.json'), snapshot: service.reminderSnapshot, now: () => now,
+    run: async (command, entries) => { native.push({ command, entries }); return { authorization: 2 } } })
+  const server = createDesktopServer({ root: dir, service, token, reminders, port: 0 })
+  t.after(async () => { await server.close(); await rm(dir, { recursive: true, force: true }) })
+  const origin = (await server.listen()).replace(/\/$/u, '')
+  const post = (path, input) => fetch(origin + path, { method: 'POST', headers: {
+    'Content-Type': 'application/json', 'x-astaria-local': '1', 'x-astaria-desktop': token, origin,
+  }, body: JSON.stringify(input) })
+  assert.equal((await post('/api/desktop/reminders/enabled', { enabled: true })).status, 200)
+  assert.equal(native.findLast(call => call.command === 'replace').entries.length, 1)
+  assert.equal((await post('/api/tasks/update', { id: task.id, patch: { status: 'done' }, expectedUpdatedAt: task.updatedAt })).status, 200)
+  await service.whenIdle()
+  assert.equal(mutations, 1, 'saved API mutation reaches notification scheduler')
+  await server.close()
+  assert.deepEqual(native.findLast(call => call.command === 'replace').entries, [], 'quit flush sees saved completion before SQLite closes')
+})
 function request(url, body, headers = {}) {
   const req = Readable.from(body === undefined ? [] : [Buffer.from(JSON.stringify(body))])
   Object.assign(req, {

@@ -198,15 +198,28 @@ async function main() {
     await mkdir(dirname(helper))
     run('/usr/bin/clang', ['-arch', ARCH, '-mmacosx-version-min=13.0', '-O2', '-fobjc-arc', '-framework', 'Foundation', '-framework', 'Security', join(ROOT, 'server/native/keychain.m'), '-o', helper])
     await chmod(helper, 0o755)
+    const reminderApp = join(payload, 'bin', 'ASTariaReminders.app')
+    const reminderBinary = join(reminderApp, 'Contents', 'MacOS', 'astaria-reminders')
+    await mkdir(dirname(reminderBinary), { recursive: true })
+    run('/usr/bin/clang', ['-arch', ARCH, '-mmacosx-version-min=13.0', '-O2', '-fobjc-arc', '-framework', 'AppKit', '-framework', 'UserNotifications', join(ROOT, 'desktop/native/reminders.m'), '-o', reminderBinary])
+    await chmod(reminderBinary, 0o755)
+    await writePlist(join(reminderApp, 'Contents', 'Info.plist'), { CFBundleIdentifier: `${BUNDLE_ID}.reminders`,
+      CFBundleExecutable: 'astaria-reminders', CFBundleName: 'ASTaria 提醒', CFBundleDisplayName: 'ASTaria 提醒',
+      CFBundleIconFile: 'ASTaria.icns',
+      CFBundlePackageType: 'APPL', CFBundleVersion: numericVersion, CFBundleShortVersionString: numericVersion,
+      LSUIElement: true, LSMinimumSystemVersion: '13.0' }, scratch)
+
 
     await createIcns(join(ROOT, 'public/astaria-icon-1024.png'), join(resources, 'ASTaria.icns'), scratch)
+    await mkdir(join(reminderApp, 'Contents', 'Resources'))
+    await copyFile(join(resources, 'ASTaria.icns'), join(reminderApp, 'Contents', 'Resources', 'ASTaria.icns'))
     const info = { ...runtimeInfo, CFBundleName: NAME, CFBundleDisplayName: NAME, CFBundleIdentifier: BUNDLE_ID,
       CFBundleShortVersionString: numericVersion, CFBundleVersion: numericVersion, CFBundleIconFile: 'ASTaria.icns', LSApplicationCategoryType: 'public.app-category.productivity' }
     delete info.ElectronAsarIntegrity
     await writePlist(join(contents, 'Info.plist'), info, scratch)
 
     const { files, bundles } = await walkRuntime(app)
-    for (const bundle of bundles.filter(path => path.endsWith('.app'))) {
+    for (const bundle of bundles.filter(path => path.endsWith('.app') && path !== reminderApp)) {
       const path = join(bundle, 'Contents', 'Info.plist'), child = readPlist(path)
       const variant = /\((Renderer|GPU|Plugin)\)\.app$/u.exec(bundle)?.[1]
       child.CFBundleIdentifier = `${BUNDLE_ID}.helper${variant ? `.${variant}` : ''}`
@@ -220,8 +233,8 @@ async function main() {
     const sign = (path, jit = false) => run('/usr/bin/codesign', ['--force', '--sign', '-', '--timestamp=none', '--options', 'runtime', ...(jit ? ['--entitlements', entitlements] : []), path])
     // Sign leaves first, then containing frameworks/helper apps, then the app.
     // Avoid --deep signing, which can miss helpers or assign them wrong metadata.
-    for (const path of files.sort((a, b) => b.split(sep).length - a.split(sep).length)) if (await isMachO(path)) sign(path, path !== helper)
-    for (const path of bundles.sort((a, b) => b.split(sep).length - a.split(sep).length)) sign(path, path.endsWith('.app'))
+    for (const path of files.sort((a, b) => b.split(sep).length - a.split(sep).length)) if (await isMachO(path)) sign(path, path !== helper && path !== reminderBinary)
+    for (const path of bundles.sort((a, b) => b.split(sep).length - a.split(sep).length)) sign(path, path.endsWith('.app') && path !== reminderApp)
     sign(app, true)
     run('/usr/bin/codesign', ['--verify', '--deep', '--strict', '--verbose=2', app])
     if (run('/usr/bin/lipo', ['-archs', helper]) !== ARCH) fail('The compiled Keychain helper is not arm64.')

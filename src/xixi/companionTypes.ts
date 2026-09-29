@@ -14,6 +14,7 @@ export type Handoff = {
 }
 
 export type Wish = {
+  clarification?: { motivation?: string; firstStep?: string }
   id: string
   content: string
   evidence: string

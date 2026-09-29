@@ -57,7 +57,7 @@ async function body(req) {
   catch (error) { if (error instanceof ValidationError) throw error; throw new ValidationError('JSON 内容无法读取') }
 }
 
-export function createLocalService({ db = createDatabase(join(DATA_DIRECTORY, 'astaria.sqlite')), vault = createKeychain(DATA_DIRECTORY), complete, fetcher = fetch, dataDirectory = DATA_DIRECTORY } = {}) {
+export function createLocalService({ db = createDatabase(join(DATA_DIRECTORY, 'astaria.sqlite')), vault = createKeychain(DATA_DIRECTORY), complete, fetcher = fetch, dataDirectory = DATA_DIRECTORY, onMutation = () => {} } = {}) {
   // Capture provider selection for the full tool loop, even if another tab
   // changes settings while a reply is in flight. Never silently change where
   // an existing conversation request is sent.
@@ -275,7 +275,7 @@ export function createLocalService({ db = createDatabase(join(DATA_DIRECTORY, 'a
         return { ok: true, toolCalling: null, message: '云端连接成功，析熙准备好了' }
       }
       if (path === '/chat') {
-        knownKeys(input.context ?? {}, ['timezone', 'page', 'taskId', 'date'], '页面上下文')
+        knownKeys(input.context ?? {}, ['timezone', 'page', 'taskId', 'date', 'wishId'], '页面上下文')
         if (!(await status()).configured) throw new ValidationError('请先在设置中连接模型')
         const config = getModelSettings(db)
         const onEvent = config.streamResponses !== false && req.headers.accept?.includes('text/event-stream') ? startStream?.() : undefined
@@ -348,13 +348,14 @@ export function createLocalService({ db = createDatabase(join(DATA_DIRECTORY, 'a
         res.statusCode = error instanceof ValidationError ? error.status : 503
         res.end(JSON.stringify({ error: message }))
       }
-    }).finally(() => clearInterval(heartbeat))
+    }).finally(() => { clearInterval(heartbeat); if (req.method === 'POST') { try { onMutation() } catch { /* Notification failure must not change the saved operation. */ } } })
     pendingRequests.add(pending)
     pending.finally(() => pendingRequests.delete(pending)).catch(() => {})
   }
   return {
     middleware,
     whenIdle: () => Promise.allSettled([...pendingRequests]),
+    reminderSnapshot: () => ({ tasks: db.listTasks(), planner: freeTime.plannerState(), preferences: getPreferences(db) }),
     close: () => { localModelInstaller.close(); db.close() },
   }
 }

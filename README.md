@@ -10,10 +10,23 @@ ASTaria 是一款本机优先的个人时间与事项应用。和析熙聊作业
 
 ## 看看 ASTaria
 
-<!-- Screenshots are captured with fictional, isolated demonstration data. -->
-![黑洞首页：当前事项与析熙入口](docs/images/home.png)
-![日程：课程、任务与空档同屏查看](docs/images/planner.png)
-![余时：展开心愿输入区，与析熙理清第一步](docs/images/free-time.png)
+截图使用虚构演示数据。
+
+**从一句话，到可核对、可撤销的安排。** 析熙把实验报告记为事项并排入今晚 18:00–18:45；展开的变更回执列出截止、预计用时和已排时段，「撤销创建与安排」可一并撤回本次写入。聊天与当天日历就在同一张首页里。
+
+![首页展开：执行结果、变更明细与撤销按钮，旁边同步显示当天安排](docs/images/home-receipt.png)
+
+**黑洞首页**：收起对话后，回到当前事项与析熙入口。
+
+![黑洞首页：当前任务为整理实验数据](docs/images/home.png)
+
+**日程**：课程、当天任务、真实空档与待安排事项一起查看。
+
+![日程周视图：已有课程和任务，当天剩余空档与两项待安排事项](docs/images/planner.png)
+
+**余时**：三个持续目标，未来七天已安排 4 小时 25 分钟；每个目标的频率、单次时长和已排次数都有迹可循。
+
+![余时：编程、英语阅读和速写目标，以及实际排入日历的练习时段](docs/images/free-time.png)
 
 - **析熙**：理解请求、读取空档、记录与安排，修改留下可核对和撤销的回执。支持 DeepSeek API 与本机兼容模型。
 - **日程**：课程、固定活动、任务时段与截止一起查看，支持单双周课表。
@@ -54,7 +67,7 @@ node scripts/run-ui-verifications.mjs --list
 node scripts/run-ui-verifications.mjs
 ```
 
-CI 自动执行源码测试、桌面网页构建、许可清单和版本文档检查。隔离 UI 验证需安装 Google Chrome（可用 `CHROME_BINARY` 指定路径），会自动创建临时浏览器和测试数据，结束后清理；也可在 Actions 中手动运行「UI Verifications」。原生通知显示和实际 GPU 帧率仍需设备验证。
+CI 自动执行源码测试、桌面网页构建、许可清单和版本文档检查。隔离 UI 验证需安装 Google Chrome（可用 `CHROME_BINARY` 指定路径），会自动创建临时浏览器和测试数据，结束后清理；也可在 Actions 中手动运行「UI Verifications」。原生通知显示和实际 GPU 帧率仍需设备验证。README 截图可用 `node scripts/capture-readme.mjs` 重新生成到 `artifacts/readme-capture/`；它使用虚构对话与内存数据库，验证真实保存和撤销，不调用在线模型。
 
 ## 项目结构
 

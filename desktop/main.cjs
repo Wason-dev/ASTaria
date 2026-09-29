@@ -5,6 +5,7 @@ const { randomBytes } = require('node:crypto')
 const { mkdtempSync, mkdirSync } = require('node:fs')
 const { readFile } = require('node:fs/promises')
 const { watchWindowButtons } = require('./window-buttons.cjs')
+const { createNetFetch } = require('./net-fetch.cjs')
 
 const resourceRoot = path.join(process.resourcesPath, 'app')
 let window
@@ -87,7 +88,7 @@ async function start() {
   }
 
   updates = createUpdateService({ current: { ...build, version: pkg.version, platform: process.platform, arch: process.arch },
-    fetcher: (url, options) => net.fetch(url, options), stateFile: updateStateFile, downloadDirectory: path.join(app.getPath('userData'), 'updates'), installer: scheduleInstall, allowNetwork: !smokeTest })
+    fetcher: createNetFetch(net), stateFile: updateStateFile, downloadDirectory: path.join(app.getPath('userData'), 'updates'), installer: scheduleInstall, allowNetwork: !smokeTest })
   if (!smokeTest && process.platform === 'darwin') {
     const { createReminderService, nativeReminderRunner } = await import(pathToFileURL(path.join(resourceRoot, 'desktop/reminders.mjs')).href)
     reminders = createReminderService({ stateFile: path.join(app.getPath('userData'), 'system-reminders.json'),

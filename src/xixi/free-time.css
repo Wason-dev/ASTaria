@@ -4,14 +4,14 @@
 .free-time-background::after { content:''; position:absolute; inset:0; pointer-events:none; opacity:.25; background-image:linear-gradient(#c0c5ce0c 1px,transparent 1px),linear-gradient(90deg,#c0c5ce0c 1px,transparent 1px); background-size:32px 32px }
 .free-time-page[data-grid=false] .free-time-background::after { display:none }
 .free-time-viewport { position:absolute; inset:76px 0 48px; padding:0 var(--home-left,32px); overflow:auto; overscroll-behavior:contain; scrollbar-width:thin }
-.free-time-container { position:relative; width:100%; max-width:var(--workspace-content-width,1320px); min-height:0; height:auto; margin:0 auto; display:flex; flex-direction:column }
+.free-time-container { --ft-pane-gap:16px; position:relative; width:100%; max-width:var(--workspace-content-width,1320px); min-height:0; height:auto; margin:0 auto; display:flex; flex-direction:column; gap:var(--ft-pane-gap) }
 .free-time-header { flex:none; display:flex; align-items:center; justify-content:space-between; gap:24px; min-height:84px; padding:0 3px 20px }
 .free-time-eyebrow { color:var(--ft-gold); font-size:11px; letter-spacing:.13em }
 .free-time-header h2 { margin:2px 0 3px; font-size:27px; line-height:1.25; font-weight:450; letter-spacing:-.02em }
 .free-time-header h2:focus { outline:none }
 .free-time-header p { margin:0; color:var(--ft-muted); font-size:13px }
 .free-time-metrics { --metrics-muted:var(--ft-muted); --metrics-line:var(--ft-line); --metrics-ink:var(--ft-body) }
-.free-time-layout { display:grid; grid-template-columns:minmax(0,1fr); gap:16px; min-height:0 }
+.free-time-layout { display:grid; grid-template-columns:minmax(0,1fr); gap:var(--ft-pane-gap); min-height:0 }
 .free-time-pane { position:relative; min-width:0; min-height:0; border-radius:20px; background:transparent }
 .free-time-pane>.home-glass-measure { position:absolute; inset:0; z-index:0 }
 .p0 .free-time-page .free-time-pane .home-glass-surface { background:transparent }
@@ -191,11 +191,24 @@
 @media (forced-colors:active) {
   .p0 .free-time-page :is(.free-time-primary,.free-time-secondary) { background:ButtonFace; color:ButtonText; border-color:ButtonText }
 }
-.free-time-wish-entry { margin:14px 0 }
-.free-time-wish-entry>.free-time-pane-content { display:flex; align-items:center; flex-wrap:wrap; justify-content:space-between; gap:12px; padding:18px 22px }
-.free-time-wish-entry h3 { margin:0 0 6px; font-size:15px; font-weight:500 }
+.free-time-wish-entry>.free-time-pane-content { display:block; padding:20px 22px }
+.free-time-wish-heading { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:20px; min-height:32px }
+.free-time-wish-copy { display:flex; align-items:baseline; flex-wrap:wrap; gap:6px 20px; min-width:0 }
+.free-time-wish-entry h3 { flex:none; margin:0; font-size:15px; font-weight:500 }
 .free-time-wish-entry p { margin:0; font-size:12px; line-height:1.7; color:var(--ft-muted) }
-.free-time-wish-start { flex-basis:100%; display:grid; gap:10px }
-.free-time-wish-start label { display:grid; gap:8px; font-size:12px }
-.free-time-wish-start textarea { width:100%; min-height:82px; resize:vertical; border:1px solid var(--ft-line); border-radius:12px; background:transparent; color:inherit; padding:12px; font:inherit }
-.free-time-wish-start>div { display:flex; justify-content:flex-end; gap:10px }
+.free-time-wish-reveal { display:grid; grid-template-rows:0fr; opacity:0; visibility:hidden; transition:grid-template-rows 360ms cubic-bezier(.22,.68,.2,1),opacity 240ms ease,visibility 0s 360ms }
+.free-time-wish-reveal[data-open=true] { grid-template-rows:1fr; opacity:1; visibility:visible; transition-delay:0s }
+.free-time-wish-clip { min-height:0; overflow:hidden }
+.free-time-wish-start { display:grid; grid-template-columns:minmax(0,1fr) minmax(210px,240px); align-items:stretch; gap:28px; min-width:0; padding:24px 6px 6px }
+.free-time-wish-start label { display:grid; gap:10px; min-width:0; font-size:13px }
+.free-time-wish-start textarea { box-sizing:border-box; display:block; width:100%; min-width:0; min-height:152px; max-height:360px; resize:vertical; border:1px solid var(--ft-line); border-radius:12px; background:transparent; color:inherit; padding:14px 16px; font:inherit; line-height:1.8; scrollbar-width:thin }
+.free-time-wish-start textarea::placeholder { color:var(--ft-muted); opacity:.72 }
+.free-time-wish-aside { display:flex; flex-direction:column; justify-content:space-between; gap:20px; padding-top:31px }
+.free-time-wish-actions { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:10px }
+.home-workspace[data-motion=reduced] .free-time-wish-reveal { transition:none }
+@media (max-width:700px) {
+  .free-time-wish-entry>.free-time-pane-content { padding:16px }
+  .free-time-wish-heading { gap:12px }
+  .free-time-wish-start { grid-template-columns:minmax(0,1fr); gap:16px; padding-top:20px }
+  .free-time-wish-aside { padding-top:0; gap:16px }
+}

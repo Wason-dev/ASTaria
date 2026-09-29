@@ -74,7 +74,7 @@
 
 /* The same measured glass and 20px corners as .free-time-pane. Keep the
    interactive contents above its sampling layer and let it own the optics. */
-.p0 .free-time-page button.string-invitation { position:relative; display:flex; align-items:center; gap:28px; width:100%; margin:2px 0 22px; padding:22px 24px; border:1px solid transparent; border-radius:20px; background:transparent; box-shadow:none; color:var(--ft-ink); text-align:left; overflow:hidden; transition:border-color 300ms ease,box-shadow 300ms ease }
+.p0 .free-time-page button.string-invitation { position:relative; display:flex; align-items:center; gap:28px; width:100%; margin:0; padding:22px 24px; border:1px solid transparent; border-radius:20px; background:transparent; box-shadow:none; color:var(--ft-ink); text-align:left; overflow:hidden; transition:border-color 300ms ease,box-shadow 300ms ease }
 .string-invitation>.home-glass-measure { z-index:0 }
 .string-invitation>:not(.home-glass-measure) { position:relative; z-index:1 }
 .p0 .free-time-page .string-invitation .home-glass-surface { background:transparent }

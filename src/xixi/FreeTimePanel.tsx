@@ -24,8 +24,8 @@ const EMPTY_DRAFT: Draft = { title: '', priority: 'normal', minPerWeek: '3', ses
 const errorText = (reason: unknown) => reason instanceof Error ? reason.message : '暂时无法完成，请重试'
 const dayLabel = (date: string, short = false) => new Intl.DateTimeFormat('zh-CN', short ? { weekday: 'short' } : { weekday: 'short', month: 'numeric', day: 'numeric' }).format(agendaDate(date) ?? new Date())
 
-function Pane({ children, className = '', blur = 0 }: { children: ReactNode; className?: string; blur?: number }) {
-  return <section className={`free-time-pane ${className}`}><MeasuredGlassSurface radius={20} material={{ transmission: 100, blur, rim: 40, shadow: 0 }} /><div className="free-time-pane-content">{children}</div></section>
+function Pane({ children, className = '', blur = 0, settleResize = false }: { children: ReactNode; className?: string; blur?: number; settleResize?: boolean }) {
+  return <section className={`free-time-pane ${className}`}><MeasuredGlassSurface radius={20} settleResize={settleResize} material={{ transmission: 100, blur, rim: 40, shadow: 0 }} /><div className="free-time-pane-content">{children}</div></section>
 }
 
 // Retain editors across navigation without rerendering them for every camera
@@ -46,7 +46,10 @@ export const FreeTimePanel = memo(function FreeTimePanel({ onClarifyWish, onChan
   const [filter, setFilter] = useState('')
   const [editing, setEditing] = useState<Editing | null>(null)
   const [wishEditing, setWishEditing] = useState<Wish | null>(null)
-  const [newWish, setNewWish] = useState<string | null>(null)
+  const [newWish, setNewWish] = useState('')
+  const [wishOpen, setWishOpen] = useState(false)
+  const wishTrigger = useRef<HTMLButtonElement>(null)
+  const wishInput = useRef<HTMLTextAreaElement>(null)
   const [date, setDate] = useState(today)
   const [period, setPeriod] = useState<'today' | 'week'>('today')
   const [planPage, setPlanPage] = useState(0)
@@ -77,6 +80,17 @@ export const FreeTimePanel = memo(function FreeTimePanel({ onClarifyWish, onChan
   useEffect(() => { if (period === 'today') setDate(today) }, [today, period])
   useEffect(() => { setPage(0) }, [filter, tab])
   useEffect(() => { setPlanPage(0) }, [date])
+  useEffect(() => {
+    if (!wishOpen || !active) return
+    const frame = requestAnimationFrame(() => wishInput.current?.focus({ preventScroll: true }))
+    return () => cancelAnimationFrame(frame)
+  }, [wishOpen, active])
+
+  const closeWish = (discard = false) => {
+    wishTrigger.current?.focus({ preventScroll: true })
+    setWishOpen(false)
+    if (discard) setNewWish('')
+  }
 
   const announce = (message: string) => { setNotice(message); onNotice(message) }
   const synchronize = async () => { notifyLocalDataChange(); await refresh(); await onChanged() }
@@ -169,10 +183,10 @@ export const FreeTimePanel = memo(function FreeTimePanel({ onClarifyWish, onChan
     try { await synchronize() } catch (reason) { setError(`牵挂状态已保存，页面同步遇到问题：${errorText(reason)}`) }
   })
   const startWish = () => execute(async () => {
-    const content = newWish?.trim()
-    if (!content) return
+    const content = newWish.trim()
+    if (!wishOpen || !content) return
     const wish = await localApi<Wish>('/companion/wish', { content, evidence: content })
-    setNewWish(null); setTab('considering')
+    setWishOpen(false); setNewWish(''); setTab('considering')
     try { await synchronize() } catch { /* Saved wish remains available to the conversation. */ }
     onClarifyWish(wish)
   })
@@ -201,8 +215,17 @@ export const FreeTimePanel = memo(function FreeTimePanel({ onClarifyWish, onChan
     <div className="free-time-viewport workspace-page-viewport"><div className="free-time-container workspace-page-container">
       <WorkspaceHeading className="free-time-header" title="余时" description="想推进的事，在合适的空档继续" titleId={`${id}-title`} headingRef={heading}><dl className="workspace-metrics free-time-metrics"><div><dt>自动安排中</dt><dd>{goals.filter(isScheduling).length}<small> 项</small></dd></div><div><dt>未来七天已安排</dt><dd>{minutesLabel(weekMinutes).split(/(\d+)/).filter(Boolean).map((part, index) => /\d/.test(part) ? <span key={index}>{part}</span> : <small key={index}>{part}</small>)}</dd></div><div><dt>最低频率待满足</dt><dd>{remaining}<small> 次</small></dd></div></dl></WorkspaceHeading>
       <StringInvitation onEnter={onOpenStrings} glass={glass} />
-      <Pane className="free-time-wish-entry" blur={glass === 'soft' ? 6 : 0}><div><h3>把心愿聊清楚</h3><p>有个想法，还不知道从哪里开始？和析熙一起理清第一步。</p></div><button className="free-time-secondary" type="button" disabled={busy} onClick={() => { setNewWish(''); setEditing(null); setWishEditing(null); setTab('considering') }}>＋ 聊聊一个心愿</button>
-        {newWish !== null && <form className="free-time-wish-start" onSubmit={event => { event.preventDefault(); void startWish() }}><label>你想做什么？<textarea autoFocus required maxLength={600} value={newWish} onChange={event => setNewWish(event.target.value)} placeholder="比如：想做一款自己的小游戏，但还没想好从哪开始" disabled={busy} /></label><p>先保留为心愿。你选择「加入自动安排」后才会占用日程。</p><div><button type="button" className="free-time-secondary" disabled={busy} onClick={() => setNewWish(null)}>取消</button><button type="submit" className="free-time-primary" disabled={busy || !newWish.trim()}>保存并聊清楚</button></div></form>}
+      <Pane className="free-time-wish-entry" blur={glass === 'soft' ? 6 : 0} settleResize>
+        <div className="free-time-wish-heading"><div className="free-time-wish-copy"><h3>把心愿聊清楚</h3><p>有个想法，还不知道从哪里开始？和析熙一起理清第一步。</p></div><button ref={wishTrigger} className="free-time-secondary" type="button" disabled={busy} aria-expanded={wishOpen} aria-controls={`${id}-wish-start`} onClick={() => {
+          if (wishOpen) closeWish()
+          else { setWishOpen(true); setEditing(null); setWishEditing(null) }
+        }}>{wishOpen ? '收起' : '＋ 聊聊一个心愿'}</button></div>
+        <div id={`${id}-wish-start`} className="free-time-wish-reveal" data-open={wishOpen} aria-hidden={!wishOpen} inert={!wishOpen}>
+          <div className="free-time-wish-clip"><form className="free-time-wish-start" onSubmit={event => { event.preventDefault(); void startWish() }}>
+            <label>你想做什么？<textarea ref={wishInput} required maxLength={600} value={newWish} onChange={event => setNewWish(event.target.value)} placeholder="比如：想做一款自己的小游戏，但还没想好从哪开始" disabled={busy || !wishOpen} /></label>
+            <div className="free-time-wish-aside"><p>先保留为心愿。你选择「加入自动安排」后才会占用日程。</p><div className="free-time-wish-actions"><button type="button" className="free-time-secondary" disabled={busy || !wishOpen} onClick={() => closeWish(true)}>取消</button><button type="submit" className="free-time-primary" disabled={busy || !wishOpen || !newWish.trim()}>{busy ? '正在保存…' : '保存并聊清楚'}</button></div></div>
+          </form></div>
+        </div>
       </Pane>
       <div className="free-time-layout">
         <Pane className="free-time-goals" blur={glass === 'soft' ? 6 : 0}><header className="free-time-pane-heading"><div className="free-time-tabs" role="group" aria-label="余时目标分类"><button type="button" aria-pressed={tab === 'goals'} onClick={() => { setTab('goals'); setEditing(null); setWishEditing(null) }}>目标 <small>{goals.length}</small></button><button type="button" aria-pressed={tab === 'considering'} onClick={() => { setTab('considering'); setEditing(null); setWishEditing(null) }}>待考虑 <small>{wishes.length}</small></button></div><button className="free-time-primary" type="button" onClick={() => { setWishEditing(null); setEditing({ draft: EMPTY_DRAFT }) }} disabled={busy}>＋ 添加目标</button></header>

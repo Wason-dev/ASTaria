@@ -11,14 +11,14 @@ ASTaria 是一款本机优先的个人时间与事项应用。和析熙聊作业
 ## 看看 ASTaria
 
 <!-- Screenshots are captured with fictional, isolated demonstration data. -->
-![黑洞首页](docs/images/home.png)
-![日程](docs/images/planner.png)
-![余时](docs/images/free-time.png)
+![黑洞首页：当前事项与析熙入口](docs/images/home.png)
+![日程：课程、任务与空档同屏查看](docs/images/planner.png)
+![余时：展开心愿输入区，与析熙理清第一步](docs/images/free-time.png)
 
 - **析熙**：理解请求、读取空档、记录与安排，修改留下可核对和撤销的回执。支持 DeepSeek API 与本机兼容模型。
 - **日程**：课程、固定活动、任务时段与截止一起查看，支持单双周课表。
 - **工作台**：从现在能开始的事项进入专注，保存步骤和下次继续的线索。
-- **余时与弦轨**：为持续目标安排练习；在地平线里整理日期、分组和顺序。
+- **余时与弦轨**：先把心愿聊清楚，再选择是否加入自动安排；为持续目标留出练习时间，在地平线里整理日期、分组和顺序。
 
 ## 安装
 

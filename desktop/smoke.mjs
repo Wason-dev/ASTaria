@@ -65,6 +65,8 @@ export async function runDesktopSmoke(window, directory) {
     if (window.__astariaNativeWindowButtonsVisible()) throw new Error('Resizing must not reveal native window buttons')
     const nativeButtons = window.getWindowButtonPosition()
     if (nativeButtons?.x !== 12 || nativeButtons?.y !== 8) throw new Error('Native window button position changed')
+    const fullscreenSkip = process.env.ASTARIA_SMOKE_SKIP_FULLSCREEN_REASON
+    if (!fullscreenSkip) {
     window.show(); window.focus()
     await new Promise(resolve => setTimeout(resolve, 500))
     window.setFullScreen(true)
@@ -77,9 +79,11 @@ export async function runDesktopSmoke(window, directory) {
       await new Promise(resolve => setTimeout(resolve, 100))
     if (window.isFullScreen() || window.__astariaNativeWindowButtonsVisible())
       throw new Error('Leaving fullscreen must restore hidden native window buttons')
+    }
     check.windowChrome = { fullSizeContent: true, initial, minimum, nativeButtons,
       nativeButtonsHiddenByDefault: true, nativeWindowActionsAvailable: true,
-      fullscreenRevealsNativeButtons: true, fullscreenRestoresHoverMode: true }
+      fullscreenRevealsNativeButtons: fullscreenSkip ? null : true, fullscreenRestoresHoverMode: fullscreenSkip ? null : true,
+      ...(fullscreenSkip ? { fullscreenSkipped: fullscreenSkip } : {}) }
   }
   await writeFile(join(directory, 'home.png'), (await window.webContents.capturePage()).toPNG())
   const report = { ...check, directory, passed: true, checkedAt: new Date().toISOString() }

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, writeFile, readFile, rm, symlink, cp, realpath } from 'node:fs/promises'
+import { mkdtemp, mkdir, writeFile, readFile, rm, symlink, cp, realpath, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { execFile } from 'node:child_process'
@@ -64,8 +64,10 @@ for (const success of [true, false]) test(`atomic replacement ${success ? 'waits
   const { chmod } = await import('node:fs/promises'); await chmod(join(newApp, 'Contents/MacOS/Electron'), 0o700)
   const script = join(staging, 'install.sh'), result = join(f.root, 'result')
   await writeFile(script, INSTALL_SCRIPT)
+  const inode = (await stat(f.app)).ino
   let failed = false
   try { await run('/bin/sh', [script, '2147483647', f.app, staging, result, 'Electron'], { timeout: 10000 }) } catch { failed = true }
+  assert.equal((await stat(f.app)).ino, inode, "outer app inode and Finder aliases survive replacement")
   assert.equal(failed, !success)
   assert.equal(await readFile(result, 'utf8'), success ? 'installed' : 'failed')
   assert.equal(await readFile(join(success ? join(staging, 'previous.app') : f.app, 'Contents/MacOS/Electron'), 'utf8'), 'binary')

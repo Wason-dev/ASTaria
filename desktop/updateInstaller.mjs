@@ -7,8 +7,8 @@ import { basename, dirname, join, resolve, sep } from 'node:path'
 const execute = promisify(execFile)
 const inside = (value, root) => value === root || value.startsWith(`${root}${sep}`)
 
-// Every path is an argv value, never executable shell text. Both renamed app
-// bundles live on the destination volume so replacement/rollback are atomic.
+// Every path is an argv value, never executable shell text. Both renamed Contents
+// directories live on the destination volume so replacement/rollback are atomic.
 export const INSTALL_SCRIPT = `#!/bin/sh
 set -eu
 pid="$1"; target="$2"; staging="$3"; result="$4"; executable="$5"
@@ -23,8 +23,8 @@ restore() {
       /bin/kill -9 "$launched" 2>/dev/null || true
     fi
     if [ "$moved" -eq 1 ] && [ -d "$old" ]; then
-      if [ -d "$target" ] && [ ! -e "$new" ]; then /bin/mv "$target" "$new"; fi
-      if [ ! -e "$target" ]; then /bin/mv "$old" "$target"; fi
+      if [ -d "$target/Contents" ] && [ ! -e "$new/Contents" ]; then /bin/mv "$target/Contents" "$new/Contents"; fi
+      if [ ! -e "$target/Contents" ]; then /bin/mv "$old/Contents" "$target/Contents"; fi
     fi
     /usr/bin/printf '%s' 'failed' > "$result"
     if [ -d "$target" ]; then /usr/bin/open "$target" || true; fi
@@ -37,9 +37,12 @@ while /bin/kill -0 "$pid" 2>/dev/null; do
   /bin/sleep 0.2
 done
 [ -d "$new" ] && [ ! -L "$new" ] && [ -d "$target" ] && [ ! -L "$target" ] && [ ! -e "$old" ] && [ ! -e "$health" ]
-/bin/mv "$target" "$old"
+# Keep the outer bundle inode so Finder aliases continue to find this App.
+[ -d "$target/Contents" ] && [ ! -L "$target/Contents" ] && [ -d "$new/Contents" ] && [ ! -L "$new/Contents" ]
+/bin/mkdir "$old"
+/bin/mv "$target/Contents" "$old/Contents"
 moved=1
-/bin/mv "$new" "$target"
+/bin/mv "$new/Contents" "$target/Contents"
 "$target/Contents/MacOS/$executable" --astaria-update-health "$health" &
 launched=$!
 count=0

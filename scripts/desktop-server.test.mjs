@@ -32,7 +32,7 @@ async function response(handler, req) {
   await finished
   return { status: res.statusCode, headers, text: Buffer.concat(chunks).toString() }
 }
-async function fixture(t) {
+async function fixture(t, updates) {
   const dir = await mkdtemp(join(tmpdir(), 'astaria-desktop-test-'))
   const root = join(dir, 'dist')
   await mkdir(join(root, 'assets'), { recursive: true })
@@ -42,7 +42,7 @@ async function fixture(t) {
   await symlink(join(dir, 'private.json'), join(root, 'escape.json'))
   const db = createDatabase(':memory:')
   const service = createLocalService({ db, dataDirectory: dir, vault: { status: async () => false } })
-  const handler = createDesktopHandler({ root, service, token })
+  const handler = createDesktopHandler({ root, service, token, updates })
   t.after(async () => { await service.whenIdle(); service.close(); await rm(dir, { recursive: true, force: true }) })
   return { handler, service, db }
 }
@@ -119,4 +119,43 @@ test('bundled keychain preparation validates a shipped executable without compil
   await writeFile(helper, '#!/bin/sh\nexit 0\n', { mode: 0o755 })
   await createKeychain(join(root, 'nonexistent-profile'), { binaryPath: helper }).prepare()
   await assert.rejects(createKeychain(root, { binaryPath: join(root, 'missing') }).prepare())
+})
+
+test('desktop update endpoints inherit the session gate and still require the local marker', async t => {
+  const calls = []
+  const updates = {
+    getStatus: async () => { calls.push('status'); return { status: 'idle', automatic: true } },
+    check: async options => { calls.push(['check', options]); return { status: 'up-to-date' } },
+    setAutomatic: async enabled => { calls.push(['automatic', enabled]); return { automatic: enabled } },
+  }
+  const { handler } = await fixture(t, updates)
+  for (const headers of [
+    { 'x-astaria-desktop': undefined }, { 'x-astaria-desktop': 'b'.repeat(64) },
+    { origin: 'http://evil.example' }, { 'sec-fetch-site': 'cross-site' }, { host: 'evil.example:5199' },
+  ]) {
+    const denied = await response(handler, request('/api/desktop/updates', undefined, headers))
+    assert.equal(denied.status, 403, JSON.stringify(headers))
+    assert.equal(denied.text, 'Forbidden')
+  }
+  const remote = request('/api/desktop/updates')
+  remote.socket.remoteAddress = '192.168.1.2'
+  assert.equal((await response(handler, remote)).status, 403)
+  assert.deepEqual(calls, [], '未通过会话校验的请求不得触达更新服务')
+
+  const status = await response(handler, request('/api/desktop/updates'))
+  assert.equal(status.status, 200)
+  assert.equal(status.headers['content-type'], 'application/json; charset=utf-8')
+  assert.equal(status.headers['cache-control'], 'no-store')
+  assert.deepEqual(JSON.parse(status.text), { status: 'idle', automatic: true })
+
+  const noMarker = await response(handler, request('/api/desktop/updates/check', {}, { 'x-astaria-local': undefined }))
+  assert.equal(noMarker.status, 403)
+  assert.equal(noMarker.headers['content-type'], 'application/json; charset=utf-8')
+  assert.deepEqual(JSON.parse(noMarker.text), { error: 'Forbidden' })
+  assert.deepEqual(calls.filter(call => Array.isArray(call)), [], '缺少本地标记时不得触发检查')
+
+  assert.equal((await response(handler, request('/api/desktop/updates/check', {}))).status, 200)
+  assert.deepEqual(calls.at(-1), ['check', { force: true }])
+  assert.equal((await response(handler, request('/api/desktop/updates/automatic', { enabled: false }))).status, 200)
+  assert.deepEqual(calls.at(-1), ['automatic', false])
 })

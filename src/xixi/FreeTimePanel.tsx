@@ -5,6 +5,8 @@ import { GlassSamplingContext, MeasuredGlassSurface } from '../home/GlassSurface
 import { WorkspaceHeading } from '../ui/WorkspaceHeading'
 import { minutesLabel } from '../planner/model'
 import { LOCAL_DATA_CHANGE, notifyLocalDataChange } from '../stores/migration'
+import { sameSnapshot } from '../stores/sameSnapshot'
+import { startVisiblePolling } from '../stores/visiblePolling'
 import { localApi } from './api'
 import type { Preferences } from './preferences'
 import type { CompanionState, FreeTimeGoal, Wish } from './companionTypes'
@@ -53,7 +55,7 @@ export const FreeTimePanel = memo(function FreeTimePanel({ onChanged, onNotice, 
   const refresh = useCallback(async () => {
     const revision = ++readRevision.current
     const next = await localApi<CompanionState>(`/companion?date=${today}&days=7`)
-    if (mounted.current && revision === readRevision.current) setState(next)
+    if (mounted.current && revision === readRevision.current) setState(previous => sameSnapshot(previous, next) ? previous : next)
   }, [today])
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; readRevision.current++ } }, [])
   useEffect(() => {
@@ -66,10 +68,10 @@ export const FreeTimePanel = memo(function FreeTimePanel({ onChanged, onNotice, 
   }, [active, refresh])
   useEffect(() => {
     if (!active) return
-    const reload = () => { if (!actionLock.current && document.visibilityState === 'visible') void refresh().catch(reason => setError(errorText(reason))) }
-    const timer = setInterval(reload, 15000)
+    const reload = () => { if (!document.hidden && !actionLock.current) void refresh().catch(reason => setError(errorText(reason))) }
+    const stopPolling = startVisiblePolling(reload, 15000, false)
     window.addEventListener(LOCAL_DATA_CHANGE, reload); window.addEventListener('focus', reload)
-    return () => { clearInterval(timer); window.removeEventListener(LOCAL_DATA_CHANGE, reload); window.removeEventListener('focus', reload) }
+    return () => { stopPolling(); window.removeEventListener(LOCAL_DATA_CHANGE, reload); window.removeEventListener('focus', reload) }
   }, [active, refresh])
   useEffect(() => { if (period === 'today') setDate(today) }, [today, period])
   useEffect(() => { setPage(0) }, [filter, tab])

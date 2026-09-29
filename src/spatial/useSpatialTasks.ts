@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Task, TaskStatus } from '../domain/task'
 import { taskStore } from '../stores/taskStore'
 import { LOCAL_DATA_CHANGE } from '../stores/migration'
+import { sameSnapshot } from '../stores/sameSnapshot'
+import { startVisiblePolling } from '../stores/visiblePolling'
 
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback
@@ -43,7 +45,7 @@ export function useSpatialTasks() {
         // In-flight reads cannot replace a later successful local write.
         if (!active || currentRequest !== request || revision !== writeRevision.current) return
         readState.current = 'ready'
-        setTasks(rows)
+        setTasks(current => sameSnapshot(current, rows) ? current : rows)
         setLoading(false)
         setLoadError('')
       } catch (error: unknown) {
@@ -58,18 +60,15 @@ export function useSpatialTasks() {
     }
     const refresh = () => { void read() }
     const visible = () => { if (document.visibilityState === 'visible') refresh() }
-    void read()
-    const poll = window.setInterval(visible, 5000)
+    const stopPolling = startVisiblePolling(refresh, 5000)
     window.addEventListener(LOCAL_DATA_CHANGE, refresh)
     window.addEventListener('focus', visible)
-    document.addEventListener('visibilitychange', visible)
     return () => {
       active = false
       request += 1
-      clearInterval(poll)
+      stopPolling()
       window.removeEventListener(LOCAL_DATA_CHANGE, refresh)
       window.removeEventListener('focus', visible)
-      document.removeEventListener('visibilitychange', visible)
     }
   }, [observation])
 

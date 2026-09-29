@@ -93,7 +93,8 @@ export class HorizonCanvas {
   private last = 0
   private flowTime = 0
   private atmosphere: { image: HTMLCanvasElement; top: number; key: string } | null = null
-  private samples: RibbonPoint[] = []
+  private samples: RibbonPoint[] = Array.from({ length: SAMPLE_COUNT + 1 }, () => ({ x: 0, y: 0, nx: 0, ny: 0 }))
+  private readonly pathPoint = { x: 0, y: 0 }
   private motions = new Map<string, GroupMotion>()
   private pointerAngle = spring(0)
   private pointerDisplacement = spring(0)
@@ -160,19 +161,22 @@ export class HorizonCanvas {
     const pull = { angle: this.pointerAngle.value, displacement: this.pointerDisplacement.value / this.height,
       spread: clamp(this.width * .11 / projection.radius, .015, .65) }
     setStringFlightEdgePull(pull)
-    this.samples = Array.from({ length: SAMPLE_COUNT + 1 }, (_, index) => {
+    for (let index = 0; index <= SAMPLE_COUNT; index++) {
       const at = index / SAMPLE_COUNT, point = horizonPoint(projection, at)
       const nx = (point.x - projection.cx) / projection.radius, ny = (point.y - projection.cy) / projection.radius
       const response = stringFlightEdgeDisplacement(Math.atan2(nx, -ny), pull) * this.height
-      return { x: point.x + nx * response, y: point.y + ny * response, nx, ny }
-    })
+      const sample = this.samples[index]
+      sample.x = point.x + nx * response; sample.y = point.y + ny * response
+      sample.nx = nx; sample.ny = ny
+    }
   }
 
-  private point(t: number, offset = 0): HorizonPoint {
+  private point(t: number, offset = 0, target: HorizonPoint = { x: 0, y: 0 }): HorizonPoint {
     const at = clamp(t) * SAMPLE_COUNT, index = Math.min(SAMPLE_COUNT - 1, Math.floor(at)), fraction = at - index
     const a = this.samples[index], b = this.samples[index + 1]
-    return { x: mix(a.x, b.x, fraction) + mix(a.nx, b.nx, fraction) * offset,
-      y: mix(a.y, b.y, fraction) + mix(a.ny, b.ny, fraction) * offset }
+    target.x = mix(a.x, b.x, fraction) + mix(a.nx, b.nx, fraction) * offset
+    target.y = mix(a.y, b.y, fraction) + mix(a.ny, b.ny, fraction) * offset
+    return target
   }
 
   private path(from = 0, to = 1, offset = 0, warp = 0, phase = 0) {
@@ -181,7 +185,7 @@ export class HorizonCanvas {
     for (let step = 0; step <= count; step++) {
       const t = mix(from, to, step / count)
       const texture = warp * (Math.sin(t * 13 + phase) * .7 + Math.sin(t * 29 - phase * .4) * .3)
-      const p = this.point(t, offset + texture)
+      const p = this.point(t, offset + texture, this.pathPoint)
       if (step === 0) c.moveTo(p.x, p.y); else c.lineTo(p.x, p.y)
     }
   }

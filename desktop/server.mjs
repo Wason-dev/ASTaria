@@ -2,6 +2,7 @@ import { createServer } from 'node:http'
 import { readFile, stat, realpath } from 'node:fs/promises'
 import { resolve, sep } from 'node:path'
 import { timingSafeEqual } from 'node:crypto'
+import { handleUpdateRequest } from './updates.mjs'
 
 const types = {
   '.css': 'text/css; charset=utf-8',
@@ -44,7 +45,7 @@ export function authorizedRequest(req, token) {
     && timingSafeEqual(Buffer.from(supplied), Buffer.from(token))
 }
 
-export function createDesktopHandler({ root, service, token }) {
+export function createDesktopHandler({ root, service, token, updates }) {
   if (typeof token !== 'string' || token.length < 32) throw new Error('Desktop session token required')
   const base = resolve(root)
   return async (req, res) => {
@@ -55,6 +56,7 @@ export function createDesktopHandler({ root, service, token }) {
     res.setHeader('X-Content-Type-Options', 'nosniff')
     res.setHeader('Cross-Origin-Resource-Policy', 'same-origin')
     res.setHeader('Referrer-Policy', 'no-referrer')
+    if (updates && await handleUpdateRequest(updates, req, res)) return
     if (req.url === '/api' || req.url?.startsWith('/api/')) {
       service.middleware(req, res, () => send(res, 404, 'Not found'))
       return
@@ -81,8 +83,8 @@ export function createDesktopHandler({ root, service, token }) {
   }
 }
 
-export function createDesktopServer({ root, service, token, port = 5199 }) {
-  const server = createServer(createDesktopHandler({ root, service, token }))
+export function createDesktopServer({ root, service, token, updates, port = 5199 }) {
+  const server = createServer(createDesktopHandler({ root, service, token, updates }))
   server.headersTimeout = 10_000
   server.requestTimeout = 120_000
   let closing
@@ -96,6 +98,7 @@ export function createDesktopServer({ root, service, token, port = 5199 }) {
       })
     }),
     close: () => closing ??= (async () => {
+      updates?.close()
       // Stop accepting new work before draining model/tool operations. A model
       // request may continue durably even after its browser connection closes.
       const stopped = new Promise(resolveClose => server.close(resolveClose))

@@ -1,4 +1,5 @@
 import type { ChatMessage, CompanionAction, ConversationState, Operation } from './types.ts'
+import { sameSnapshot } from '../stores/sameSnapshot.ts'
 
 export type ConversationRow = { message: ChatMessage; operations: Operation[]; companionActions: CompanionAction[] }
 
@@ -25,7 +26,10 @@ export function mergeConversation(current: ConversationState | null, next: Conve
   const companionActions = [...new Map([...(current.companionActions ?? []), ...(next.companionActions ?? [])].map(item => [item.id, item])).values()]
     .filter(item => !messages.some(message => message.requestId === item.requestId && message.retractedAt))
   const hasEarlier = (current.oldestSeq ?? Infinity) < (next.oldestSeq ?? Infinity)
-  return { ...next, messages, companionActions, ...(hasEarlier ? { oldestSeq: current.oldestSeq, hasOlder: current.hasOlder } : {}) }
+  const merged = { ...next, messages, companionActions, ...(hasEarlier ? { oldestSeq: current.oldestSeq, hasOlder: current.hasOlder } : {}) }
+  // A polling response may be identical even after older history was loaded.
+  // Keep the React snapshot stable without dropping withdrawals or receipts.
+  return sameSnapshot(current, merged) ? current : merged
 }
 
 /** Replace the whole visible action, including receipts cached by older clients. */

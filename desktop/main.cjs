@@ -1,8 +1,10 @@
-const { app, BrowserWindow, dialog, shell, session, Menu, screen } = require('electron')
+const { app, BrowserWindow, dialog, shell, session, Menu, screen, powerMonitor } = require('electron')
 const path = require('node:path')
 const { pathToFileURL } = require('node:url')
 const { randomBytes } = require('node:crypto')
 const { mkdtempSync, mkdirSync } = require('node:fs')
+const { readFile } = require('node:fs/promises')
+const { watchWindowButtons } = require('./window-buttons.cjs')
 
 const resourceRoot = path.join(process.resourcesPath, 'app')
 let window
@@ -10,8 +12,8 @@ let desktopServer
 let service
 let quitting = false
 let appOrigin
-let nativeWindowButtonsVisible = false
-let nativeWindowButtonsPoll
+let updateTimer
+let updates
 const smokeTest = process.argv.includes('--smoke-test')
 // The acceptance run must never open the user's SQLite file or Keychain.
 const smokeDirectory = smokeTest ? mkdtempSync(path.join(app.getPath('temp'), 'astaria-smoke-')) : null
@@ -49,10 +51,11 @@ function externalLink(value) {
 }
 
 async function start() {
-  const [{ createLocalService, DATA_DIRECTORY }, { createKeychain }, { createDesktopServer }] = await Promise.all([
+  const [{ createLocalService, DATA_DIRECTORY }, { createKeychain }, { createDesktopServer }, { createUpdateService }] = await Promise.all([
     import(pathToFileURL(path.join(resourceRoot, 'server/index.mjs')).href),
     import(pathToFileURL(path.join(resourceRoot, 'server/keychain.mjs')).href),
     import(pathToFileURL(path.join(resourceRoot, 'desktop/server.mjs')).href),
+    import(pathToFileURL(path.join(resourceRoot, 'desktop/updates.mjs')).href),
   ])
   if (smokeTest) {
     const { createDatabase } = await import(pathToFileURL(path.join(resourceRoot, 'server/database.mjs')).href)
@@ -65,8 +68,26 @@ async function start() {
       vault: createKeychain(DATA_DIRECTORY, { binaryPath: path.join(resourceRoot, 'bin/astaria-keychain') }),
     })
   }
+  const pkg = JSON.parse(await readFile(path.join(resourceRoot, 'package.json'), 'utf8'))
+  let build = {}
+  try { build = JSON.parse(await readFile(path.join(resourceRoot, 'build-info.json'), 'utf8')) } catch { /* Older bundles still expose their full package version. */ }
+  const updateStateFile = path.join(app.getPath('userData'), 'update-check.json')
+  const scheduleInstall = async candidate => {
+    if (smokeTest || process.platform !== 'darwin' || quitting) throw new Error('当前暂不支持自动安装')
+    const { prepareMacUpdate, launchMacUpdate } = await import(pathToFileURL(path.join(resourceRoot, 'desktop/updateInstaller.mjs')).href)
+    const prepared = await prepareMacUpdate({ ...candidate,
+      appBundle: path.resolve(path.dirname(process.execPath), '..', '..'),
+      resultFile: path.join(app.getPath('userData'), 'update-install-result'),
+    })
+    await service.whenIdle()
+    await launchMacUpdate(prepared)
+    setTimeout(() => app.quit(), 250)
+  }
+
+  updates = createUpdateService({ current: { ...build, version: pkg.version, platform: process.platform, arch: process.arch },
+    stateFile: updateStateFile, downloadDirectory: path.join(app.getPath('userData'), 'updates'), installer: scheduleInstall, allowNetwork: !smokeTest })
   const token = randomBytes(32).toString('hex')
-  desktopServer = createDesktopServer({ root: path.join(resourceRoot, 'dist'), service, token, port: smokeTest ? 0 : undefined })
+  desktopServer = createDesktopServer({ root: path.join(resourceRoot, 'dist'), service, token, updates, port: smokeTest ? 0 : undefined })
   const url = await desktopServer.listen()
   appOrigin = new URL(url).origin
   const clipboardWrite = (contents, permission) => {
@@ -106,47 +127,9 @@ async function start() {
     },
   })
   if (process.platform === 'darwin') {
-    const setNativeWindowButtons = visible => {
-      if (!window || window.isDestroyed() || nativeWindowButtonsVisible === visible) return
-      nativeWindowButtonsVisible = visible
-      window.setWindowButtonVisibility(visible)
-    }
-    const pointerIsOverTrafficLights = () => {
-      if (!window || window.isDestroyed() || window.isFullScreen()) return false
-      const bounds = window.getBounds()
-      const pointer = screen.getCursorScreenPoint()
-      return pointer.x >= bounds.x && pointer.x <= bounds.x + 92
-        && pointer.y >= bounds.y && pointer.y <= bounds.y + 42
-    }
-    let hideTimer
-    const trackNativeWindowButtons = () => {
-      if (!window || window.isDestroyed() || window.isFullScreen()) return
-      if (pointerIsOverTrafficLights()) {
-        clearTimeout(hideTimer)
-        setNativeWindowButtons(true)
-        return
-      }
-      if (nativeWindowButtonsVisible && !hideTimer) {
-        hideTimer = setTimeout(() => {
-          hideTimer = undefined
-          if (!pointerIsOverTrafficLights()) setNativeWindowButtons(false)
-        }, 220)
-      }
-    }
-    setNativeWindowButtons(false)
-    nativeWindowButtonsPoll = setInterval(trackNativeWindowButtons, 50)
-    window.on('enter-full-screen', () => setNativeWindowButtons(true))
-    window.on('leave-full-screen', () => {
-      clearTimeout(hideTimer)
-      setNativeWindowButtons(false)
-    })
-    window.on('enter-html-full-screen', () => setNativeWindowButtons(true))
-    window.on('leave-html-full-screen', () => {
-      clearTimeout(hideTimer)
-      setNativeWindowButtons(false)
-    })
+    const nativeButtons = watchWindowButtons(window, screen)
     // Expose only a smoke-test probe; this is never enabled in normal builds.
-    if (smokeTest) window.__astariaNativeWindowButtonsVisible = () => nativeWindowButtonsVisible
+    if (smokeTest) window.__astariaNativeWindowButtonsVisible = nativeButtons.isVisible
   }
   session.defaultSession.webRequest.onBeforeSendHeaders({ urls: [`${url}*`] }, (details, callback) => {
     if (details.webContentsId !== window?.webContents.id) { callback({ cancel: true }); return }
@@ -167,14 +150,40 @@ async function start() {
   })
   window.once('ready-to-show', () => window?.show())
   window.on('closed', () => {
-    if (nativeWindowButtonsPoll) clearInterval(nativeWindowButtonsPoll)
-    nativeWindowButtonsPoll = undefined
+    clearTimeout(updateTimer)
     window = null
   })
   window.webContents.on('render-process-gone', () => {
     dialog.showErrorBox('ASTaria 页面已停止', '本机数据仍保存在数据库中。请退出后重新打开 ASTaria。')
   })
   await window.loadURL(url)
+  const healthIndex = process.argv.indexOf('--astaria-update-health')
+  if (!smokeTest && healthIndex >= 0 && process.argv[healthIndex + 1]) {
+    // The local service and renderer must both be ready before replacement succeeds.
+    const rendered = await window.webContents.executeJavaScript("new Promise(resolve => { let attempts = 0; const check = () => { if (document.querySelector('#root')?.children.length) resolve(true); else if (++attempts < 100) setTimeout(check, 100); else resolve(false); }; check(); })")
+    if (!rendered) throw new Error('Updated renderer did not start')
+    const { acknowledgeMacUpdate } = await import(pathToFileURL(path.join(resourceRoot, 'desktop/updateInstaller.mjs')).href)
+    await acknowledgeMacUpdate(path.resolve(path.dirname(process.execPath), '..', '..'), process.argv[healthIndex + 1])
+  }
+  if (!smokeTest) {
+    // One delayed startup check, then at most once every six hours while visible.
+    // Focus/resume rechecks the cached deadline instead of waking a hidden app.
+    const checkUpdates = async () => {
+      if (!quitting && window && !window.isDestroyed() && window.isVisible() && !window.isMinimized()) {
+        const state = await updates.check()
+        if (!quitting && window && !window.isDestroyed()) schedule(state.automatic && state.nextCheckAt
+          ? Math.max(60_000, Date.parse(state.nextCheckAt) - Date.now()) : 6 * 60 * 60 * 1000)
+      } else if (!quitting && window && !window.isDestroyed()) schedule(6 * 60 * 60 * 1000)
+    }
+    const schedule = delay => {
+      clearTimeout(updateTimer)
+      updateTimer = setTimeout(() => { void checkUpdates() }, delay)
+      updateTimer.unref?.()
+    }
+    window.on('focus', checkUpdates)
+    powerMonitor.on('resume', checkUpdates)
+    schedule(20_000)
+  }
   if (smokeTest) {
     const { runDesktopSmoke } = await import(pathToFileURL(path.join(resourceRoot, 'desktop/smoke.mjs')).href)
     await runDesktopSmoke(window, smokeDirectory)
@@ -194,6 +203,8 @@ app.on('window-all-closed', () => app.quit())
 app.on('before-quit', event => {
   if (quitting) return
   quitting = true
+  clearTimeout(updateTimer)
+  updates?.close()
   event.preventDefault()
   // Bound quit while preserving SQLite's atomic transactions. If a provider
   // never settles, process exit leaves durable turn recovery for next launch.

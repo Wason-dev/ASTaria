@@ -163,7 +163,7 @@ export function createLocalService({ db = createDatabase(join(DATA_DIRECTORY, 'a
       if (path === '/companion') return companion.listState({ ...(url.searchParams.get('date') ? { date: url.searchParams.get('date') } : {}), ...(url.searchParams.get('days') ? { days: Number(url.searchParams.get('days')) } : {}) })
       if (path === '/companion/string-order') return stringOrder.list({ date: url.searchParams.get('date') || undefined })
       if (path === '/companion/horizon-order') return horizonOrder.list({ date: url.searchParams.get('date') || undefined })
-      if (path === '/planner') return db.getPlanner()
+      if (path === '/planner') return freeTime.plannerState()
       if (path === '/conversation/reasoning') {
         const conversationId = identifier(url.searchParams.get('conversationId'), '对话标识')
         const requestId = identifier(url.searchParams.get('requestId'), '请求标识')
@@ -219,6 +219,7 @@ export function createLocalService({ db = createDatabase(join(DATA_DIRECTORY, 'a
       if (path === '/companion/free-time/resume') { const result = freeTime.resume(input); return { ...result, operation: result.operation ? publicOperation(result.operation, db) : null } }
       if (path === '/companion/free-time/ensure') { knownKeys(input, []); const result = freeTime.ensureDaily(); return { ...result, ...(result.operation ? { operation: publicOperation(result.operation, db) } : {}) } }
       if (path === '/companion/free-time/complete') return freeTime.completeSession(input)
+      if (path === '/companion/free-time/reopen') return freeTime.reopenSession(input)
       if (path === '/companion/scenario') return companion.previewScenario(input)
       if (path === '/companion/decision') return companion.previewDecision(input)
       if (path === '/companion/route') return completionScope.run(selectedCompletion(), () => routeAnalysis.analyze(input))
@@ -250,7 +251,7 @@ export function createLocalService({ db = createDatabase(join(DATA_DIRECTORY, 'a
         '/areas/rename': ['id', 'name'], '/events/delete': ['id'], '/availability': ['date', 'until'],
       }[path]
       if (fields) knownKeys(input, fields)
-      if (path === '/planner') return db.updatePlanner(input.action, input.expectedRevision)
+      if (path === '/planner') return freeTime.plannerState(db.updatePlanner(input.action, input.expectedRevision))
       if (path === '/settings/key') {
         if (typeof input.key !== 'string' || !/^[\x21-\x7e]{8,512}$/u.test(input.key.trim())) throw new ValidationError('请输入有效的 API Key')
         await vault.save(input.key); return status()

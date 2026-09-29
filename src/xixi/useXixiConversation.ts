@@ -4,6 +4,8 @@ import type { ChatMessage, ChatStreamDraft, ConversationState, ConversationSumma
 import type { ResponsePhase } from '../prototype/responseEffects'
 import { mergeConversation, mergeOperationReceipt } from './conversationTimeline'
 import { advanceChatStream, restoreChatReasoning } from './stream'
+import { sameSnapshot } from '../stores/sameSnapshot.ts'
+import { startVisiblePolling } from '../stores/visiblePolling.ts'
 
 export type XixiContext = { page: 'home' | 'workbench' | 'calendar' | 'timetable'; taskId?: string; date?: string; timezone: string }
 type PendingMessage = { requestId: string; conversationId: string; text: string; context: XixiContext; createdAt?: string; seq?: number }
@@ -63,7 +65,10 @@ export function useXixiConversation(onTasksChanged: () => void, onNotice: (messa
     // A transport can disconnect just before the final reply is saved. Once
     // that reply arrives through refresh, its durable transcript owns the UI.
     const settled = new Set(next.messages.filter(item => item.role === 'assistant' && !item.retractedAt && item.requestId && item.content.trim()).map(item => item.requestId!))
-    if (withdrawn.size || settled.size) setInterruptedReasoning(current => Object.fromEntries(Object.entries(current).filter(([id]) => !withdrawn.has(id) && !settled.has(id))))
+    if (withdrawn.size || settled.size) setInterruptedReasoning(current => {
+      const retained = Object.entries(current).filter(([id]) => !withdrawn.has(id) && !settled.has(id))
+      return retained.length === Object.keys(current).length ? current : Object.fromEntries(retained)
+    })
     if (!withdrawn.size) return
     for (const id of withdrawn) cancelledRequests.current.add(id)
     if (activeTransport.current && withdrawn.has(activeTransport.current.requestId)) {
@@ -73,8 +78,14 @@ export function useXixiConversation(onTasksChanged: () => void, onNotice: (messa
       busy.current = false
       setStream(null); setSending(false); setResponsePhase('idle')
     }
-    try { sessionStorage.setItem(PENDING_KEY, JSON.stringify(pendingRequests().filter(item => !withdrawn.has(item.requestId)))) } catch { /* Server-side withdrawal also prevents retry. */ }
-    setOutgoing(items => items.filter(item => !withdrawn.has(item.requestId)))
+    try {
+      const pending = pendingRequests(), retained = pending.filter(item => !withdrawn.has(item.requestId))
+      if (retained.length !== pending.length) sessionStorage.setItem(PENDING_KEY, JSON.stringify(retained))
+    } catch { /* Server-side withdrawal also prevents retry. */ }
+    setOutgoing(items => {
+      const retained = items.filter(item => !withdrawn.has(item.requestId))
+      return retained.length === items.length ? items : retained
+    })
   }, [])
 
   const refreshStatus = useCallback(async () => {
@@ -83,7 +94,7 @@ export function useXixiConversation(onTasksChanged: () => void, onNotice: (messa
       const next = await localApi<LocalStatus>('/status')
       if (!mounted.current || requestRevision !== statusRevision.current) return
       currentStatus.current = next
-      setStatus(next)
+      setStatus(current => sameSnapshot(current, next) ? current : next)
       if (next.configured) setError(previous => previous === MODEL_NOT_CONNECTED ? '' : previous)
     } catch {
       if (!mounted.current || requestRevision !== statusRevision.current) return
@@ -100,7 +111,9 @@ export function useXixiConversation(onTasksChanged: () => void, onNotice: (messa
       const next = await localApi<ConversationState>(`/conversation${id ? `?id=${encodeURIComponent(id)}` : ''}`)
       if (!mounted.current || busy.current || revision.current !== currentRevision) return
       selectedId.current = next.conversationId
-      try { sessionStorage.setItem(SELECTED_KEY, next.conversationId) } catch { /* Pending writes have a separate checked persistence step. */ }
+      try {
+        if (sessionStorage.getItem(SELECTED_KEY) !== next.conversationId) sessionStorage.setItem(SELECTED_KEY, next.conversationId)
+      } catch { /* Pending writes have a separate checked persistence step. */ }
       acceptRetractions(next)
       setConversation(current => mergeConversation(current, next))
       setLoadError('')
@@ -113,20 +126,17 @@ export function useXixiConversation(onTasksChanged: () => void, onNotice: (messa
 
   useEffect(() => {
     mounted.current = true
-    void refresh()
     void refreshStatus()
-    const poll = window.setInterval(() => {
-      if (document.visibilityState === 'visible') void refresh()
-    }, 5000)
+    const stopPolling = startVisiblePolling(() => { void refresh() }, 5000)
     const visible = () => {
-      if (document.visibilityState === 'visible') { void refresh(); void refreshStatus() }
+      if (document.visibilityState === 'visible') void refreshStatus()
     }
     document.addEventListener('visibilitychange', visible)
     return () => {
       mounted.current = false
       revision.current += 1
       statusRevision.current += 1
-      clearInterval(poll)
+      stopPolling()
       activeTransport.current?.controller.abort()
       activeTransport.current = null
       activeRequest.current = null

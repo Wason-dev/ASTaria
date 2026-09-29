@@ -112,7 +112,11 @@ export function PlannerWorkspace({ active, initialMode = 'week', tasks, tasksLoa
     </div></div>
     {routine && state && <RoutineDialog routine={routine.value === 'new' ? undefined : routine.value} source={routine.source} initialWeekday={routine.initialWeekday} state={state} act={act} onClose={() => setRoutine(null)} onNotice={onNotice} onBrowseRoutines={() => { setRoutine(null); setRoutinesOpen(true) }} />}
     {dayEvent && state && <DayEventDialog key={dayEvent.id} event={dayEvent} state={state} act={act} onClose={() => setDayEvent(null)} onNotice={onNotice} />}
-    {selectedTask && state && <TaskPlanDialog key={`${selectedTask.id}:${taskSelection?.blockId ?? ''}`} task={selectedTask} state={state} selected={taskSelection?.date ?? selected} initialBlockId={taskSelection?.blockId} act={act} onClose={() => setTaskSelection(null)} onNotice={onNotice} onRefresh={onRefresh} />}
+    {selectedTask && state && <TaskPlanDialog key={`${selectedTask.id}:${taskSelection?.blockId ?? ''}`} task={selectedTask} state={state} selected={taskSelection?.date ?? selected} initialBlockId={taskSelection?.blockId} act={act} onClose={() => setTaskSelection(null)} onNotice={onNotice} onRefresh={async () => {
+      const refreshed = await planner.refresh()
+      onRefresh()
+      if (!refreshed) throw new Error('日程暂未重新读取，请稍后重试')
+    }} />}
     {creating && <CreateTaskDialog selected={selected} onClose={() => setCreating(false)} onRefresh={onRefresh} onNotice={onNotice} />}
     {routinesOpen && state && <RoutineBrowser routines={state.routines} selectedDate={selected} onClose={() => setRoutinesOpen(false)}
       onEdit={item => { setRoutinesOpen(false); setRoutine({ value: item }) }}

@@ -1,7 +1,7 @@
 import type { Task } from '../domain/task'
 import { agendaDate, isOpenTask, localDay } from '../home/agenda'
 import { deadlineTime, upcomingDeadlines } from './deadlines'
-import { recommendationReason, taskGroups } from './tasks'
+import { recommendationReason, taskGroups, taskSchedule, scheduleDisplay } from './tasks'
 import type { WorkbenchSchedule } from './tasks'
 
 export type BriefingRecommendation = {
@@ -37,6 +37,7 @@ const DAY = 24 * 60 * MINUTE
 export type ScheduledMinutes = Readonly<Record<string, number>>
 
 export function effectiveEstimate(task: Task, scheduled: ScheduledMinutes = {}): number | undefined {
+  if (task.freeTimeGoalId) return scheduled[task.id] > 0 ? scheduled[task.id] : undefined
   return typeof task.estimateMin === 'number' && Number.isFinite(task.estimateMin) && task.estimateMin > 0
     ? task.estimateMin
     : typeof scheduled[task.id] === 'number' && Number.isFinite(scheduled[task.id]) && scheduled[task.id] > 0
@@ -46,6 +47,7 @@ export function effectiveEstimate(task: Task, scheduled: ScheduledMinutes = {}):
 export function estimateLabel(task: Task, scheduled: ScheduledMinutes = {}): string | undefined {
   const value = effectiveEstimate(task, scheduled)
   if (value === undefined) return undefined
+  if (task.freeTimeGoalId) return `本次 ${minutesLabel(value)}`
   return task.estimateMin !== undefined && Number.isFinite(task.estimateMin) && task.estimateMin > 0
     ? `原预计 ${minutesLabel(value)}` : `已排 ${minutesLabel(value)}`
 }
@@ -106,17 +108,21 @@ export function deadlineContext(task: Task, now: Date, focusMin: number, getSpen
   return { effortLabel, evidence, tone, suggestion }
 }
 
-export function buildWorkbenchBriefing(tasks: readonly Task[], now: Date, focusMin: number, getSpentMs: (id: string) => number, scheduled: ScheduledMinutes = {}, scheduleBlocks: readonly WorkbenchSchedule[] = []): WorkbenchBriefing {
+export function buildWorkbenchBriefing(tasks: readonly Task[], now: Date, focusMin: number, getSpentMs: (id: string) => number, scheduled: ScheduledMinutes = {}, scheduleBlocks: readonly WorkbenchSchedule[] = [], completedFreeTimeSessions: Readonly<Record<string, string>> = {}): WorkbenchBriefing {
   if (!Number.isFinite(now.getTime())) {
     return { availableCount: 0, dueSoonCount: 0, overdueCount: 0, completedTodayCount: 0, estimatedMin: 0, unestimatedCount: 0, recommendation: null, notices: [] }
   }
-  const { available, completed } = taskGroups(tasks, now, scheduleBlocks)
+  const { available, completed } = taskGroups(tasks, now, scheduleBlocks, completedFreeTimeSessions)
   const open = tasks.filter(task => isOpenTask(task) && !task.freeTimeGoalId)
   const deadlines = upcomingDeadlines(tasks, now)
   const today = localDay(now)
   const recommended = available[0]
   const focus = focusLength(focusMin)
-  const context = recommended ? deadlineContext(recommended, now, focus, getSpentMs, scheduled) : undefined
+  const recommendedSession = recommended?.freeTimeGoalId ? taskSchedule(recommended, now, scheduleBlocks, completedFreeTimeSessions) : undefined
+  const context = recommendedSession ? {
+    suggestion: `推进这一次余时安排，完成后保留长期目标与之后的安排`,
+    evidence: [scheduleDisplay(recommendedSession, now), estimateLabel(recommended!, scheduled) ?? '本次余时'],
+  } : recommended ? deadlineContext(recommended, now, focus, getSpentMs, scheduled) : undefined
   const notices: BriefingNotice[] = []
   const overEstimate = open.filter(task => {
     const expected = effectiveEstimate(task, scheduled)
@@ -133,6 +139,10 @@ export function buildWorkbenchBriefing(tasks: readonly Task[], now: Date, focusM
   if (unconfirmed.length) {
     notices.push({ id: 'missing-deadlines', title: `${unconfirmed.length} 项没有明确截止`, body: '这些事项仍保留在任务区，暂时不出现在 Upcoming', taskIds: unconfirmed.map(task => task.id) })
   }
+  const freeTimeTasks = new Set(tasks.filter(task => isOpenTask(task) && task.freeTimeGoalId).map(task => task.id))
+  const completedSessionToday = new Set(scheduleBlocks.filter(block => block.id && freeTimeTasks.has(block.taskId)
+    && Object.hasOwn(completedFreeTimeSessions, block.id)
+    && agendaDate(completedFreeTimeSessions[block.id]) && localDay(agendaDate(completedFreeTimeSessions[block.id])!) === today).map(block => block.id)).size
   return {
     availableCount: available.length,
     dueSoonCount: deadlines.filter(item => item.deadlineMs > now.getTime() && item.deadlineMs - now.getTime() <= DAY).length,
@@ -140,7 +150,7 @@ export function buildWorkbenchBriefing(tasks: readonly Task[], now: Date, focusM
     completedTodayCount: completed.filter(task => {
       const done = agendaDate(task.doneAt)
       return done !== undefined && localDay(done) === today
-    }).length,
+    }).length + completedSessionToday,
     estimatedMin: available.reduce((total, task) => total + (effectiveEstimate(task, scheduled) ?? 0), 0),
     unestimatedCount: unestimated.length,
     recommendation: recommended && context ? {

@@ -4,6 +4,7 @@ import {
   restoreFocusTimer, selectFocusTask, startFocusRest, startFocusTimer, taskFocusSpentMs,
 } from './focusTimer'
 import type { FocusDurations, FocusTimerState } from './focusTimer'
+import { createFocusTimerTicker } from './focusTimerTicker'
 import { usePreferences } from '../xixi/preferences'
 
 function loadTimer(storageKey: string) {
@@ -15,7 +16,7 @@ function loadTimer(storageKey: string) {
 }
 
 /** Mount a separate instance/key for sample previews so they never alter real focus records. */
-export function useFocusTimer(storageKey: string) {
+export function useFocusTimer(storageKey: string, active = true) {
   const preferences = usePreferences()
   const [initial] = useState(() => loadTimer(storageKey))
   const model = useRef(initial.state)
@@ -46,28 +47,36 @@ export function useFocusTimer(storageKey: string) {
 
   useEffect(() => {
     // Keep the in-memory timer during StrictMode effect replay; an actual unmount
-    // saves a paused checkpoint without leaving a background interval alive.
-    model.current = advanceFocusTimer(model.current, Date.now())
-    setSession(focusTimerSession(model.current))
-    setCurrentDurations(model.current.durations)
-    persist(model.current)
-    const tick = () => {
-      const before = model.current
-      const next = advanceFocusTimer(before, Date.now())
-      const finished = focusTimerSession(before)?.phase === 'running' && focusTimerSession(next)?.phase === 'finished'
-      commit(next, finished)
-    }
-    const checkpoint = () => commit(advanceFocusTimer(model.current, Date.now()))
-    const interval = window.setInterval(tick, 250)
+    // saves a paused checkpoint. Visibility and phase changes must not pause it.
+    return () => persist(pauseFocusTimer(model.current, Date.now()), false)
+  }, [persist])
+
+  useEffect(() => {
+    const ticker = createFocusTimerTicker({
+      remainingMs: () => {
+        const current = focusTimerSession(model.current)
+        return current?.phase === 'running' ? current.remainingMs : null
+      },
+      isVisible: () => active && document.visibilityState !== 'hidden',
+      tick: checkpoint => {
+        const before = model.current
+        const next = advanceFocusTimer(before, Date.now())
+        const finished = focusTimerSession(before)?.phase === 'running' && focusTimerSession(next)?.phase === 'finished'
+        commit(next, checkpoint || finished)
+      },
+      setTimeout: (callback, delay) => window.setTimeout(callback, delay),
+      clearTimeout: id => window.clearTimeout(id),
+    })
+    const checkpoint = () => ticker.refresh(true)
+    checkpoint()
     document.addEventListener('visibilitychange', checkpoint)
     window.addEventListener('pagehide', checkpoint)
     return () => {
-      window.clearInterval(interval)
+      ticker.stop()
       document.removeEventListener('visibilitychange', checkpoint)
       window.removeEventListener('pagehide', checkpoint)
-      persist(pauseFocusTimer(model.current, Date.now()), false)
     }
-  }, [commit, persist])
+  }, [active, session?.phase, session?.taskId, session?.mode, session?.durationMs, commit])
 
   const selectTask = useCallback((taskId: string) => commit(selectFocusTask(model.current, taskId, Date.now())), [commit])
   const start = useCallback(() => commit(startFocusTimer(model.current, Date.now())), [commit])

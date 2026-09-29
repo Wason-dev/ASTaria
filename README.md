@@ -8,9 +8,9 @@ ASTaria 是以析熙为伴的个人时间与事项应用。黑洞首页连接对
 - **日程**回答「现在要做什么」：一起查看课程、固定活动、截止时间与具体任务时段。
 - **余时**回答「未来想做什么」：持续学习目标按真实空档推进；弦轨让用户先调整日期与顺序，再按真实空档在本机安排具体时间。
 
-默认进入黑洞首页，事项界面可从 `/#/app` 进入。首页、工作台与日程共享析熙对话、本机任务和记忆。`0.1.0-beta.2` 面向 macOS Apple Silicon 的小范围内测；尚不是正式版。
+默认进入黑洞首页，事项界面可从 `/#/app` 进入。首页、工作台与日程共享析熙对话、本机任务和记忆。`0.1.0-beta.3` 面向 macOS Apple Silicon 的小范围内测；尚不是正式版。
 
-累计功能与修复见[更新记录](./CHANGELOG.md)，本轮实际结果见[发布说明](./docs/RELEASE_NOTES_v0.1.0-beta.2.md)。安装包与版本说明见 [v0.1.0-beta.2 Release](https://github.com/Wason-dev/ASTaria/releases/tag/v0.1.0-beta.2)。
+累计功能与修复见[更新记录](./CHANGELOG.md)，本轮实际结果见[发布说明](./docs/RELEASE_NOTES_v0.1.0-beta.3.md)。安装包与版本说明见 [v0.1.0-beta.3 Release](https://github.com/Wason-dev/ASTaria/releases/tag/v0.1.0-beta.3)。
 
 ## 技术栈
 
@@ -162,7 +162,7 @@ public/               静态资源与 ASTaria 图标
 
 ## macOS 内测与发布范围
 
-本轮面向 macOS 13+ Apple Silicon（arm64）Mac 制作 beta 包。桌面运行时采用 Electron 44.1.0，内含 Node 本机服务和预编译的钥匙串助手。构建机需要 Apple Silicon Mac、arm64 Node.js 24.19+（Node 24 系列）、Command Line Tools 和独立取得的干净 Electron.app 及其 LICENSE、LICENSES.chromium.html；应用运行时不应依赖开发服务器或系统 Node。测试范围见[发布说明](./docs/RELEASE_NOTES_v0.1.0-beta.2.md)。
+本轮面向 macOS 13+ Apple Silicon（arm64）Mac 制作 beta 包。桌面运行时采用 Electron 44.1.0，内含 Node 本机服务和预编译的钥匙串助手。构建机需要 Apple Silicon Mac、arm64 Node.js 24.19+（Node 24 系列）、Command Line Tools 和独立取得的干净 Electron.app 及其 LICENSE、LICENSES.chromium.html；应用运行时不应依赖开发服务器或系统 Node。测试范围见[发布说明](./docs/RELEASE_NOTES_v0.1.0-beta.3.md)。
 
 ```bash
 npm ci
@@ -171,23 +171,27 @@ node scripts/third-party-notices.mjs
 npm run package:desktop -- --runtime /path/to/Electron.app --out desktop-builds
 ```
 
-打包器拒绝覆盖同版本产物，只复制指定源码和构建文件，编译并随包放入钥匙串助手、Electron/Chromium 许可和 [第三方依赖许可清单](./THIRD_PARTY_NOTICES.txt)，然后完成 ad-hoc 签名、压缩和 SHA-256 清单。`--runtime` 必须指向 arm64 Electron.app，Electron 的两份许可文件须与它同目录。打包不包含个人数据库、密钥、环境文件或测试日志。包与校验文件见 [v0.1.0-beta.2 Release](https://github.com/Wason-dev/ASTaria/releases/tag/v0.1.0-beta.2)。
+打包器拒绝覆盖同版本产物，只复制指定源码和构建文件，编译并随包放入钥匙串助手、Electron/Chromium 许可和 [第三方依赖许可清单](./THIRD_PARTY_NOTICES.txt)，然后完成 ad-hoc 签名、压缩和 SHA-256 清单。`--runtime` 必须指向 arm64 Electron.app，Electron 的两份许可文件须与它同目录。打包不包含个人数据库、密钥、环境文件或测试日志。包与校验文件见 [v0.1.0-beta.3 Release](https://github.com/Wason-dev/ASTaria/releases/tag/v0.1.0-beta.3)。
 
-以上命令默认将新产物写入 `desktop-builds/ASTaria-0.1.0-beta.2-mac-arm64/`。版本 Release 提供 DMG、ZIP、SHA-256、安装说明和记录源码提交的构建清单；本机开发产物留在被 Git 忽略的 `desktop-builds/`。应用使用层叠三瓣 SVG 图标及透明顶部拖动区；图标生成方法见 [图标说明](./design/icon-vector/README.md)。
+以上命令默认将新产物写入 `desktop-builds/ASTaria-0.1.0-beta.3-mac-arm64/`。版本 Release 提供 DMG、ZIP、SHA-256、安装说明和记录源码提交的构建清单；本机开发产物留在被 Git 忽略的 `desktop-builds/`。应用使用层叠三瓣 SVG 图标及透明顶部拖动区；图标生成方法见 [图标说明](./design/icon-vector/README.md)。
 
 小范围测试 DMG 包含 App、Applications 快捷方式及中文安装说明；不含开发者的课表、事项、析熙聊天、记忆、数据库或备份。先退出旧版，再将 App 拖到「应用程序」。App 和 DMG 均为 ad-hoc 签名、未公证；若被 macOS 拦截，先核对来源和校验值，优先使用「系统设置 → 隐私与安全性 → 仍要打开」。[安装说明](./docs/INSTALL.md) 另附只针对此 App 的终端命令。
 
-2026-09-27 完整自动化回归 **1152/1152 通过**，类型检查与桌面构建通过；本 beta 修复全屏模式下鼠标与左上角原生窗口圆点显示问题，并修复析熙回执泄露内部执行词汇。智能分组、清透／磨砂编辑器、DMG 挂载与复制安装后的隔离安装与启动检查已验收；真实账号全流程、干净机器、休眠恢复及长期功耗仍需继续测试。详细范围见[发布说明](./docs/RELEASE_NOTES_v0.1.0-beta.2.md)。
+2026-09-29 的 beta.3 增加可校验的下载与重启安装、工作台余时单次安排入口，并继续减少后台轮询和绘制分配。工作台、日程、余时的单次完成／撤回以及跨日隔离已通过真实页面验收；清透／磨砂设置、更新失败重试与取消、安装失败回退均已验证。完整范围见[发布说明](./docs/RELEASE_NOTES_v0.1.0-beta.3.md)，性能测量见[性能说明](./docs/PERFORMANCE.md)。干净机器、休眠恢复和长期功耗仍需继续测试。
 
 备份导出与恢复已统一为格式化 JSON 的 32 MiB UTF-8 字节上限，超限明确拒绝且不改动本机数据，不再导出无法恢复的超限文件。中文字节、精确上限、超限拒绝与失败原子性测试已通过。恢复会更新状态，之后的新备份仍会重新核验大小。
 
 桌面端沿用 `~/Library/Application Support/ASTaria/` 的本机业务数据。首次运行前应从「设置 → 数据」导出备份，并保留原备份文件；浏览器保存的专注计时、外观调参等状态不等同于 SQLite 数据，不应假定会自动复制进桌面容器。DeepSeek 密钥继续由 macOS 钥匙串管理；若使用本地模型，Ollama 或 LM Studio 仍需在本机运行。
 
-当前不承诺 Intel Mac、Windows、iOS 或 Android 原生包，也未提供自动更新和关闭应用后的系统后台提醒。个人内测可以使用 ad-hoc 签名；对外分发应完成 Developer ID 签名、公证和干净机器验证，不能把关闭系统安全保护作为安装步骤。实际帧率、休眠恢复与长期功耗需要在目标设备测量。
+「设置 → 通用 → App 更新」支持检查 GitHub 发布、查看更新说明及下载匹配芯片架构的 DMG。自动检查默认开启，App 可见时最多每六小时检查一次，也可关闭或手动检查；遇到 GitHub 限流会退避，不反复请求。检查仅读取公开版本信息，不发送课表、聊天或模型密钥。Beta 安装可接收后续 beta 和正式版，正式版只接收正式发布。同版本替换包通过更晚的 App 构建时间和不同源码提交识别，编辑 Release 说明不会触发更新。
+
+从 beta.3 起，可在设置中「下载并校验」后选择「安装并重启」。下载支持取消；安装前核对 SHA-256、包大小、App 身份、架构、构建记录和代码签名，原应用在新版本启动成功前保留，失败会尝试回退。本机数据不随 App 替换。旧版尚无安装更新功能，需要先手动安装 beta.3 一次。App 必须位于可写目录；直接从 DMG 或受系统隔离的临时路径运行时，请先复制安装。发布须同时上传匹配的 DMG 和构建清单。
+
+当前不承诺 Intel Mac、Windows、iOS 或 Android 原生包，也未提供关闭应用后的系统后台提醒。个人内测可以使用 ad-hoc 签名；对外分发应完成 Developer ID 签名、公证和干净机器验证，不能把关闭系统安全保护作为安装步骤。实际帧率、休眠恢复与长期功耗需要在目标设备测量。
 
 ## 公开与反馈
 
-当前 Release 是预发布 beta，面向 macOS 13+ Apple Silicon。它不代表 Developer ID 签名、公证或自动更新已经接入。
+当前 Release 是预发布 beta，面向 macOS 13+ Apple Silicon。当前使用 ad-hoc 签名，尚未完成 Developer ID 签名和 Apple 公证。
 
 主项目采用 Apache-2.0；资源来源见 [资源说明](./ASSET_PROVENANCE.md)。第三方依赖许可正文见 [THIRD_PARTY_NOTICES.txt](./THIRD_PARTY_NOTICES.txt)。
 

@@ -4,9 +4,12 @@ import type { Task } from '../domain/task'
 import { GlassSamplingContext, MeasuredGlassSurface } from '../home/GlassSurface'
 import { agendaDate, localDay } from '../home/agenda'
 import { taskStore } from '../stores/taskStore'
+import { notifyLocalDataChange } from '../stores/migration'
+import { localApi } from '../xixi/api'
 import { deadlineShortcuts } from '../xixi/deadlineShortcuts'
 import { PlannerIcon as Icon } from './PlannerIcon'
 import { weeklyRoutineSource } from './model'
+import { freeTimeCompletionAction, isFreeTimeSessionTask, planBlockCompleted } from './completion'
 import type { DayEvent, PlanBlock, PlannerAction, PlannerState, Routine, TaskPreparation } from './types'
 
 type Act = (action: PlannerAction, expectedRevision?: number) => Promise<PlannerState>
@@ -142,7 +145,7 @@ export function DayEventDialog({ event, state, act, onClose, onNotice }: { event
   </PlannerDialog>
 }
 
-export function TaskPlanDialog({ task, state, selected, initialBlockId, act, onClose, onNotice, onRefresh }: { task: Task; state: PlannerState; selected: string; initialBlockId?: string; act: Act; onClose: () => void; onNotice: (text: string) => void; onRefresh: () => void }) {
+export function TaskPlanDialog({ task, state, selected, initialBlockId, act, onClose, onNotice, onRefresh }: { task: Task; state: PlannerState; selected: string; initialBlockId?: string; act: Act; onClose: () => void; onNotice: (text: string) => void; onRefresh: () => Promise<void> }) {
   const details = state.details[task.id] ?? EMPTY_DETAILS
   const [items, setItems] = useState(details.items.join('、')), [preparation, setPreparation] = useState(details.preparation)
   const [needsSubmission, setNeedsSubmission] = useState(details.needsSubmission)
@@ -153,6 +156,8 @@ export function TaskPlanDialog({ task, state, selected, initialBlockId, act, onC
   const currentBlock = existing.find(block => block.id === editing.id)
   const locked = Boolean(currentBlock?.locked)
   const canPlan = task.status !== 'done' && task.status !== 'dropped'
+  const sessionTask = isFreeTimeSessionTask(task)
+  const sessionAction = freeTimeCompletionAction(task, state, currentBlock?.id)
   const [busy, setBusy] = useState(false), [error, setError] = useState('')
   const [removing, setRemoving] = useState<string | null>(null)
   const [removingTask, setRemovingTask] = useState(false)
@@ -184,9 +189,33 @@ export function TaskPlanDialog({ task, state, selected, initialBlockId, act, onC
     setBusy(true); setError('')
     try {
       await taskStore.updateTask(task.id, { deletedAt: new Date().toISOString() }, task.updatedAt)
-      onRefresh(); onNotice('事项已删除'); setFinished(true)
+      await onRefresh(); onNotice('事项已删除'); setFinished(true)
     } catch (reason) { setError(explain(reason)); setRemovingTask(false) } finally { setBusy(false) }
   }
+  const toggleCompletion = async () => {
+    if (busy || (sessionTask && (stale || !sessionAction))) return
+    setBusy(true); setError('')
+    let saved = false
+    try {
+      if (sessionAction) {
+        await localApi(sessionAction.path, sessionAction.input)
+        notifyLocalDataChange()
+      } else if (task.status === 'done') await taskStore.reopenTask(task.id, task.updatedAt)
+      else await taskStore.updateTask(task.id, { status: 'done' }, task.updatedAt)
+      saved = true
+      await onRefresh()
+      onNotice(sessionAction ? sessionAction.completed ? '已撤回本次完成，长期目标继续保留' : '本次已完成，余时进度已同步'
+        : task.status === 'done' ? '已撤回完成，恢复原状态' : '任务已完成')
+    } catch (reason) {
+      setError(`${saved ? '完成状态已保存，页面同步遇到问题：' : ''}${explain(reason)}`)
+      try { await onRefresh() } catch { /* Keep the specific action or synchronization error. */ }
+    } finally { setBusy(false) }
+  }
+  const completionLabel = sessionTask ? sessionAction?.completed ? '撤回本次完成' : '完成本次' : task.status === 'done' ? '撤回完成' : '标记完成'
+  const completionStatus = sessionTask ? currentBlock
+    ? `${currentBlock.date} ${currentBlock.start}–${currentBlock.end} · ${sessionAction?.completed ? '本次已完成' : '本次待完成'}`
+    : '请先选择已保存的时段，再完成本次'
+    : task.status === 'done' ? '任务已完成' : task.status === 'doing' ? '任务进行中' : '任务待办'
   return <PlannerDialog title="事项与安排" onClose={onClose} busy={busy} closeRequested={finished}>
     <p className="pl-dialog-task-title">{task.title}</p>
     <p className="pl-muted">{task.due ? `截止 ${task.due.length === 10 ? task.due : new Date(task.due).toLocaleString('zh-CN', { hour12: false })}` : '尚未设置截止日期'} · {task.estimateMin ? `预计 ${task.estimateMin} 分钟` : '用时待估'}</p>
@@ -204,18 +233,20 @@ export function TaskPlanDialog({ task, state, selected, initialBlockId, act, onC
       {existing.length === 0 && originalDate && task.startAt?.includes('T') && <p className="pl-muted">原计划 {localDay(originalDate)} {originalDate.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })} · 新增具体时段后以新安排为准</p>}
       {existing.map(block => {
         const chosen = block.id === editing.id
-        const label = <><span>{block.date}　{block.start}–{block.end}{block.locked && <Icon name="lock" />}</span>{chosen && canPlan && <small>当前时段</small>}</>
-        return <div className="pl-plan-row" key={block.id} data-selected={chosen && canPlan}>
+        const completed = sessionTask && planBlockCompleted(task, state, block)
+        const label = <><span>{block.date}　{block.start}–{block.end}{completed && ' · 本次已完成'}{block.locked && <Icon name="lock" />}</span>{chosen && canPlan && <small>当前时段</small>}</>
+        return <div className="pl-plan-row" key={block.id} data-selected={chosen && canPlan} data-done={completed}>
           {canPlan && (existing.length > 1 || !currentBlock) ? <button className="pl-plan-select" type="button" disabled={busy || stale} aria-pressed={chosen} aria-label={`选择 ${block.date} ${block.start}–${block.end} 时段`} onClick={() => { setEditing(block); setRemoving(null); setError('') }}>{label}</button> : <div className="pl-plan-label">{label}</div>}
           <div className="pl-plan-actions">{block.locked ? <button className="pl-secondary" disabled={busy || stale} onClick={() => void execute({ type: 'save-block', block: { ...block, locked: false } }, '已解锁时段')}>解锁</button> : <button className="pl-icon-button" disabled={busy || stale} title={removing === block.id ? '确认移除' : '移除时段'} aria-label={removing === block.id ? '确认移除时段' : `移除 ${block.date} ${block.start} 时段`} onClick={() => { if (removing !== block.id) { setRemoving(block.id); return } void execute({ type: 'delete-block', id: block.id }, '已移除时段') }}><Icon name={removing === block.id ? 'check' : 'close'} /></button>}</div>
         </div>
       })}
       {canPlan && locked && <p className="pl-muted" role="note">这段时间已锁定，解锁后可以修改。</p>}
+      {sessionAction?.completed && <p className="pl-muted" role="note">本次已完成；如需修改时段，请先撤回本次完成。</p>}
     </section>
     {canPlan && <form className="pl-form pl-plan-form" onSubmit={event => {
-      event.preventDefault(); if (locked) return
+      event.preventDefault(); if (locked || sessionAction?.completed) return
       void execute({ type: 'save-block', block: editing }, '计划已写入日历')
-    }}><fieldset disabled={busy || stale || locked}>
+    }}><fieldset disabled={busy || stale || locked || sessionAction?.completed}>
       <label>日期<input type="date" required value={editing.date} onChange={e => setEditing({ ...editing, date: e.target.value })} /></label>
       <div className="pl-form-pair"><label>开始<input type="time" required value={editing.start} onChange={e => setEditing({ ...editing, start: e.target.value })} /></label><label>结束<input type="time" required value={editing.end} onChange={e => setEditing({ ...editing, end: e.target.value })} /></label></div>
       <label className="pl-checkbox"><input type="checkbox" checked={editing.locked} onChange={e => setEditing({ ...editing, locked: e.target.checked })} />锁定这段时间</label>
@@ -224,11 +255,7 @@ export function TaskPlanDialog({ task, state, selected, initialBlockId, act, onC
     {removingTask ? <section className="pl-task-delete-confirm" aria-label="确认删除事项">
       <p>删除「{task.title}」？</p><p className="pl-muted">事项、截止提醒和全部关联时段会一起移除{existing.some(block => block.locked) ? '，包括已锁定的时段' : ''}</p>
       <div className="pl-task-status-buttons"><button className="pl-secondary" type="button" disabled={busy} onClick={() => setRemovingTask(false)}>保留事项</button><button className="pl-secondary pl-delete" type="button" disabled={busy || stale} onClick={() => void removeTask()}>确认删除事项</button></div>
-    </section> : <div className="pl-task-status-actions"><span>{task.status === 'done' ? '任务已完成' : task.status === 'doing' ? '任务进行中' : '任务待办'}</span><div className="pl-task-status-buttons"><button className="pl-delete" type="button" disabled={busy || stale} onClick={() => void removeTask()}>删除事项</button><button className="pl-secondary" disabled={busy} onClick={async () => {
-      setBusy(true); setError('')
-      try { if (task.status === 'done') await taskStore.reopenTask(task.id, task.updatedAt); else await taskStore.updateTask(task.id, { status: 'done' }, task.updatedAt); onRefresh(); onNotice(task.status === 'done' ? '已撤回完成，恢复原状态' : '任务已完成') }
-      catch (reason) { setError(explain(reason)) } finally { setBusy(false) }
-    }}><Icon name={task.status === 'done' ? 'undo' : 'check'} />{task.status === 'done' ? '撤回完成' : '标记完成'}</button></div></div>}
+    </section> : <div className="pl-task-status-actions"><span>{completionStatus}</span><div className="pl-task-status-buttons"><button className="pl-delete" type="button" disabled={busy || stale} onClick={() => void removeTask()}>删除事项</button><button className="pl-secondary" disabled={busy || (sessionTask && (stale || !sessionAction))} onClick={() => void toggleCompletion()}><Icon name={sessionTask ? sessionAction?.completed ? 'undo' : 'check' : task.status === 'done' ? 'undo' : 'check'} />{completionLabel}</button></div></div>}
   </PlannerDialog>
 }
 

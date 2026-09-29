@@ -1,0 +1,18 @@
+.xixi-app-updates .xixi-app-version{font-variant-numeric:tabular-nums;overflow-wrap:anywhere;text-align:right}
+.xixi-app-update-feedback{margin-top:13px;min-height:42px}
+:is(.p0,.app-shell) .xixi-settings .xixi-app-update-feedback p{margin:0 0 3px;color:var(--settings-ink)}
+:is(.p0,.app-shell) .xixi-settings .xixi-app-update-feedback[data-error=true] p{color:var(--settings-accent)}
+.xixi-app-update-actions{gap:10px 14px}
+.xixi-app-update-actions a{color:var(--settings-accent);font-size:11px;text-underline-offset:3px;overflow-wrap:anywhere}
+.xixi-app-update-actions .xixi-app-update-download{display:inline-flex;align-items:center;min-height:32px;box-sizing:border-box;border:1px solid var(--settings-line);border-radius:12px;background:var(--settings-control);padding:6px 11px;color:var(--settings-ink);text-decoration:none;line-height:1.5}
+.xixi-app-update-actions button.xixi-app-update-download{font:inherit;cursor:pointer}
+.xixi-app-update-actions button.xixi-app-update-download:disabled{opacity:.55;cursor:default}
+.xixi-update-progress{display:flex;align-items:center;gap:12px;margin:12px 0;color:var(--settings-ink);font-variant-numeric:tabular-nums}
+.xixi-update-progress progress{flex:1;min-width:0;max-width:300px;height:5px;accent-color:var(--settings-accent)}
+.xixi-app-update-actions .xixi-app-update-download:hover{background:#d8bb791c;border-color:#d8bb7960}
+.xixi-app-update-actions a:focus-visible,.xixi-app-update-notes summary:focus-visible{outline:2px solid var(--settings-accent);outline-offset:3px;border-radius:4px}
+.xixi-app-update-notes{margin-top:16px;padding-top:12px;border-top:1px solid var(--settings-line)}
+.xixi-app-update-notes summary{cursor:pointer;font-size:12px;color:var(--settings-ink)}
+.xixi-app-update-notes summary small{margin-left:12px}
+:is(.p0,.app-shell) .xixi-settings .xixi-app-update-notes p{white-space:pre-wrap;overflow-wrap:anywhere;max-height:260px;overflow-y:auto;margin:10px 0 0;line-height:1.8;scrollbar-width:thin;scrollbar-color:#d5bb8b50 transparent}
+:is(.p0,.app-shell) .xixi-settings .xixi-app-update-install{margin-top:13px}

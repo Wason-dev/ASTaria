@@ -6,6 +6,7 @@ import type { Preferences } from './preferences'
 import { notificationsAllowed } from './preferences'
 import { localDay } from '../home/agenda'
 import { LOCAL_DATA_CHANGE } from '../stores/migration'
+import { startVisiblePolling } from '../stores/visiblePolling'
 
 /** Uses saved actions and explicit calendar conditions; never invents an AI reply. */
 export function useXixiNotice(preferences: Preferences, enabled: boolean) {
@@ -30,11 +31,11 @@ export function useXixiNotice(preferences: Preferences, enabled: boolean) {
         setNotice(opportunity ? `${opportunity.kind === 'carry' ? '出门前看看' : '有空时可以考虑'} · ${opportunity.title}` : '')
       } catch { /* An unavailable service must not manufacture a notification. */ }
     }
-    void refresh()
-    const timer = setInterval(() => void refresh(), 60000)
+    const stopPolling = startVisiblePolling(() => void refresh(), 60000)
     const change = () => void refresh()
-    window.addEventListener(LOCAL_DATA_CHANGE, change); document.addEventListener('visibilitychange', change)
-    return () => { live = false; generation.current++; clearInterval(timer); window.removeEventListener(LOCAL_DATA_CHANGE, change); document.removeEventListener('visibilitychange', change) }
+    const hide = () => { if (document.hidden) { generation.current++; setNotice('') } }
+    window.addEventListener(LOCAL_DATA_CHANGE, change); document.addEventListener('visibilitychange', hide)
+    return () => { live = false; generation.current++; stopPolling(); window.removeEventListener(LOCAL_DATA_CHANGE, change); document.removeEventListener('visibilitychange', hide) }
   }, [preferences.notifications.enabled, preferences.notifications.opportunities, preferences.notifications.quietStart, preferences.notifications.quietEnd, enabled])
   return notice
 }

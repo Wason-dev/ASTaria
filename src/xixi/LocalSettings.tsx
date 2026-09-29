@@ -11,6 +11,7 @@ import { notifyLocalDataChange } from '../stores/migration'
 import { GlassSamplingContext, MeasuredGlassSurface } from '../home/GlassSurface'
 import { WorkspaceHeading } from '../ui/WorkspaceHeading'
 import { ModelConnection } from './ModelConnection'
+import { AppUpdates } from './AppUpdates'
 import { HorizonTuningPanel } from './HorizonTuningPanel'
 import { BACKUP_MAX_BYTES, BACKUP_EXPORT_TOO_LARGE, BACKUP_IMPORT_TOO_LARGE, backupByteLength, serializeBackup } from './backupLimits'
 import './settings.css'
@@ -149,6 +150,7 @@ export function LocalSettings({ onClose, onSaved, onEffectChange, onPreviewEffec
     <nav className="xixi-settings-tabs" aria-label="设置分区">{TABS.map(item => <button key={item} type="button" aria-current={tab === item ? 'page' : undefined} onClick={() => { setTab(item); onStopPreview?.(); scroll.current?.scrollTo({ top: 0 }) }}>{item}</button>)}</nav>
     <div className="xixi-settings-content" data-section={tab} key={tab}>
     {tab === '通用' && <section><h3>按照你的习惯打开</h3><Row title="启动页面" note="首页始终保留沉浸式黑洞"><select aria-label="启动页面" value={(['calendar', 'timetable'].includes(preferences.startupPage) ? 'schedule' : preferences.startupPage)} disabled={!ready || busy} onChange={event => void savePreferences({ ...preferences, startupPage: event.target.value as Preferences['startupPage'] })}><option value="home">首页</option><option value="workbench">工作台</option><option value="schedule">日程</option><option value="companion">余时</option></select></Row><Row title="当前日期与时区" note="日期和钟点跟随这台电脑，避免产生两套时间"><output>{Intl.DateTimeFormat().resolvedOptions().timeZone}<br />{new Date().toLocaleString('zh-CN', { hourCycle: 'h23' })}</output></Row><Row title="当前任务" note="明确的 DDL 优先，再结合进行状态和重要程度"><span>与工作台共用真实事项</span></Row></section>}
+    {tab === '通用' && <AppUpdates visible={!previewVisible && !closing} />}
     {tab === '析熙' && <>
       <ModelConnection status={status} busy={busy} onAction={action} />
       <section className="xixi-assistant-preferences"><h3>相处与决定</h3>

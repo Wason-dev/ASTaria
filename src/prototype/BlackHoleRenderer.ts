@@ -165,7 +165,7 @@ function createStars() {
 /** Owns the GPU, animation clock, adaptive resolution and its complete lifecycle. */
 export class BlackHoleRenderer {
   private readonly host: HTMLElement
-  private readonly onStats: (stats: RenderStats) => void
+  private readonly onStats: ((stats: RenderStats) => void) | undefined
   private readonly onError: (message: string) => void
   private readonly renderer: THREE.WebGLRenderer
   private readonly camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1)
@@ -212,6 +212,8 @@ export class BlackHoleRenderer {
   private view: CameraView | 'custom' = 'panorama'
   private readonly samples: number[] = []
   private readonly sessionSamples: number[] = []
+  private sessionSampleCursor = 0
+  private profileInitialized = false
   private quality: Quality = 'ultra'
   private requestedQuality: QualityMode = 'auto'
   private paused = false
@@ -245,7 +247,7 @@ export class BlackHoleRenderer {
   private activeDpr = 0
   private starTextureDirty = true
 
-  constructor(host: HTMLElement, onStats: (stats: RenderStats) => void, onError: (message: string) => void) {
+  constructor(host: HTMLElement, onStats: ((stats: RenderStats) => void) | undefined, onError: (message: string) => void) {
     this.host = host
     this.onStats = onStats
     this.onError = onError
@@ -375,6 +377,8 @@ export class BlackHoleRenderer {
 
   setRenderProfile(profile: RenderProfile, scene: RenderScene = 'home') {
     const next = normalizeRenderProfile(profile)
+    if (this.profileInitialized && this.renderProfile === next && this.renderScene === scene) return
+    this.profileInitialized = true
     this.renderProfile = next
     this.renderScene = scene
     const config = resolveRenderProfile(next, scene)
@@ -523,7 +527,7 @@ export class BlackHoleRenderer {
   }
 
   getFrameSamples() {
-    return [...this.sessionSamples]
+    return this.sessionSampleCursor ? [...this.sessionSamples.slice(this.sessionSampleCursor), ...this.sessionSamples.slice(0, this.sessionSampleCursor)] : [...this.sessionSamples]
   }
 
   dispose() {
@@ -559,6 +563,7 @@ export class BlackHoleRenderer {
     this.renderer.domElement.remove()
     this.samples.length = 0
     this.sessionSamples.length = 0
+    this.sessionSampleCursor = 0
   }
 
   private ambientIsRunning() {
@@ -763,8 +768,11 @@ export class BlackHoleRenderer {
     if (ambient && this.previousWasAmbient && elapsed > 0) {
       this.samples.push(elapsed)
       if (this.samples.length > SAMPLE_COUNT) this.samples.shift()
-      this.sessionSamples.push(elapsed)
-      if (this.sessionSamples.length > SESSION_SAMPLE_COUNT) this.sessionSamples.shift()
+      if (this.sessionSamples.length < SESSION_SAMPLE_COUNT) this.sessionSamples.push(elapsed)
+      else {
+        this.sessionSamples[this.sessionSampleCursor] = elapsed
+        this.sessionSampleCursor = (this.sessionSampleCursor + 1) % SESSION_SAMPLE_COUNT
+      }
       this.adaptQuality(elapsed)
     }
     if (ambient) this.simulationTime += delta
@@ -895,11 +903,11 @@ export class BlackHoleRenderer {
   }
 
   private publishStats = () => {
-    if (!this.disposed) this.onStats(this.getSnapshot())
+    if (!this.disposed && this.onStats) this.onStats(this.getSnapshot())
   }
 
   private syncStatsTimer() {
-    if (!this.ambientIsRunning()) {
+    if (!this.onStats || !this.ambientIsRunning()) {
       this.stopStatsTimer()
     } else if (this.statsTimer === null) {
       this.statsTimer = setInterval(this.publishStats, 1000)

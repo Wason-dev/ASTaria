@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useSyncExternalStore } from 'react'
 import { localApi } from './api'
 import type { ResponseEffectSettings } from '../prototype/responseEffects'
 import { normalizeResponseEffect } from '../prototype/responseEffects'
 import type { RenderProfile } from '../prototype/renderProfile'
+import { createPreferencesStore } from './preferencesStore.ts'
 
 export type Preferences = {
   version: 1; startupPage: 'home' | 'workbench' | 'schedule' | 'companion'; theme: 'dark' | 'light'; grid: boolean
@@ -20,29 +21,30 @@ export const DEFAULT_PREFERENCES: Preferences = {
   focus: { focusMin: 35, restMin: 5 }, scheduling: { bufferMin: 10 },
 }
 export const PREFERENCE_CHANGE = 'astaria-preferences-change'
-export function publishPreferences(value: Preferences) { window.dispatchEvent(new CustomEvent(PREFERENCE_CHANGE, { detail: value })) }
-export function usePreferences() {
-  const [value, setValue] = useState<Preferences>(DEFAULT_PREFERENCES)
-  const [loaded, setLoaded] = useState(false)
-  const [error, setError] = useState('')
-  const mounted = useRef(true)
-  const revision = useRef(0)
-  const refresh = useCallback(async () => {
-    const current = ++revision.current
-    try { const next = await localApi<Preferences>('/preferences'); if (mounted.current && current === revision.current) { setValue(next); setLoaded(true); setError('') } }
-    catch (reason) { if (mounted.current && current === revision.current) setError(reason instanceof Error ? reason.message : '暂时无法读取设置') }
-  }, [])
-  useEffect(() => {
-    mounted.current = true
-    void refresh()
-    const changed = (event: Event) => { revision.current++; setValue((event as CustomEvent<Preferences>).detail); setLoaded(true) }
-    const visible = () => { if (document.visibilityState === 'visible') void refresh() }
+const preferencesStore = createPreferencesStore({
+  initialValue: DEFAULT_PREFERENCES,
+  read: () => localApi<Preferences>('/preferences'),
+  isVisible: () => document.visibilityState === 'visible',
+  onVisibilityChange: listener => {
+    document.addEventListener('visibilitychange', listener)
+    return () => document.removeEventListener('visibilitychange', listener)
+  },
+  onPublish: listener => {
+    const changed = (event: Event) => listener((event as CustomEvent<Preferences>).detail)
     window.addEventListener(PREFERENCE_CHANGE, changed)
-    document.addEventListener('visibilitychange', visible)
-    const poll = window.setInterval(visible, 15000)
-    return () => { mounted.current = false; revision.current++; clearInterval(poll); window.removeEventListener(PREFERENCE_CHANGE, changed); document.removeEventListener('visibilitychange', visible) }
-  }, [refresh])
-  return { value, loaded, error, refresh }
+    return () => window.removeEventListener(PREFERENCE_CHANGE, changed)
+  },
+  setTimer: (listener, delay) => window.setTimeout(listener, delay),
+  clearTimer: timer => window.clearTimeout(timer),
+})
+export function publishPreferences(value: Preferences) {
+  // Keep the cache current even while no settings consumers are mounted.
+  preferencesStore.publish(value)
+  window.dispatchEvent(new CustomEvent(PREFERENCE_CHANGE, { detail: value }))
+}
+export function usePreferences() {
+  const snapshot = useSyncExternalStore(preferencesStore.subscribe, preferencesStore.getSnapshot, preferencesStore.getSnapshot)
+  return { ...snapshot, refresh: preferencesStore.refresh }
 }
 
 export function notificationsAllowed(value: Preferences['notifications'], now: Date) {

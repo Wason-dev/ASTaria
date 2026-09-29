@@ -45,7 +45,7 @@ export default function BlackHolePrototype() {
     if (!host.current) return
     let engine: BlackHoleRenderer
     try {
-      engine = new BlackHoleRenderer(host.current, () => undefined, setError)
+      engine = new BlackHoleRenderer(host.current, undefined, setError)
       engine.setNight(1, true)
       renderer.current = engine
       if (responseSettings.current) engine.setResponseEffect(responseSettings.current)

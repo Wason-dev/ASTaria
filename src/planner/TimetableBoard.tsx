@@ -5,6 +5,7 @@ import { localDay, shiftDay } from '../home/agenda'
 import { blocksForDay, compactMinutesLabel, dayCapacity, minuteOf, minutesLabel, routinesForDay, timeOf, timetableTimeScale, visibleTimetableRoutines } from './model'
 import type { PlanBlock, PlannerState, Routine } from './types'
 import { usePeriodMotion } from './usePeriodMotion'
+import { planBlockCompleted } from './completion'
 
 type Props = {
   state: PlannerState; tasks: Task[]; selected: string; anchor: Date; now: Date; direction: number; mode?: 'week' | 'day'
@@ -137,11 +138,12 @@ export function TimetableBoard({ state, tasks, selected, anchor, now, direction,
               const coverage = isAvailable ? availableLabelCoverage(slot, slots, density, scale.position) : null
               const dayOverride = slot.routine && !slot.routine.sourceDate ? state.dayOverrides?.[day] : undefined
               const activate = () => slot.routine ? onRoutine(slot.routine, day) : slot.task && onTask(slot.task.id, slot.block?.id, day)
-              const label = `${slot.routine?.sourceDate ? '单日活动' : kindLabels[slot.kind]}，${title}，${range}${slot.routine?.location ? `，${slot.routine.location}` : ''}`
+              const completed = planBlockCompleted(slot.task, state, slot.block)
+              const label = `${slot.routine?.sourceDate ? '单日活动' : kindLabels[slot.kind]}，${title}，${range}${slot.routine?.location ? `，${slot.routine.location}` : ''}${completed ? '，已完成' : ''}`
               const actionLabel = dayOverride ? `${label}，临时按周${sourceWeekdays[dayOverride.sourceWeekday]}课表，编辑来源每周安排` : `${isAvailable ? '编辑' : ''}${label}`
               return isAvailable ? <button key={slot.key} type="button" className="pl-slot" data-kind="available" data-density={density} data-override={Boolean(dayOverride)} data-title-covered={coverage?.title} data-time-covered={coverage?.time} style={slotStyle(slot)} onClick={activate} aria-label={actionLabel} title={actionLabel}>
                 <strong>{title}</strong><small className="pl-slot-time">{range}</small>
-              </button> : <button key={slot.key} type="button" className="pl-slot" data-kind={slot.kind} data-density={density} data-done={slot.task?.status === 'done'}
+              </button> : <button key={slot.key} type="button" className="pl-slot" data-kind={slot.kind} data-density={density} data-done={completed}
                 data-override={Boolean(dayOverride)} data-conflict={Boolean((slot.block && capacity.conflicts.includes(slot.block.id)) || (slot.routine && capacity.conflicts.includes(slot.routine.id)))} style={slotStyle(slot)} onClick={activate} aria-label={actionLabel} title={actionLabel}>
                 <small className="pl-slot-time">{range}</small><strong>{title}</strong>{slot.routine?.location && <small className="pl-slot-location">{slot.routine.location}</small>}
                 {slot.block?.locked && <span className="pl-slot-locked" aria-label="时间已锁定">◇</span>}

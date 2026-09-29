@@ -7,11 +7,12 @@ export function useLocalTime() {
     let timer: ReturnType<typeof setTimeout>
     const refresh = () => {
       clearTimeout(timer)
+      if (document.visibilityState !== 'visible') return
       const date = new Date()
       setNow(date)
       timer = setTimeout(refresh, 60_000 - date.getTime() % 60_000)
     }
-    const resume = () => { if (document.visibilityState === 'visible') refresh() }
+    const resume = () => { refresh() }
     refresh()
     document.addEventListener('visibilitychange', resume)
     window.addEventListener('focus', refresh)

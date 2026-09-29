@@ -94,6 +94,13 @@
 .planner .pl-overview .pl-overview-date-content.pl-capacity { overflow:visible; max-height:none }
 .planner .pl-overview .pl-overview-date-content.pl-calendar-summary-focus { overflow:visible }
 .planner .pl-overview-task-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; align-items:start }
+.planner .pl-overview-task-page { grid-template-rows:repeat(2,100px); align-items:stretch; animation:pl-day-enter 180ms var(--pl-motion-ease) both }
+.planner .pl-overview-task-page .pl-overview-task-copy :is(strong,small) { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden }
+.planner .pl-overview-task-page .pl-overview-task-copy small { line-height:1.7 }
+.planner .pl-overview-task-pages { display:flex; align-items:center; justify-content:center; gap:12px; margin-top:10px; color:var(--pl-muted); font-size:10px; font-variant-numeric:tabular-nums }
+.planner .pl-overview-task-pages>span { min-width:36px; text-align:center }
+.planner .pl-overview-task-pages .pl-icon-button { width:26px; height:26px }
+.planner .pl-overview-task-pages .pl-icon-button:disabled { opacity:.3; cursor:default }
 .p0 .planner .pl-overview :is(.pl-day-task,.pl-calendar-summary-task,.pl-preparation) { margin:0; padding:9px 10px; min-width:0; border:1px solid transparent; border-left:2px solid #c5b38b66; background:var(--pl-plate); box-shadow:none; border-radius:9px; display:block }
 .p0 .planner .pl-overview :is(.pl-day-task,.pl-calendar-summary-task,.pl-preparation):is(:hover,:focus-visible) { border-color:#cfb58399 }
 .planner .pl-overview-task-copy { display:block; min-width:0 }
@@ -252,7 +259,7 @@
 }
 @media(prefers-reduced-motion:reduce) {
   .planner .pl-mode-frame { animation:none!important }
-  .planner .pl-overview-date-content,.planner .pl-overview-grid>section { animation:none!important }
+  .planner .pl-overview-date-content,.planner .pl-overview-task-page,.planner .pl-overview-grid>section { animation:none!important }
   .planner .pl-chat-column::backdrop,.planner .pl-chat-column .pl-chat .home-glass-surface::after,.planner .pl-chat-column .pl-chat>.pl-glass-content { animation:none!important }
   .planner dialog.pl-chat-column,.planner .pl-layout>:is(.pl-day-panel,.pl-calendar-summary) { transition:none!important }
 }

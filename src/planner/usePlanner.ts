@@ -18,10 +18,12 @@ export function usePlanner(active: boolean) {
     setLoading(true)
     try {
       const value = await localApi<PlannerState>('/planner')
-      if (!mounted.current || token !== revision.current) return
+      if (!mounted.current || token !== revision.current) return false
       current.current = value; setState(value); setError('')
+      return true
     } catch (reason) {
       if (mounted.current && token === revision.current) setError(reason instanceof Error ? reason.message : '日程暂未读取成功')
+      return false
     } finally { if (mounted.current && token === revision.current) setLoading(false) }
   }, [])
   useEffect(() => {

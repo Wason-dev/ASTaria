@@ -22,6 +22,8 @@ export type PlannerState = {
   details: Record<string, TaskPreparation>; checked: Record<string, string[]>
   dayOverrides?: Record<string, DayTemplateOverride>
   dayEvents?: DayEvent[]
+  /** Read-only API projection of the shared per-session completion history. */
+  completedFreeTimeSessions?: Record<string, string>
 }
 export type PlannerAction =
   | { type: 'save-routine'; routine: Routine }

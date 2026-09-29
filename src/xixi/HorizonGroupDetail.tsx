@@ -100,7 +100,10 @@ export function HorizonGroupDetail({ group, origin, tuning, reduced, disabled = 
     }
     resize(); const observer = new ResizeObserver(resize); observer.observe(node)
     let last = 0
+    const transforms = new WeakMap<HTMLButtonElement, string>()
     const draw = (now: number) => {
+      frame.current = 0
+      if (document.hidden) return
       const state = latest.current, { width, height } = size.current
       const projection = renderedHorizonProjection(width, height, state.tuning)
       const dt = last ? Math.min(.05, (now - last) / 1000) : 1 / 60; last = now
@@ -122,19 +125,27 @@ export function HorizonGroupDetail({ group, origin, tuning, reduced, disabled = 
         motion.dy = advance(motion.dy, dragging ? held.y - anchor.y : 0, dragging ? 28 : 15)
         const p = { x: anchor.x + motion.dx.value, y: anchor.y + motion.dy.value }; motion.point = p
         const button = buttons.current.get(task.id)
-        if (button) button.style.transform = `translate3d(${p.x - 40}px,${p.y - 22}px,0)`
+        if (button) {
+          const transform = `translate3d(${p.x - 40}px,${p.y - 22}px,0)`
+          if (transforms.get(button) !== transform) { button.style.transform = transform; transforms.set(button, transform) }
+        }
         const span = Math.min(150, width * .65 / Math.max(1, state.pageTasks.length))
         const bend = 1 - motion.lift.value
         const d = Array.from({ length: 25 }, (_, step) => {
           const x = (step / 24 - .5) * span, point = horizonPoint(projection, motion.t.value + x / width)
           return `${step ? 'L' : 'M'}${(p.x + x).toFixed(2)},${(p.y + (point.y - anchor.y) * bend).toFixed(2)}`
         }).join(' ')
-        paths.current.get(task.id)?.querySelectorAll('path').forEach(path => path.setAttribute('d', d))
+        paths.current.get(task.id)?.querySelectorAll('path').forEach(path => { if (path.getAttribute('d') !== d) path.setAttribute('d', d) })
       })
       frame.current = requestAnimationFrame(draw)
     }
-    frame.current = requestAnimationFrame(draw)
-    return () => { cancelAnimationFrame(frame.current); observer.disconnect() }
+    const visibility = () => {
+      cancelAnimationFrame(frame.current); frame.current = 0; last = 0
+      if (!document.hidden) frame.current = requestAnimationFrame(draw)
+    }
+    document.addEventListener('visibilitychange', visibility)
+    if (!document.hidden) frame.current = requestAnimationFrame(draw)
+    return () => { cancelAnimationFrame(frame.current); observer.disconnect(); document.removeEventListener('visibilitychange', visibility) }
   }, [active?.id])
   useEffect(() => () => { clearPageHover(); const held = grab.current; grab.current = null; if (held && shell.current?.hasPointerCapture(held.pointerId)) shell.current.releasePointerCapture(held.pointerId) }, [])
 

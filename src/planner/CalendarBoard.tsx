@@ -5,6 +5,7 @@ import { agendaDate, localDay, monthDays, shiftDay } from '../home/agenda'
 import { blocksForDay, compactMinutesLabel, dayCapacity, minuteOf, minutesLabel, routinesForDay } from './model'
 import type { DayCapacity, PlannerState } from './types'
 import { usePeriodMotion } from './usePeriodMotion'
+import { taskDayCompletion } from './completion'
 
 type Props = {
   state: PlannerState; tasks: Task[]; selected: string; anchor: Date; now: Date
@@ -32,8 +33,9 @@ function entriesForDay(state: PlannerState, tasks: Task[], day: string): Entry[]
     const time = block ? `${block.start}–${block.end}`
       : planned && task.startAt?.includes('T') && start ? clock.format(start)
         : deadline && task.due?.includes('T') && due ? clock.format(due) : ''
-    const label = [planned ? '已安排' : '', deadline ? '截止' : '', time, task.status === 'done' ? '已完成' : ''].filter(Boolean).join(' · ')
-    return [{ id: `task:${task.id}`, title: task.title, done: task.status === 'done', event: false, deadline, planned, time, label }]
+    const completion = taskDayCompletion(task, state, day, taskBlocks)
+    const label = [planned ? '已安排' : '', deadline ? '截止' : '', time, completion.label].filter(Boolean).join(' · ')
+    return [{ id: `task:${task.id}`, title: task.title, done: completion.done, event: false, deadline, planned, time, label }]
   })
   const eventEntries: Entry[] = (state.dayEvents ?? []).filter(event => event.date === day).map(event => {
     const time = `${event.start}–${event.end}`

@@ -5,7 +5,7 @@ import { deadlineTime } from './deadlines'
 import type { PlanBlock } from '../planner/types'
 import { minuteOf } from '../planner/model'
 
-export type WorkbenchSchedule = Pick<PlanBlock, 'taskId' | 'date' | 'start' | 'end'>
+export type WorkbenchSchedule = Pick<PlanBlock, 'taskId' | 'date' | 'start' | 'end'> & { id?: string }
 
 function isOverdue(task: Task, now: Date) {
   return (deadlineTime(task.due) ?? Infinity) <= now.getTime()
@@ -16,25 +16,30 @@ function blockMinutes(block: WorkbenchSchedule) {
   return Number.isFinite(start) && Number.isFinite(end) && start < 1440 && end > start ? { start, end } : undefined
 }
 
-function validBlocks(task: Task, blocks: readonly WorkbenchSchedule[]) {
+function validBlocks(task: Task, blocks: readonly WorkbenchSchedule[], completedFreeTimeSessions: Readonly<Record<string, string>> = {}) {
   return blocks.filter(block => block.taskId === task.id && /^\d{4}-\d{2}-\d{2}$/u.test(block.date) && agendaDate(block.date) && blockMinutes(block))
+    .filter(block => !task.freeTimeGoalId || (typeof block.id === 'string' && block.id.length > 0
+      && !(Object.hasOwn(completedFreeTimeSessions, block.id) && typeof completedFreeTimeSessions[block.id] === 'string')))
 }
 
 /** Return the most relevant concrete planner block for a task. */
-export function taskSchedule(task: Task, now: Date, blocks: readonly WorkbenchSchedule[] = []): WorkbenchSchedule | undefined {
+export function taskSchedule(task: Task, now: Date, blocks: readonly WorkbenchSchedule[] = [], completedFreeTimeSessions: Readonly<Record<string, string>> = {}): WorkbenchSchedule | undefined {
   const today = localDay(now), minute = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60 + now.getMilliseconds() / 60000
-  const candidates = validBlocks(task, blocks)
+  const candidates = validBlocks(task, blocks, completedFreeTimeSessions).filter(block => !task.freeTimeGoalId || block.date >= today)
   if (!candidates.length) return undefined
   return [...candidates].sort((a, b) => {
     const aTime = blockMinutes(a)!, bTime = blockMinutes(b)!
     const rank = (block: WorkbenchSchedule, time: { start: number; end: number }) => {
       if (block.date === today && time.start <= minute && minute < time.end) return 0
-      if (block.date === today && time.start > minute) return 1
-      if (block.date > today) return 2
+      // An unfinished session from today can still be done today. Historical
+      // sessions do not turn an ongoing goal into an accumulating overdue task.
+      if (task.freeTimeGoalId && block.date === today && time.end <= minute) return 1
+      if (block.date === today && time.start > minute) return task.freeTimeGoalId ? 2 : 1
+      if (block.date > today) return task.freeTimeGoalId ? 3 : 2
       return 3
     }
     const aRank = rank(a, aTime), bRank = rank(b, bTime)
-    return aRank - bRank || (aRank === 3
+    return aRank - bRank || (!task.freeTimeGoalId && aRank === 3
       ? b.date.localeCompare(a.date) || bTime.end - aTime.end || bTime.start - aTime.start
       : a.date.localeCompare(b.date) || aTime.start - bTime.start || aTime.end - bTime.end)
   })[0]
@@ -48,11 +53,14 @@ export function taskSchedule(task: Task, now: Date, blocks: readonly WorkbenchSc
  * in later until their day arrives. A deadline alone never delays availability;
  * future start-date intentions and someday tasks still remain in later.
  */
-export function taskGroups(tasks: readonly Task[], now: Date, blocks: readonly WorkbenchSchedule[] = []) {
+export function taskGroups(tasks: readonly Task[], now: Date, blocks: readonly WorkbenchSchedule[] = [], completedFreeTimeSessions: Readonly<Record<string, string>> = {}) {
   const today = localDay(now), currentMinute = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60 + now.getMilliseconds() / 60000
   const later: Task[] = [], available: Task[] = []
-  for (const task of tasks.filter(task => isOpenTask(task) && !task.freeTimeGoalId)) {
-    const schedule = taskSchedule(task, now, blocks)
+  for (const task of tasks.filter(task => isOpenTask(task))) {
+    const schedule = taskSchedule(task, now, blocks, completedFreeTimeSessions)
+    // Long-running free-time goals enter the workbench through persisted sessions;
+    // an unscheduled backing task remains in the goal workflow.
+    if (task.freeTimeGoalId && !schedule) continue
     const start = agendaDate(task.startAt)
     const due = agendaDate(task.due)
     const futureDate = start ? localDay(start) > today : task.fuzzyWindow === 'someday'

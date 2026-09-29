@@ -155,9 +155,14 @@ export function createFreeTime({ db, now = () => new Date() }) {
   }
 
   function completeSession(input) {
-    knownKeys(input, ['sessionId', 'feedback', 'nextStep'], '余时学习反馈')
+    knownKeys(input, ['sessionId', 'feedback', 'nextStep', 'expectedSession'], '余时学习反馈')
     return db.transaction(() => {
       const sessionId = identifier(input.sessionId), value = stateOf(db), previous = value.freeTimeHistory.find(item => item.sessionId === sessionId)
+      const block = db.getPlanner().blocks.find(item => item.id === sessionId), goal = value.freeTimeGoals.find(item => item.taskId === block?.taskId)
+      if (input.expectedSession !== undefined) {
+        knownKeys(input.expectedSession, ['taskId', 'date', 'start', 'end'], '本次余时安排')
+        if (!block || ['taskId', 'date', 'start', 'end'].some(key => input.expectedSession[key] !== block[key])) fail('本次余时安排已有变化，请重新选择', 409)
+      }
       if (previous) {
         const updated = { ...previous,
           ...(input.feedback === undefined ? {} : { feedback: choice(input.feedback, ['smooth', 'stuck', 'continue'], '学习反馈') }),
@@ -166,14 +171,36 @@ export function createFreeTime({ db, now = () => new Date() }) {
         db.saveCompanionState(value)
         return updated
       }
-      const block = db.getPlanner().blocks.find(item => item.id === sessionId), goal = value.freeTimeGoals.find(item => item.taskId === block?.taskId)
-      if (!block || !goal || !goalValid(db, goal)) fail('找不到这段余时安排', 404)
+      if (!block || !goal || !goalValid(db, goal) || !taskAvailable(db.getTask(block.taskId))) fail('找不到这段有效余时安排，请重新读取', 404)
       const record = { sessionId, goalId: goal.id, date: block.date, minutes: minutes(block),
         feedback: choice(input.feedback, ['smooth', 'stuck', 'continue'], '学习反馈', 'smooth'), nextStep: text(input.nextStep ?? '', '下次接着做', 1500, { empty: true }), completedAt: new Date(now()).toISOString() }
       if (value.freeTimeHistory.length >= 5000) fail('余时学习记录较多，请先整理历史记录', 409)
       value.freeTimeHistory.push(record); db.saveCompanionState(value)
       return record
     })
+  }
+  function reopenSession(input) {
+    knownKeys(input, ['sessionId', 'expectedCompletedAt'], '撤回本次余时完成')
+    return db.transaction(() => {
+      const sessionId = identifier(input.sessionId), value = stateOf(db)
+      const block = db.getPlanner().blocks.find(item => item.id === sessionId)
+      const goal = value.freeTimeGoals.find(item => item.taskId === block?.taskId)
+      if (!block || !goal || !goalValid(db, goal) || !taskAvailable(db.getTask(block.taskId))) fail('找不到这段有效余时安排，请重新读取', 404)
+      const record = value.freeTimeHistory.find(item => item.sessionId === sessionId)
+      if (record) {
+        if (record.completedAt !== input.expectedCompletedAt) fail('本次完成记录已有变化，请重新读取后再撤回', 409)
+        value.freeTimeHistory = value.freeTimeHistory.filter(item => item.sessionId !== sessionId)
+        db.saveCompanionState(value)
+      }
+      return { sessionId, completed: false }
+    })
+  }
+  function plannerState(planner = db.getPlanner()) {
+    const value = stateOf(db), blocks = new Set(planner.blocks.map(block => block.id))
+    const goals = new Set(value.freeTimeGoals.filter(goal => goalValid(db, goal)).map(goal => goal.id))
+    return { ...planner, completedFreeTimeSessions: Object.fromEntries(value.freeTimeHistory
+      .filter(record => blocks.has(record.sessionId) && goals.has(record.goalId))
+      .map(record => [record.sessionId, record.completedAt])) }
   }
   function ensureDaily() {
     const date = localDay(new Date(now())), previous = db.getPreference('free-time-daily')
@@ -189,7 +216,7 @@ export function createFreeTime({ db, now = () => new Date() }) {
       return { ...result, ensured: true, date }
     })
   }
-  return { schedule, resume, ensureDaily, completeSession, state: (input = {}) => {
+  return { schedule, resume, ensureDaily, completeSession, reopenSession, plannerState, state: (input = {}) => {
     knownKeys(input, ['date', 'days'], '读取余时')
     const date = day(input.date ?? localDay(new Date(now()))), days = input.days ?? 7
     if (!Number.isInteger(days) || days < 1 || days > 31) fail('余时查看天数应在1–31之间')

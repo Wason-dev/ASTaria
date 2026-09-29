@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState, type CSSProperties } from 'react'
 import type { Task } from '../domain/task'
 import { TaskCardStack } from '../ui/TaskCardStack'
 import { agendaDate, localDay } from '../home/agenda'
@@ -6,6 +6,7 @@ import { blocksForDay, carryItems, dayCapacity, minutesLabel, timeOf } from './m
 import { EMPTY_DETAILS } from './PlannerDialogs'
 import { PlannerIcon as Icon } from './PlannerIcon'
 import type { DayEvent, PlannerAction, PlannerState } from './types'
+import { taskDayCompletion } from './completion'
 
 type Props = {
   view: 'calendar' | 'timetable'; selected: string; anchor: Date; now: Date
@@ -17,7 +18,7 @@ type Props = {
 const fullDate = new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' })
 const clock = new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
 
-/** A horizontal briefing whose sections grow naturally instead of nesting scroll areas. */
+/** A horizontal briefing with paged day cards instead of nested scroll areas. */
 export function PlannerOverview({ view, selected, anchor, now, state, tasks, saving, error, onMoveDay, onTask, onDayEvent, onCreate, onAct }: Props) {
   const today = localDay(now)
   const dayOverride = state.dayOverrides?.[selected]
@@ -40,8 +41,9 @@ export function PlannerOverview({ view, selected, anchor, now, state, tasks, sav
   const taskMeta = (task: Task) => {
     const due = agendaDate(task.due)
     const planned = blocks.filter(block => block.taskId === task.id).map(block => `${block.start}–${block.end}`).join(' · ')
-    return [planned, due && localDay(due) === selected ? `当天截止${task.due?.includes('T') ? ` ${clock.format(due)}` : ''}` : '', task.status === 'done' ? '已完成' : ''].filter(Boolean).join(' · ') || '时间待定'
+    return [planned, due && localDay(due) === selected ? `当天截止${task.due?.includes('T') ? ` ${clock.format(due)}` : ''}` : '', taskDayCompletion(task, state, selected, blocks).label].filter(Boolean).join(' · ') || '时间待定'
   }
+  const taskDone = (task: Task) => taskDayCompletion(task, state, selected, blocks).done
 
   return <div className="pl-overview-grid" data-view={view}>
     <section className="pl-overview-summary">
@@ -56,14 +58,11 @@ export function PlannerOverview({ view, selected, anchor, now, state, tasks, sav
         {capacity.unestimatedCount > 0 && <p className="pl-warning">{capacity.unestimatedCount} 项未估时，暂未扣除</p>}
         {capacity.conflicts.length > 0 && <p className="pl-warning">{capacity.conflicts.length} 项时间冲突，需核对</p>}
         {!capacity.totalMin && <p className="pl-muted">添加空课后显示可用时间</p>}
-      </section> : <section className="pl-calendar-summary-focus pl-overview-date-content" key={selected}><strong>{entryCount ? `${entryCount} 项事项` : '这天还没有事项'}</strong><small>{tasksForDay.filter(task => task.status === 'done').length} 项已完成 · {tasksForDay.filter(task => { const due = agendaDate(task.due); return due && localDay(due) === selected }).length} 项当天截止</small></section>}
+      </section> : <section className="pl-calendar-summary-focus pl-overview-date-content" key={selected}><strong>{entryCount ? `${entryCount} 项事项` : '这天还没有事项'}</strong><small>{tasksForDay.filter(taskDone).length} 项已完成 · {tasksForDay.filter(task => { const due = agendaDate(task.due); return due && localDay(due) === selected }).length} 项当天截止</small></section>}
     </section>
     <section className="pl-overview-tasks">
       <header className="pl-overview-heading"><h4>当天事项 <small>{entryCount}</small></h4><button className="pl-add-inline" onClick={onCreate}><Icon name="plus" />记录事项</button></header>
-      <div className="pl-overview-list pl-overview-date-content" key={selected}><div className="pl-overview-task-grid">
-        {tasksForDay.map(task => <button key={`task:${task.id}`} className={view === 'calendar' ? 'pl-calendar-summary-task' : 'pl-day-task'} data-done={task.status === 'done'} onClick={() => onTask(task.id)}><span className="pl-overview-task-copy"><strong>{task.title}</strong><small>{taskMeta(task)}</small></span></button>)}
-        {eventsForDay.map(event => <button key={`event:${event.id}`} type="button" className={view === 'calendar' ? 'pl-calendar-summary-task' : 'pl-day-task'} aria-label={`编辑单日活动，${event.title}，${event.date}，${event.start}–${event.end}${event.location ? `，${event.location}` : ''}`} onClick={() => onDayEvent(event)}><span className="pl-overview-task-copy"><strong>{event.title}</strong><small>{event.date} · {event.start}–{event.end}{event.location && ` · ${event.location}`}</small></span></button>)}
-      </div>{!entryCount && <p className="pl-muted">这天还没有活动、计划或截止事项</p>}</div>
+      <DayEntries key={selected} view={view} tasks={tasksForDay} events={eventsForDay} taskMeta={taskMeta} taskDone={taskDone} onTask={onTask} onDayEvent={onDayEvent} />
     </section>
     <section className="pl-overview-notes">
       {view === 'calendar' ? <MonthDeadlines key={`${anchor.getFullYear()}-${anchor.getMonth()}`} tasks={monthDue} onTask={onTask} /> : <>
@@ -80,6 +79,45 @@ export function PlannerOverview({ view, selected, anchor, now, state, tasks, sav
       <header className="pl-overview-heading"><h4 id="pl-unscheduled-heading">待安排 <small>{undated.length}</small></h4></header>
       <TaskCardStack compact label="待安排" items={undated.map(task => ({ id: task.id, title: task.title, meta: task.estimateMin ? `${task.estimateMin} 分钟` : '用时待估' }))} onOpen={onTask} empty="暂无待安排事项" />
     </section>}
+  </div>
+}
+
+function DayEntries({ view, tasks, events, taskMeta, taskDone, onTask, onDayEvent }: {
+  view: Props['view']; tasks: Task[]; events: DayEvent[]
+  taskMeta: (task: Task) => string; taskDone: (task: Task) => boolean; onTask: Props['onTask']; onDayEvent: Props['onDayEvent']
+}) {
+  const [page, setPage] = useState(0)
+  const [direction, setDirection] = useState(1)
+  const entries = [
+    ...tasks.map(task => ({ kind: 'task' as const, task })),
+    ...events.map(event => ({ kind: 'event' as const, event })),
+  ]
+  const pageCount = Math.ceil(entries.length / 4)
+  const currentPage = Math.min(page, Math.max(0, pageCount - 1))
+  useEffect(() => { if (page !== currentPage) setPage(currentPage) }, [page, currentPage])
+  const movePage = (amount: number) => {
+    setDirection(amount)
+    setPage(currentPage + amount)
+  }
+  const cardClass = view === 'calendar' ? 'pl-calendar-summary-task' : 'pl-day-task'
+  return <div className="pl-overview-list pl-overview-date-content">
+    {entries.length ? <div className="pl-overview-task-grid pl-overview-task-page" key={currentPage} style={{ '--pl-direction': direction } as CSSProperties}>
+      {entries.slice(currentPage * 4, currentPage * 4 + 4).map(entry => {
+        if (entry.kind === 'task') {
+          const task = entry.task
+          const meta = taskMeta(task)
+          return <button key={`task:${task.id}`} type="button" className={cardClass} data-done={taskDone(task)} title={`${task.title} · ${meta}`} onClick={() => onTask(task.id)}><span className="pl-overview-task-copy"><strong>{task.title}</strong><small>{meta}</small></span></button>
+        }
+        const event = entry.event
+        const meta = `${event.date} · ${event.start}–${event.end}${event.location ? ` · ${event.location}` : ''}`
+        return <button key={`event:${event.id}`} type="button" className={cardClass} title={`${event.title} · ${meta}`} aria-label={`编辑单日活动，${event.title}，${event.date}，${event.start}–${event.end}${event.location ? `，${event.location}` : ''}`} onClick={() => onDayEvent(event)}><span className="pl-overview-task-copy"><strong>{event.title}</strong><small>{meta}</small></span></button>
+      })}
+    </div> : <p className="pl-muted">这天还没有活动、计划或截止事项</p>}
+    {pageCount > 0 && <div className="pl-overview-task-pages" role="group" aria-label="当天事项分页">
+      <button type="button" className="pl-icon-button" disabled={currentPage === 0} aria-label="上一页当天事项" onClick={() => movePage(-1)}><Icon name="left" /></button>
+      <span role="status" aria-live="polite" aria-atomic="true">{currentPage + 1} / {pageCount}</span>
+      <button type="button" className="pl-icon-button" disabled={currentPage + 1 === pageCount} aria-label="下一页当天事项" onClick={() => movePage(1)}><Icon name="right" /></button>
+    </div>}
   </div>
 }
 

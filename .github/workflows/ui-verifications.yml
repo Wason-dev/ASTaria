@@ -1,0 +1,50 @@
+name: UI Verifications (manual)
+
+# 手动触发的隔离 UI 验证：只跑 scripts/run-ui-verifications.mjs 白名单里那些自带
+# 一次性 Chrome/profile 与隔离后端的脚本。刻意不含黑洞渲染读回类与真实模型/真实数据
+# 类验证，也不启动本机开发或预览服务器——它们的 /api 会连上真实数据库与真实钥匙串。
+on:
+  workflow_dispatch:
+    inputs:
+      only:
+        description: 只跑指定脚本 id（逗号分隔，留空跑白名单全部）
+        required: false
+        default: ''
+        type: string
+      timeout:
+        description: 每个脚本的超时秒数
+        required: false
+        default: '420'
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-ui:
+    runs-on: macos-14
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.19.0
+          cache: npm
+      - run: npm ci
+      - run: npm run build:desktop
+      - name: Run isolated UI verifications
+        env:
+          ONLY: ${{ inputs.only }}
+          TIMEOUT: ${{ inputs.timeout }}
+        run: |
+          args=(--timeout "${TIMEOUT:-420}")
+          if [ -n "$ONLY" ]; then args+=(--only "$ONLY"); fi
+          node scripts/run-ui-verifications.mjs "${args[@]}"
+      - name: Upload verification artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-verification-artifacts
+          path: artifacts/verification/
+          if-no-files-found: ignore
+          retention-days: 7

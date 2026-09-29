@@ -116,6 +116,11 @@
 @media (prefers-reduced-motion: reduce) {
   .wb-focus-view { transition: none; transform: none }
 }
+.wb-focus-title-row { display:flex; justify-content:space-between; align-items:center; gap:12px }
+.wb-focus-title-row .wb-inline-button { font-size:11px }
+.wb-delete-confirm { border:1px solid color-mix(in srgb,var(--wb-gold) 30%,transparent); border-radius:10px; padding:12px; margin-block:12px; font-size:12px }
+.wb-delete-confirm p { margin:0 0 10px; line-height:1.65 }
+.wb-delete-confirm>div { display:flex; flex-wrap:wrap; gap:10px }
 @media (forced-colors: active) {
   .p0 .wb-focus-main .wb-handoff-trigger { background: ButtonFace; color: ButtonText; border-color: ButtonText }
 }

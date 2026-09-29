@@ -138,5 +138,9 @@ export function useSpatialTasks() {
     return write(() => taskStore.reopenTask(id, expectedUpdatedAt), '完成状态尚未撤回')
   }, [write])
 
-  return { tasks, loading, loadError, saving, retry, create, setStatus, reopen }
+  const remove = useCallback(async (id: string, expectedUpdatedAt: string): Promise<Task> => {
+    return write(() => taskStore.updateTask(id, { deletedAt: new Date().toISOString() }, expectedUpdatedAt), '事项尚未删除')
+  }, [write])
+
+  return { tasks, loading, loadError, saving, retry, create, setStatus, reopen, remove }
 }

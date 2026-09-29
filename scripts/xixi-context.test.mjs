@@ -31,7 +31,8 @@ test('prompt keeps a caring persona with the default high voice and facts anchor
   await f.xixi.chat(input('早'))
   const prompt = f.requests[0].messages[0].content
   assert.match(prompt, /本轮表达风格：高/)
-  assert.match(prompt, /嘴硬只是语气转折/)
+  assert.match(prompt, /熟悉用户的傲娇搭档/)
+  assert.doesNotMatch(prompt, /哈？你在说什么胡话/)
   assert.match(prompt, /温柔/)
   const context = contextData(f.requests[0])
   assert.equal(context.now, '2026-09-17T16:30:00.000Z')

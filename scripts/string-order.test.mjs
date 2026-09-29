@@ -43,6 +43,20 @@ const request = (svc, patch = {}) => {
     expectedRevision: snap.revision, snapshotKey: snap.snapshotKey, requestId: randomUUID(), ...patch }
 }
 
+test('reordering refuses over-budget fixed facts before inference without touching any placements', async t => {
+  const f = fixture(t)
+  f.db.setPreference('model-connection', { contextBudget: { mode: 'custom', maxUnits: 8000 } })
+  for (let i = 0; i < 18; i++) f.act({ type: 'save-routine', routine: { id: `large-${i}`, title: `固定课程${i}${'资料'.repeat(55)}`,
+    kind: 'class', weekdays: [0, 1, 2, 3, 4, 5, 6], start: '07:00', end: '07:10', location: '', items: [], enabled: true } })
+  const before = f.db.getPlanner()
+  let calls = 0
+  const svc = service(f, async () => { calls++; return completion(candidate()) })
+  await assert.rejects(svc.apply(request(svc)), /上下文预算/)
+  assert.equal(calls, 0)
+  assert.deepEqual(f.db.getPlanner(), before)
+  assert.equal(f.db.listOperations().length, 0)
+})
+
 test('snapshot is complete, uses block identities and exposes locked slots without permitting movement', t => {
   const f = fixture(t), before = f.db.getPlanner(), snap = service(f).list({ date: DATE })
   assert.equal(snap.days, 7)

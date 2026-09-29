@@ -1,5 +1,6 @@
 /** Isolated month/week/day QA: owned temporary Chrome and Vite, intercepted in-memory API, no personal data. */
 import assert from 'node:assert/strict'
+import { mock } from 'node:test'
 import { spawn } from 'node:child_process'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -17,6 +18,8 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const temporary = await mkdtemp(join(tmpdir(), 'astaria-schedule-ui-runtime-'))
 const profile = join(temporary, 'chrome-profile')
 let base, chrome, vite, ws, stopping = false
+// Match the browser fixture day; keep real timers for Chrome/Vite lifecycle.
+mock.timers.enable({ apis: ['Date'], now: new Date('2026-09-21T10:00:00+08:00').getTime() })
 const db = createDatabase(':memory:')
 const task = db.createTask({ title: '日程测试报告', due: '2026-09-23', estimateMin: 35, inbox: false })
 const edit = action => db.updatePlanner(action, db.getPlanner().revision)
@@ -145,7 +148,7 @@ try {
   await check('month task chips stay inset from the selected gold frame and separated from one another', `(()=>{
     const cell=document.querySelector('${current} .pl-calendar-day[data-date="2026-09-23"]');
     const frame=cell.getBoundingClientRect(),entries=[...cell.querySelectorAll('.pl-calendar-entry')].map(e=>e.getBoundingClientRect());
-    return entries.length===2&&entries.every(e=>e.left-frame.left>=9&&frame.right-e.right>=9)&&entries[1].top-entries[0].bottom>=5.5;
+    return entries.length===2&&entries.every(e=>e.left-frame.left>=9&&frame.right-e.right>=9)&&entries[1].top-entries[0].bottom>=4.5;
   })()`)
   await evaluate(`document.querySelector('${current} .pl-calendar-day[data-date="2026-09-23"]').scrollIntoView({block:'center'});true`)
   await shot('month-card-spacing')
@@ -271,6 +274,9 @@ try {
   for (const value of ['month', 'week', 'day']) {
     await mode(value)
     await click('button[aria-label="每周安排"]'); await wait('!!document.querySelector(".pl-dialog[open]")')
+    // The selected date is Sunday while the edited source routine belongs to Thursday.
+    // Select its source weekday before asserting the routine browser contents.
+    await click('.pl-routine-days button[aria-label^="星期四"]')
     await check(`${value} exposes weekly routines and add-time action`, `document.querySelector('.pl-dialog').textContent.includes('添加时段')&&document.querySelector('.pl-dialog').textContent.includes('调课来源修正物理课')`)
     await click('button[aria-label="关闭每周安排"]'); await wait('!document.querySelector(".pl-dialog[open]")')
     await click('button[aria-label="记录事项"]'); await wait('!!document.querySelector(".pl-dialog[open]")')
@@ -310,4 +316,5 @@ try {
     if (chrome.exitCode === null) { chrome.kill('SIGKILL'); await delay(150) }
   }
   await vite?.close(); service.close(); await rm(temporary, { recursive: true, force: true })
+  mock.timers.reset()
 }

@@ -7,6 +7,7 @@ import { readableDate, STATUS_LABELS } from '../spatial/scene'
 import { useSceneCamera } from '../spatial/useSceneCamera'
 import { useSpatialTasks } from '../spatial/useSpatialTasks'
 import { GlassSamplingContext, GlassSurface, MeasuredGlassSurface } from './GlassSurface'
+import type { GlassGeometryHandle } from './GlassSurface'
 import { HomeStatus } from './HomeStatus'
 import { HomeAgenda } from './HomeAgenda'
 import { HomeDeadlinePicker } from './HomeDeadlinePicker'
@@ -32,6 +33,8 @@ import { OrbitStudio } from '../xixi/OrbitStudio'
 import { FreeTimePanel } from '../xixi/FreeTimePanel'
 import { useXixiNotice } from '../xixi/useXixiNotice'
 import { BlackHoleEntry } from './BlackHoleEntry'
+import { ScenarioReceiptDialog } from '../xixi/ScenarioReceiptDialog'
+import { HOME_GLASS } from './glass'
 import './home.css'
 import './scrollbars.css'
 import './theme.css'
@@ -94,7 +97,11 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
   const changePreviewPhase = useCallback((phase: ResponsePhase) => setPreviewPhase(current => current === null ? null : phase), [])
   // Old scenario receipts lead to the new home for optional plans.
   useEffect(() => {
-    const open = () => changePage('free-time')
+    const open = (event: Event) => {
+      const detail = (event as CustomEvent<{ tab?: string; targetId?: string }>).detail
+      if (detail?.tab === 'scenarios' && typeof detail.targetId === 'string' && detail.targetId) setReceiptScenarioId(detail.targetId)
+      else changePage('free-time')
+    }
     window.addEventListener('astaria-open-companion', open)
     return () => window.removeEventListener('astaria-open-companion', open)
   })
@@ -104,11 +111,11 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
   const settingsOpener = useRef<HTMLElement | null>(null)
   const [chatOpen, setChatOpen] = useState(false)
   const [informationActive, setInformationActive] = useState(false)
-  const camera = useSceneCamera(readCamera, `${page}:${chatOpen}:${stringsOpen}`)
   const [cameraMissing, setCameraMissing] = useState(false)
-  const progress = sceneUnavailable || cameraMissing ? Number(chatOpen) : Math.max(0, Math.min(1, (camera.zoom - .7) / (2.05 - .7)))
   const [menuOpen, setMenuOpen] = useState(false)
   const [clarifyingWish, setClarifyingWish] = useState<Wish | null>(null)
+  const [receiptScenarioId, setReceiptScenarioId] = useState<string | null>(null)
+  const homeGlass = useMemo(() => ({ transmission: HOME_GLASS.chatTransmission, blur: preferences.value.glass === 'soft' ? 6 : 0, rim: HOME_GLASS.rim, reflection: HOME_GLASS.reflection, shadow: HOME_GLASS.shadow }), [preferences.value.glass])
   const [draft, setDraft] = useState(() => readDraft())
   const draftKey = clarifyingWish ? `${DRAFT_KEY}:wish:${clarifyingWish.id}` : DRAFT_KEY
   const clarifyWishAction = useRef<(wish: Wish) => void>(() => {})
@@ -128,6 +135,9 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
   const current = useRef<HTMLDivElement>(null)
   const currentButton = useRef<HTMLButtonElement>(null)
   const launch = useRef<HTMLButtonElement>(null)
+  const morph = useRef<HTMLDivElement>(null)
+  const deck = useRef<HTMLDivElement>(null)
+  const morphGlass = useRef<GlassGeometryHandle>(null)
   const compose = useRef<HTMLTextAreaElement>(null)
   const submitKeys = useChatSubmitKey(() => compose.current?.form?.requestSubmit())
   const informationToggle = useRef<HTMLButtonElement>(null)
@@ -137,6 +147,29 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
   const taskOpener = useRef<HTMLElement | null>(null)
   const taskFromAgenda = useRef(false)
   const compact = layout.width < 748
+  const animateSceneUI = useCallback((next: SceneCamera) => {
+    const amount = sceneUnavailable || cameraMissing ? Number(chatOpen) : Math.max(0, Math.min(1, (next.zoom - .7) / (2.05 - .7)))
+    const endWidth = Math.min(340, layout.width - (layout.width <= 600 ? 44 : 68))
+    const endHeight = Math.max(180, Math.min(680, layout.height - 149))
+    const startTop = layout.taskBottom + 12
+    if (morph.current) {
+      const surface = morph.current
+      surface.style.top = `${startTop + (Math.max(84, (layout.height - endHeight) / 2) - startTop) * amount}px`
+      const width = 128 + (endWidth - 128) * amount + (compact ? 0 : endWidth * Math.max(0, (amount - .5) / .5))
+      const height = 38 + (endHeight - 38) * amount
+      const radius = 19 - 4 * amount
+      surface.style.width = `${width}px`
+      surface.style.height = `${height}px`
+      surface.style.borderRadius = `${radius}px`
+      morphGlass.current?.update(width, height, radius, amount)
+      surface.dataset.progress = amount.toFixed(3)
+    }
+    if (current.current) { current.current.style.opacity = String(Math.max(0, 1 - amount * 3)); current.current.style.visibility = amount > .6 ? 'hidden' : 'visible' }
+    if (launch.current) { launch.current.style.opacity = String(Math.max(0, 1 - amount * 4)); launch.current.style.visibility = amount > .35 ? 'hidden' : 'visible' }
+    if (deck.current) { deck.current.style.opacity = String(Math.max(0, Math.min(1, (amount - .45) / .55))); deck.current.style.visibility = amount > .35 ? 'visible' : 'hidden' }
+  }, [sceneUnavailable, cameraMissing, chatOpen, layout, compact])
+  const camera = useSceneCamera(readCamera, `${page}:${chatOpen}:${stringsOpen}`, animateSceneUI)
+  const progress = sceneUnavailable || cameraMissing ? Number(chatOpen) : Math.max(0, Math.min(1, (camera.zoom - .7) / (2.05 - .7)))
 
   useEffect(() => {
     if (compact && document.activeElement?.closest('.home-agenda')) setInformationActive(true)
@@ -423,11 +456,11 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
       </button>
     </div>
 
-    <div className="home-morph" style={{ top: startTop + (endTop - startTop) * progress, width: extendedWidth, height, borderRadius: radius }} data-progress={progress.toFixed(3)} data-compact={compact} data-information-active={informationActive}>
-      <GlassSurface width={Math.round(extendedWidth)} height={Math.round(height)} radius={radius} progress={progress} />
+    <div ref={morph} className="home-morph" style={{ top: startTop + (endTop - startTop) * progress, width: extendedWidth, height, borderRadius: radius }} data-progress={progress.toFixed(3)} data-compact={compact} data-information-active={informationActive}>
+      <GlassSurface geometryRef={morphGlass} width={Math.round(extendedWidth)} height={Math.round(height)} radius={radius} progress={progress} material={homeGlass} />
       <button ref={launch} className="home-launch" onClick={() => changeChat(true)} aria-expanded={chatOpen} aria-controls="home-xixi"
         style={{ opacity: Math.max(0, 1 - progress * 4), visibility: progress > .35 ? 'hidden' : 'visible' }} disabled={chatOpen}>交给析熙</button>
-      <div className="home-deck" style={{ opacity: Math.max(0, Math.min(1, (progress - .45) / .55)), visibility: chatVisible ? 'visible' : 'hidden' }}>
+      <div ref={deck} className="home-deck" style={{ opacity: Math.max(0, Math.min(1, (progress - .45) / .55)), visibility: chatVisible ? 'visible' : 'hidden' }}>
       <div className="home-pane-track" style={{ width: endWidth * 2, transform: `translateX(${compact && informationActive ? -endWidth : 0}px)` }}>
       <HomeDeadlinePicker active={page === 'home' && chatOpen} conversationId={chat.conversation?.conversationId}
         onOpen={() => { if (compact) setInformationActive(true) }} onClose={() => setInformationActive(false)}>
@@ -483,6 +516,7 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
     {settingsOpen && <LocalSettings initialTab={settingsTab} onClose={closeSettings} onSaved={chat.refreshStatus} onPreviewEffect={previewEffect} onPreviewPhaseChange={changePreviewPhase} onStopPreview={stopPreview} previewPhase={previewPhase} />}
     {stringsOpen && <OrbitStudio onReveal={() => setStringCovered(false)} onClose={closeStrings} onSaved={message => { data.retry(); void chat.refresh(); setNotification(message) }} />}
     {selectedId && <TaskDialog task={selectedTask} saving={data.saving} onClose={closeTask} onStatus={data.setStatus} />}
+    {receiptScenarioId && <ScenarioReceiptDialog scenarioId={receiptScenarioId} tasks={data.tasks} tasksLoading={data.loading} tasksError={data.loadError} onChanged={freeTimeChanged} onClose={() => setReceiptScenarioId(null)} onNotice={setNotification} />}
   </div>
 }
 

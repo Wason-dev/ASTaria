@@ -1,8 +1,10 @@
 import { spawn } from 'node:child_process'
-import { mkdir, stat, chmod, rename, rm } from 'node:fs/promises'
+import { lstat, mkdtemp, chmod, readFile, rm } from 'node:fs/promises'
+import { rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { randomUUID } from 'node:crypto'
+import { createHash } from 'node:crypto'
 
 function run(file, args, input = '') {
   return new Promise((resolve, reject) => {
@@ -23,31 +25,35 @@ function run(file, args, input = '') {
   })
 }
 
-export function createKeychain(dataDirectory, { binaryPath } = {}) {
+export function createKeychain(_dataDirectory, { binaryPath, binarySha256 } = {}) {
   let preparation
-  const binary = binaryPath ?? join(dataDirectory, 'bin', 'astaria-keychain')
+  let binary = binaryPath, expectedHash = binarySha256
   const source = fileURLToPath(new URL('./native/keychain.m', import.meta.url))
   const prepare = () => preparation ??= (async () => {
     if (process.platform !== 'darwin') throw new Error('当前密钥存储支持 macOS 钥匙串')
     // Desktop builds ship a signed helper; end users do not need clang/Xcode.
     if (binaryPath) {
-      const bundled = await stat(binary)
-      if (!bundled.isFile() || !(bundled.mode & 0o111)) throw new Error('应用内钥匙串助手不可用，请重新安装 ASTaria')
+      const bundled = await lstat(binary)
+      if (!bundled.isFile() || bundled.isSymbolicLink() || !(bundled.mode & 0o111)
+        || !/^[a-f0-9]{64}$/u.test(expectedHash ?? '')) throw new Error('应用内钥匙串助手不可用，请重新安装 ASTaria')
       return
     }
-    await mkdir(join(dataDirectory, 'bin'), { recursive: true, mode: 0o700 })
-    const compiled = await stat(binary).catch(() => null)
-    if (!compiled || compiled.mtimeMs < (await stat(source)).mtimeMs) {
-      const temporary = `${binary}.${randomUUID()}`
-      try {
-        await run('/usr/bin/clang', ['-fobjc-arc', '-framework', 'Foundation', '-framework', 'Security', source, '-O2', '-o', temporary])
-        await chmod(temporary, 0o700)
-        await rename(temporary, binary)
-      } finally { await rm(temporary, { force: true }) }
-    }
+    // Source development still needs clang, but never executes a persistent,
+    // replaceable cache from the user's data directory. Compile into a fresh
+    // private directory and retain its digest in this process only.
+    const directory = await mkdtemp(join(tmpdir(), 'astaria-keychain-'))
+    try {
+      binary = join(directory, 'astaria-keychain')
+      await run('/usr/bin/clang', ['-fobjc-arc', '-framework', 'Foundation', '-framework', 'Security', source, '-O2', '-o', binary])
+      await chmod(binary, 0o700)
+      expectedHash = createHash('sha256').update(await readFile(binary)).digest('hex')
+      process.once('exit', () => { try { rmSync(directory, { recursive: true, force: true }) } catch { /* OS temporary directory. */ } })
+    } catch (error) { await rm(directory, { recursive: true, force: true }); throw error }
   })().catch(error => { preparation = undefined; throw error })
   const invoke = async request => {
     await prepare()
+    const info = await lstat(binary)
+    if (!info.isFile() || info.isSymbolicLink() || createHash('sha256').update(await readFile(binary)).digest('hex') !== expectedHash) throw new Error('钥匙串助手校验失败，请重新打开或重新安装 ASTaria')
     const result = JSON.parse(await run(binary, [], JSON.stringify(request)))
     if (!result.ok) throw new Error('钥匙串暂时不可用，请解锁或允许 ASTaria 访问')
     return result

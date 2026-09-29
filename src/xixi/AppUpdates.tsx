@@ -18,6 +18,7 @@ type UpdateState = {
   download: { version: string; sizeBytes: number; downloadedBytes: number } | null
   canInstall: boolean
   releasesUrl: string
+  lastInstall?: { status: 'installed' | 'failed' | 'prepared'; message: string } | null
 }
 type UpdateAction = 'load' | 'poll' | 'check' | 'automatic' | 'download' | 'install' | 'cancel'
 const POLL_LIMIT = 60
@@ -146,6 +147,7 @@ export function AppUpdates({ visible = true }: { visible?: boolean }) {
       <p>{statusText}</p>
       {!unavailable && checkedAt && <small>上次检查 {checkedAt}</small>}
     </div>
+    {state?.lastInstall && <div className="xixi-app-update-feedback xixi-app-update-last-install" data-error={state.lastInstall.status === 'failed'} role="status"><p>{state.lastInstall.message}</p></div>}
     {!unavailable && <div className="xixi-settings-actions xixi-app-update-actions">
       <button type="button" disabled={busy || state?.status === 'ready'} onClick={() => void request(!state || state.status === 'checking' ? 'load' : 'check')}>{checking || pending === 'check' ? '检查中…' : !state || state.status === 'checking' ? '重新读取' : '检查更新'}</button>
       {latest?.downloadUrl && (state?.status === 'available' || state?.status === 'error') && <button type="button" className="xixi-app-update-download" disabled={busy} onClick={() => void request('download')}>下载并校验{latest.size ? ` · ${(latest.size / 1024 / 1024).toFixed(1)} MB` : ''}</button>}

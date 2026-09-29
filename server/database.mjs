@@ -83,15 +83,19 @@ export function createDatabase(filename) {
   let depth = 0
   function transaction(fn) {
     if (typeof fn !== 'function' || fn.constructor.name === 'AsyncFunction') fail('数据库事务需要同步函数')
-    const savepoint = `astaria_${depth++}`
-    db.exec(depth === 1 ? 'BEGIN IMMEDIATE' : `SAVEPOINT ${savepoint}`)
+    const outermost = depth === 0
+    const savepoint = `astaria_${depth}`
+    // A failed BEGIN/SAVEPOINT has not entered a transaction. In particular,
+    // SQLITE_BUSY must not make the next outer transaction start deferred.
+    db.exec(outermost ? 'BEGIN IMMEDIATE' : `SAVEPOINT ${savepoint}`)
+    depth++
     try {
       const result = fn()
       if (result && typeof result.then === 'function') fail('数据库事务不能跨越异步操作')
-      db.exec(depth === 1 ? 'COMMIT' : `RELEASE SAVEPOINT ${savepoint}`)
+      db.exec(outermost ? 'COMMIT' : `RELEASE SAVEPOINT ${savepoint}`)
       return result
     } catch (error) {
-      db.exec(depth === 1 ? 'ROLLBACK' : `ROLLBACK TO SAVEPOINT ${savepoint}; RELEASE SAVEPOINT ${savepoint}`)
+      db.exec(outermost ? 'ROLLBACK' : `ROLLBACK TO SAVEPOINT ${savepoint}; RELEASE SAVEPOINT ${savepoint}`)
       throw error
     } finally { depth-- }
   }
@@ -197,10 +201,12 @@ export function createDatabase(filename) {
     return db.prepare(`SELECT document FROM tasks${conditions.length ? ` WHERE ${conditions.join(' AND ')}` : ''} ORDER BY json_extract(document, '$.createdAt') DESC, id`).all(...params).map(row => JSON.parse(row.document))
   }
   function createTask(draft) {
-    const timestamp = now()
-    const task = fullTask({ ...taskInput(draft), id: randomUUID(), createdAt: timestamp, updatedAt: timestamp })
-    put('tasks', task.id, task)
-    return task
+    return transaction(() => {
+      const timestamp = now()
+      const task = fullTask({ ...taskInput(draft), id: randomUUID(), createdAt: timestamp, updatedAt: timestamp })
+      put('tasks', task.id, task)
+      return task
+    })
   }
   function updateTask(id, patch, expectedUpdatedAt) {
     return transaction(() => {
@@ -298,12 +304,14 @@ export function createDatabase(filename) {
   function ensureSeedArea(id) {
     const seed = SEED_AREAS.find(area => area[0] === id)
     if (!seed || get('areas', id)) return
-    const [, name, defaultEnergy] = seed
-    const timestamp = now()
-    const area = { id, name, defaultEnergy, createdAt: timestamp, updatedAt: timestamp, deletedAt: null }
-    if (put('areas', id, area, true)) {
-      db.prepare('INSERT OR REPLACE INTO state (key,value) VALUES (?,?)').run(`generated-area:${id}`, JSON.stringify(area))
-    }
+    transaction(() => {
+      const [, name, defaultEnergy] = seed
+      const timestamp = now()
+      const area = { id, name, defaultEnergy, createdAt: timestamp, updatedAt: timestamp, deletedAt: null }
+      if (put('areas', id, area, true)) {
+        db.prepare('INSERT OR REPLACE INTO state (key,value) VALUES (?,?)').run(`generated-area:${id}`, JSON.stringify(area))
+      }
+    })
   }
   function fullArea(input) {
     return { id: identifier(input.id), name: text(input.name, '分类名称', 100), defaultEnergy: choice(input.defaultEnergy, ['deep', 'light'], '分类精力', 'deep'), createdAt: dateTime(input.createdAt, '创建时间'), updatedAt: dateTime(input.updatedAt, '修改时间'), deletedAt: input.deletedAt == null ? null : dateTime(input.deletedAt, '删除时间') }
@@ -315,12 +323,14 @@ export function createDatabase(filename) {
     return area
   }
   function renameArea(id, name) {
-    const current = get('areas', id)
-    if (!current) fail('找不到这个分类', 404)
-    const area = fullArea({ ...current, name, updatedAt: now() })
-    put('areas', id, area)
-    db.prepare('DELETE FROM state WHERE key = ?').run(`generated-area:${id}`)
-    return area
+    return transaction(() => {
+      const current = get('areas', id)
+      if (!current) fail('找不到这个分类', 404)
+      const area = fullArea({ ...current, name, updatedAt: now() })
+      put('areas', id, area)
+      db.prepare('DELETE FROM state WHERE key = ?').run(`generated-area:${id}`)
+      return area
+    })
   }
   function fullEvent(input) {
     return clean({ ...eventInput(input), id: identifier(input.id), updatedAt: dateTime(input.updatedAt, '修改时间'), deletedAt: input.deletedAt == null ? null : dateTime(input.deletedAt, '删除时间') })

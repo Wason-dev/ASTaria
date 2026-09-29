@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App'
 import BlackHolePrototype from './prototype/BlackHolePrototype'
+import { RenderErrorBoundary } from './RenderErrorBoundary'
 import './index.css'
 
 const container = document.getElementById('root')
@@ -16,7 +17,7 @@ const macDesktop = import.meta.env.MODE === 'desktop' && navigator.userAgent.inc
 
 createRoot(container).render(
   <StrictMode>
-    <Root />
+    <RenderErrorBoundary><Root /></RenderErrorBoundary>
     {macDesktop && <div className="desktop-drag-region" aria-hidden="true" />}
   </StrictMode>,
 )

@@ -56,6 +56,7 @@ export interface RenderStats {
   decisionEffect: ReturnType<DecisionEffectController['getSnapshot']>
   stringFlightProgress: number
   cameraRadius: number
+  foregroundFirstFrameMs: number | null
 }
 
 interface CameraSpring {
@@ -224,6 +225,8 @@ export class BlackHoleRenderer {
   private raf = 0
   private statsTimer: ReturnType<typeof setInterval> | null = null
   private previousFrame: number | null = null
+  private foregroundStartedAt: number | null = null
+  private foregroundFirstFrameMs: number | null = null
   private previousWasAmbient = false
   private nextFrameAt = 0
   private renderProfile: RenderProfile = 'full'
@@ -350,6 +353,8 @@ export class BlackHoleRenderer {
     window.addEventListener(STRING_FLIGHT_EVENT, this.handleStringFlight)
     this.decisionEffect.setDetail(getDecisionEffect())
     document.addEventListener('visibilitychange', this.handleVisibility)
+    window.addEventListener('focus', this.handleForeground)
+    window.addEventListener('pageshow', this.handleForeground)
     this.motionQuery.addEventListener('change', this.handleMotion)
     this.resizeObserver = new ResizeObserver(this.handleResize)
     this.resizeObserver.observe(host)
@@ -523,11 +528,24 @@ export class BlackHoleRenderer {
       decisionEffect: this.decisionEffect.getSnapshot(this.decisionMotionIsReduced()),
       stringFlightProgress: this.stringFlightProgress,
       cameraRadius: this.material.uniforms.uFlightCameraRadius.value,
+      foregroundFirstFrameMs: this.foregroundFirstFrameMs,
     }
   }
 
   getFrameSamples() {
     return this.sessionSampleCursor ? [...this.sessionSamples.slice(this.sessionSampleCursor), ...this.sessionSamples.slice(0, this.sessionSampleCursor)] : [...this.sessionSamples]
+  }
+
+  /** UI projection does not need to sort frame timings or copy effect state. */
+  getCameraSnapshot() {
+    return {
+      zoom: this.material.uniforms.uZoom.value as number,
+      roll: THREE.MathUtils.radToDeg(this.material.uniforms.uRoll.value),
+      inclination: THREE.MathUtils.radToDeg(this.material.uniforms.uInclination.value),
+      centerX: this.cameraCenter.x, centerY: this.cameraCenter.y,
+      cameraTransition: this.cameraIsRunning(), reducedMotion: this.reducedMotion,
+      paused: this.paused, simulationTime: this.simulationTime,
+    }
   }
 
   dispose() {
@@ -537,6 +555,8 @@ export class BlackHoleRenderer {
     this.stopStatsTimer()
     this.resizeObserver.disconnect()
     document.removeEventListener('visibilitychange', this.handleVisibility)
+    window.removeEventListener('focus', this.handleForeground)
+    window.removeEventListener('pageshow', this.handleForeground)
     this.motionQuery.removeEventListener('change', this.handleMotion)
     this.host.removeEventListener('pointermove', this.handlePointer)
     this.host.removeEventListener('pointerleave', this.handlePointerLeave)
@@ -763,6 +783,10 @@ export class BlackHoleRenderer {
       return
     }
     const ambient = this.ambientIsRunning()
+    // macOS may throttle an occluded window without a visibilitychange. A
+    // suspended RAF is not a slow rendered frame: discard its wall-clock gap
+    // so it neither drags the rolling FPS down nor fast-forwards the scene.
+    if (this.previousFrame !== null && now - this.previousFrame > 1000) this.resetMeasurements()
     const elapsed = this.previousFrame === null ? 0 : Math.max(0, now - this.previousFrame)
     const delta = elapsed * 0.001
     if (ambient && this.previousWasAmbient && elapsed > 0) {
@@ -816,6 +840,10 @@ export class BlackHoleRenderer {
       ? 1 - THREE.MathUtils.smoothstep(this.stringFlightProgress, .05, .5) : 1
     this.bloom.render(this.sceneTarget.texture, this.night, this.pointer, this.pointerStrength * pointerWeight)
     this.renderedFrames++
+    if (this.foregroundStartedAt !== null) {
+      this.foregroundFirstFrameMs = Math.max(0, performance.now() - this.foregroundStartedAt)
+      this.foregroundStartedAt = null
+    }
     this.nextFrameAt = nextRenderDeadline(this.nextFrameAt, now, this.targetFps)
     if (ambient || this.springIsRunning() || this.cameraIsRunning() || this.pointerIsRunning()
       || this.responseEffect.needsFrame(this.reducedMotion, this.paused)
@@ -962,10 +990,21 @@ export class BlackHoleRenderer {
     this.resetMeasurements()
     this.syncStatsTimer()
     if (!this.visibilityPaused) {
-      this.resize()
-      this.requestFrame()
+      this.handleForeground()
     }
     this.publishStats()
+  }
+
+  private handleForeground = () => {
+    if (document.hidden || this.disposed || this.contextLost) return
+    this.visibilityPaused = false
+    this.foregroundStartedAt ??= performance.now()
+    this.foregroundFirstFrameMs = null
+    this.cancelFrame()
+    this.resetMeasurements()
+    this.resize()
+    this.syncStatsTimer()
+    this.requestFrame()
   }
 
   private handleMotion = (event: MediaQueryListEvent) => {

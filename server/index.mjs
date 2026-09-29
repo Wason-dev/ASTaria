@@ -69,7 +69,7 @@ export function createLocalService({ db = createDatabase(join(DATA_DIRECTORY, 'a
   const routeAnalysis = createRouteAnalysis({ db, companion, complete: completion })
   const stringOrder = createStringOrder({ db, complete: completion })
   const horizonOrder = createHorizonOrder({ db, complete: completion })
-  const horizonGrouping = createHorizonGrouping({ list: horizonOrder.list, complete: completion })
+  const horizonGrouping = createHorizonGrouping({ db, list: horizonOrder.list, complete: completion })
   const freeTime = createFreeTime({ db })
   const localModelInstaller = createLocalModelInstaller({ fetcher })
   const state = (id = db.getActiveConversation().id, before) => {

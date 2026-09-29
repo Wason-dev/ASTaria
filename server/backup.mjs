@@ -12,7 +12,7 @@ const columns = {
   task_completion_history: ['id', 'taskId', 'beforeStatus', 'completionDoneAt', 'completedAt', 'closedAt'], state: ['key', 'value'],
 }
 const documentTables = new Set(['areas', 'tasks', 'events', 'availability', 'assignments', 'memories', 'operations', 'turns', 'summaries'])
-const stateAllowed = key => ['activeConversation', 'deepseekModel', 'planner-v1', 'planner-v1-weekend-defaults-v1', 'companion-v1', 'preferences:app', 'preferences:model-connection'].includes(key) || /^(task-undo-version:|generated-area:|deleted-conversation:|deleted-request:)/u.test(key)
+const stateAllowed = key => ['activeConversation', 'deepseekModel', 'planner-v1', 'planner-v1-weekend-defaults-v1', 'companion-v1', 'preferences:app', 'preferences:model-connection', 'preferences:free-time-daily'].includes(key) || /^(task-undo-version:|generated-area:|deleted-conversation:|deleted-request:)/u.test(key)
 const fail = message => { throw new ValidationError(message) }
 const checksum = tables => createHash('sha256').update(JSON.stringify(tables)).digest('hex')
 const integer = (value, min = 0, max = Number.MAX_SAFE_INTEGER) => { if (!Number.isSafeInteger(value) || value < min || value > max) fail('备份数字无效'); return value }
@@ -260,11 +260,22 @@ export function createBackupStore({ db, transaction, validate }) {
             const value = parse(row.value, '备份设置'); object(value)
             if (row.key === 'companion-v1') companion(value)
             if (row.key === 'preferences:model-connection') validateModelSettings(value)
+            if (row.key === 'preferences:free-time-daily') {
+              knownKeys(value, ['date', 'completedAt', 'policyVersion'], '余时每日安排记录')
+              day(value.date); stamp(value.completedAt)
+              if (value.policyVersion !== undefined) integer(value.policyVersion, 1)
+            }
           }
         }
         if (table === 'conversations') { text(row.title, '对话名', 120); stamp(row.createdAt); stamp(row.updatedAt); choice(row.titleEdited, [0, 1], '对话标题状态') }
         if (table === 'task_completion_history') { integer(row.id, 1); identifier(row.taskId); choice(row.beforeStatus, ['todo', 'doing', 'done', 'dropped'], '完成前状态'); stamp(row.completionDoneAt); stamp(row.completedAt); optionalStamp(row.closedAt) }
       }
+    }
+    const openCompletions = new Set()
+    for (const row of input.tables.task_completion_history) {
+      if (row.closedAt !== null) continue
+      if (openCompletions.has(row.taskId)) fail('备份中同一任务有多条未撤回的完成记录，请使用有效备份')
+      openCompletions.add(row.taskId)
     }
     return transaction(() => {
       if (running()) throw new ValidationError('析熙还在处理消息，请等回复结束再恢复', 409)

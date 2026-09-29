@@ -5,14 +5,14 @@ export async function readCompletionStream(response, { maxBytes, onDelta }) {
   const message = { role: 'assistant', content: '' }, calls = new Map()
   let pending = '', data = [], bytes = 0, ended = false, finishReason = null, usage
   let publishedContent = 0, protocolText = false
-  const emitContent = () => {
+  const emitContent = (final = false) => {
     const content = message.content
     if (/(?:DSML|<\|(?:tool|function)|<｜(?:tool|function))/iu.test(content)) protocolText = true
     if (protocolText) return
     // Hold an unfinished markup prefix across chunks so textual tool protocols
     // cannot flash into the chat before the ordinary protocol validator runs.
     const lastOpen = content.lastIndexOf('<'), lastClose = content.lastIndexOf('>')
-    const safeEnd = lastOpen > lastClose ? lastOpen : content.length
+    const safeEnd = !final && lastOpen > lastClose ? lastOpen : content.length
     if (safeEnd > publishedContent) {
       onDelta?.({ type: 'content', delta: content.slice(publishedContent, safeEnd) })
       publishedContent = safeEnd
@@ -22,7 +22,7 @@ export async function readCompletionStream(response, { maxBytes, onDelta }) {
     if (!data.length) return
     const raw = data.join('\n'); data = []
     if (raw === '[DONE]') { ended = true; return }
-    if (ended) throw new Error('AFTER_STREAM_END')
+    if (ended) return
     const chunk = JSON.parse(raw)
     if (chunk.error) throw new Error('UPSTREAM_STREAM_ERROR')
     if (chunk.usage) usage = chunk.usage
@@ -66,15 +66,18 @@ export async function readCompletionStream(response, { maxBytes, onDelta }) {
       if (bytes > maxBytes) throw new Error('RESPONSE_LIMIT')
       pending += decoder.decode(value, { stream: true })
       let newline
-      while ((newline = pending.indexOf('\n')) >= 0) {
+      while (!ended && (newline = pending.indexOf('\n')) >= 0) {
         line(pending.slice(0, newline).replace(/\r$/u, ''))
         pending = pending.slice(newline + 1)
       }
     }
-    if (pending) line(pending.replace(/\r$/u, ''))
-    event()
+    if (!ended) {
+      if (pending) line(pending.replace(/\r$/u, ''))
+      event()
+    }
     if (!ended || !finishReason) throw new Error('INCOMPLETE_STREAM')
     if (calls.size) message.tool_calls = [...calls.entries()].sort(([a], [b]) => a - b).map(([, call]) => call)
+    if (finishReason === 'stop' && !calls.size) emitContent(true)
     return { choices: [{ index: 0, message, finish_reason: finishReason }], ...(usage ? { usage } : {}) }
   } finally { await reader.cancel().catch(() => {}) }
 }

@@ -61,8 +61,9 @@ export function nativeReminderRunner(binary) {
 
 export function createReminderService({ stateFile, snapshot, run, now = () => new Date() }) {
   let enabled = false, authorization = 0, count = 0, through = null, error = null, omitted = 0, fingerprint = '', timer, pending, closed = false
+  let previewMode = 'unknown', iconAvailable = null
   const ready = readFile(stateFile, 'utf8').then(value => { enabled = JSON.parse(value).enabled === true }).catch(() => {})
-  const status = () => ({ supported: true, enabled, authorization, count, through, omitted, error })
+  const status = () => ({ supported: true, enabled, authorization, count, through, omitted, error, previewMode, iconAvailable })
   const sync = async () => {
     await ready
     if (closed) return status()
@@ -70,10 +71,16 @@ export function createReminderService({ stateFile, snapshot, run, now = () => ne
     pending = (async () => {
       try {
         const native = await run('status'); authorization = native.authorization
+        previewMode = ['always', 'when-unlocked', 'never'][native.showPreviews] ?? 'unknown'
+        iconAvailable = typeof native.iconAvailable === 'boolean' ? native.iconAvailable : null
         const plan = enabled ? buildReminderPlan(snapshot(), now()) : { entries: [], omitted: 0 }
         const key = hash(JSON.stringify([plan.entries, authorization]))
         if (key !== fingerprint) {
           await run('replace', plan.entries)
+          const delivered = await run('status')
+          if (Number.isInteger(delivered.pendingWithContent) && delivered.pendingWithContent !== delivered.pending) {
+            throw new Error('系统收到的提醒内容不完整，请重新同步提醒')
+          }
           fingerprint = key
         }
         count = plan.entries.length; omitted = plan.omitted; through = plan.entries.at(-1)?.at ?? null; error = null
@@ -95,6 +102,12 @@ export function createReminderService({ stateFile, snapshot, run, now = () => ne
       enabled = value; await mkdir(dirname(stateFile), { recursive: true, mode: 0o700 }); await writeFile(stateFile, JSON.stringify({ enabled }), { mode: 0o600 })
       return sync()
     },
+    test: async () => {
+      const settings = await run('status')
+      if (![2, 3].includes(settings.authorization)) throw Error('请先开启系统提醒并允许通知')
+      await run('test')
+      return { message: '测试提醒将在 5 秒后出现，可以切到桌面查看' }
+    },
     flush: async () => { clearTimeout(timer); return sync() },
     close: () => { closed = true; clearTimeout(timer) },
   }
@@ -105,12 +118,12 @@ export async function handleReminderRequest(service, req, res) {
   const send = (status, body) => { res.statusCode = status; res.setHeader('Content-Type', 'application/json; charset=utf-8'); res.setHeader('Cache-Control', 'no-store'); res.end(JSON.stringify(body)) }
   try {
     if (req.method === 'GET' && req.url === '/api/desktop/reminders') send(200, await service.status())
-    else if (req.method === 'POST' && ['/api/desktop/reminders/enabled', '/api/desktop/reminders/refresh'].includes(req.url)) {
+    else if (req.method === 'POST' && ['/api/desktop/reminders/enabled', '/api/desktop/reminders/refresh', '/api/desktop/reminders/test'].includes(req.url)) {
       if (req.headers['x-astaria-local'] !== '1') { send(403, { error: 'Forbidden' }); return true }
       let size = 0; const chunks = []
       for await (const chunk of req) { size += chunk.length; if (size > 1024) throw Error('提醒请求过大'); chunks.push(chunk) }
       const body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}')
-      send(200, req.url.endsWith('/enabled') ? await service.setEnabled(body.enabled) : await service.flush())
+      send(200, req.url.endsWith('/enabled') ? await service.setEnabled(body.enabled) : req.url.endsWith('/test') ? await service.test() : await service.flush())
     } else send(405, { error: 'Method not allowed' })
   } catch (reason) { send(400, { error: reason instanceof Error && /[\u3400-\u9fff]/u.test(reason.message) ? reason.message : '系统提醒操作未完成，请重试' }) }
   return true

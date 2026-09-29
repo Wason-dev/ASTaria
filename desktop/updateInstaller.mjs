@@ -4,6 +4,9 @@ import { constants } from 'node:fs'
 import { access, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises'
 import { basename, dirname, join, resolve, sep } from 'node:path'
 
+import { RELEASE_KEYS, verifyReleaseManifest } from './releaseTrust.mjs'
+import { verifyAsset } from './updateDownload.mjs'
+
 const execute = promisify(execFile)
 const inside = (value, root) => value === root || value.startsWith(`${root}${sep}`)
 
@@ -11,7 +14,7 @@ const inside = (value, root) => value === root || value.startsWith(`${root}${sep
 // directories live on the destination volume so replacement/rollback are atomic.
 export const INSTALL_SCRIPT = `#!/bin/sh
 set -eu
-pid="$1"; target="$2"; staging="$3"; result="$4"; executable="$5"
+pid="$1"; target="$2"; staging="$3"; result="$4"; executable="$5"; expectedHash="$6"
 new="$staging/ASTaria.app"; old="$staging/previous.app"; health="$staging/started"
 moved=0; launched=""
 restore() {
@@ -37,6 +40,11 @@ while /bin/kill -0 "$pid" 2>/dev/null; do
   /bin/sleep 0.2
 done
 [ -d "$new" ] && [ ! -L "$new" ] && [ -d "$target" ] && [ ! -L "$target" ] && [ ! -e "$old" ] && [ ! -e "$health" ]
+# The running application may take time to quit. Revalidate after that wait,
+# immediately before replacement, against the authenticated release CDHash.
+/usr/bin/codesign --verify --deep --strict "$new"
+actualHash=$(/usr/bin/codesign --display --verbose=4 "$new" 2>&1 | /usr/bin/sed -n 's/^CDHash=//p')
+[ -n "$expectedHash" ] && [ "$actualHash" = "$expectedHash" ]
 # Keep the outer bundle inode so Finder aliases continue to find this App.
 [ -d "$target/Contents" ] && [ ! -L "$target/Contents" ] && [ -d "$new/Contents" ] && [ ! -L "$new/Contents" ]
 /bin/mkdir "$old"
@@ -106,7 +114,8 @@ export async function validateUpdateBundle(bundle, manifest, run = execute) {
   return info.CFBundleExecutable
 }
 
-export async function prepareMacUpdate({ appBundle, path: dmg, manifest, resultFile, run = execute }) {
+export async function prepareMacUpdate({ appBundle, path: dmg, manifest, resultFile, run = execute, trustedKeys = RELEASE_KEYS }) {
+  verifyReleaseManifest(manifest, trustedKeys)
   const target = resolve(appBundle)
   await regular(target, true)
   if (basename(target) !== 'ASTaria.app' || await realpath(target) !== target || target.startsWith('/Volumes/') || target.includes('/AppTranslocation/')) {
@@ -118,6 +127,7 @@ export async function prepareMacUpdate({ appBundle, path: dmg, manifest, resultF
   let mounted = false, prepared = false, attachAttempted = false
   try {
     await mkdir(mount, { mode: 0o700 })
+    await verifyAsset(dmg, manifest)
     attachAttempted = true
     await run('/usr/bin/hdiutil', ['attach', '-nobrowse', '-readonly', '-mountpoint', mount, dmg], { timeout: 120_000 })
     mounted = true
@@ -132,7 +142,7 @@ export async function prepareMacUpdate({ appBundle, path: dmg, manifest, resultF
     await mkdir(dirname(resultFile), { recursive: true, mode: 0o700 })
     await writeFile(resultFile, 'prepared', { mode: 0o600 })
     prepared = true
-    return { target, staging, resultFile, script, executable }
+    return { target, staging, resultFile, script, executable, appCDHash: manifest.appCDHash }
   } finally {
     if (mounted || attachAttempted) {
       mounted = true
@@ -143,7 +153,11 @@ export async function prepareMacUpdate({ appBundle, path: dmg, manifest, resultF
 }
 
 export async function launchMacUpdate(prepared, pid = process.pid) {
-  const child = spawn('/bin/sh', [prepared.script, String(pid), prepared.target, prepared.staging, prepared.resultFile, prepared.executable], { detached: true, stdio: 'ignore' })
+  // Execute this process's verified template, not a writable script path left
+  // in staging while the application waits for outstanding work to finish.
+  const child = spawn('/bin/sh', ['-s', '--', String(pid), prepared.target, prepared.staging, prepared.resultFile, prepared.executable, prepared.appCDHash], { detached: true, stdio: ['pipe', 'ignore', 'ignore'] })
+  child.stdin.on('error', () => {})
+  child.stdin.end(INSTALL_SCRIPT)
   await new Promise((yes, no) => { child.once('spawn', yes); child.once('error', no) })
   child.unref()
 }

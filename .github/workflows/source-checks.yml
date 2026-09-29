@@ -2,7 +2,7 @@ name: Source Checks
 
 on:
   push:
-    branches: [main, feature/settings-local-model]
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -19,6 +19,9 @@ jobs:
           node-version: 24.19.0
           cache: npm
       - run: npm ci
+      # Cheap consistency gate first: the packaged version must be documented
+      # before the slow desktop build runs.
+      - run: node scripts/verify-doc-versions.mjs
       - run: npm test
       - run: npm run build:desktop
       - run: node scripts/third-party-notices.mjs

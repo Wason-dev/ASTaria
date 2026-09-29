@@ -198,10 +198,11 @@ async function main() {
     await mkdir(dirname(helper))
     run('/usr/bin/clang', ['-arch', ARCH, '-mmacosx-version-min=13.0', '-O2', '-fobjc-arc', '-framework', 'Foundation', '-framework', 'Security', join(ROOT, 'server/native/keychain.m'), '-o', helper])
     await chmod(helper, 0o755)
+    // Filled after signing below: codesign changes the executable bytes.
     const reminderApp = join(payload, 'bin', 'ASTariaReminders.app')
     const reminderBinary = join(reminderApp, 'Contents', 'MacOS', 'astaria-reminders')
     await mkdir(dirname(reminderBinary), { recursive: true })
-    run('/usr/bin/clang', ['-arch', ARCH, '-mmacosx-version-min=13.0', '-O2', '-fobjc-arc', '-framework', 'AppKit', '-framework', 'UserNotifications', join(ROOT, 'desktop/native/reminders.m'), '-o', reminderBinary])
+    run('/usr/bin/clang', ['-arch', ARCH, '-mmacosx-version-min=13.0', '-O2', '-fobjc-arc', '-framework', 'AppKit', '-framework', 'UserNotifications', '-framework', 'CoreServices', join(ROOT, 'desktop/native/reminders.m'), '-o', reminderBinary])
     await chmod(reminderBinary, 0o755)
     await writePlist(join(reminderApp, 'Contents', 'Info.plist'), { CFBundleIdentifier: `${BUNDLE_ID}.reminders`,
       CFBundleExecutable: 'astaria-reminders', CFBundleName: 'ASTaria 提醒', CFBundleDisplayName: 'ASTaria 提醒',
@@ -235,6 +236,8 @@ async function main() {
     // Avoid --deep signing, which can miss helpers or assign them wrong metadata.
     for (const path of files.sort((a, b) => b.split(sep).length - a.split(sep).length)) if (await isMachO(path)) sign(path, path !== helper && path !== reminderBinary)
     for (const path of bundles.sort((a, b) => b.split(sep).length - a.split(sep).length)) sign(path, path.endsWith('.app') && path !== reminderApp)
+    buildInfo.nativeHelpers = { keychainSha256: await sha256(helper) }
+    await writeFile(join(payload, 'build-info.json'), `${JSON.stringify(buildInfo, null, 2)}\n`)
     sign(app, true)
     run('/usr/bin/codesign', ['--verify', '--deep', '--strict', '--verbose=2', app])
     if (run('/usr/bin/lipo', ['-archs', helper]) !== ARCH) fail('The compiled Keychain helper is not arm64.')

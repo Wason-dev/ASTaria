@@ -9,7 +9,7 @@ import type { Appearance, useAppearance } from './appearance'
 import { recommendationReason, scheduleDisplay, scheduleStatusLabel, taskArea, taskGroups, taskSchedule } from './tasks'
 import { useFocusTimer } from './useFocusTimer'
 import { UpcomingDeadlines } from './UpcomingDeadlines'
-import { buildWorkbenchBriefing, effectiveEstimate, estimateLabel } from './briefing'
+import { buildWorkbenchBriefing, effectiveEstimate, planningEstimateLabel } from './briefing'
 import type { ScheduledMinutes } from './briefing'
 import { usePlanner } from '../planner/usePlanner'
 import { freeTimeCompletionAction } from '../planner/completion'
@@ -99,6 +99,7 @@ function WorkbenchContent({ active, data, now, onCapture, onNotice, appearance, 
   const [transitioning, setTransitioning] = useState(false)
   const [timingOpen, setTimingOpen] = useState(false)
   const [error, setError] = useState('')
+  const [removeCandidate, setRemoveCandidate] = useState<Task | null>(null)
   const [assistance, setAssistance] = useState<{ taskId: string; text: string; revision: number } | null>(null)
   const heading = useRef<HTMLHeadingElement>(null)
   const deadlineHeading = useRef<HTMLHeadingElement>(null)
@@ -205,6 +206,7 @@ function WorkbenchContent({ active, data, now, onCapture, onNotice, appearance, 
   }, [session?.phase, session?.mode, active, preview, onNotice])
 
   const switchTo = (id: string | null) => {
+    setRemoveCandidate(null)
     const nextTask = tasks.find(task => task.id === id)
     const nextSession = nextTask?.freeTimeGoalId ? taskSchedule(nextTask, now, scheduleBlocks, completedFreeTimeSessions) : undefined
     startRevision.current += 1
@@ -234,6 +236,22 @@ function WorkbenchContent({ active, data, now, onCapture, onNotice, appearance, 
   }
   const updateStatus = async (task: Task, status: TaskStatus) => {
     await data.setStatus(task.id, status)
+  }
+  const removeSelected = async () => {
+    if (!removeCandidate || removeCandidate.id !== selectedId || removeCandidate.freeTimeGoalId || busy || reopening.current) return
+    reopening.current = true
+    startRevision.current += 1
+    timer.pause()
+    setError('')
+    try {
+      await data.remove(removeCandidate.id, removeCandidate.updatedAt)
+      notifyLocalDataChange()
+      onNotice(`已删除「${removeCandidate.title}」及其关联安排`)
+      switchTo(null)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '事项尚未删除，请重试')
+      setRemoveCandidate(null)
+    } finally { reopening.current = false }
   }
   const start = async () => {
     if (!selected || busy || selectedDone || selectedMissingSession || reopening.current) return
@@ -319,7 +337,7 @@ function WorkbenchContent({ active, data, now, onCapture, onNotice, appearance, 
       {appearance.metadata && <span className="wb-task-meta">
         <span className="wb-meta-value" title={`课程或分类：${taskArea(task)}`}><Icon name="book" /><span>{taskArea(task)}</span></span>
         <span className="wb-meta-value" title={schedule ? '日历安排' : task.startAt && agendaDate(task.startAt) ? '安排日期' : '截止时间'}><Icon name="calendar" /><span>{schedule ? scheduleDisplay(schedule, now) : task.startAt && agendaDate(task.startAt) ? `${shortTimestamp(task.startAt, now)}安排` : task.due ? `${deadlineLabel(task, now)}截止` : '待安排'}</span></span>
-        {effectiveEstimate(task, scheduledMinutes) !== undefined ? <span className="wb-meta-value" title={estimateLabel(task, scheduledMinutes) ?? '用时'}><Icon name="hourglass" /><span className="p0-sr-only">用时</span>{estimateLabel(task, scheduledMinutes)}</span> : null}
+        {effectiveEstimate(task, scheduledMinutes) !== undefined ? <span className="wb-meta-value" title={planningEstimateLabel(task, scheduledMinutes) ?? '用时'}><Icon name="hourglass" /><span className="p0-sr-only">用时</span>{planningEstimateLabel(task, scheduledMinutes)}</span> : null}
       </span>}
       {appearance.progress && timer.getSpentMs(task.id) > 0 && <span className="wb-task-spent wb-meta-value" title="累计专注"><Icon name="timer" /><span className="p0-sr-only">累计专注</span>{spentLabel(timer.getSpentMs(task.id))}</span>}
     </span>
@@ -358,11 +376,12 @@ function WorkbenchContent({ active, data, now, onCapture, onNotice, appearance, 
             <div className="wb-focus-modes" data-mode={handoffRequest ? 'handoff' : 'focus'}>
             <div className="wb-focus-view" data-view="focus" inert={Boolean(handoffRequest)} aria-hidden={Boolean(handoffRequest)}>
             <div className="wb-focus-details">
-            <span className="wb-eyebrow">{selectedDone ? selected.freeTimeGoalId ? '本次余时，完成了' : '这一项，完成了' : '当前专注'}</span>
+            <div className="wb-focus-title-row"><span className="wb-eyebrow">{selectedDone ? selected.freeTimeGoalId ? '本次余时，完成了' : '这一项，完成了' : '当前专注'}</span>{!selected.freeTimeGoalId && <button type="button" className="wb-inline-button" disabled={busy || transitioning} aria-expanded={removeCandidate?.id === selected.id} onClick={() => { timer.pause(); setRemoveCandidate(selected) }}>删除事项</button>}</div>
             <h2 ref={heading} tabIndex={-1}>{selected.title}</h2>
-            {appearance.metadata && <p className="wb-focus-meta">{taskArea(selected)}{selected.due && ` · ${deadlineLabel(selected, now)}截止`}{selectedBlock ? ` · ${scheduleDisplay(selectedBlock, now)}` : effectiveEstimate(selected, scheduledMinutes) !== undefined && ` · ${estimateLabel(selected, scheduledMinutes)}`}</p>}
+            {appearance.metadata && <p className="wb-focus-meta">{taskArea(selected)}{selected.due && ` · ${deadlineLabel(selected, now)}截止`}{selectedBlock && ` · ${scheduleDisplay(selectedBlock, now)}`}{effectiveEstimate(selected, scheduledMinutes) !== undefined && ` · ${planningEstimateLabel(selected, scheduledMinutes)}`}</p>}
             <p className="wb-focus-note">{selected.notes || '先做一个能够推进它的小步骤'}</p>
             </div>
+            {removeCandidate?.id === selected.id && <section className="wb-delete-confirm" aria-label="确认删除事项"><p>删除「{removeCandidate.title}」？截止提醒和全部关联时段也会移除。</p><div><button type="button" className="wb-secondary" disabled={busy} onClick={() => setRemoveCandidate(null)}>保留事项</button><button type="button" className="wb-secondary" disabled={busy} onClick={() => void removeSelected()}>确认删除事项</button></div></section>}
             {selectedDone ? <div className="wb-finished wb-enter"><span className="wb-finished-mark" aria-hidden="true">✓</span><p>专注了 {spentLabel(session.spentMs)}</p><div className="wb-clock-actions"><button className="wb-action" disabled={busy} onClick={() => switchTo(null)}>选择下一项</button><button type="button" className="wb-secondary wb-reopen wb-meta-value" title="撤回完成" aria-label="撤回完成" disabled={busy} onClick={() => void reopen(selected)}><Icon name="undo" /><span>{reopeningId === selected.id ? '正在撤回' : '撤回完成'}</span></button></div></div> : <>
               <div className="wb-clock-area">
                 <div className="wb-clock" role="timer" aria-live="off" aria-label={`${session.mode === 'focus' ? '专注' : '休息'}剩余 ${Math.ceil(session.remainingMs / 1000)} 秒`}>{clockLabel(session.remainingMs)}</div>
@@ -409,6 +428,7 @@ function DurationControls({ timer, open }: { timer: Timer; open: boolean }) {
     <label><span>专注</span><input aria-label="专注分钟" type="range" min={5} max={120} step={5} value={timer.durations.focusMin} onChange={event => timer.setDurations({ ...timer.durations, focusMin: Number(event.target.value) })} /><output>{timer.durations.focusMin} 分钟</output></label>
     <label><span>休息</span><input aria-label="休息分钟" type="range" min={1} max={30} step={1} value={timer.durations.restMin} onChange={event => timer.setDurations({ ...timer.durations, restMin: Number(event.target.value) })} /><output>{timer.durations.restMin} 分钟</output></label>
     <small>进行中的计时保持不变，新时长从下一轮开始</small>
+    {timer.preferenceError && <p className="wb-error" role="alert">{timer.preferenceError}<button type="button" className="wb-inline-button" onClick={timer.retrySaveDurations}>重试保存</button></p>}
   </div></div></div>
 }
 

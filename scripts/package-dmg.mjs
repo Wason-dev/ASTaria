@@ -5,8 +5,9 @@ import { createReadStream } from 'node:fs'
 import { lstat, mkdir, mkdtemp, readFile, realpath, rename, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { signReleaseManifest } from './sign-release-manifest.mjs'
 
-const USAGE = 'node scripts/package-dmg.mjs --app /path/to/ASTaria.app --out /path/to/output --instructions docs/INSTALL.md'
+const USAGE = 'node scripts/package-dmg.mjs --app /path/to/ASTaria.app --out /path/to/output --instructions docs/INSTALL.md [--sign-manifest /private/update-ed25519.pem]'
 const VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/u
 function fail(message) { throw new Error(message) }
 function run(command, args) {
@@ -38,11 +39,11 @@ export function argumentsFor(argv) {
   const options = {}
   for (let index = 0; index < argv.length; index += 2) {
     const name = argv[index], value = argv[index + 1]
-    if (!['--app', '--out', '--instructions'].includes(name) || !value || value.startsWith('--') || options[name]) fail(`Expected unique --app, --out and --instructions arguments.\n${USAGE}`)
+    if (!['--app', '--out', '--instructions', '--sign-manifest'].includes(name) || !value || value.startsWith('--') || options[name]) fail(`Expected unique --app, --out and --instructions arguments.\n${USAGE}`)
     options[name] = resolve(value)
   }
   if (!options['--app'] || !options['--out'] || !options['--instructions']) fail(`All three arguments are required.\n${USAGE}`)
-  return { app: options['--app'], out: options['--out'], instructions: options['--instructions'] }
+  return { app: options['--app'], out: options['--out'], instructions: options['--instructions'], signingKey: options['--sign-manifest'] }
 }
 async function sha256(path) {
   const digest = createHash('sha256')
@@ -108,12 +109,13 @@ async function main() {
     run('/usr/bin/codesign', ['--verify', '--strict', '--verbose=2', dmg])
     run('/usr/bin/hdiutil', ['verify', dmg])
     const digest = await sha256(dmg)
-    const manifest = { schemaVersion: 1, name: 'ASTaria', version, platform: 'darwin', arch: 'arm64',
+    let manifest = { schemaVersion: 1, name: 'ASTaria', version, platform: 'darwin', arch: 'arm64',
       bundleId: plist.CFBundleIdentifier, signing: 'ad-hoc', notarized: false, builtAt: new Date().toISOString(),
       dmg: names[0], sha256: digest, sizeBytes: (await stat(dmg)).size, appCDHash, buildInfo,
       packagerSha256: await sha256(fileURLToPath(import.meta.url)),
       instructionsSha256: createHash('sha256').update(instructionsBytes).digest('hex'),
       contents: ['ASTaria.app', 'Applications', '安装与打开说明.txt'], imageVerified: true, appSignatureVerified: true }
+    if (args.signingKey) manifest = await signReleaseManifest(manifest, args.signingKey)
     await writeFile(join(staging, names[1]), `${digest}  ${names[0]}\n`)
     await writeFile(join(staging, names[2]), `${JSON.stringify(manifest, null, 2)}\n`)
     for (const name of names) if (await exists(join(out, name))) fail(`Another build created the same version output: ${name}`)

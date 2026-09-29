@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { createDatabase } from '../server/database.mjs'
 import { createXixi } from '../server/xixi.mjs'
+import { contextUnits } from '../server/contextBudget.mjs'
 
 process.env.TZ = 'Asia/Shanghai'
 const DATE = '2026-09-22'
@@ -20,7 +21,7 @@ function fixture(t) {
   return { db, responses, requests, async run() {
     const result = await xixi.chat({ requestId: randomUUID(), conversationId: 'main', text: '读取安排', context: { timezone: 'Asia/Shanghai' } })
     assert.deepEqual(errors, [])
-    assert.equal(result.status, 'completed')
+    assert.equal(result.status, 'completed', result.error)
     return result
   } }
 }
@@ -28,6 +29,32 @@ const clock = minutes => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:$
 const routine = (db, index, items = []) => db.updatePlanner({ type: 'save-routine', routine: { id: `school-${index}`, title: `课程${index}`,
   kind: 'class', weekdays: [0, 1, 2, 3, 4, 5, 6], start: clock(480 + index * 10), end: clock(489 + index * 10),
   location: '508', items, enabled: true } }, db.getPlanner().revision)
+
+test('crowded seven-day overview is bounded and resumes exact omitted routines in a small model budget', async t => {
+  const f = fixture(t)
+  f.db.setPreference('model-connection', { contextBudget: { mode: 'custom', maxUnits: 24000 } })
+  for (let index = 0; index < 42; index++) routine(f.db, index, Array.from({ length: 8 }, (_, i) => `完整材料${i}${'说明'.repeat(20)}`))
+  let continuation
+  f.responses.push(tool('read_planner', { date: DATE, days: 7 }), request => {
+    assert.ok(contextUnits(request.messages) + contextUnits(request.tools) <= 24000)
+    const data = receipt(request)
+    assert.equal(data.revision, f.db.getPlanner().revision)
+    assert.equal(data.days.length, 7)
+    const page = data.days[0].routines
+    assert.equal(page.total, 43)
+    assert.equal(page.truncated, true)
+    assert.equal(page.nextOffset, page.items.length)
+    continuation = page.nextOffset
+    const { tool: name, ...args } = page.readMore
+    return tool(name, { ...args, limit: 1 })
+  }, request => {
+    const page = receipt(request).days[0].routines
+    assert.equal(page.items.length, 1)
+    assert.equal(page.nextOffset, continuation + 1)
+    assert.ok(page.items[0].items.some(item => item.includes('完整材料')))
+  })
+  await f.run()
+})
 
 test('seven-day planner read retains each full normal school day and named evening windows', async t => {
   const f = fixture(t)

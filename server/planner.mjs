@@ -69,6 +69,18 @@ function routineValue(input) {
     location: text(input.location, '地点', 160, { empty: true }), items: strings(input.items, '携带物品'), enabled: boolean(input.enabled, '启用状态'),
   }
 }
+function firstWeekValue(value) {
+  const date = day(value)
+  if (weekStart(date) !== date) fail('第1周需要选择有效的周一日期')
+  return date
+}
+function routineForState(input, state) {
+  if (state.firstWeekMonday && ['odd', 'even'].includes(input?.weekCycle)) {
+    if (input.weekAnchor !== undefined && input.weekAnchor !== state.firstWeekMonday) fail('单双周安排应使用每周安排中统一的第1周日期')
+    return routineValue({ ...input, weekAnchor: state.firstWeekMonday })
+  }
+  return routineValue(input)
+}
 function sourceWeekdayValue(value) {
   if (!Number.isInteger(value) || value < 0 || value > 6) fail('来源星期需要是 0–6，0 表示周日')
   return value
@@ -256,9 +268,10 @@ export function createPlannerStore({ db, transaction, getTask, listTasks, now = 
 
   function applyPlannerAction(action, expectedRevision, deferBlockValidation = false) {
     if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0) fail('安排版本不正确')
-    choice(action?.type, ['save-routine', 'delete-routine', 'import-routines', 'edit-weekday', 'set-day-template', 'remove-day-template', 'save-day-event', 'delete-day-event', 'save-block', 'delete-block', 'save-details', 'check-item'], '安排操作')
+    choice(action?.type, ['save-routine', 'delete-routine', 'import-routines', 'set-first-week-monday', 'edit-weekday', 'set-day-template', 'remove-day-template', 'save-day-event', 'delete-day-event', 'save-block', 'delete-block', 'save-details', 'check-item'], '安排操作')
     knownKeys(action, ['type', ...({
       'save-routine': ['routine'], 'delete-routine': ['id'], 'import-routines': ['routines'],
+      'set-first-week-monday': ['date'],
       'edit-weekday': ['weekday', 'replacements', 'syncDates'],
       'set-day-template': ['date', 'sourceWeekday'], 'remove-day-template': ['date'],
       'save-day-event': ['event'], 'delete-day-event': ['id'],
@@ -268,8 +281,19 @@ export function createPlannerStore({ db, transaction, getTask, listTasks, now = 
       const state = getPlanner()
       if (state.revision !== expectedRevision) fail('安排已在其他窗口更新，请刷新后重试', 409)
       switch (action.type) {
+        case 'set-first-week-monday': {
+          const anchor = firstWeekValue(action.date)
+          const routines = state.routines.map(routine => ['odd', 'even'].includes(routine.weekCycle)
+            ? { ...routine, weekAnchor: anchor } : routine)
+          for (const routine of routines) validateRoutineOccupancy(routine, state)
+          state.firstWeekMonday = anchor
+          state.routines = routines
+          // Dated overrides are explicit snapshots, not another repeating
+          // template. Changing the shared week count must not rewrite them.
+          break
+        }
         case 'save-routine': {
-          const routine = routineValue(action.routine)
+          const routine = routineForState(action.routine, state)
           validateRoutineOccupancy(routine, state)
           const index = state.routines.findIndex(item => item.id === routine.id)
           const previous = index < 0 ? null : state.routines[index]
@@ -279,7 +303,7 @@ export function createPlannerStore({ db, transaction, getTask, listTasks, now = 
         }
         case 'import-routines': {
           if (!Array.isArray(action.routines) || action.routines.length > limits.routines) fail('导入的固定安排最多 300 项')
-          const routines = action.routines.map(routineValue)
+          const routines = action.routines.map(routine => routineForState(routine, state))
           if (new Set(routines.map(item => item.id)).size !== routines.length) fail('导入的安排标识不可重复')
           for (const routine of routines) validateRoutineOccupancy(routine, state)
           const imported = new Map(routines.map(item => [item.id, item]))
@@ -502,12 +526,16 @@ export function createPlannerStore({ db, transaction, getTask, listTasks, now = 
     })
   }
   function validateState(state) {
-    knownKeys(state, ['revision', 'timetableConfirmed', 'routines', 'blocks', 'details', 'checked', 'dayOverrides', 'dayEvents'], '备份日程')
+    knownKeys(state, ['revision', 'timetableConfirmed', 'routines', 'blocks', 'details', 'checked', 'dayOverrides', 'dayEvents', 'firstWeekMonday'], '备份日程')
     if (!Number.isSafeInteger(state.revision) || state.revision < 0) fail('备份日程版本无效')
     boolean(state.timetableConfirmed, '课表确认')
+    if (state.firstWeekMonday !== undefined) firstWeekValue(state.firstWeekMonday)
     if (!Array.isArray(state.routines) || state.routines.length > limits.routines || !Array.isArray(state.blocks) || state.blocks.length > limits.blocks) fail('备份日程数量无效')
     if (new Set(state.routines.map(item => item?.id)).size !== state.routines.length || new Set(state.blocks.map(item => item?.id)).size !== state.blocks.length) fail('备份日程标识重复')
-    for (const routine of state.routines) routineValue(routine)
+    for (const routine of state.routines) {
+      routineValue(routine)
+      if (state.firstWeekMonday && ['odd', 'even'].includes(routine.weekCycle) && routine.weekAnchor !== state.firstWeekMonday) fail('备份中的单双周安排与统一第1周日期不一致')
+    }
     const occurrenceTasks = new Set()
     for (const block of state.blocks) {
       blockValue(block)

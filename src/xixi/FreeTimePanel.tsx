@@ -46,6 +46,7 @@ export const FreeTimePanel = memo(function FreeTimePanel({ onClarifyWish, onChan
   const [filter, setFilter] = useState('')
   const [editing, setEditing] = useState<Editing | null>(null)
   const [wishEditing, setWishEditing] = useState<Wish | null>(null)
+  const [newWish, setNewWish] = useState<string | null>(null)
   const [date, setDate] = useState(today)
   const [period, setPeriod] = useState<'today' | 'week'>('today')
   const [planPage, setPlanPage] = useState(0)
@@ -167,6 +168,14 @@ export const FreeTimePanel = memo(function FreeTimePanel({ onClarifyWish, onChan
     announce(wish.status === 'paused' ? '已恢复留意合适的机会' : '已暂停留意，内容继续保留')
     try { await synchronize() } catch (reason) { setError(`牵挂状态已保存，页面同步遇到问题：${errorText(reason)}`) }
   })
+  const startWish = () => execute(async () => {
+    const content = newWish?.trim()
+    if (!content) return
+    const wish = await localApi<Wish>('/companion/wish', { content, evidence: content })
+    setNewWish(null); setTab('considering')
+    try { await synchronize() } catch { /* Saved wish remains available to the conversation. */ }
+    onClarifyWish(wish)
+  })
 
   const goals = (state?.freeTimeGoals ?? []).filter(goal => goal.status !== 'deleted')
   const wishes = (state?.wishes ?? []).filter(wish => wish.status !== 'deleted' && !goals.some(goal => goal.fromWishId === wish.id))
@@ -192,6 +201,9 @@ export const FreeTimePanel = memo(function FreeTimePanel({ onClarifyWish, onChan
     <div className="free-time-viewport workspace-page-viewport"><div className="free-time-container workspace-page-container">
       <WorkspaceHeading className="free-time-header" title="余时" description="想推进的事，在合适的空档继续" titleId={`${id}-title`} headingRef={heading}><dl className="workspace-metrics free-time-metrics"><div><dt>自动安排中</dt><dd>{goals.filter(isScheduling).length}<small> 项</small></dd></div><div><dt>未来七天已安排</dt><dd>{minutesLabel(weekMinutes).split(/(\d+)/).filter(Boolean).map((part, index) => /\d/.test(part) ? <span key={index}>{part}</span> : <small key={index}>{part}</small>)}</dd></div><div><dt>最低频率待满足</dt><dd>{remaining}<small> 次</small></dd></div></dl></WorkspaceHeading>
       <StringInvitation onEnter={onOpenStrings} glass={glass} />
+      <Pane className="free-time-wish-entry" blur={glass === 'soft' ? 6 : 0}><div><h3>把心愿聊清楚</h3><p>有个想法，还不知道从哪里开始？和析熙一起理清第一步。</p></div><button className="free-time-secondary" type="button" disabled={busy} onClick={() => { setNewWish(''); setEditing(null); setWishEditing(null); setTab('considering') }}>＋ 聊聊一个心愿</button>
+        {newWish !== null && <form className="free-time-wish-start" onSubmit={event => { event.preventDefault(); void startWish() }}><label>你想做什么？<textarea autoFocus required maxLength={600} value={newWish} onChange={event => setNewWish(event.target.value)} placeholder="比如：想做一款自己的小游戏，但还没想好从哪开始" disabled={busy} /></label><p>先保留为心愿。你选择「加入自动安排」后才会占用日程。</p><div><button type="button" className="free-time-secondary" disabled={busy} onClick={() => setNewWish(null)}>取消</button><button type="submit" className="free-time-primary" disabled={busy || !newWish.trim()}>保存并聊清楚</button></div></form>}
+      </Pane>
       <div className="free-time-layout">
         <Pane className="free-time-goals" blur={glass === 'soft' ? 6 : 0}><header className="free-time-pane-heading"><div className="free-time-tabs" role="group" aria-label="余时目标分类"><button type="button" aria-pressed={tab === 'goals'} onClick={() => { setTab('goals'); setEditing(null); setWishEditing(null) }}>目标 <small>{goals.length}</small></button><button type="button" aria-pressed={tab === 'considering'} onClick={() => { setTab('considering'); setEditing(null); setWishEditing(null) }}>待考虑 <small>{wishes.length}</small></button></div><button className="free-time-primary" type="button" onClick={() => { setWishEditing(null); setEditing({ draft: EMPTY_DRAFT }) }} disabled={busy}>＋ 添加目标</button></header>
           {wishEditing ? <WishEditor key={wishEditing.id} wish={wishEditing} busy={busy} onCancel={() => setWishEditing(null)} onSave={saveWish} /> : editing ? <GoalEditor key={editing.goal?.id ?? editing.wish?.id ?? 'new'} editing={editing} busy={busy} onCancel={() => setEditing(null)} onSave={save} /> : <>

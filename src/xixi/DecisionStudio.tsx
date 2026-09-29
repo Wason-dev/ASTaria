@@ -48,8 +48,10 @@ export function DecisionStudio({ tasks, tasksLoading, tasksError, state, date, o
     setRecurrence(value.decision?.recurrence ?? 'once')
   }
   useEffect(() => {
-    if (!selectedId && !available.some(task => task.id === taskId)) setTaskId(available[0]?.id ?? '')
-  }, [available, taskId, selectedId])
+    // Receipt restoration owns the subject while its saved target is loading.
+    // StrictMode may replay this effect before the restore state is committed.
+    if (!selectedId && !initialScenarioId && !available.some(task => task.id === taskId)) setTaskId(available[0]?.id ?? '')
+  }, [available, taskId, selectedId, initialScenarioId])
   useEffect(() => {
     if (initialScenarioId && initialScenarioId !== targetRef.current) {
       const value = state.scenarios.find(item => item.id === initialScenarioId)

@@ -52,6 +52,14 @@ export function estimateLabel(task: Task, scheduled: ScheduledMinutes = {}): str
     ? `原预计 ${minutesLabel(value)}` : `已排 ${minutesLabel(value)}`
 }
 
+/** Keep recorded intent and actual allocated time visible as separate facts. */
+export function planningEstimateLabel(task: Task, scheduled: ScheduledMinutes = {}): string | undefined {
+  const estimate = estimateLabel(task, scheduled)
+  const planned = scheduled[task.id]
+  return !task.freeTimeGoalId && Number.isFinite(task.estimateMin) && (task.estimateMin ?? 0) > 0 && Number.isFinite(planned) && planned > 0
+    ? `${estimate} · 已排 ${minutesLabel(planned)}` : estimate
+}
+
 function focusLength(minutes: number): number {
   return Number.isFinite(minutes) && minutes > 0 ? Math.max(1, Math.round(minutes)) : 35
 }

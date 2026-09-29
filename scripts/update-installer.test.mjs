@@ -1,13 +1,17 @@
 import test from 'node:test'
+import { createHash } from 'node:crypto'
+import { signTestManifest, testReleaseKeys } from './fixtures/release-signing.mjs'
 import assert from 'node:assert/strict'
 import { mkdtemp, mkdir, writeFile, readFile, rm, symlink, cp, realpath, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { execFile } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
+import { once } from 'node:events'
 import { promisify } from 'node:util'
-import { INSTALL_SCRIPT, validateUpdateBundle, prepareMacUpdate, acknowledgeMacUpdate } from '../desktop/updateInstaller.mjs'
+import { INSTALL_SCRIPT, validateUpdateBundle, prepareMacUpdate, launchMacUpdate, acknowledgeMacUpdate } from '../desktop/updateInstaller.mjs'
 const run = promisify(execFile)
-const manifest = { version: '0.1.0-beta.3', arch: 'arm64', appCDHash: 'a'.repeat(40), buildInfo: { builtAt: '2026-09-29T00:00:00Z', source: { commit: 'b'.repeat(40) } } }
+const dmgBytes = Buffer.from('verified dmg fixture')
+const manifest = signTestManifest({ sha256: createHash('sha256').update(dmgBytes).digest('hex'), sizeBytes: dmgBytes.length, version: '0.1.0-beta.3', arch: 'arm64', appCDHash: 'a'.repeat(40), buildInfo: { builtAt: '2026-09-29T00:00:00Z', source: { commit: 'b'.repeat(40) } } })
 const build = { version: manifest.version, arch: 'arm64', platform: 'darwin', ...manifest.buildInfo, source: { ...manifest.buildInfo.source, dirty: false } }
 const info = { CFBundleIdentifier: 'dev.wason.ASTaria', CFBundleExecutable: 'Electron' }
 async function fixture(t) {
@@ -43,7 +47,8 @@ test('updater validates exact bundle identity, architecture, provenance and seal
 })
 test('preparing a copied app never changes the existing app; rejects aliases', async t => {
   const f = await fixture(t), commands = []
-  const prepared = await prepareMacUpdate({ appBundle: f.app, path: join(f.root, 'payload.dmg'), manifest, resultFile: join(f.root, 'result'), run: async (tool, args) => {
+  await writeFile(join(f.root, 'payload.dmg'), dmgBytes)
+  const prepared = await prepareMacUpdate({ trustedKeys: testReleaseKeys, appBundle: f.app, path: join(f.root, 'payload.dmg'), manifest, resultFile: join(f.root, 'result'), run: async (tool, args) => {
     commands.push([tool, args])
     if (tool.endsWith('/hdiutil')) { if (args[0] === 'attach') await cp(f.app, join(args[4], 'ASTaria.app'), { recursive: true }); return {} }
     if (tool.endsWith('/ditto')) { await cp(args[0], args[1], { recursive: true }); return {} }
@@ -53,7 +58,7 @@ test('preparing a copied app never changes the existing app; rejects aliases', a
   assert.equal(prepared.executable, 'Electron')
   assert.ok(commands.some(([tool, args]) => tool.endsWith('/hdiutil') && args[0] === 'detach'))
   await symlink(f.app, join(f.root, 'linked.app'))
-  await assert.rejects(prepareMacUpdate({ appBundle: join(f.root, 'linked.app'), path: '', manifest, resultFile: '' }), /结构/)
+  await assert.rejects(prepareMacUpdate({ trustedKeys: testReleaseKeys, appBundle: join(f.root, 'linked.app'), path: '', manifest, resultFile: '' }), /结构/)
 })
 for (const success of [true, false]) test(`atomic replacement ${success ? 'waits for startup acknowledgement' : 'rolls back a crashed new app'}`, async t => {
   const f = await fixture(t), staging = await mkdtemp(join(f.root, '.astaria-update-'))
@@ -63,10 +68,13 @@ for (const success of [true, false]) test(`atomic replacement ${success ? 'waits
   // cp preserves the existing mode; executable permission is set explicitly.
   const { chmod } = await import('node:fs/promises'); await chmod(join(newApp, 'Contents/MacOS/Electron'), 0o700)
   const script = join(staging, 'install.sh'), result = join(f.root, 'result')
-  await writeFile(script, INSTALL_SCRIPT)
+  const verifier = join(f.root, 'codesign')
+  await writeFile(verifier, '#!/bin/sh\nif [ \"$1\" = \"--display\" ]; then echo CDHash=' + manifest.appCDHash + ' >&2; fi\n', {mode:0o700})
+  const quote = value => "'" + value.replaceAll("'", "'\\''") + "'"
+  await writeFile(script, INSTALL_SCRIPT.replaceAll('/usr/bin/codesign', quote(verifier)))
   const inode = (await stat(f.app)).ino
   let failed = false
-  try { await run('/bin/sh', [script, '2147483647', f.app, staging, result, 'Electron'], { timeout: 10000 }) } catch { failed = true }
+  try { await run('/bin/sh', [script, '2147483647', f.app, staging, result, 'Electron', manifest.appCDHash], { timeout: 10000 }) } catch { failed = true }
   assert.equal((await stat(f.app)).ino, inode, "outer app inode and Finder aliases survive replacement")
   assert.equal(failed, !success)
   assert.equal(await readFile(result, 'utf8'), success ? 'installed' : 'failed')
@@ -80,4 +88,70 @@ test('startup acknowledgements cannot write to arbitrary paths', async t => {
   await acknowledgeMacUpdate(f.app, join(staging, 'started'))
   assert.equal(await readFile(join(staging, 'started'), 'utf8'), 'ready')
   await assert.rejects(acknowledgeMacUpdate(f.app, join(staging, 'started')), /EEXIST/)
+})
+
+for (const rejection of ['seal', 'cdhash']) test(`post-exit ${rejection} rejection keeps the original bundle untouched`, { timeout: 10000 }, async t => {
+  const f = await fixture(t)
+  await writeFile(join(f.root, 'payload.dmg'), dmgBytes)
+  const prepared = await prepareMacUpdate({ trustedKeys: testReleaseKeys, appBundle: f.app, path: join(f.root, 'payload.dmg'), manifest,
+    resultFile: join(f.root, 'result'), run: async (tool, args) => {
+      if (tool.endsWith('/hdiutil')) { if (args[0] === 'attach') await cp(f.app, join(args[4], 'ASTaria.app'), { recursive: true }); return {} }
+      if (tool.endsWith('/ditto')) { await cp(args[0], args[1], { recursive: true }); return {} }
+      return f.execute(tool, args)
+    } })
+  const inode = (await stat(f.app)).ino, quote = value => "'" + value.replaceAll("'", "'\\''") + "'"
+  const verifier = join(f.root, 'final-codesign'), calls = join(f.root, 'verifier-calls')
+  await writeFile(verifier, `#!/bin/sh
+printf '%s\\n' "$1" >> ${quote(calls)}
+for bundle do :; done
+if [ "$1" = '--verify' ]; then
+  ${rejection === 'seal' ? '[ "$(cat "$bundle/Contents/MacOS/Electron")" = binary ] || exit 1' : 'exit 0'}
+else
+  printf '%s\\n' 'CDHash=${'c'.repeat(40)}' >&2
+fi
+`, { mode: 0o700 })
+  const waiting = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' })
+  const stopped = once(waiting, 'exit')
+  t.after(() => waiting.kill('SIGKILL'))
+  const child = spawn('/bin/sh', ['-s', '--', String(waiting.pid), prepared.target, prepared.staging,
+    prepared.resultFile, prepared.executable, prepared.appCDHash], { stdio: ['pipe', 'pipe', 'pipe'] })
+  t.after(() => child.kill('SIGKILL'))
+  const finished = once(child, 'exit')
+  let output = ''
+  const enteredWait = new Promise(resolve => child.stdout.on('data', chunk => { output += chunk; if (output.includes('waiting')) resolve() }))
+  // Substitute only external OS commands and expose the actual exit-wait loop.
+  // The production check order, hash comparison and replacement code all run.
+  child.stdin.end(INSTALL_SCRIPT.replaceAll('/usr/bin/codesign', quote(verifier)).replaceAll('/usr/bin/open', '/usr/bin/true')
+    .replace('while /bin/kill -0 "$pid" 2>/dev/null; do\n', 'while /bin/kill -0 "$pid" 2>/dev/null; do\nprintf "waiting\\n"\n'))
+  await enteredWait
+  await assert.rejects(readFile(calls), { code: 'ENOENT' }, 'verification must not run before the old app exits')
+  await writeFile(join(prepared.staging, 'ASTaria.app/Contents/MacOS/Electron'), 'tampered after preparation')
+  waiting.kill(); await stopped
+  const [code] = await finished
+  assert.notEqual(code, 0)
+  assert.equal(await readFile(prepared.resultFile, 'utf8'), 'failed')
+  assert.equal((await stat(f.app)).ino, inode)
+  assert.equal(await readFile(join(f.app, 'Contents/MacOS/Electron'), 'utf8'), 'binary')
+  await assert.rejects(stat(join(prepared.staging, 'previous.app')), { code: 'ENOENT' }, 'rejection happens before moving the original Contents')
+  await assert.rejects(stat(join(prepared.staging, 'started')), { code: 'ENOENT' })
+  assert.deepEqual((await readFile(calls, 'utf8')).trim().split('\n'), rejection === 'seal' ? ['--verify'] : ['--verify', '--display'])
+})
+
+test('launching an update ignores a writable staging script', { timeout: 10000 }, async t => {
+  const f = await fixture(t), staging = await mkdtemp(join(f.root, '.astaria-update-'))
+  const script = join(staging, 'install.sh'), marker = join(staging, 'untrusted-executed'), resultFile = join(staging, 'result')
+  await writeFile(script, '#!/bin/sh\ntouch "$(dirname "$0")/untrusted-executed"\n')
+  // A missing target safely stops the genuine template before codesign, launch
+  // or replacement, while a path-based implementation would run the poison.
+  await launchMacUpdate({ script, target: join(f.root, 'missing.app'), staging, resultFile,
+    executable: 'Electron', appCDHash: manifest.appCDHash }, 2147483647)
+  let result
+  for (let attempt = 0; attempt < 100 && result === undefined; attempt++) {
+    try { result = await readFile(resultFile, 'utf8') } catch (error) {
+      if (error.code !== 'ENOENT') throw error
+      await new Promise(resolve => setTimeout(resolve, 20))
+    }
+  }
+  assert.equal(result, 'failed')
+  await assert.rejects(stat(marker), { code: 'ENOENT' })
 })

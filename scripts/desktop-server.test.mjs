@@ -1,6 +1,7 @@
+import { createHash } from 'node:crypto'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, writeFile, symlink, rm } from 'node:fs/promises'
+import { mkdtemp, mkdir, writeFile, readFile, symlink, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Readable, Writable } from 'node:stream'
@@ -146,7 +147,7 @@ test('bundled keychain preparation validates a shipped executable without compil
   t.after(() => rm(root, { recursive: true, force: true }))
   const helper = join(root, 'helper')
   await writeFile(helper, '#!/bin/sh\nexit 0\n', { mode: 0o755 })
-  await createKeychain(join(root, 'nonexistent-profile'), { binaryPath: helper }).prepare()
+  await createKeychain(join(root, 'nonexistent-profile'), { binaryPath: helper, binarySha256: createHash('sha256').update(await readFile(helper)).digest('hex') }).prepare()
   await assert.rejects(createKeychain(root, { binaryPath: join(root, 'missing') }).prepare())
 })
 

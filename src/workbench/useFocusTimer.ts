@@ -5,7 +5,7 @@ import {
 } from './focusTimer'
 import type { FocusDurations, FocusTimerState } from './focusTimer'
 import { createFocusTimerTicker } from './focusTimerTicker'
-import { usePreferences } from '../xixi/preferences'
+import { saveFocusPreferences, usePreferences } from '../xixi/preferences'
 
 function loadTimer(storageKey: string) {
   try {
@@ -24,6 +24,10 @@ export function useFocusTimer(storageKey: string, active = true) {
   const [durations, setCurrentDurations] = useState(initial.state.durations)
   const [storageError, setStorageError] = useState<string | null>(initial.error)
   const storageFailed = useRef(false)
+  const [preferenceError, setPreferenceError] = useState('')
+  const pendingDurations = useRef<FocusDurations | null>(null)
+  const preferenceTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const mounted = useRef(true)
 
   const persist = useCallback((state: FocusTimerState, report = true) => {
     try {
@@ -84,10 +88,31 @@ export function useFocusTimer(storageKey: string, active = true) {
   const startRest = useCallback(() => commit(startFocusRest(model.current, Date.now())), [commit])
   const nextFocus = useCallback(() => commit(nextFocusRound(model.current, Date.now())), [commit])
   const getSpentMs = useCallback((taskId: string) => taskFocusSpentMs(advanceFocusTimer(model.current, Date.now()), taskId), [])
-  const setDurations = useCallback((next: FocusDurations) => commit(changeFocusDurations(model.current, next)), [commit])
+  const saveDurations = useCallback(() => {
+    clearTimeout(preferenceTimer.current)
+    const next = pendingDurations.current
+    if (!next || storageKey.includes('preview')) return
+    void saveFocusPreferences(next).then(() => {
+      if (pendingDurations.current === next) pendingDurations.current = null
+      if (mounted.current) setPreferenceError('')
+    }).catch(() => {
+      if (mounted.current) setPreferenceError('时长暂未同步到本机设置，本次仍生效。请重试保存。')
+    })
+  }, [storageKey])
+  const setDurations = useCallback((next: FocusDurations) => {
+    commit(changeFocusDurations(model.current, next))
+    if (storageKey.includes('preview')) return
+    pendingDurations.current = next
+    clearTimeout(preferenceTimer.current)
+    preferenceTimer.current = setTimeout(saveDurations, 300)
+  }, [commit, storageKey, saveDurations])
   useEffect(() => {
-    if (preferences.loaded && !storageKey.includes('preview')) setDurations(preferences.value.focus)
-  }, [preferences.loaded, preferences.value.focus.focusMin, preferences.value.focus.restMin, storageKey, setDurations])
+    mounted.current = true
+    return () => { mounted.current = false; saveDurations() }
+  }, [saveDurations])
+  useEffect(() => {
+    if (preferences.loaded && !storageKey.includes('preview') && !pendingDurations.current) commit(changeFocusDurations(model.current, preferences.value.focus))
+  }, [preferences.loaded, preferences.value.focus.focusMin, preferences.value.focus.restMin, storageKey, commit])
 
-  return { session, selectTask, start, pause, startRest, nextFocus, getSpentMs, durations, setDurations, storageError }
+  return { session, selectTask, start, pause, startRest, nextFocus, getSpentMs, durations, setDurations, storageError, preferenceError, retrySaveDurations: saveDurations }
 }

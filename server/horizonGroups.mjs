@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto'
 import { ValidationError, knownKeys, identifier, text, day } from './validation.mjs'
 import { ProviderError } from './provider.mjs'
+import { assertContextBudget } from './contextBudget.mjs'
+import { resolveContextBudget } from './modelSettings.mjs'
 
 const fail = (message, status = 400) => { throw new ValidationError(message, status) }
 const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex')
@@ -148,7 +150,7 @@ function suggestedGroups(result, snapshot) {
 }
 
 /** One semantic grouping call produces a draft only. It never writes a planner. */
-export function createHorizonGrouping({ list, complete, timeoutMs = 60_000 }) {
+export function createHorizonGrouping({ db, list, complete, timeoutMs = 60_000 }) {
   const pending = new Map(), requests = new Map(), cache = new Map()
   const cacheLifetime = 120_000
   const send = (listener, event) => { try { listener(event) } catch { /* A disconnected UI does not change a draft. */ } }
@@ -188,6 +190,8 @@ export function createHorizonGrouping({ list, complete, timeoutMs = 60_000 }) {
     const payload = { messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: JSON.stringify({
       date: snapshot.date, items: items.map(item => ({ id: item.id, title: item.title, day: Math.round((new Date(`${item.date}T12:00:00`) - new Date(`${snapshot.date}T12:00:00`)) / 86_400_000), minutes: item.durationMin })), initialGroups,
     }) }], response_format: { type: 'json_object' }, max_tokens: Math.min(16000, Math.max(2048, items.length * 150 + 256)) }
+    try { assertContextBudget(payload, resolveContextBudget(db?.getPreference('model-connection') ?? {}).hard) }
+    catch { fail('本次分组资料超出当前模型的上下文预算，请减少事项或在设置中提高预算；原有分组未改动') }
     phase('preparing')
     activity('group-semantics', 'model', 'running', `分析 ${items.length} 段事项的关联`, '根据内容、共同目标和工作顺序提出分组；每组保持在原来的日期。')
     let result, timeout, accepting = true, receiving = false

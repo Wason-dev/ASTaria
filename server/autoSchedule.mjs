@@ -2,6 +2,7 @@ import { dayCapacity, minuteOf, routinesForDay, timeOf } from '../src/planner/mo
 import { localDay } from '../src/home/agenda.ts'
 
 export const DEFAULT_INITIAL_MINUTES = 30
+export const MIN_INITIAL_SEGMENT_MINUTES = 15
 export function onlyRecordRequested(text) {
   if (/(?:先|暂时?|这次)(?:不|别|不要)(?:用)?(?:排|安排)|(?:不用|不要|别)(?:自动)?(?:排时间|排程|安排(?:时间)?|排进日历)/u.test(text)) return true
   for (const match of text.matchAll(/(?:只|仅)(?:先)?(?:记(?:下|录|着|一下)?|存(?:下|着)?|创建)/gu)) {
@@ -40,7 +41,7 @@ function occurrenceSlot(task, state, allTasks, now, bufferMin) {
   })).filter(range => range.end - range.start >= minutes)
   const withinWindow = preferredWindow ? mergeRanges(available.flatMap(range => windows.map(window => ({
     start: Math.max(range.start, window.start), end: Math.min(range.end, window.end),
-  })).filter(range => range.end - range.start >= minutes))) : available
+  })).filter(range => range.start < range.end))).filter(range => range.end - range.start >= minutes) : available
   const pickEdge = ranges => placement === 'end' ? ranges.at(-1) && { start: ranges.at(-1).end - minutes, end: ranges.at(-1).end }
     : ranges[0] && { start: ranges[0].start, end: ranges[0].start + minutes }
   const preferred = pickEdge(withinWindow)
@@ -88,9 +89,12 @@ export function initialTaskSchedule({ state, allTasks, tasks, now, idForBlock, b
     const firstDate = exactDate ?? (task.startAt && task.startAt > today ? task.startAt : today)
     const deadline = task.due ? new Date(task.due.length === 10 ? `${nextDay(task.due, 1)}T00:00:00` : task.due).getTime() : Infinity
     const lastDate = exactDate ?? (task.due ? localDay(new Date(deadline - 1)) : nextDay(firstDate, 6))
-    // One year is a bounded search horizon for a far-future explicitly dated
-    // task; ordinary new tasks stop at the first available few slots.
-    for (let offset = 0; offset < 366 && remainingMin > 0 && plans.length < 64; offset++) {
+    // Prefer one continuous slot before splitting. Keep the earlier candidates
+    // so a task with no complete slot can still use meaningful work sessions.
+    const candidates = []
+    let completeSlot
+    // One year is a bounded search horizon for a far-future explicitly dated task.
+    for (let offset = 0; offset < 366 && !completeSlot && plans.length < 64; offset++) {
       const date = nextDay(firstDate, offset)
       if (date > lastDate) break
       if (exactDate && (date < today || (task.startAt && date < task.startAt))) continue
@@ -107,21 +111,31 @@ export function initialTaskSchedule({ state, allTasks, tasks, now, idForBlock, b
         let end = Math.floor(range.end - (adjacentAfter ? bufferMin : 0))
         const dayStart = new Date(`${date}T00:00:00`).getTime()
         end = Math.min(end, Math.floor((deadline - dayStart) / 60000))
-        // A requested day is a constraint, not the beginning of a search week.
-        // Leave an undersized window untouched so the user can choose a tradeoff.
-        if (end - start < (exactDate ? totalMin : Math.min(10, remainingMin))) continue
-        const duration = Math.min(remainingMin, end - start)
-        const block = { id: idForBlock(task.id, plans.length), taskId: task.id, date,
-          start: timeOf(start), end: timeOf(start + duration), locked: false }
-        plans.push(block); working.blocks.push(block); remainingMin -= duration
-        if (!remainingMin || plans.length >= 64) break
+        if (end - start < Math.min(MIN_INITIAL_SEGMENT_MINUTES, totalMin)) continue
+        const slot = { date, start, end }
+        candidates.push(slot)
+        if (end - start >= totalMin) { completeSlot = slot; break }
       }
+    }
+    // A requested day still requires a complete slot. An explicit short task
+    // is also kept whole; it is not permission to make a tiny tail on long work.
+    const selected = completeSlot ? [completeSlot] : exactDate ? [] : candidates
+    for (const slot of selected) {
+      if (remainingMin <= 0 || plans.length >= 64) break
+      let duration = Math.min(remainingMin, slot.end - slot.start)
+      if (duration < remainingMin && remainingMin - duration < MIN_INITIAL_SEGMENT_MINUTES) {
+        duration = remainingMin - MIN_INITIAL_SEGMENT_MINUTES
+      }
+      if (duration < Math.min(MIN_INITIAL_SEGMENT_MINUTES, totalMin)) continue
+      const block = { id: idForBlock(task.id, plans.length), taskId: task.id, date: slot.date,
+        start: timeOf(slot.start), end: timeOf(slot.start + duration), locked: false }
+      plans.push(block); working.blocks.push(block); remainingMin -= duration
     }
     allocations.push({ taskId: task.id, title: task.title, ...(exactDate ? { date: exactDate } : {}), totalMin, scheduledMin: totalMin - remainingMin, estimated })
     if (remainingMin) unscheduled.push({ taskId: task.id, title: task.title, ...(exactDate ? { date: exactDate } : {}), remainingMin,
       reason: exactDate
         ? `${exactDate}${windowByTask.has(task.id) ? ` 的「${windowByTask.get(task.id)}」` : ' 当天'}没有可用的完整 ${totalMin} 分钟空档；未拆分或挪到其他日期，现有安排保持不变`
-        : `${deadline <= now.getTime() ? '截止时间已过，未安排过去的时段' : `截止前${windowByTask.has(task.id) ? `的「${windowByTask.get(task.id)}」` : ''}没有足够的已知空档，现有安排保持不变`}；还剩 ${remainingMin} 分钟未安排` })
+        : `${deadline <= now.getTime() ? '截止时间已过，未安排过去的时段' : `截止前${windowByTask.has(task.id) ? `的「${windowByTask.get(task.id)}」` : ''}没有足够的可用连续空档${totalMin > MIN_INITIAL_SEGMENT_MINUTES ? `（拆分时每段至少 ${MIN_INITIAL_SEGMENT_MINUTES} 分钟）` : ''}，现有安排保持不变`}；还剩 ${remainingMin} 分钟未安排` })
   }
   return { plans, allocations, unscheduled }
 }

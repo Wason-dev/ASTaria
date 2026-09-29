@@ -59,6 +59,9 @@ async function start() {
     import(pathToFileURL(path.join(resourceRoot, 'desktop/server.mjs')).href),
     import(pathToFileURL(path.join(resourceRoot, 'desktop/updates.mjs')).href),
   ])
+  const pkg = JSON.parse(await readFile(path.join(resourceRoot, 'package.json'), 'utf8'))
+  let build = {}
+  try { build = JSON.parse(await readFile(path.join(resourceRoot, 'build-info.json'), 'utf8')) } catch { /* Older bundles still expose their full package version. */ }
   if (smokeTest) {
     const { createDatabase } = await import(pathToFileURL(path.join(resourceRoot, 'server/database.mjs')).href)
     service = createLocalService({ db: createDatabase(path.join(smokeDirectory, 'test.sqlite')),
@@ -67,13 +70,10 @@ async function start() {
     })
   } else {
     service = createLocalService({
-      vault: createKeychain(DATA_DIRECTORY, { binaryPath: path.join(resourceRoot, 'bin/astaria-keychain') }),
+      vault: createKeychain(DATA_DIRECTORY, { binaryPath: path.join(resourceRoot, 'bin/astaria-keychain'), binarySha256: build.nativeHelpers?.keychainSha256 }),
       onMutation: () => reminders?.schedule(),
     })
   }
-  const pkg = JSON.parse(await readFile(path.join(resourceRoot, 'package.json'), 'utf8'))
-  let build = {}
-  try { build = JSON.parse(await readFile(path.join(resourceRoot, 'build-info.json'), 'utf8')) } catch { /* Older bundles still expose their full package version. */ }
   const updateStateFile = path.join(app.getPath('userData'), 'update-check.json')
   const scheduleInstall = async candidate => {
     if (smokeTest || process.platform !== 'darwin' || quitting) throw new Error('当前暂不支持自动安装')
@@ -88,7 +88,7 @@ async function start() {
   }
 
   updates = createUpdateService({ current: { ...build, version: pkg.version, platform: process.platform, arch: process.arch },
-    fetcher: createNetFetch(net), stateFile: updateStateFile, downloadDirectory: path.join(app.getPath('userData'), 'updates'), installer: scheduleInstall, allowNetwork: !smokeTest })
+    fetcher: createNetFetch(net), stateFile: updateStateFile, installResultFile: path.join(app.getPath('userData'), 'update-install-result'), downloadDirectory: path.join(app.getPath('userData'), 'updates'), installer: scheduleInstall, allowNetwork: !smokeTest })
   if (!smokeTest && process.platform === 'darwin') {
     const { createReminderService, nativeReminderRunner } = await import(pathToFileURL(path.join(resourceRoot, 'desktop/reminders.mjs')).href)
     reminders = createReminderService({ stateFile: path.join(app.getPath('userData'), 'system-reminders.json'),

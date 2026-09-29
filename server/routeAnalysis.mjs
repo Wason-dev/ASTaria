@@ -3,6 +3,8 @@ import { ValidationError, knownKeys, text, identifier, choice, day, clockTime } 
 import { ProviderError } from './provider.mjs'
 import { dayCapacity, blocksForDay, minuteOf } from '../src/planner/model.ts'
 import { localDay } from '../src/home/agenda.ts'
+import { assertContextBudget } from './contextBudget.mjs'
+import { resolveContextBudget } from './modelSettings.mjs'
 
 const fail = (message, status = 400) => { throw new ValidationError(message, status) }
 const horizons = ['week', 'fourWeeks', 'threeMonths', 'oneYear']
@@ -179,8 +181,11 @@ export function createRouteAnalysis({ db, planner = db, companion, complete, now
         companion: snap.context,
         ...(correction ? { correction: `上次候选未通过服务端校验：${correction}。请根据这里最新事实重新输出完整JSON。` } : {}) })
       if (user.length > 120000) fail('本次真实日程资料过多，请先整理安排后再推演')
+      const payload = { messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: user }], response_format: { type: 'json_object' }, max_tokens: 6500 }
+      try { assertContextBudget(payload, resolveContextBudget(db.getPreference('model-connection') ?? {}).hard) }
+      catch { fail('本次路线资料超出当前模型的上下文预算，请缩小范围或在设置中提高预算；原日程未改动') }
       let result
-      try { result = await complete({ messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: user }], response_format: { type: 'json_object' }, max_tokens: 6500 }) }
+      try { result = await complete(payload) }
       catch (error) {
         if (error instanceof ProviderError) throw new ProviderError(`路线推演未完成：${error.message}`)
         throw new ProviderError('路线推演未完成：模型服务暂时不可用，请检查设置后重试')

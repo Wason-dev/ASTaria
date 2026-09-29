@@ -11,7 +11,7 @@ const resolution = registerHooks({
     return nextResolve(specifier, context)
   },
 })
-const { buildWorkbenchBriefing, deadlineContext } = await import('../src/workbench/briefing.ts')
+const { buildWorkbenchBriefing, deadlineContext, planningEstimateLabel } = await import('../src/workbench/briefing.ts')
 resolution.deregister()
 process.env.TZ = 'Asia/Shanghai'
 
@@ -25,6 +25,13 @@ const task = (id, extra = {}) => ({
 })
 const briefing = (tasks, spent = () => 0, focus = 35, at = now, scheduled = {}) => buildWorkbenchBriefing(tasks, at, focus, spent, scheduled)
 const context = (entry, spent = 0, focus = 35, at = now, scheduled = {}) => deadlineContext(entry, at, focus, () => spent, scheduled)
+
+test('workbench distinguishes the original estimate from allocated calendar time', () => {
+  assert.equal(planningEstimateLabel(task('one', { estimateMin: 25 }), { one: 40 }), '原预计 25 分钟 · 已排 40 分钟')
+  assert.equal(planningEstimateLabel(task('one'), { one: 40 }), '已排 40 分钟')
+  assert.equal(planningEstimateLabel(task('one', { estimateMin: 25 })), '原预计 25 分钟')
+  assert.equal(planningEstimateLabel(task('one', { freeTimeGoalId: 'reading', estimateMin: 25 }), { one: 40 }), '本次 40 分钟')
+})
 
 test('empty and invalid clock produce no fabricated tasks or advice', () => {
   const empty = { availableCount: 0, dueSoonCount: 0, overdueCount: 0, completedTodayCount: 0, estimatedMin: 0, unestimatedCount: 0, recommendation: null, notices: [] }

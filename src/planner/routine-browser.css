@@ -61,3 +61,7 @@
 @media (prefers-reduced-motion:reduce) {
   .pl-routine-browser :is(button,.pl-routine-disclosure) { transition:none }
 }
+.pl-routine-week-controls { display:flex; align-items:center; flex-wrap:wrap; justify-content:space-between; gap:12px; flex:none }
+.pl-routine-week-controls form { display:flex; align-items:flex-end; gap:8px }
+.pl-routine-week-controls label { display:grid; gap:5px; color:var(--pl-muted); font-size:11px }
+.pl-routine-week-controls input { background:var(--pl-highlight); border:1px solid var(--pl-line); border-radius:8px; color:var(--pl-ink); padding:6px 9px; font:inherit }

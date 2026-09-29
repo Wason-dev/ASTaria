@@ -179,13 +179,16 @@ export function HorizonStudio({ onReveal, onClose, onSaved }: Props) {
   useEffect(() => {
     mounted.current = true
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    dialog.current?.showModal(); travel(); void refresh()
+    const element = dialog.current
+    if (element && !element.open) element.showModal()
+    travel(); void refresh()
     return () => {
       mounted.current = false; loadVersion.current++
       submission.current?.abort()
       suggestionVersion.current++; suggestion.current?.abort()
       grab.current = null; visual.current.dragging = null
       cancelAnimationFrame(frame.current); setStringFlight(0, 'edge')
+      element?.close()
       if (opener?.isConnected && !opener.closest('[inert]')) opener.focus({ preventScroll: true })
     }
   }, [travel, refresh])

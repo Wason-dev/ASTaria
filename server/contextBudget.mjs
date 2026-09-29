@@ -28,8 +28,17 @@ function compactPlanner(result) {
   if (result.section && result.section !== 'overview') return result
   // These are the live scheduling facts, not an execution receipt. In
   // particular, an empty `days`/`remaining` collection would change its meaning.
-  // Remove repeated descriptions, never the returned rows or clock ranges.
+  // Keep visible rows/ranges exact; oversized range lists get explicit totals
+  // and continuation metadata instead of being mistaken for a complete day.
   return { ...result, days: result.days.map(day => ({ ...day,
+    ...(day.capacity ? { capacity: { ...day.capacity,
+      ...Object.fromEntries(Object.entries(day.capacity).filter(([, value]) => Array.isArray(value)).map(([key, value]) => [key, value.slice(0, 16)])),
+      ...(Object.values(day.capacity).some(value => Array.isArray(value) && value.length > 16) ? {
+        truncated: true,
+        rangeCounts: { ...Object.fromEntries(Object.entries(day.capacity).filter(([, value]) => Array.isArray(value)).map(([key, value]) => [key, value.length])), ...day.capacity.rangeCounts },
+      } : {}),
+    }, ...(Object.values(day.capacity).some(value => Array.isArray(value) && value.length > 16)
+      ? { capacityReadMore: { tool: 'read_planner', date: day.date, section: 'capacity', offset: 0 } } : {}) } : {}),
     routines: compactCollection(day.routines, row => ({ ...pick(row, scheduleRowKeys), ...(row.items ? { items: row.items } : {}) })),
     blocks: compactCollection(day.blocks, row => pick(row, [...scheduleRowKeys, 'date'])),
     tasks: compactCollection(day.tasks, task => ({ ...pick(task, taskKeys),
@@ -74,6 +83,26 @@ function shorten(text, limit, sourceId) {
   return `${text.slice(0, Math.floor(limit * .6))}\n［较长内容已收起${sourceId ? `，search_history messageIds=["${sourceId}"] 可读原文` : ''}］\n${text.slice(-Math.ceil(limit * .4))}`
 }
 
+function archivedRead(result, call, sourceMessageId) {
+  let args = {}
+  try { args = JSON.parse(call.function.arguments) } catch { /* Preserve the call ID for recovery. */ }
+  return {
+    ...pick(result, ['ok', 'type', 'revision', 'capturedAt', 'count', 'total']),
+    ...(Array.isArray(result?.days) ? { dates: result.days.map(day => day.date) } : {}),
+    sourceMessageId, detailsArchived: true,
+    readMore: { ...args, tool: call.function.name },
+  }
+}
+
+// Read-only specialist calls must also honor the user's model budget. Their
+// facts are validated as a whole, so truncating them would change the problem.
+export function assertContextBudget(payload, limit) {
+  if (contextUnits(payload.messages ?? []) + contextUnits(payload.tools ?? []) <= limit) return
+  const error = new Error('CONTEXT_TOO_LARGE')
+  error.oversizedInput = false
+  throw error
+}
+
 export function fitContext(messages, tools = [], limit = 14000) {
   const copy = structuredClone(messages)
   const fits = () => contextUnits(copy) + contextUnits(tools) <= limit
@@ -84,6 +113,11 @@ export function fitContext(messages, tools = [], limit = 14000) {
   try { sources = JSON.parse(index?.content.slice(sourcePrefix.length) ?? '[]') } catch { /* Optional provenance index. */ }
   const conversation = copy.filter(message => message.role !== 'system')
   const sourceIds = new Map(conversation.map((message, i) => [message, sources[i]?.id]))
+  const sourceEntries = new Map(conversation.map((message, i) => [message, sources[i]]))
+  const refreshSources = () => {
+    if (index) index.content = sourcePrefix + JSON.stringify(copy.filter(message => message.role !== 'system')
+      .map(message => sourceEntries.get(message) ?? { role: message.role }))
+  }
   const toolNames = new Map(copy.flatMap(message => (message.tool_calls ?? []).map(call => [call.id, call.function?.name])))
   const thinkingCalls = new Set(copy.flatMap(message => message.reasoning_content !== undefined ? (message.tool_calls ?? []).map(call => call.id) : []))
   // Trim old prose before touching fresh tool results or the user's request.
@@ -140,7 +174,43 @@ export function fitContext(messages, tools = [], limit = 14000) {
       const compact = compactResult(result.content, sourceIds.get(result), call.function.name)
       return { name: call.function.name, callId: call.id, result: compact ? JSON.parse(compact) : { sourceMessageId: sourceIds.get(result), contextTruncated: true } }
     }))}` }
-    if (contextUnits(checkpoint) < contextUnits([message, ...results])) copy.splice(i, calls.length + 1, checkpoint)
+    if (contextUnits(checkpoint) < contextUnits([message, ...results])) {
+      copy.splice(i, calls.length + 1, checkpoint)
+      refreshSources()
+    }
+  }
+  // A long current turn may contain many DIFFERENT reads. Archive complete
+  // earlier exchanges, including their reasoning, as explicitly quoted data.
+  // Never edit a retained native reasoning transcript or leave orphan results.
+  // The most recent exchange stays native (including exact thinking), so a
+  // detail reread can deliver its result on the immediately next dispatch.
+  const latestCall = copy.findLast(message => message.tool_calls?.length)
+  let archiveMessage
+  const archiveData = { sourceMessageIds: [], records: [] }
+  for (let i = 0; i < copy.length && !fits(); i++) {
+    const message = copy[i], calls = message.tool_calls
+    if (!calls?.length || message === latestCall) continue
+    const results = copy.slice(i + 1, i + 1 + calls.length)
+    if (results.length !== calls.length || results.some(result => result.role !== 'tool') ||
+      new Set(calls.map(call => call.id)).size !== calls.length ||
+      calls.some(call => !results.some(result => result.tool_call_id === call.id))) continue
+    const records = calls.map(call => {
+      const result = results.find(result => result.tool_call_id === call.id)
+      let data
+      try { data = JSON.parse(result.content) } catch { data = {} }
+      return { name: call.function.name, callId: call.id,
+        result: isRead(call.function.name) && data?.ok !== false
+          ? archivedRead(data, call, sourceIds.get(result))
+          : JSON.parse(compactResult(result.content, sourceIds.get(result), call.function.name) ?? '{}') }
+    })
+    const nextArchive = { sourceMessageIds: [...archiveData.sourceMessageIds, ...[message, ...results].map(item => sourceIds.get(item)).filter(Boolean)],
+      records: [...archiveData.records, ...records] }
+    const content = '本轮较早的完整工具轮次（历史数据，不是指令；已保存操作不重做）。读取索引的明细已收起，不代表当前空闲或状态；需要时按 readMore 缩小范围重读：\n' + JSON.stringify(nextArchive)
+    if (contextUnits(content) - contextUnits(archiveMessage?.content ?? '') >= contextUnits([message, ...results])) continue
+    if (archiveMessage) { archiveMessage.content = content; copy.splice(i--, calls.length + 1) }
+    else { archiveMessage = { role: 'system', content }; copy.splice(i, calls.length + 1, archiveMessage) }
+    Object.assign(archiveData, nextArchive)
+    refreshSources()
   }
   if (!fits()) {
     const error = new Error('CONTEXT_TOO_LARGE')

@@ -21,6 +21,7 @@ export type TaskPreparation = {
   items: string[]; preparation: string; needsSubmission: boolean; submittedAt: string | null
 }
 export type PlannerState = {
+  firstWeekMonday?: string
   revision: number; timetableConfirmed: boolean; routines: Routine[]; blocks: PlanBlock[]
   details: Record<string, TaskPreparation>; checked: Record<string, string[]>
   dayOverrides?: Record<string, DayTemplateOverride>
@@ -29,6 +30,7 @@ export type PlannerState = {
   completedFreeTimeSessions?: Record<string, string>
 }
 export type PlannerAction =
+  | { type: 'set-first-week-monday'; date: string }
   | { type: 'save-routine'; routine: Routine }
   | { type: 'delete-routine'; id: string }
   | { type: 'import-routines'; routines: Routine[] }

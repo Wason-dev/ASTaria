@@ -1,6 +1,7 @@
 import { readFile, writeFile, rename, mkdir } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { downloadVerifiedAsset, verifyAsset } from './updateDownload.mjs'
+import { RELEASE_KEYS, verifyReleaseManifest } from './releaseTrust.mjs'
 
 export const RELEASES_URL = 'https://github.com/Wason-dev/ASTaria/releases'
 const RELEASE_API = 'https://api.github.com/repos/Wason-dev/ASTaria/releases?per_page=100'
@@ -66,7 +67,8 @@ export function selectRelease(releases, current) {
   }
 }
 
-export function validateManifest(manifest, release, current) {
+export function validateManifest(manifest, release, current, trustedKeys = RELEASE_KEYS) {
+  verifyReleaseManifest(manifest, trustedKeys)
   if (manifest?.schemaVersion !== 1 || manifest.name !== 'ASTaria' || manifest.bundleId !== 'dev.wason.ASTaria'
     || manifest.version !== release.version || manifest.platform !== current.platform || manifest.arch !== current.arch
     || manifest.dmg !== release.assetName || manifest.sizeBytes !== release.size
@@ -98,9 +100,10 @@ async function limitedJson(response, limit) {
 }
 
 /** Public release metadata only. No model keys, local tasks or machine identity are sent. */
-export function createUpdateService({ current, stateFile, fetcher = fetch, now = Date.now, allowNetwork = true, downloadDirectory, installer: installHandler }) {
+export function createUpdateService({ current, stateFile, fetcher = fetch, now = Date.now, allowNetwork = true, downloadDirectory, installer: installHandler, trustedKeys = RELEASE_KEYS, installResultFile }) {
   let automatic = true, lastCheckedAt = null, nextCheckAt = 0, lastAttempt = -Infinity, retryAfter = 0
   let releases = null, etag = null, latest = null, manifest = null, status = 'idle', error = null, pending = null, closed = false
+  let lastInstall = null
   let download = null, downloadPending = null, downloadController = null, installPending = null
   const downloadRoot = downloadDirectory ?? (stateFile ? join(dirname(stateFile), 'updates') : null)
   const installer = typeof installHandler === 'function' ? installHandler : null
@@ -110,7 +113,7 @@ export function createUpdateService({ current, stateFile, fetcher = fetch, now =
     commit: current.source?.commit?.slice(0, 7) ?? null }, automatic, status, error, lastCheckedAt,
     nextCheckAt: nextCheckAt ? new Date(nextCheckAt).toISOString() : null, latest, releasesUrl: RELEASES_URL,
     download: download ? { version: download.version, sizeBytes: download.sizeBytes, downloadedBytes: download.downloadedBytes ?? 0, path: null } : null,
-    canInstall: Boolean(download?.path && installer) })
+    canInstall: Boolean(download?.path && installer), lastInstall })
   const persist = () => {
     if (!stateFile) return Promise.resolve()
     const value = JSON.stringify({ schema: 1, automatic, lastCheckedAt, nextCheckAt, retryAfter, etag, releases, manifest, status, error, downloaded: download?.path ? { sha256: manifest?.sha256 } : null })
@@ -133,7 +136,7 @@ export function createUpdateService({ current, stateFile, fetcher = fetch, now =
       status = 'unavailable'; error = '这个版本尚未提供适合此设备的完整安装包，可到发布页查看'
       return
     }
-    const build = validateManifest(manifest, latest, current)
+    const build = validateManifest(manifest, latest, current, trustedKeys)
     const newerVersion = compareVersions(latest.version, current.version) > 0
     latest = { ...latest, builtAt: build.builtAt, sameVersion: !newerVersion }
     if (newerVersion || isNewBuild(build, current)) status = 'available'
@@ -142,6 +145,13 @@ export function createUpdateService({ current, stateFile, fetcher = fetch, now =
     }
   }
   const ready = (async () => {
+    if (installResultFile) {
+      try {
+        const result = (await readFile(installResultFile, 'utf8')).trim()
+        const messages = { installed: '上次更新已安装并成功启动', failed: '上次更新未能启动，已恢复原版本；可重试或手动安装', prepared: '上次更新尚未完成，当前仍在使用原版本' }
+        if (Object.hasOwn(messages, result)) lastInstall = { status: result, message: messages[result] }
+      } catch { /* No previous installation result. */ }
+    }
     if (!stateFile) return
     try {
       const raw = await readFile(stateFile, 'utf8')
@@ -250,7 +260,7 @@ export function createUpdateService({ current, stateFile, fetcher = fetch, now =
     if (pending) await pending
     if (closed || downloadPending || installPending || download?.path) return snapshot()
     if (!latest?.downloadUrl || !manifest || !downloadRoot) throw new Error('请先检查到可用更新')
-    const build = validateManifest(manifest, latest, current)
+    const build = validateManifest(manifest, latest, current, trustedKeys)
     if (compareVersions(latest.version, current.version) <= 0 && !isNewBuild(build, current)) throw new Error('当前没有可安装的新版本')
     const candidate = structuredClone(latest), metadata = structuredClone(manifest)
     status = 'downloading'; error = null
@@ -289,13 +299,18 @@ export function createUpdateService({ current, stateFile, fetcher = fetch, now =
     status = 'installing'; error = null
     const candidate = { path: download.path, version: download.version, manifest: structuredClone(manifest) }
     installPending = (async () => {
+      let bytesVerified = false
       try {
         // Recheck the cached bytes immediately before mounting, even after a restart.
+        validateManifest(candidate.manifest, latest, current, trustedKeys)
         await verifyAsset(candidate.path, candidate.manifest)
+        bytesVerified = true
         await installer(candidate)
       } catch (reason) {
-        status = 'ready'
+        if (!bytesVerified) download = null
+        status = bytesVerified ? 'ready' : 'error'
         error = reason instanceof Error && /[\u3400-\u9fff]/u.test(reason.message) ? reason.message : '更新安装未完成，原版本已保留，请重试或手动安装'
+        try { await persist() } catch { /* The next startup still authenticates all cached bytes. */ }
       }
     })().finally(() => { installPending = null })
     return snapshot()

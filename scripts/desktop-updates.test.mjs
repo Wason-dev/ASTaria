@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { Readable, Writable } from 'node:stream'
 import { once } from 'node:events'
 import { createHash } from 'node:crypto'
+import { signTestManifest, testReleaseKeys } from './fixtures/release-signing.mjs'
 import { RELEASES_URL, compareVersions, createUpdateService, handleUpdateRequest, selectRelease, validateManifest } from '../desktop/updates.mjs'
 
 const RELEASE_API = 'https://api.github.com/repos/Wason-dev/ASTaria/releases?per_page=100'
@@ -42,8 +43,8 @@ function buildRelease(options = {}) {
     version, tag, dmgName, manifestName, manifestUrl: manifestAsset.browser_download_url,
     release: { tag_name: tag, name: `ASTaria ${version}`, draft, prerelease: releaseFlag, body,
       published_at: publishedAt, assets: [dmgAsset, manifestAsset], ...releasePatch },
-    manifest: { schemaVersion: 1, name: 'ASTaria', bundleId: 'dev.wason.ASTaria', version, platform, arch,
-      dmg: dmgName, sizeBytes: size, sha256, buildInfo: { version, builtAt, source: { commit } }, ...manifestPatch },
+    manifest: signTestManifest({ schemaVersion: 1, name: 'ASTaria', bundleId: 'dev.wason.ASTaria', version, platform, arch,
+      dmg: dmgName, sizeBytes: size, sha256, buildInfo: { version, builtAt, source: { commit } }, ...manifestPatch }),
   }
 }
 
@@ -111,7 +112,7 @@ function installed(patch = {}) {
 }
 
 function startService({ backend, current = installed(), clock = createClock(T0), stateFile = null, allowNetwork = true, ...extra }) {
-  return { updates: createUpdateService({ current, stateFile, fetcher: backend.fetcher, now: clock.now, allowNetwork, ...extra }), clock }
+  return { updates: createUpdateService({ trustedKeys: testReleaseKeys, current, stateFile, fetcher: backend.fetcher, now: clock.now, allowNetwork, ...extra }), clock }
 }
 
 function httpRequest(url, { method = 'GET', body, headers = {} } = {}) {
@@ -246,7 +247,7 @@ test('validateManifest 拒绝平台、版本与哈希长度不一致的清单', 
   const current = { version: '1.0.0-beta.2', arch: 'arm64', platform: 'darwin' }
   const build = buildRelease({ version: '1.0.0-beta.3' })
   const selected = selectRelease([build.release], current)
-  assert.deepEqual(validateManifest(build.manifest, selected, current), build.manifest.buildInfo)
+  assert.deepEqual(validateManifest(build.manifest, selected, current, testReleaseKeys), build.manifest.buildInfo)
   for (const [label, patch] of [
     ['平台不一致', { platform: 'win32' }],
     ['版本不一致', { version: '1.0.0-beta.4' }],
@@ -259,14 +260,14 @@ test('validateManifest 拒绝平台、版本与哈希长度不一致的清单', 
     ['schema 不符', { schemaVersion: 2 }],
     ['bundleId 不符', { bundleId: 'dev.other.App' }],
     ['名称不符', { name: 'Other' }],
-  ]) assert.throws(() => validateManifest({ ...build.manifest, ...patch }, selected, current), /Invalid build manifest/u, label)
+  ]) assert.throws(() => validateManifest(signTestManifest({ ...build.manifest, ...patch }), selected, current, testReleaseKeys), /Invalid build manifest/u, label)
   for (const [label, patch] of [
     ['缺少构建信息', { buildInfo: undefined }],
     ['构建版本不符', { buildInfo: { ...build.manifest.buildInfo, version: '1.0.0' } }],
     ['构建时间非法', { buildInfo: { ...build.manifest.buildInfo, builtAt: 'not-a-date' } }],
     ['缺少构建时间', { buildInfo: { ...build.manifest.buildInfo, builtAt: undefined } }],
-  ]) assert.throws(() => validateManifest({ ...build.manifest, ...patch }, selected, current), /Invalid build information/u, label)
-  assert.throws(() => validateManifest(null, selected, current), /Invalid build manifest/u)
+  ]) assert.throws(() => validateManifest(signTestManifest({ ...build.manifest, ...patch }), selected, current, testReleaseKeys), /Invalid build information/u, label)
+  assert.throws(() => validateManifest(null, selected, current), /发布者签名/u)
 })
 
 test('createUpdateService 并发检查只访问一次发布接口', async () => {
@@ -652,8 +653,8 @@ test('createUpdateService 用 Content-Length 与真实体积把清单限制在 1
   const release = buildRelease({ version: '1.0.0-beta.3' })
   const cases = [
     ['声明超限', { text: JSON.stringify(release.manifest), headers: { 'content-length': '128001' } }, false],
-    ['真实超限', { text: sizedJson(128_001, pad => ({ ...release.manifest, pad })), headers: { 'content-length': '1' } }, false],
-    ['恰好 128KB', { text: sizedJson(128_000, pad => ({ ...release.manifest, pad })), headers: { 'content-length': '128000' } }, true],
+    ['真实超限', { text: sizedJson(128_001, pad => signTestManifest({ ...release.manifest, pad })), headers: { 'content-length': '1' } }, false],
+    ['恰好 128KB', { text: sizedJson(128_000, pad => signTestManifest({ ...release.manifest, pad })), headers: { 'content-length': '128000' } }, true],
   ]
   for (const [label, shape, accepted] of cases) {
     const backend = createBackend({ releases: [release.release],
@@ -682,7 +683,7 @@ test('createUpdateService 关闭时中止在途请求，之后不再发起新请
       options.signal.addEventListener('abort', () => reject(options.signal.reason), { once: true })
     })
   }
-  const updates = createUpdateService({ current: installed(), stateFile: null, fetcher, now: createClock(T0).now })
+  const updates = createUpdateService({ trustedKeys: testReleaseKeys, current: installed(), stateFile: null, fetcher, now: createClock(T0).now })
   const inFlight = updates.check()
   await new Promise(resolve => setImmediate(resolve))
   assert.equal(calls.length, 1)
@@ -773,7 +774,7 @@ test('更新接口拒绝异常 JSON 与超大请求体', async () => {
 test('更新接口把手动检查与自动检查分别落到 force 上', async () => {
   const latest = buildRelease({ version: '1.0.0-beta.3' })
   const backend = createBackend({ releases: [latest.release], builds: [latest] })
-  const updates = createUpdateService({ current: installed(), stateFile: null, fetcher: backend.fetcher, now: createClock(T0).now })
+  const updates = createUpdateService({ trustedKeys: testReleaseKeys, current: installed(), stateFile: null, fetcher: backend.fetcher, now: createClock(T0).now })
   await updates.setAutomatic(false)
   const automatic = await httpResponse(handleUpdateRequest,
     httpRequest('/api/desktop/updates/check', { method: 'POST', body: { automatic: true } }), updates)

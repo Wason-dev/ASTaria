@@ -283,3 +283,16 @@ test('long-term free-time goals are rejected before model inference without chan
   assert.deepEqual(f.db.getPlanner(), before)
   assert.equal(f.db.getCompanionState().scenarios.length, 0)
 })
+
+test('route facts respect the configured model budget before provider dispatch without losing stored detail', async t => {
+  const f = fixture(t)
+  f.db.setPreference('model-connection', { contextBudget: { mode: 'custom', maxUnits: 8000 } })
+  f.db.updateTask(f.task.id, { subSteps: Array.from({ length: 60 }, (_, i) => ({ id: `step-${i}`, title: `步骤${i}`, detail: '需要仔细核对资料'.repeat(60) })) })
+  const before = { tasks: f.db.listTasks(), planner: f.db.getPlanner() }
+  let calls = 0
+  await assert.rejects(service(f, async () => { calls++; return completion(output(f)) }).analyze(f.input), /上下文预算/)
+  assert.equal(calls, 0)
+  assert.deepEqual(f.db.listTasks(), before.tasks)
+  assert.deepEqual(f.db.getPlanner(), before.planner)
+  assert.equal(f.db.getCompanionState().scenarios.length, 0)
+})

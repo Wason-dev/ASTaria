@@ -47,6 +47,19 @@ export function usePreferences() {
   return { ...snapshot, refresh: preferencesStore.refresh }
 }
 
+let focusWrite = Promise.resolve()
+/** Serialize slider writes and preserve unrelated preferences changed elsewhere. */
+export function saveFocusPreferences(focus: Preferences['focus']): Promise<Preferences> {
+  const write = focusWrite.then(async () => {
+    const expected = await localApi<Preferences>('/preferences')
+    const saved = await localApi<Preferences>('/preferences', { expected, value: { ...expected, focus } })
+    publishPreferences(saved)
+    return saved
+  })
+  focusWrite = write.then(() => {}, () => {})
+  return write
+}
+
 export function notificationsAllowed(value: Preferences['notifications'], now: Date) {
   if (!value.enabled) return false
   const minute = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`

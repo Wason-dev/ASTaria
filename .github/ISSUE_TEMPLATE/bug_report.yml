@@ -1,0 +1,103 @@
+name: Bug 报告
+description: 报告可复现的缺陷或异常行为（请先阅读下方隐私提醒）
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## 请勿在此提交密钥或个人数据
+
+        这是公开仓库的 Issue 表单，提交后**所有人可见且会被永久索引**。请勿上传或粘贴：
+
+        - API Key、访问令牌、模型服务凭据、macOS 钥匙串中的任何内容；
+        - 个人课表、日程、待办、聊天记录、对话导出或数据库文件（如 `astaria.db`）；
+        - 含真实姓名、学号、邮箱、单位、地址的截图或日志；
+        - 备份文件、`.env`、`desktop-builds/` 中的构建清单或本机绝对路径。
+
+        需要这些信息才能定位时，请先用示例数据复现并给出**最小化、已脱敏**的片段；安全漏洞请改用仓库的私密漏洞报告入口，不要开公开 Issue。
+
+  - type: input
+    id: version
+    attributes:
+      label: 版本
+      description: 出问题的 ASTaria 版本号。可在 App 内「设置 → 关于」或安装包文件名中查看。
+      placeholder: 例如 0.1.0-beta.4
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: 平台
+      description: 你运行 ASTaria 的方式。
+      options:
+        - macOS · Apple Silicon（arm64）
+        - macOS · Intel（x64）
+        - 浏览器开发预览（npm run dev）
+        - 其他（请在补充信息中说明）
+    validations:
+      required: true
+
+  - type: input
+    id: system
+    attributes:
+      label: 系统版本
+      description: macOS 版本（浏览器预览请填浏览器名称与版本）。
+      placeholder: 例如 macOS 15.6 或 Chrome 141
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 请写出从启动 App 开始的最小步骤，包含每一步的确切操作与顺序。不要包含个人数据。
+      placeholder: |
+        1. 打开 ASTaria，进入「日程」
+        2. 点击右上角「+」
+        3. ...
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望结果
+      description: 你认为应该发生什么？
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际结果
+      description: 实际发生了什么？如出现错误提示或崩溃，请给出提示原文。
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: 补充信息（可选）
+      description: 复现频率、是否只在特定设置下出现、已脱敏的截图或日志片段。请再次确认不含密钥与个人数据。
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: 提交前确认
+      options:
+        - label: 我已搜索现有 Issue，确认这不是重复报告。
+          required: true
+        - label: 以上内容不含 API Key、令牌、钥匙串内容或任何凭据。
+          required: true
+        - label: 以上内容不含个人课表、日程、聊天记录、数据库文件或可识别个人身份的信息。
+          required: true
+        - label: 我了解当前 beta 安装包使用 ad-hoc 签名且未经 Apple 公证，非安全问题的报错属于正常提示。
+          required: false

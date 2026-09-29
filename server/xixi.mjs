@@ -442,9 +442,38 @@ export function createXixi({ db, complete, now = () => new Date() }) {
     return { offset, limit }
   }
   function compactCapacity(capacity, limit = 16) {
+    const truncated = capacity.available.length > limit || capacity.free.length > limit || capacity.remaining.length > limit || capacity.conflicts.length > 16
     return { ...capacity, available: capacity.available.slice(0, limit), free: capacity.free.slice(0, limit),
       remaining: capacity.remaining.slice(0, limit), conflicts: capacity.conflicts.slice(0, 16),
-      truncated: capacity.available.length > limit || capacity.free.length > limit || capacity.remaining.length > limit || capacity.conflicts.length > 16 }
+      ...(truncated ? { rangeCounts: Object.fromEntries(['available', 'free', 'remaining', 'conflicts'].map(key => [key, capacity[key].length])) } : {}), truncated }
+  }
+  function boundedPlannerOverview(view, units) {
+    // Keep normal days complete. Only overflowing overview pages yield rows;
+    // totals and exact continuation offsets always describe the full data.
+    const sections = ['routines', 'blocks', 'tasks', 'carry', 'availabilityWindows']
+    const ranges = ['available', 'free', 'remaining', 'conflicts']
+    const capacityCounts = view.capacity.rangeCounts ?? Object.fromEntries(ranges.map(key => [key, view.capacity[key].length]))
+    while (contextUnits(view) > units) {
+      const candidates = [
+        ...sections.filter(key => view[key].items.length).map(key => ({ key, rows: view[key].items, capacity: false })),
+        ...ranges.filter(key => view.capacity[key].length).map(key => ({ key, rows: view.capacity[key], capacity: true })),
+      ].sort((a, b) => contextUnits(b.rows) - contextUnits(a.rows))
+      const target = candidates[0]
+      if (!target) break
+      target.rows.pop()
+      const readMore = { tool: 'read_planner', date: view.date, section: target.capacity ? 'capacity' : target.key,
+        offset: target.capacity ? 0 : target.rows.length }
+      if (target.capacity) {
+        view.capacity.truncated = true
+        view.capacity.rangeCounts = capacityCounts
+        view.capacityReadMore = readMore
+      } else {
+        view[target.key].truncated = true
+        view[target.key].nextOffset = target.rows.length
+        view[target.key].readMore = readMore
+      }
+    }
+    return view
   }
   function weeklyRows(state, weekday) {
     return state.routines.filter(r => r.enabled && r.weekdays.includes(weekday)).sort((a, b) => a.start.localeCompare(b.start) || a.id.localeCompare(b.id))
@@ -529,7 +558,7 @@ export function createXixi({ db, complete, now = () => new Date() }) {
     if (detail) {
       const page = (section, limit, budget, map) => rowPage(collections[section], { limit, units: budget, map,
         readMore: { tool: 'read_planner', date, section } })
-      return { date, capacity: compactCapacity(cap, 64),
+      return boundedPlannerOverview({ date, capacity: compactCapacity(cap, 64),
         ...(cap.available.length > 64 || cap.free.length > 64 || cap.remaining.length > 64 || cap.conflicts.length > 16
           ? { capacityReadMore: { tool: 'read_planner', date, section: 'capacity', offset: 0 } } : {}),
         availabilityWindows: { ...availabilityWindows(state, tasks, date, at, 1800), readMore: { tool: 'read_planner', date, section: 'availabilityWindows', offset: 0 } },
@@ -539,7 +568,7 @@ export function createXixi({ db, complete, now = () => new Date() }) {
         blocks: page('blocks', 32, 2200), tasks: page('tasks', 24, 1600, ({ notes, preparation, ...row }) => ({ ...row,
           ...(notes || preparation ? { readMore: { tool: 'read_planner', date, section: 'tasks', offset: collections.tasks.findIndex(item => item.id === row.id), limit: 1 } } : {}) })),
         carry: page('carry', 24, 1200),
-      }
+      }, units)
     }
     return {
       date, capacity: compactCapacity(cap, 12),
@@ -562,10 +591,17 @@ export function createXixi({ db, complete, now = () => new Date() }) {
     if (section !== 'overview' && count !== 1) throw new ValidationError('详细分页每次读取一天，请使用要继续查看的date')
     if (section === 'overview' && (args.offset !== undefined || args.limit !== undefined)) throw new ValidationError('请指定section再读取详细分页')
     const state = db.getPlanner(), tasks = db.listTasks(), at = clock(), days = []
+    const budget = contextBudget()
+    // A read result shares the next dispatch with schemas, persona, live facts
+    // and the current request. Half of a small local budget is not necessarily
+    // available for calendar rows, even before earlier exchanges are archived.
+    const reservedUnits = contextUnits(XIXI_TOOLS) + contextUnits(PERSONA + WORKING +
+      personalityPrompt(personalityLevel(preferences().assistant?.personality))) + 5000
+    const overviewUnits = Math.floor(Math.min(24_000, budget.enabled ? Math.max(3500, budget.hard - reservedUnits) : 24_000) / count)
     const start = new Date(`${first}T12:00:00`)
     for (let offset = 0; offset < count; offset++) {
       const date = localDay(new Date(start.getFullYear(), start.getMonth(), start.getDate() + offset))
-      days.push(plannerDayView(state, tasks, date, at, 6000, input.context.taskId, { section, ...page }))
+      days.push(plannerDayView(state, tasks, date, at, overviewUnits, input.context.taskId, { section, ...page }))
     }
     return { type: 'planner_read', revision: state.revision, timezone: plannerTimezone(), userTimezone: input.context.timezone,
       timezoneMatches: timezoneMatches(input.context.timezone), capturedAt: at.toISOString(), timetableConfirmed: state.timetableConfirmed,
@@ -648,6 +684,7 @@ export function createXixi({ db, complete, now = () => new Date() }) {
       actions = [{ type: 'edit-weekday', weekday: args.weekday, replacements: args.replacements, syncDates: args.syncDates }]
       summary = `每周${'日一二三四五六'[args.weekday]}课表已修正${args.syncDates.length ? `，并同步 ${args.syncDates.join('、')}` : ''}`
     } else if (name === 'plan_tasks') {
+      if (onlyRecordRequested(input.text)) throw new ValidationError('用户要求只记录，原日程保留，不应新增或移动任务时段')
       if (!Array.isArray(args.plans) || args.plans.length < 1 || args.plans.length > 8) throw new ValidationError('每次安排1至8个时间段')
       const plans = args.plans.map((plan, index) => {
         knownKeys(plan, ['id', 'taskId', 'date', 'start', 'end'])
@@ -817,6 +854,7 @@ export function createXixi({ db, complete, now = () => new Date() }) {
       materials: selectedHandoff.materials.slice(0, 3).map(item => clipped(item, 100)), source: { kind: selectedHandoff.source.kind, messageId: selectedHandoff.source.messageId } } : null
     const opportunities = companionState?.opportunities.slice(0, 2).map(item => ({ id: item.id, kind: item.kind, date: item.date,
       title: clipped(item.title, 160), reason: clipped(item.reason, 160), start: item.start, end: item.end,
+      ...(item.needsConfirmation !== undefined ? { needsConfirmation: item.needsConfirmation } : {}),
       source: { kind: item.source.kind, messageId: item.source.messageId } })) ?? []
     const liveTime = currentTime(context.timezone)
     const todayDate = liveTime.localDate
@@ -1304,7 +1342,6 @@ export function createXixi({ db, complete, now = () => new Date() }) {
     const existingOperations = db.listOperations({ requestId: input.requestId }).filter(operation => !operation.undoneAt)
     const committed = new Map(existingOperations.map(operation => [operation.id, operation.summary]))
     let cancelledSummaries = []
-    let toolFailures = 0
     let schedulingNudge = false // Only actual task scheduling obligations require a task-plan commit.
     const workOrder = createWorkOrder({ ...input, userMessageId }, previous, timestamp)
     workOrder.resume()
@@ -1403,7 +1440,7 @@ export function createXixi({ db, complete, now = () => new Date() }) {
       })
     }
     const recordOutcome = (call, step, outcome) => {
-      if (outcome.ok === false) { toolFailures += 1; workOrder.fail(step, outcome.error); return }
+      if (outcome.ok === false) { workOrder.fail(step, outcome.error); return }
       if (outcome.operation?.summary) { committed.set(outcome.operation.id, outcome.operation.summary); workOrder.commit(step, outcome.operation) }
       else workOrder.succeed(step)
       for (const operation of outcome.operations ?? []) {
@@ -1520,6 +1557,12 @@ export function createXixi({ db, complete, now = () => new Date() }) {
           } : undefined)
           db.assertTurnWritable(input.requestId, modelContext.sourceMessageIds)
           message = normalizeAssistantProtocol(resultMessage(response))
+          const nativeCalls = message.tool_calls
+          if (nativeCalls?.length && (nativeCalls.some(call => typeof call?.id !== 'string' || !call.id ||
+            typeof call.function?.name !== 'string' || !call.function.name || typeof call.function?.arguments !== 'string') ||
+            new Set(nativeCalls.map(call => call?.id)).size !== nativeCalls.length)) {
+            message = { ...message, protocolError: true }
+          }
           if (!message.protocolError) break
           repairThisRound = true
           if (protocolRepairs++ >= 2) throw new ProviderError('析熙的回复格式暂时未恢复，已保留你的要求；这次未完成的修改没有执行')
@@ -1540,9 +1583,9 @@ export function createXixi({ db, complete, now = () => new Date() }) {
             taskId: input.context.taskId, sourceMessageIds: modelContext.sourceMessageIds })
           return finish('completed')
         }
-        if (last || calls.length > 8 || totalCalls + calls.length > MAX_CALLS || calls.some(call => !call.id || typeof call.function?.arguments !== 'string')) {
-          throw new Error('TOOL_LIMIT')
-        }
+        const rejectedBatch = last || totalCalls + calls.length > MAX_CALLS
+          ? '本轮工具调用额度已用完，这批调用均未执行；已保存的操作保留'
+          : calls.length > 8 ? '每批最多8个工具调用，这批均未执行；请拆成较小批次继续，勿重复已成功的操作' : null
         if (calls.length === 1 && calls[0].function.name === 'ask_user') {
           let args
           try {
@@ -1564,8 +1607,27 @@ export function createXixi({ db, complete, now = () => new Date() }) {
             // The normal tool error path below lets the model repair its call.
           }
         }
-        db.appendMessage({ conversationId: input.conversationId, requestId: input.requestId, role: 'assistant',
+        const journalCalls = () => db.appendMessage({ conversationId: input.conversationId, requestId: input.requestId, role: 'assistant',
           content: clipped(message.content, 8000), reasoningContent: message.reasoning_content, toolCalls: calls, taskId: input.context.taskId, sourceMessageIds: modelContext.sourceMessageIds })
+        if (rejectedBatch) {
+          // Store a rejection as one transaction. A crash must not leave the
+          // batch looking like unfinished tools that the retry should execute.
+          db.transaction(() => {
+            journalCalls()
+            for (const call of calls) {
+              const step = workOrder.step(call.id, call.function.name, attemptedOperationId(input, call))
+              recordOutcome(call, step, { ok: false, error: rejectedBatch })
+              db.appendMessage({ conversationId: input.conversationId, requestId: input.requestId, role: 'tool', toolCallId: call.id,
+                content: JSON.stringify({ ok: false, error: rejectedBatch }), taskId: input.context.taskId, sourceMessageIds: modelContext.sourceMessageIds })
+            }
+            checkpoint()
+          })
+          totalCalls += calls.length
+          if (last || totalCalls >= MAX_CALLS) throw new Error('TOOL_LIMIT')
+          modelContext = await makeContext(input, { currentUser })
+          continue
+        }
+        journalCalls()
         emit({ type: 'phase', phase: 'executing' })
         for (const call of calls) {
           const step = workOrder.step(call.id, call.function?.name ?? 'unknown', attemptedOperationId(input, call))
@@ -1605,7 +1667,7 @@ export function createXixi({ db, complete, now = () => new Date() }) {
       // A create followed by a concrete time range is a two-phase workflow:
       // the task record alone is not completion. Keep the turn retryable while
       // the scheduling nudge still says that the calendar phase is pending.
-      if (committedSummaries.length && toolFailures === 0 && !workOrder.value.interrupted && !workOrder.value.failures.length && !workOrder.value.steps.some(step => step.status === 'running') && !schedulingNudge && !boundedExecutionFailure) {
+      if (committedSummaries.length && !workOrder.value.interrupted && !workOrder.value.failures.length && !workOrder.value.steps.some(step => step.status === 'running') && !schedulingNudge && !boundedExecutionFailure) {
         workOrder.verify(); workOrder.finishReply('fallback')
         checkpoint()
         return db.transaction(() => {
@@ -1620,7 +1682,7 @@ export function createXixi({ db, complete, now = () => new Date() }) {
       if (schedulingNudge) workOrder.pending('日历安排尚未保存');
       const hasActions = db.listOperations({ requestId: input.requestId }).length > 0
       const safeFailure = cause instanceof ProviderError ? cause.message : cause?.message === 'CONTEXT_TOO_LARGE'
-        ? cause.oversizedInput ? '这条消息本身较长，请拆成较短的消息后发送' : '本轮资料整理未完成，原要求和已保存进度都保留；可重试继续，无需重新描述'
+        ? cause.oversizedInput ? '这条消息本身较长，请拆成较短的消息后发送' : '这次读取的资料超出当前模型容量，原要求和已保存进度都保留；请缩小要处理的范围，或在模型设置中提高上下文预算后重试'
         : cause?.message === 'TOOL_LIMIT' ? '这项请求仍有步骤未完成，已保存进度；重试会接着处理，不用重新描述'
         : cause?.message === 'NO_EXECUTION_PROGRESS' ? '析熙重复读取了相同资料，没有继续执行，已停止这次空转；原要求和已保存进度保留，可重试继续'
         : cause?.message === 'SCHEDULE_INCOMPLETE' ? '事项已记录，但日历时段尚未保存'

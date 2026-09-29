@@ -477,7 +477,11 @@ try {
   await check('card decoration defaults to symmetrical edges', getPreferences(db).cardEdges === 'both')
   await check('Settings offers both, left and hidden card-edge modes', `JSON.stringify([...document.querySelectorAll('select[aria-label="卡片装饰线"] option')].map(option=>({value:option.value,label:option.textContent})))===JSON.stringify([{value:'both',label:'左右对称'},{value:'left',label:'仅左侧'},{value:'none',label:'隐藏'}])`)
   await send('Emulation.setDeviceMetricsOverride', { width: 1366, height: 768, deviceScaleFactor: 1, mobile: false }); await delay(300)
-  await check('1366×768: the extra card-edge setting fits the appearance page', '(()=>{const e=document.querySelector(".xixi-settings-scroll");return e.scrollHeight<=e.clientHeight+1&&e.scrollWidth<=e.clientWidth+1})()')
+  // Horizon controls make vertical scrolling intentional; every control must remain reachable.
+  await check('1366×768: appearance controls have no horizontal overflow', '(()=>{const e=document.querySelector(".xixi-settings-scroll");return e.scrollWidth<=e.clientWidth+1})()')
+  await evaluate('document.querySelector(".xixi-settings-scroll").scrollTop=10000;true')
+  await delay(100)
+  await check('1366×768: the final appearance action is reachable by scrolling', '(()=>{const e=document.querySelector(".xixi-settings-scroll"),b=document.querySelector(".xixi-appearance-preview button"),r=b?.getBoundingClientRect(),v=e.getBoundingClientRect();return !!r&&r.top>=v.top&&r.bottom<=v.bottom&&r.left>=v.left&&r.right<=v.right})()')
   await shot('light-appearance-card-edge-setting')
   await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false }); await delay(250)
   const settingsColors = await evaluate(`(()=>{const e=document.querySelector('.xixi-settings');return{ink:getComputedStyle(e).color,select:getComputedStyle(e.querySelector('select[aria-label=界面外观]')).color,theme:e.dataset.theme}})()`)

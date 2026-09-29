@@ -54,9 +54,9 @@ export function PlannerDialog({ title, onClose, busy = false, closeRequested = f
   </dialog></GlassSamplingContext.Provider>
 }
 
-export function RoutineDialog({ routine, source, initialWeekday, state, act, onClose, onNotice, onBrowseRoutines }: { routine?: Routine; source?: { date: string; weekday: number }; initialWeekday?: number; state: PlannerState; act: Act; onClose: () => void; onNotice: (text: string) => void; onBrowseRoutines: () => void }) {
+export function RoutineDialog({ routine, source, initialWeekday, initialCycle, state, act, onClose, onNotice, onBrowseRoutines }: { routine?: Routine; source?: { date: string; weekday: number }; initialWeekday?: number; initialCycle?: Routine['weekCycle']; state: PlannerState; act: Act; onClose: () => void; onNotice: (text: string) => void; onBrowseRoutines: () => void }) {
   const original = routine ? weeklyRoutineSource(state, routine, source?.weekday) : undefined
-  const [draft, setDraft] = useState<Routine>(original ?? routine ?? { id: crypto.randomUUID(), title: '', kind: 'class', weekdays: initialWeekday !== undefined && Number.isInteger(initialWeekday) && initialWeekday >= 0 && initialWeekday <= 6 ? [initialWeekday] : [1,2,3,4,5], start: '08:00', end: '08:40', location: '', items: [], enabled: true })
+  const [draft, setDraft] = useState<Routine>(original ?? routine ?? { id: crypto.randomUUID(), title: '', kind: 'class', weekdays: initialWeekday !== undefined && Number.isInteger(initialWeekday) && initialWeekday >= 0 && initialWeekday <= 6 ? [initialWeekday] : [1,2,3,4,5], start: '08:00', end: '08:40', location: '', items: [], enabled: true, ...(initialCycle && initialCycle !== 'weekly' ? { weekCycle: initialCycle, weekAnchor: state.firstWeekMonday ?? weekStart(localDay(new Date())) } : {}) })
   const [items, setItems] = useState(draft.items.join('、'))
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [deleting, setDeleting] = useState(false)
   const [finished, setFinished] = useState(false)
@@ -94,7 +94,7 @@ export function RoutineDialog({ routine, source, initialWeekday, state, act, onC
       <div className="pl-form-pair"><label>重复周次<select aria-label="重复周次" value={draft.weekCycle ?? 'weekly'} onChange={e => {
         const cycle = e.target.value as Routine['weekCycle']
         if (cycle === 'weekly') { const { weekCycle: _cycle, weekAnchor: _anchor, ...weekly } = draft; setDraft(weekly) }
-        else setDraft({ ...draft, weekCycle: cycle, weekAnchor: draft.weekAnchor ?? weekStart(localDay(new Date())) })
+        else setDraft({ ...draft, weekCycle: cycle, weekAnchor: state.firstWeekMonday ?? draft.weekAnchor ?? weekStart(localDay(new Date())) })
       }}><option value="weekly">每周</option><option value="odd">单周 · 第1、3、5周…</option><option value="even">双周 · 第2、4、6周…</option></select></label>
       {draft.weekCycle && draft.weekCycle !== 'weekly' && <label>第1周的周一<input aria-label="第1周的周一" type="date" required value={draft.weekAnchor ?? ''} onChange={e => setDraft({ ...draft, weekAnchor: e.target.value })} /></label>}</div>
       {draft.weekCycle && draft.weekCycle !== 'weekly' && <p className="pl-muted">周次按你设定的第1周连续计算，跨年也不会重置。单日调课使用目标日期所在周的单双周课表。</p>}

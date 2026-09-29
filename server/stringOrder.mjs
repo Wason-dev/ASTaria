@@ -4,6 +4,8 @@ import { ProviderError } from './provider.mjs'
 import { publicOperation } from './operationReceipts.mjs'
 import { blocksForDay, dayCapacity, minuteOf, routinesForDay } from '../src/planner/model.ts'
 import { localDay } from '../src/home/agenda.ts'
+import { assertContextBudget } from './contextBudget.mjs'
+import { resolveContextBudget } from './modelSettings.mjs'
 
 const fail = (message, status = 400) => { throw new ValidationError(message, status) }
 const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex')
@@ -227,6 +229,8 @@ export function createVerifiedOrder({ db, complete, now = () => new Date(), poli
       response_format: { type: 'json_object' }, max_tokens: 16000,
     }
     if (JSON.stringify(payload).length > 400_000) fail('本次完整日程资料过多，暂时无法提交给模型；没有截断或修改任何安排')
+    try { assertContextBudget(payload, resolveContextBudget(db.getPreference('model-connection') ?? {}).hard) }
+    catch { fail('本次安排资料超出当前模型的上下文预算，请减少本次调整范围或在设置中提高预算；原日程未改动') }
     let result, timeout
     const controller = new AbortController()
     const stream = policy.streamActivity?.({ input, snap: initial.snap, prepared, activity })

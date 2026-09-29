@@ -1,6 +1,7 @@
 #import <Foundation/Foundation.h>
 #import <AppKit/AppKit.h>
 #import <UserNotifications/UserNotifications.h>
+#import <CoreServices/CoreServices.h>
 
 static BOOL finished = NO;
 static void output(NSDictionary *value) {
@@ -13,9 +14,15 @@ static void output(NSDictionary *value) {
 static void status(UNUserNotificationCenter *center) {
     [center getNotificationSettingsWithCompletionHandler:^(UNNotificationSettings *settings) {
         [center getPendingNotificationRequestsWithCompletionHandler:^(NSArray<UNNotificationRequest *> *requests) {
-            NSUInteger count = 0;
-            for (UNNotificationRequest *request in requests) if ([request.identifier hasPrefix:@"astaria."]) count++;
-            output(@{@"authorization": @(settings.authorizationStatus), @"pending": @(count)});
+            NSUInteger count = 0, withContent = 0;
+            for (UNNotificationRequest *request in requests) if ([request.identifier hasPrefix:@"astaria."]) {
+                count++;
+                if (request.content.title.length && request.content.body.length) withContent++;
+            }
+            NSString *icon = [NSBundle.mainBundle pathForResource:@"ASTaria" ofType:@"icns"];
+            output(@{@"authorization": @(settings.authorizationStatus), @"pending": @(count),
+                @"pendingWithContent": @(withContent), @"showPreviews": @(settings.showPreviewsSetting),
+                @"iconAvailable": @([NSImage.alloc initWithContentsOfFile:icon ?: @""] != nil)});
         }];
     }];
 }
@@ -30,7 +37,8 @@ static void replace(UNUserNotificationCenter *center) {
         if (![row isKindOfClass:NSDictionary.class]) { valid = NO; break; }
         id identifier = row[@"id"], at = row[@"at"];
         if (!stringWithin(identifier, 100) || ![identifier hasPrefix:@"astaria."] || [ids containsObject:identifier]
-            || !stringWithin(row[@"title"], 200) || !stringWithin(row[@"body"], 1000) || ![at isKindOfClass:NSNumber.class]
+            || !stringWithin(row[@"title"], 200) || ![row[@"title"] length]
+            || !stringWithin(row[@"body"], 1000) || ![row[@"body"] length] || ![at isKindOfClass:NSNumber.class]
             || !isfinite([at doubleValue]) || [at doubleValue] >= now + 32 * 86400) { valid = NO; break; }
         [ids addObject:identifier];
     }
@@ -47,6 +55,8 @@ static void replace(UNUserNotificationCenter *center) {
                 if ([row[@"at"] doubleValue] <= [NSDate date].timeIntervalSince1970) continue;
                 UNMutableNotificationContent *content = [UNMutableNotificationContent new];
                 content.title = row[@"title"]; content.body = row[@"body"]; content.sound = UNNotificationSound.defaultSound;
+                content.categoryIdentifier = @"ASTARIA_REMINDER";
+                content.threadIdentifier = @"astaria.schedule";
                 NSDate *date = [NSDate dateWithTimeIntervalSince1970:[row[@"at"] doubleValue]];
                 NSDateComponents *parts = [NSCalendar.currentCalendar components:(NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay | NSCalendarUnitHour | NSCalendarUnitMinute | NSCalendarUnitSecond) fromDate:date];
                 parts.timeZone = NSTimeZone.localTimeZone;
@@ -68,12 +78,32 @@ static void replace(UNUserNotificationCenter *center) {
     }];
 }
 int main(int argc, const char *argv[]) { @autoreleasepool {
+    // This bundled accessory runs directly to schedule reminders after the main
+    // App quits. Register its actual bundle before notification authorization so
+    // Notification Center can resolve its display name and ICNS after updates.
+    LSRegisterURL((__bridge CFURLRef)NSBundle.mainBundle.bundleURL, true);
     [NSApplication.sharedApplication setActivationPolicy:NSApplicationActivationPolicyAccessory];
+    NSString *icon = [NSBundle.mainBundle pathForResource:@"ASTaria" ofType:@"icns"];
+    if (icon) NSApplication.sharedApplication.applicationIconImage = [[NSImage alloc] initWithContentsOfFile:icon];
     UNUserNotificationCenter *center = UNUserNotificationCenter.currentNotificationCenter;
+    UNNotificationCategory *category = [UNNotificationCategory categoryWithIdentifier:@"ASTARIA_REMINDER" actions:@[] intentIdentifiers:@[]
+        hiddenPreviewsBodyPlaceholder:@"打开 ASTaria 查看提醒" categorySummaryFormat:@"%u 条待办提醒" options:UNNotificationCategoryOptionNone];
+    [center setNotificationCategories:[NSSet setWithObject:category]];
     NSString *command = argc > 1 ? [NSString stringWithUTF8String:argv[1]] : @"status";
     if ([command isEqualToString:@"authorize"]) {
         [center requestAuthorizationWithOptions:(UNAuthorizationOptionAlert | UNAuthorizationOptionSound) completionHandler:^(BOOL granted, NSError *error) {
             if (error) output(@{@"error": @"无法申请系统提醒权限，请在系统设置中检查通知权限"}); else status(center);
+        }];
+    } else if ([command isEqualToString:@"test"]) {
+        UNMutableNotificationContent *content = [UNMutableNotificationContent new];
+        content.title = @"ASTaria 提醒测试";
+        content.body = @"这是一条测试提醒。事项名称和开始或截止时间会显示在这里。";
+        content.categoryIdentifier = @"ASTARIA_REMINDER";
+        content.sound = UNNotificationSound.defaultSound;
+        UNNotificationRequest *request = [UNNotificationRequest requestWithIdentifier:@"astaria.test" content:content
+            trigger:[UNTimeIntervalNotificationTrigger triggerWithTimeInterval:5 repeats:NO]];
+        [center addNotificationRequest:request withCompletionHandler:^(NSError *error) {
+            output(error ? @{@"error": @"测试提醒未能交给系统，请检查通知权限"} : @{@"scheduled": @1});
         }];
     } else if ([command isEqualToString:@"status"]) status(center);
     else if ([command isEqualToString:@"replace"]) replace(center);

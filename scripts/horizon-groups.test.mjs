@@ -44,6 +44,21 @@ const validSuggestion = () => ({ groups: [
   { title: '阅读', day: 1, itemIds: ['reading'] },
 ] })
 
+test('grouping checks model units before inference and keeps existing membership intact', async t => {
+  const f = fixture(t)
+  f.db.setPreference('model-connection', { contextBudget: { mode: 'custom', maxUnits: 8000 } })
+  const time = minute => `${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`
+  for (let i = 0; i < 80; i++) f.add(`large-${i}`, `任务${i}${'核对内容'.repeat(35)}`, 13, DATE, {}, {
+    start: time(780 + i * 5), end: time(785 + i * 5),
+  })
+  const before = f.db.getPlanner()
+  let calls = 0
+  const grouping = createHorizonGrouping({ db: f.db, list: f.list, complete: async () => { calls++; return completion(validSuggestion()) } })
+  await assert.rejects(grouping.suggest(f.request()), /上下文预算/)
+  assert.equal(calls, 0)
+  assert.deepEqual(f.db.getPlanner(), before)
+})
+
 test('fallback groups prefer a goal over its category and keep needsReschedule, day and six-item bounds', t => {
   const f = fixture(t), algebra = f.db.getPlanner().blocks.find(block => block.id === 'algebra')
   f.db.saveCompanionState({ ...f.db.getCompanionState(), freeTimeGoals: [{ id: 'functions', taskId: algebra.taskId, title: '掌握函数' }] })

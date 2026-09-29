@@ -19,7 +19,7 @@ export default function BlackHolePrototype() {
     setNight(value)
     renderer.current?.setNight(Number(value))
   }, [])
-  const readCamera = useCallback(() => renderer.current?.getSnapshot(), [])
+  const readCamera = useCallback(() => renderer.current?.getCameraSnapshot(), [])
   const changeView = useCallback((view: 'panorama' | 'interstellar') => {
     renderer.current?.setView(view)
   }, [])

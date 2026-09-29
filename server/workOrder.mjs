@@ -40,7 +40,15 @@ export function createWorkOrder(input, previous = null, clock = () => new Date()
     succeed(step) {
       if (step.status !== 'committed') step.status = 'completed'
       delete step.error
-      order.failures = order.failures.filter(failure => failure.stepId !== step.id)
+      // Reads and other successful no-receipt tools can also recover a rejected
+      // attempt. Their stable intent ID includes the tool and exact arguments;
+      // a different read must not erase an unresolved failure.
+      const recovered = new Set([step.id])
+      for (const previous of order.steps) if (step.operationId && previous.status === 'failed' &&
+        previous.name === step.name && previous.operationId === step.operationId) {
+        previous.status = 'recovered'; previous.resolvedByStepId = step.id; recovered.add(previous.id)
+      }
+      order.failures = order.failures.filter(failure => !recovered.has(failure.stepId))
       save()
     },
     fail(step, error) {

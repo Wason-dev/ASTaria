@@ -35,7 +35,7 @@ export function PlannerWorkspace({ active, initialMode = 'week', tasks, tasksLoa
   const [selected, setSelected] = useState(() => localDay(now)), [anchor, setAnchor] = useState(() => now)
   const [mode, setMode] = useState<PlannerMode>(initialMode), [direction, setDirection] = useState(1)
   const view = mode === 'month' ? 'calendar' : 'timetable'
-  const [routine, setRoutine] = useState<{ value: Routine | 'new'; initialWeekday?: number; source?: { date: string; weekday: number } } | null>(null)
+  const [routine, setRoutine] = useState<{ value: Routine | 'new'; initialWeekday?: number; initialCycle?: Routine['weekCycle']; source?: { date: string; weekday: number } } | null>(null)
   const [dayEvent, setDayEvent] = useState<DayEvent | null>(null)
   const [taskSelection, setTaskSelection] = useState<{ taskId: string; blockId?: string; date?: string } | null>(null)
   const openTask = (taskId: string, blockId?: string, date?: string) => setTaskSelection({ taskId, blockId, date })
@@ -110,7 +110,7 @@ export function PlannerWorkspace({ active, initialMode = 'week', tasks, tasksLoa
       </>}
       {tasksLoading && <span className="pl-loading" role="status">正在同步事项</span>}
     </div></div>
-    {routine && state && <RoutineDialog routine={routine.value === 'new' ? undefined : routine.value} source={routine.source} initialWeekday={routine.initialWeekday} state={state} act={act} onClose={() => setRoutine(null)} onNotice={onNotice} onBrowseRoutines={() => { setRoutine(null); setRoutinesOpen(true) }} />}
+    {routine && state && <RoutineDialog routine={routine.value === 'new' ? undefined : routine.value} source={routine.source} initialWeekday={routine.initialWeekday} initialCycle={routine.initialCycle} state={state} act={act} onClose={() => setRoutine(null)} onNotice={onNotice} onBrowseRoutines={() => { setRoutine(null); setRoutinesOpen(true) }} />}
     {dayEvent && state && <DayEventDialog key={dayEvent.id} event={dayEvent} state={state} act={act} onClose={() => setDayEvent(null)} onNotice={onNotice} />}
     {selectedTask && state && <TaskPlanDialog key={`${selectedTask.id}:${taskSelection?.blockId ?? ''}`} task={selectedTask} state={state} selected={taskSelection?.date ?? selected} initialBlockId={taskSelection?.blockId} act={act} onClose={() => setTaskSelection(null)} onNotice={onNotice} onRefresh={async () => {
       const refreshed = await planner.refresh()
@@ -118,8 +118,8 @@ export function PlannerWorkspace({ active, initialMode = 'week', tasks, tasksLoa
       if (!refreshed) throw new Error('日程暂未重新读取，请稍后重试')
     }} />}
     {creating && <CreateTaskDialog selected={selected} onClose={() => setCreating(false)} onRefresh={onRefresh} onNotice={onNotice} />}
-    {routinesOpen && state && <RoutineBrowser routines={state.routines} selectedDate={selected} onClose={() => setRoutinesOpen(false)}
+    {routinesOpen && state && <RoutineBrowser routines={state.routines} selectedDate={selected} firstWeekMonday={state.firstWeekMonday} onSaveFirstWeek={async date => { await act({ type: 'set-first-week-monday', date }, state.revision); onNotice('共用第1周已保存，任务时段保持不变') }} onClose={() => setRoutinesOpen(false)}
       onEdit={item => { setRoutinesOpen(false); setRoutine({ value: item }) }}
-      onAdd={weekday => { setRoutinesOpen(false); setRoutine({ value: 'new', initialWeekday: weekday }) }} />}
+      onAdd={(weekday, initialCycle) => { setRoutinesOpen(false); setRoutine({ value: 'new', initialWeekday: weekday, initialCycle }) }} />}
   </section></GlassSamplingContext.Provider>
 }

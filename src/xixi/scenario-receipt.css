@@ -1,0 +1,16 @@
+:is(.p0,.app-shell) .scenario-receipt-dialog { width:min(1280px,calc(100vw - 40px)); height:min(850px,calc(100dvh - 48px)); }
+.scenario-receipt-dialog .xc-header p { color:var(--xc-muted); font-size:11px; }
+.scenario-receipt-dialog .xc-glass { position:relative; isolation:isolate; border:1px solid var(--xc-line); border-radius:20px; overflow:hidden; }
+.scenario-receipt-dialog .xc-glass-content { position:relative; z-index:1; min-width:0; }
+.scenario-receipt-message { padding:12px 0; color:var(--xc-muted); line-height:1.8; }
+.scenario-receipt-message button { margin:8px 0 0 10px; }
+:is(.p0,.app-shell) .scenario-receipt-dialog[data-theme=light] { --xc-ink:#30343a; --xc-body:#55616b; --xc-muted:#626b75; --xc-gold:#927443; --xc-line:#41465026; color:var(--xc-ink); }
+:is(.p0,.app-shell) .scenario-receipt-dialog[data-theme=light] .home-glass-surface { background:rgb(250 251 252 / var(--glass-tint)); }
+:is(.p0,.app-shell) .scenario-receipt-dialog[data-theme=light] :is(input,textarea,select) { background:#fafbfc80; color-scheme:light; border-color:#41465030; }
+:is(.p0,.app-shell) .scenario-receipt-dialog[data-theme=light] button { border-color:#41465030; }
+:is(.p0,.app-shell) .scenario-receipt-dialog[data-theme=light] .xc-primary { color:#806233; }
+@media (max-width:650px) {
+  :is(.p0,.app-shell) .scenario-receipt-dialog { width:calc(100vw - 20px); height:calc(100dvh - 24px); }
+  .scenario-receipt-dialog .xc-header { padding:16px; }
+  .scenario-receipt-dialog .xc-scroll { padding:12px; }
+}

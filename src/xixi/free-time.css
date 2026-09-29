@@ -191,3 +191,11 @@
 @media (forced-colors:active) {
   .p0 .free-time-page :is(.free-time-primary,.free-time-secondary) { background:ButtonFace; color:ButtonText; border-color:ButtonText }
 }
+.free-time-wish-entry { margin:14px 0 }
+.free-time-wish-entry>.free-time-pane-content { display:flex; align-items:center; flex-wrap:wrap; justify-content:space-between; gap:12px; padding:18px 22px }
+.free-time-wish-entry h3 { margin:0 0 6px; font-size:15px; font-weight:500 }
+.free-time-wish-entry p { margin:0; font-size:12px; line-height:1.7; color:var(--ft-muted) }
+.free-time-wish-start { flex-basis:100%; display:grid; gap:10px }
+.free-time-wish-start label { display:grid; gap:8px; font-size:12px }
+.free-time-wish-start textarea { width:100%; min-height:82px; resize:vertical; border:1px solid var(--ft-line); border-radius:12px; background:transparent; color:inherit; padding:12px; font:inherit }
+.free-time-wish-start>div { display:flex; justify-content:flex-end; gap:10px }

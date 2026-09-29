@@ -26,8 +26,8 @@ const { useXixiConversation } = await import('../src/xixi/useXixiConversation.ts
 loader.deregister()
 const tick = () => new Promise(resolve => setImmediate(resolve))
 const context = { page: 'home', timezone: 'Asia/Shanghai' }
-const disconnected = { provider: 'local', configured: false, cloudConfigured: null }
-const connected = { provider: 'deepseek', configured: true, cloudConfigured: true }
+const disconnected = { provider: 'local', model: 'local-test-model', configured: false, cloudConfigured: null }
+const connected = { provider: 'deepseek', model: 'deepseek-chat', configured: true, cloudConfigured: true }
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no }); return { promise, resolve, reject } }
 
 async function fixture(t) {

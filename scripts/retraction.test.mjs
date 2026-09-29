@@ -10,6 +10,8 @@ import { createDatabase } from '../server/database.mjs'
 import { createXixi } from '../server/xixi.mjs'
 import { createLocalService } from '../server/index.mjs'
 
+// 固定测试时区，与页面上下文 Asia/Shanghai 保持一致
+process.env.TZ = 'Asia/Shanghai'
 const reply = content => ({ choices: [{ message: { role: 'assistant', content } }] })
 const tool = (name, args) => ({ choices: [{ message: { role: 'assistant', content: null,
   tool_calls: [{ id: randomUUID(), type: 'function', function: { name, arguments: JSON.stringify(args) } }] } }] })

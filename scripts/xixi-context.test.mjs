@@ -4,6 +4,8 @@ import { randomUUID } from 'node:crypto'
 import { createDatabase } from '../server/database.mjs'
 import { createXixi, contextUnits, XIXI_TOOLS, MAX_ROUNDS, HARD_INPUT_UNITS } from '../server/xixi.mjs'
 
+// 固定测试时区，与页面上下文 Asia/Shanghai 保持一致
+process.env.TZ = 'Asia/Shanghai'
 const NOW = new Date('2026-09-18T00:30:00+08:00')
 const reply = content => ({ choices: [{ message: { role: 'assistant', content } }] })
 const call = (name, args, id = randomUUID()) => ({ choices: [{ message: { role: 'assistant', content: null,

@@ -10,6 +10,8 @@ import { createLocalService, validateRequest } from '../server/index.mjs'
 import { createCompletion, ProviderError } from '../server/provider.mjs'
 import { localDay } from '../src/home/agenda.ts'
 
+// 固定测试时区，与页面上下文 Asia/Shanghai 保持一致
+process.env.TZ = 'Asia/Shanghai'
 const SECRET = 'sk-fake-TEST-ONLY-not-a-real-provider-secret'
 const reply = content => ({ choices: [{ message: { role: 'assistant', content } }] })
 const toolCall = (name, args, id = randomUUID()) => ({ choices: [{ message: { role: 'assistant', content: null, tool_calls: [{ id, type: 'function', function: { name, arguments: JSON.stringify(args) } }] } }] })

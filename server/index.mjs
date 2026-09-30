@@ -275,7 +275,7 @@ export function createLocalService({ db = createDatabase(join(DATA_DIRECTORY, 'a
         return { ok: true, toolCalling: null, message: '云端连接成功，析熙准备好了' }
       }
       if (path === '/chat') {
-        knownKeys(input.context ?? {}, ['timezone', 'page', 'taskId', 'date', 'wishId'], '页面上下文')
+        knownKeys(input.context ?? {}, ['timezone', 'page', 'taskId', 'date', 'wishId', 'freeTimeGoalId'], '页面上下文')
         if (!(await status()).configured) throw new ValidationError('请先在设置中连接模型')
         const config = getModelSettings(db)
         const onEvent = config.streamResponses !== false && req.headers.accept?.includes('text/event-stream') ? startStream?.() : undefined

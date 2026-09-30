@@ -29,6 +29,18 @@ export type Wish = {
   updatedAt: string
 }
 
+export type FreeTimePlanWeek = {
+  week: number
+  title: string
+  details?: string
+  status?: 'pending' | 'active' | 'completed'
+  taskId?: string
+  sessionIds?: string[]
+  completedAt?: string
+  startDate?: string
+  requiredSessions?: number
+}
+
 export type FreeTimeGoal = {
   id: string
   title: string
@@ -40,6 +52,7 @@ export type FreeTimeGoal = {
   taskId?: string
   targetDate?: string | null
   targetNote?: string
+  planWeeks?: FreeTimePlanWeek[]
   fromWishId?: string
   status: 'active' | 'paused' | 'deleted'
   version: number
@@ -49,7 +62,23 @@ export type FreeTimeGoal = {
 }
 
 export type FreeTimeSession = { id: string; goalId: string; taskId: string; title: string; date: string; start: string; end: string; locked: boolean; completed: boolean }
-export type FreeTimeProgress = { goalId: string; schedulingStatus: 'active' | 'paused'; taskUpdatedAt: string | null; scheduledCount: number; completedCount: number; scheduledMin: number; completedMin: number; required: number; remainingCount: number; shortSessionCount: number }
+export type FreeTimeProgress = {
+  goalId: string
+  schedulingStatus: 'active' | 'paused'
+  taskUpdatedAt: string | null
+  scheduledCount: number
+  completedCount: number
+  scheduledMin: number
+  completedMin: number
+  required: number
+  remainingCount: number
+  shortSessionCount: number
+  planCurrentWeek?: number
+  planWeeksTotal?: number
+  planCompletedWeeks?: number
+  planCurrentTitle?: string
+  planCurrentDetails?: string
+}
 
 export type ScenarioPlan = { id: string; taskId: string; title: string; date: string; start: string; end: string }
 export type DecisionStrategy = 'today' | 'split' | 'defer' | 'model'

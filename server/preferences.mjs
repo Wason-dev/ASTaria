@@ -9,7 +9,7 @@ export const DEFAULT_PREFERENCES = {
   version: 1, startupPage: 'home', theme: 'dark', grid: true, glass: 'clear', density: 'compact', cardEdges: 'both',
   effect: { style: 'tide', intensity: 'gentle', motion: 'system', binary: DEFAULT_BINARY_EFFECT },
   render: { profile: 'full' },
-  assistant: { autonomy: 'act', personality: 'high', useMemory: true, useHistory: true },
+  assistant: { autonomy: 'act', personality: 'medium', useMemory: true, useHistory: true },
   notifications: { enabled: true, quietStart: '23:00', quietEnd: '08:00', opportunities: true },
   focus: { focusMin: 35, restMin: 5 }, scheduling: { bufferMin: 10 },
 }

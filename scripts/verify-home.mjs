@@ -94,7 +94,7 @@ try {
   await send('Page.navigate', { url }); await ready()
   await evaluate('sessionStorage.clear()')
   await send('Page.reload', { ignoreCache: true }); await ready()
-  await check('minimal home removes observatory, sun and task-orbit UI', '!document.querySelector(".p0-observatory,.p0-actions,.p0-views,.spatial-ui") && document.querySelector(".p0-whisper").textContent === "把今天交给我"')
+  await check('minimal home removes observatory, sun and task-orbit UI', '!document.querySelector(".p0-observatory,.p0-actions,.p0-views,.spatial-ui") && document.querySelector(".p0-whisper").textContent === "让时间有引力"')
   await check('fullscreen keeps the system pointer visible over the scene', 'getComputedStyle(document.querySelector(".p0-universe")).cursor !== "none"')
   await check('pill stays small and exactly 12px below two-line current task', '(()=>{const p=document.querySelector(".home-morph").getBoundingClientRect(),t=document.querySelector(".home-current").getBoundingClientRect();return p.width===128&&p.height===38&&Math.abs(p.top-t.bottom-12)<.1})()')
   await check('real empty state, no example tasks', 'document.querySelector(".home-current-title").textContent === "今天还没有事项"')

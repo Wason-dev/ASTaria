@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { ValidationError, knownKeys, day, identifier, text, choice } from './validation.mjs'
 import { dayCapacity, blocksForDay, minuteOf } from '../src/planner/model.ts'
 import { localDay } from '../src/home/agenda.ts'
+import { currentPlanWeek, sessionPlanWeek, refreshPlanProgress, freeTimeTaskNotes } from './freeTimePlan.mjs'
 
 const fail = (message, status = 400) => { throw new ValidationError(message, status) }
 const timeOf = value => `${String(Math.floor(value / 60)).padStart(2, '0')}:${String(value % 60).padStart(2, '0')}`
@@ -35,18 +36,24 @@ export function freeTimeState(db, { date = localDay(new Date()), days = 7, now =
   const byTask = new Map(goals.filter(goal => goal.taskId && taskAvailable(db.getTask(goal.taskId))).map(goal => [goal.taskId, goal]))
   const history = new Map(value.freeTimeHistory.map(item => [item.sessionId, item]))
   const freeTimeSessions = planner.blocks.filter(block => byTask.has(block.taskId) && dates.includes(block.date) && !db.getTask(block.taskId)?.deletedAt)
-    .map(block => ({ ...block, goalId: byTask.get(block.taskId).id, title: byTask.get(block.taskId).title, completed: history.has(block.id) }))
+    .map(block => { const goal = byTask.get(block.taskId), week = sessionPlanWeek(goal, block.id)
+      return { ...block, goalId: goal.id, title: week ? `${goal.title} · ${week.title}` : goal.title, completed: history.has(block.id) } })
     .sort((a, b) => a.date.localeCompare(b.date) || a.start.localeCompare(b.start))
   const freeTimeProgress = goals.map(goal => {
-    const scheduled = freeTimeSessions.filter(item => item.goalId === goal.id)
-    const completed = value.freeTimeHistory.filter(item => item.goalId === goal.id && dates.includes(item.date))
+    const week = currentPlanWeek(goal), plan = goal.planWeeks?.length
+    const scheduled = freeTimeSessions.filter(item => item.goalId === goal.id && (!plan || week?.sessionIds?.includes(item.id)))
+    const completed = value.freeTimeHistory.filter(item => item.goalId === goal.id && (plan ? week?.sessionIds?.includes(item.sessionId) : dates.includes(item.date)))
     const completedIds = new Set(completed.map(item => item.sessionId))
-    const fulfilled = completed.filter(item => item.minutes >= goal.sessionMin).length + scheduled.filter(item => !completedIds.has(item.id) && minutes(item) >= goal.sessionMin && atTime(item.date, item.end) > now.getTime()).length
-    const required = requiredCount(goal, date)
+    const pending = plan ? planner.blocks.filter(item => week?.sessionIds?.includes(item.id) && taskAvailable(db.getTask(item.taskId))) : scheduled
+    const fulfilled = completed.filter(item => plan || item.minutes >= goal.sessionMin).length + pending.filter(item => !completedIds.has(item.id) && minutes(item) >= goal.sessionMin && atTime(item.date, item.end) > now.getTime()).length
+    const required = plan ? (week ? week.requiredSessions ?? requiredCount(goal, date) : 0) : requiredCount(goal, date)
     return { goalId: goal.id, schedulingStatus: schedulingStatus(goal), taskUpdatedAt: goal.taskId ? db.getTask(goal.taskId)?.updatedAt ?? null : null,
       scheduledCount: scheduled.length, completedCount: completed.length,
       scheduledMin: scheduled.reduce((sum, item) => sum + minutes(item), 0), completedMin: completed.reduce((sum, item) => sum + item.minutes, 0),
-      required, remainingCount: goal.status === 'paused' ? 0 : Math.max(0, required - fulfilled), shortSessionCount: scheduled.filter(item => minutes(item) < goal.sessionMin).length }
+      required, remainingCount: goal.status === 'paused' ? 0 : Math.max(0, required - fulfilled), shortSessionCount: scheduled.filter(item => minutes(item) < goal.sessionMin).length,
+      ...(plan ? { planCurrentWeek: week?.week, planWeeksTotal: goal.planWeeks.length,
+        planCompletedWeeks: goal.planWeeks.filter(item => item.status === 'completed').length,
+        planCurrentTitle: week?.title, planCurrentDetails: week?.details } : {}) }
   })
   const freeTimeBreaks = freeTimeSessions.flatMap(session => {
     const end = minuteOf(session.end), free = dayCapacity(planner, db.listTasks(), session.date, now).free
@@ -76,16 +83,19 @@ export function createFreeTime({ db, now = () => new Date() }) {
       goals.sort((a, b) => (a.targetDate ?? '9999').localeCompare(b.targetDate ?? '9999') || priority[a.priority] - priority[b.priority] || a.createdAt.localeCompare(b.createdAt))
       const actions = [], shortfalls = [], bufferMin = Math.max(10, Math.min(60, db.getPreference('app')?.scheduling?.bufferMin ?? 10))
       for (const goal of goals) {
-        const required = requiredCount(goal, date)
+        const week = goal.planWeeks?.length ? currentPlanWeek(goal) : null
+        if (goal.planWeeks?.length && !week) continue
+        const required = week?.requiredSessions ?? requiredCount(goal, date)
         let task = goal.taskId ? db.getTask(goal.taskId) : null
         // Renew only when a real slot is found. Keep the old task and its blocks
         // inactive: their time may already have been taken by other work.
         if (!taskAvailable(task)) task = null
-        const completed = value.freeTimeHistory.filter(item => item.goalId === goal.id && dates.includes(item.date))
+        if (week && task && task.notes !== freeTimeTaskNotes(goal)) task = db.updateTask(task.id, { notes: freeTimeTaskNotes(goal) })
+        const completed = value.freeTimeHistory.filter(item => item.goalId === goal.id && (week ? week.sessionIds?.includes(item.sessionId) : dates.includes(item.date)))
         const completedIds = new Set(completed.map(item => item.sessionId))
-        const existing = task ? working.blocks.filter(block => block.taskId === task.id && dates.includes(block.date)) : []
+        const existing = task ? working.blocks.filter(block => block.taskId === task.id && (week ? week.sessionIds?.includes(block.id) : dates.includes(block.date))) : []
         const shortSessions = existing.filter(block => minutes(block) < goal.sessionMin).length
-        let fulfilled = completed.filter(item => item.minutes >= goal.sessionMin).length + existing.filter(block => !completedIds.has(block.id) && minutes(block) >= goal.sessionMin && atTime(block.date, block.end) > at.getTime()).length
+        let fulfilled = completed.filter(item => week || item.minutes >= goal.sessionMin).length + existing.filter(block => !completedIds.has(block.id) && minutes(block) >= goal.sessionMin && atTime(block.date, block.end) > at.getTime()).length
         const counts = new Map(dates.map(currentDate => [currentDate, existing.filter(block => block.date === currentDate).length]))
         // One pass places at most one session on a date. A second pass is only
         // used for explicit frequencies over seven sessions per week.
@@ -114,11 +124,20 @@ export function createFreeTime({ db, now = () => new Date() }) {
           if (!candidate) break
           if (!task) {
             task = db.createTask({ title: goal.title, source: 'recurring', freeTimeGoalId: goal.id, inbox: false, estimateMin: goal.sessionMin, importance: goal.priority === 'high' ? 3 : goal.priority === 'low' ? 1 : 2,
-              notes: `余时长期目标：${goal.title}${goal.targetNote ? `\n${goal.targetNote}` : ''}`, status: 'todo' })
+              notes: freeTimeTaskNotes(goal), status: 'todo' })
             tasks.push(task); goal.taskId = task.id; goal.version += 1; goal.updatedAt = at.toISOString()
           }
           const block = { id: `free-time:${randomUUID()}`, taskId: task.id, ...candidate, locked: false }
           working.blocks.push(block); actions.push({ type: 'save-block', block })
+          if (week) {
+            week.requiredSessions ??= required
+            week.startDate ??= candidate.date
+            week.taskId = task.id
+            week.sessionIds ??= []
+            week.sessionIds.push(block.id)
+            week.status = 'active'
+            goal.version += 1; goal.updatedAt = at.toISOString()
+          }
           counts.set(candidate.date, (counts.get(candidate.date) ?? 0) + 1); fulfilled += 1
         }
         if (fulfilled < required) shortfalls.push({ goalId: goal.id, title: goal.title, required, scheduled: fulfilled,
@@ -175,7 +194,11 @@ export function createFreeTime({ db, now = () => new Date() }) {
       const record = { sessionId, goalId: goal.id, date: block.date, minutes: minutes(block),
         feedback: choice(input.feedback, ['smooth', 'stuck', 'continue'], '学习反馈', 'smooth'), nextStep: text(input.nextStep ?? '', '下次接着做', 1500, { empty: true }), completedAt: new Date(now()).toISOString() }
       if (value.freeTimeHistory.length >= 5000) fail('余时学习记录较多，请先整理历史记录', 409)
-      value.freeTimeHistory.push(record); db.saveCompanionState(value)
+      value.freeTimeHistory.push(record)
+      refreshPlanProgress(goal, value.freeTimeHistory, record.completedAt)
+      const task = db.getTask(goal.taskId)
+      if (goal.planWeeks?.length && taskAvailable(task) && task.notes !== freeTimeTaskNotes(goal)) db.updateTask(task.id, { notes: freeTimeTaskNotes(goal) })
+      db.saveCompanionState(value)
       return record
     })
   }
@@ -190,6 +213,24 @@ export function createFreeTime({ db, now = () => new Date() }) {
       if (record) {
         if (record.completedAt !== input.expectedCompletedAt) fail('本次完成记录已有变化，请重新读取后再撤回', 409)
         value.freeTimeHistory = value.freeTimeHistory.filter(item => item.sessionId !== sessionId)
+        const stamp = new Date(now()), changed = refreshPlanProgress(goal, value.freeTimeHistory, stamp.toISOString())
+        if (changed && goal.planWeeks?.length) {
+          const currentIndex = goal.planWeeks.findIndex(week => week === currentPlanWeek(goal))
+          const completed = new Set(value.freeTimeHistory.map(item => item.sessionId))
+          for (const week of goal.planWeeks.slice(currentIndex + 1)) {
+            const removable = (week.sessionIds ?? []).filter(id => {
+              const later = db.getPlanner().blocks.find(item => item.id === id)
+              return later && !later.locked && !completed.has(id) && atTime(later.date, later.start) > stamp.getTime()
+            })
+            for (const id of removable) db.updatePlanner({ type: 'delete-block', id }, db.getPlanner().revision)
+            if (removable.length) {
+              week.sessionIds = week.sessionIds.filter(id => !removable.includes(id))
+              if (!week.sessionIds.length) delete week.sessionIds
+            }
+          }
+          const task = db.getTask(goal.taskId)
+          if (taskAvailable(task) && task.notes !== freeTimeTaskNotes(goal)) db.updateTask(task.id, { notes: freeTimeTaskNotes(goal) })
+        }
         db.saveCompanionState(value)
       }
       return { sessionId, completed: false }

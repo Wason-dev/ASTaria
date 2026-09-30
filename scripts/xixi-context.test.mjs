@@ -28,12 +28,13 @@ function fixture(t, responses = []) {
 const toolResults = request => request.messages.filter(message => message.role === 'tool').map(message => JSON.parse(message.content))
 const contextData = request => JSON.parse(request.messages.find(message => message.content?.startsWith('当前环境与数据库资料')).content.split('\n').slice(1).join('\n'))
 
-test('prompt keeps a caring persona with the default high voice and facts anchor midnight in the local timezone', async t => {
+test('prompt keeps a caring persona with the default medium voice and facts anchor midnight in the local timezone', async t => {
   const f = fixture(t)
   await f.xixi.chat(input('早'))
   const prompt = f.requests[0].messages[0].content
-  assert.match(prompt, /本轮表达风格：高/)
-  assert.match(prompt, /熟悉用户的傲娇搭档/)
+  assert.match(prompt, /本轮表达风格：中/)
+  assert.match(prompt, /自然俏皮/)
+  assert.doesNotMatch(prompt, /熟悉用户的傲娇搭档/)
   assert.doesNotMatch(prompt, /哈？你在说什么胡话/)
   assert.match(prompt, /温柔/)
   const context = contextData(f.requests[0])

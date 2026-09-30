@@ -17,6 +17,8 @@
 .xixi-settings-page-header p{font-size:11px;margin:0}
 .xixi-settings-panel{position:relative;isolation:isolate;min-width:0;border-radius:24px}
 .xixi-settings-panel>.home-glass-measure,.xixi-preview-dock>.home-glass-measure{position:absolute;inset:0;pointer-events:none;border-radius:inherit;overflow:hidden}
+.xixi-settings[data-theme=light] :is(.xixi-settings-panel,.xixi-preview-dock)>.home-glass-measure{box-shadow:0 10px 24px -4px rgb(37 45 57 / calc(var(--glass-shadow,.3) * .8)),0 3px 7px -2px rgb(37 45 57 / calc(var(--glass-shadow,.3) * .55));transition:box-shadow 180ms ease}
+.xixi-settings[data-theme=light][data-closing=true] .home-glass-measure{box-shadow:none}
 :is(.p0,.app-shell) .xixi-settings .home-glass-surface{background:rgb(8 10 14 / .56)}
 :is(.p0,.app-shell) .xixi-settings[data-theme=light] .home-glass-surface{background:rgb(250 251 252 / var(--glass-tint))}
 .xixi-settings-shell{position:relative;z-index:1;padding:14px 24px 16px;min-width:0}

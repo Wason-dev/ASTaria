@@ -61,9 +61,9 @@ export function nativeReminderRunner(binary) {
 
 export function createReminderService({ stateFile, snapshot, run, now = () => new Date() }) {
   let enabled = false, authorization = 0, count = 0, through = null, error = null, omitted = 0, fingerprint = '', timer, pending, closed = false
-  let previewMode = 'unknown', iconAvailable = null
+  let previewMode = 'unknown', iconAvailable = null, registeredBundleMatches = null, registeredIconAvailable = null
   const ready = readFile(stateFile, 'utf8').then(value => { enabled = JSON.parse(value).enabled === true }).catch(() => {})
-  const status = () => ({ supported: true, enabled, authorization, count, through, omitted, error, previewMode, iconAvailable })
+  const status = () => ({ supported: true, enabled, authorization, count, through, omitted, error, previewMode, iconAvailable, registeredBundleMatches, registeredIconAvailable })
   const sync = async () => {
     await ready
     if (closed) return status()
@@ -73,6 +73,8 @@ export function createReminderService({ stateFile, snapshot, run, now = () => ne
         const native = await run('status'); authorization = native.authorization
         previewMode = ['always', 'when-unlocked', 'never'][native.showPreviews] ?? 'unknown'
         iconAvailable = typeof native.iconAvailable === 'boolean' ? native.iconAvailable : null
+        registeredBundleMatches = typeof native.registeredBundleMatches === 'boolean' ? native.registeredBundleMatches : null
+        registeredIconAvailable = typeof native.registeredIconAvailable === 'boolean' ? native.registeredIconAvailable : null
         const plan = enabled ? buildReminderPlan(snapshot(), now()) : { entries: [], omitted: 0 }
         const key = hash(JSON.stringify([plan.entries, authorization]))
         if (key !== fingerprint) {

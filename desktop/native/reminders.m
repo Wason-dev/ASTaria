@@ -20,9 +20,16 @@ static void status(UNUserNotificationCenter *center) {
                 if (request.content.title.length && request.content.body.length) withContent++;
             }
             NSString *icon = [NSBundle.mainBundle pathForResource:@"ASTaria" ofType:@"icns"];
+            NSURL *registeredURL = [NSWorkspace.sharedWorkspace URLForApplicationWithBundleIdentifier:NSBundle.mainBundle.bundleIdentifier];
+            NSBundle *registeredBundle = registeredURL ? [NSBundle bundleWithURL:registeredURL] : nil;
+            NSString *registeredIconName = [registeredBundle objectForInfoDictionaryKey:@"CFBundleIconFile"];
+            NSString *registeredIcon = registeredIconName ? [registeredBundle pathForResource:registeredIconName.stringByDeletingPathExtension
+                ofType:registeredIconName.pathExtension.length ? registeredIconName.pathExtension : nil] : nil;
             output(@{@"authorization": @(settings.authorizationStatus), @"pending": @(count),
                 @"pendingWithContent": @(withContent), @"showPreviews": @(settings.showPreviewsSetting),
-                @"iconAvailable": @([NSImage.alloc initWithContentsOfFile:icon ?: @""] != nil)});
+                @"iconAvailable": @([NSImage.alloc initWithContentsOfFile:icon ?: @""] != nil),
+                @"registeredBundleMatches": @([registeredURL.URLByResolvingSymlinksInPath isEqual:NSBundle.mainBundle.bundleURL.URLByResolvingSymlinksInPath]),
+                @"registeredIconAvailable": @([NSImage.alloc initWithContentsOfFile:registeredIcon ?: @""] != nil)});
         }];
     }];
 }

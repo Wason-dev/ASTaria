@@ -296,7 +296,7 @@ test('provider pins the endpoint and model and keeps secrets out of bodies and e
   const payload = JSON.parse(calls[0].options.body)
   assert.equal(payload.model, 'deepseek-flash')
   assert.deepEqual(payload.thinking, { type: 'enabled' })
-  assert.equal(payload.reasoning_effort, 'max')
+  assert.equal(payload.reasoning_effort, 'low')
   assert.equal(payload.stream, false)
   assert.doesNotMatch(calls[0].options.body, new RegExp(SECRET))
   for (const status of [401, 429, 500, 302]) {

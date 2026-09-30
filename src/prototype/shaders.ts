@@ -41,6 +41,7 @@ uniform float uMaxImpact;
 uniform float uCameraRadius;
 uniform float uFlightCameraRadius;
 uniform float uFlightEdgeFocus;
+uniform float uFlightApproach;
 uniform vec3 uFlightEdgePull;
 uniform float uResponseStrength;
 uniform float uResponseReply;
@@ -522,7 +523,12 @@ void main() {
   // the near-horizon strands retain their original photographic brightness.
   float limbDistance = abs(length(screen)-shadowImageRadius)/scale;
   float edgeExposure = mix(.065,1.0,exp(-pow(limbDistance/.10,2.0)));
-  finalColor = mix(finalColor,clamp(finalColor,vec3(0.0),vec3(1.0))*edgeExposure,uFlightEdgeFocus);
+  // Paper daylight needs to adapt before the dark silhouette fills the view.
+  // Drive exposure from the same reversible camera progress, retaining both
+  // endpoints and the night scene instead of switching themes on arrival.
+  float dayApproach = smoothstep(.04,.64,uFlightApproach)*(1.0-uNight);
+  float exposureFocus = max(uFlightEdgeFocus,dayApproach);
+  finalColor = mix(finalColor,clamp(finalColor,vec3(0.0),vec3(1.0))*edgeExposure,exposureFocus);
   finalColor += (hash(gl_FragCoord.xy+vec2(7,13))-.5)/255.0;
   gl_FragColor = vec4(clamp(finalColor,0.0,1.0),1.0);
 }

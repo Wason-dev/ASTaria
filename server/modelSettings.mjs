@@ -2,7 +2,7 @@ import { cpus, totalmem, platform, arch } from 'node:os'
 import { ValidationError, object, knownKeys, choice } from './validation.mjs'
 
 export const LOCAL_DEFAULT = { engine: 'ollama', baseUrl: 'http://127.0.0.1:11434/v1', model: '' }
-export const DEFAULT_REASONING_EFFORT = 'max'
+export const DEFAULT_REASONING_EFFORT = 'low'
 export const DEFAULT_STREAM_RESPONSES = true
 export const DEFAULT_CONTEXT_BUDGET = { mode: 'auto', maxUnits: 48_000 }
 export const REASONING_EFFORTS = ['off', 'low', 'high', 'max']

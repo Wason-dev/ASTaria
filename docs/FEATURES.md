@@ -158,7 +158,7 @@ public/               静态资源与 ASTaria 图标
 
 ## macOS 内测与发布范围
 
-本轮面向 macOS 13+ Apple Silicon（arm64）Mac 制作 beta 包。桌面运行时采用 Electron 44.1.0，内含 Node 本机服务、预编译的钥匙串助手和系统提醒助手。构建机需要 Apple Silicon Mac、arm64 Node.js 24.19+（Node 24 系列）、Command Line Tools 和独立取得的干净 Electron.app 及其 LICENSE、LICENSES.chromium.html；应用运行时不应依赖开发服务器或系统 Node。测试范围见[发布说明](./RELEASE_NOTES_v0.1.0-beta.5.md)。
+本轮面向 macOS 13+ Apple Silicon（arm64）Mac 制作 beta 包。桌面运行时采用 Electron 44.1.0，内含 Node 本机服务、预编译的钥匙串助手和系统提醒助手。构建机需要 Apple Silicon Mac、arm64 Node.js 24.19+（Node 24 系列）、Command Line Tools 和独立取得的干净 Electron.app 及其 LICENSE、LICENSES.chromium.html；应用运行时不应依赖开发服务器或系统 Node。测试范围见[发布说明](./RELEASE_NOTES_v0.1.0-beta.6.md)。
 
 ```bash
 npm ci
@@ -167,13 +167,13 @@ node scripts/third-party-notices.mjs
 npm run package:desktop -- --runtime /path/to/Electron.app --out desktop-builds
 ```
 
-打包器拒绝覆盖同版本产物，只复制指定源码和构建文件，编译并随包放入钥匙串及提醒助手、Electron/Chromium 许可和 [第三方依赖许可清单](../THIRD_PARTY_NOTICES.txt)，然后完成 ad-hoc 签名、压缩和 SHA-256 清单。`--runtime` 必须指向 arm64 Electron.app，Electron 的两份许可文件须与它同目录。打包不包含个人数据库、密钥、环境文件或测试日志。包与校验文件见 [v0.1.0-beta.5 Release](https://github.com/Wason-dev/ASTaria/releases/tag/v0.1.0-beta.5)。
+打包器拒绝覆盖同版本产物，只复制指定源码和构建文件，编译并随包放入钥匙串及提醒助手、Electron/Chromium 许可和 [第三方依赖许可清单](../THIRD_PARTY_NOTICES.txt)，然后完成 ad-hoc 签名、压缩和 SHA-256 清单。`--runtime` 必须指向 arm64 Electron.app，Electron 的两份许可文件须与它同目录。打包不包含个人数据库、密钥、环境文件或测试日志。包与校验文件见 [v0.1.0-beta.6 Release](https://github.com/Wason-dev/ASTaria/releases/tag/v0.1.0-beta.6)。
 
-以上命令默认将新产物写入 `desktop-builds/ASTaria-0.1.0-beta.5-mac-arm64/`。版本 Release 提供 DMG、SHA-256、安装说明和记录源码提交的构建清单；本机开发产物留在被 Git 忽略的 `desktop-builds/`。应用使用层叠三瓣 SVG 图标及透明顶部拖动区；图标生成方法见 [图标说明](../design/icon-vector/README.md)。
+以上命令默认将新产物写入 `desktop-builds/ASTaria-0.1.0-beta.6-mac-arm64/`。版本 Release 提供 DMG、SHA-256、安装说明和记录源码提交的构建清单；本机开发产物留在被 Git 忽略的 `desktop-builds/`。应用使用层叠三瓣 SVG 图标及透明顶部拖动区；图标生成方法见 [图标说明](../design/icon-vector/README.md)。
 
 小范围测试 DMG 包含 App、Applications 快捷方式及中文安装说明；不含开发者的课表、事项、析熙聊天、记忆、数据库或备份。先退出旧版，再将 App 拖到「应用程序」。App 和 DMG 均为 ad-hoc 签名、未公证；若被 macOS 拦截，先核对来源和校验值，优先使用「系统设置 → 隐私与安全性 → 仍要打开」。[安装说明](./INSTALL.md) 另附只针对此 App 的终端命令。
 
-2026-09-29 分两版交付：beta.3 增加可校验的下载与重启安装、工作台余时单次安排入口，并继续减少后台轮询和绘制分配；beta.4 增加隔周课表、macOS 预约提醒和心愿澄清。工作台、日程、余时的单次完成／撤回以及跨日隔离已通过真实页面验收；清透／磨砂设置、更新失败重试与取消、安装失败回退均已验证。完整范围见[发布说明](./RELEASE_NOTES_v0.1.0-beta.5.md)，性能测量见[性能说明](./PERFORMANCE.md)。干净机器、休眠恢复和长期功耗仍需继续测试。
+2026-09-29 分两版交付：beta.3 增加可校验的下载与重启安装、工作台余时单次安排入口，并继续减少后台轮询和绘制分配；beta.4 增加隔周课表、macOS 预约提醒和心愿澄清。工作台、日程、余时的单次完成／撤回以及跨日隔离已通过真实页面验收；清透／磨砂设置、更新失败重试与取消、安装失败回退均已验证。完整范围见[发布说明](./RELEASE_NOTES_v0.1.0-beta.6.md)，性能测量见[性能说明](./PERFORMANCE.md)。干净机器、休眠恢复和长期功耗仍需继续测试。
 
 备份导出与恢复已统一为格式化 JSON 的 32 MiB UTF-8 字节上限，超限明确拒绝且不改动本机数据，不再导出无法恢复的超限文件。中文字节、精确上限、超限拒绝与失败原子性测试已通过。恢复会更新状态，之后的新备份仍会重新核验大小。
 

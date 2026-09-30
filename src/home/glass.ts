@@ -76,7 +76,9 @@ export function glassDisplacement(width: number, height: number, radius: number)
   if (cached) return cached
   const canvas = document.createElement('canvas')
   canvas.width = w; canvas.height = h
-  const context = canvas.getContext('2d')
+  // This canvas only uploads CPU pixels and immediately encodes them. Keep it
+  // on the readback-friendly path so PNG encoding cannot stall the scene GPU.
+  const context = canvas.getContext('2d', { willReadFrequently: true })
   if (!context) return ''
   const pixels = context.createImageData(w, h)
   const r = Math.min(radius, w / 2, h / 2)

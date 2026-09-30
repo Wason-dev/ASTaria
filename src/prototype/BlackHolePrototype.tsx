@@ -67,7 +67,7 @@ export default function BlackHolePrototype() {
     <div ref={host} className="p0-universe" role="img" aria-label="实时黑洞与吸积盘" />
     <h1 className="p0-sr-only">ASTaria</h1>
     <HomeWorkspace readCamera={readCamera} onViewChange={changeView} onThemeChange={changeTheme} onResponseEffect={changeResponseEffect} onResponsePhase={changeResponsePhase} onRenderProfile={changeRenderProfile} sceneUnavailable={Boolean(error)} />
-    <p className="p0-whisper">把今天交给我</p>
+    <p className="p0-whisper">让时间有引力</p>
     {error && <div className="p0-error" role="alert">
       <h2>视界暂时不可见</h2><p>{error}</p>
       <button onClick={() => location.reload()}>重新打开</button>

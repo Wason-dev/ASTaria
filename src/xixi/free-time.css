@@ -116,6 +116,7 @@
 .free-time-editor>footer p { margin:0; font-size:11px; color:var(--ft-muted); max-width:none }
 .free-time-page[data-theme=light] { --ft-ink:#303941; --ft-body:#48535c; --ft-muted:#657079; --ft-gold:#846b42; --ft-line:#39454f22; --ft-wash:#ffffff40; --ft-control-line:#846b4266; color-scheme:light }
 .free-time-page[data-theme=light] .free-time-background { background:rgb(238 242 245 / .65) }
+.free-time-page[data-theme=light] .free-time-pane>.home-glass-measure { box-shadow:0 10px 24px -4px rgb(37 45 57 / calc(var(--glass-shadow, .3) * .8)),0 3px 7px -2px rgb(37 45 57 / calc(var(--glass-shadow, .3) * .55)) }
 .free-time-page[data-theme=light] .free-time-background::after { background-image:linear-gradient(#46566610 1px,transparent 1px),linear-gradient(90deg,#46566610 1px,transparent 1px) }
 .free-time-page[data-theme=light] select option { background:#f6f8fa }
 .free-time-page[data-theme=light] :is(input,select) { background:#ffffff30 }

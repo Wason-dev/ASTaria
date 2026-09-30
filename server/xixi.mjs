@@ -11,6 +11,7 @@ import { dayCapacity, carryItems, blocksForDay, routinesForDay, minuteOf } from 
 import { localDay } from '../src/home/agenda.ts'
 import { createCompanion } from './companion.mjs'
 import { createFreeTime } from './freeTime.mjs'
+import { currentPlanWeek } from './freeTimePlan.mjs'
 import { createRouteAnalysis } from './routeAnalysis.mjs'
 import { normalizeAssistantProtocol } from './provider-protocol.mjs'
 import { prepareTaskSteps } from './taskSteps.mjs'
@@ -139,15 +140,19 @@ export const XIXI_TOOLS = [
   tool('read_companion', '读取接力、牵挂、方案及真实空档机会', {
     date: str('起始日期 YYYY-MM-DD'), days: { type: 'integer', minimum: 1, maximum: 7 },
   }),
-  tool('read_free_time', '读取余时长期目标、实际学习安排和完成反馈。目标按页读取，日历日期不会被压缩成空列表', {
+  tool('read_free_time', '读取余时长期目标、实际学习安排和完成反馈。默认按目标分页，返回完整周号/主题/状态大纲和当前阶段details；detailsOmitted表示其他阶段详情未展开。同时传goalId和planWeek可读取该阶段完整详情，不混用offset/limit；该结果仅是一周，不替代完整大纲', {
     date: str('起始日期 YYYY-MM-DD'), offset: { type: 'integer', minimum: 0 }, limit: { type: 'integer', minimum: 1, maximum: 20 },
+    goalId: str('与planWeek一起传：需要核对阶段详情的余时目标ID'), planWeek: { type: 'integer', minimum: 1, maximum: 52, description: '与goalId一起传：需要完整详情的周号' },
   }),
-  tool('save_free_time_goal', '保存或修改余时长期学习目标并自动安排真实空档；原目标传id和版本，暂停不新增。单次偏好默认20–40分钟，长期只保留一个目标', {
+  tool('save_free_time_goal', '保存或修改余时长期学习目标并自动安排真实空档；原目标传id和版本，暂停不新增。分周大纲写planWeeks，细化时保留原周号与主题，把可执行步骤写details；未改的未来details可省略，由服务端保留，需查看时用read_free_time读取；只安排当前未完成阶段，完成后推进，未来大纲不提前占满日历', {
     fromWishId: str('明确加入余时的来源心愿ID'), expectedWishVersion: { type: 'integer', minimum: 1 },
     id: str('已有目标ID，新增省略'), title: str('长期目标名称'), evidence: str('用户原话依据'),
     priority: { type: 'string', enum: ['high', 'normal', 'low'] }, minPerWeek: { type: 'integer', minimum: 0, maximum: 14 },
     sessionMin: { type: 'integer', minimum: 5, maximum: 720 }, sessionMax: { type: 'integer', minimum: 5, maximum: 720 },
     targetDate: str('阶段目标日期 YYYY-MM-DD'), targetNote: str('阶段重点、复习情况或学习反馈'),
+    planWeeks: { type: 'array', maxItems: 52, description: '完整周号与主题大纲；省略整个字段则保留原计划，每周未改的details可省略并保留原值。不得把未读取的未来details猜写为空或截断文本；已开始阶段不可删除，进度由真实完成记录维护', items: { ...objectSchema({
+      week: { type: 'integer', minimum: 1, maximum: 52 }, title: str('保留用户的本周主题'), details: str('本阶段可执行学习步骤和实践产物，不捏造已完成进度，最多3000字'),
+    }), required: ['week', 'title'] } },
     status: { type: 'string', enum: ['active', 'paused', 'deleted'] }, expectedVersion: { type: 'integer', minimum: 0 },
   }, ['title', 'evidence']),
   tool('complete_free_time_session', '记录余时某一次学习完成与反馈，不结束整个长期目标；先read_free_time确认真实时段', {
@@ -774,6 +779,26 @@ export function createXixi({ db, complete, now = () => new Date() }) {
     return compact
   }
 
+  function freeTimeGoalReceipt(goal) {
+    // Save acknowledgements need the current stage, not another copy of every
+    // future detail. The complete plan stays in companion storage for the UI.
+    const week = currentPlanWeek(goal)
+    return { id: goal.id, title: goal.title, status: goal.status, version: goal.version, taskId: goal.taskId,
+      priority: goal.priority, minPerWeek: goal.minPerWeek, sessionMin: goal.sessionMin, sessionMax: goal.sessionMax,
+      targetDate: goal.targetDate, targetNote: goal.targetNote,
+      ...(goal.planWeeks ? { planWeeksTotal: goal.planWeeks.length,
+        currentPlanWeek: week ? { week: week.week, title: week.title, status: week.status, details: week.details } : null } : {}),
+      ...(goal.source ? { source: compactSource(goal.source) } : {}) }
+  }
+
+  function freeTimeGoalOutline(goal) {
+    const current = currentPlanWeek(goal)
+    return { ...goal, ...(goal.planWeeks ? { planWeeks: goal.planWeeks.map(week => ({
+      week: week.week, title: week.title, status: week.status ?? (week.week === current?.week ? 'active' : 'pending'),
+      ...(week.week === current?.week ? { details: week.details ?? '' } : { detailsOmitted: true }),
+    })) } : {}) }
+  }
+
   function memoriesFor(context) {
     return db.listMemories().filter(memory =>
       (!memory.expiresAt || Date.parse(memory.expiresAt) > clock().getTime()) &&
@@ -848,6 +873,16 @@ export function createXixi({ db, complete, now = () => new Date() }) {
     const planner = db.getPlanner(), selectedDate = selectedPlannerDate(input)
     const capacity = dayCapacity(planner, allTasks, selectedDate, clock())
     const companionState = useMemory ? companion.listState({ date: selectedDate, days: 1 }) : null
+    const selectedFreeTimeGoal = context.freeTimeGoalId
+      ? companion.listState({ date: selectedDate, days: 1 }).freeTimeGoals.find(goal => goal.id === context.freeTimeGoalId)
+      : null
+    const readFreeTimeCalls = new Set(messages.filter(message => message.requestId === requestId)
+      .flatMap(message => (message.toolCalls ?? []).filter(call => call.function?.name === 'read_free_time').map(call => call.id)))
+    const selectedGoalInCurrentRead = selectedFreeTimeGoal && messages.some(message => {
+      if (message.requestId !== requestId || message.role !== 'tool' || !readFreeTimeCalls.has(message.toolCallId)) return false
+      try { return JSON.parse(message.content).goals?.some(goal => goal.id === selectedFreeTimeGoal.id && Array.isArray(goal.planWeeks)) ?? false }
+      catch { return false }
+    })
     const selectedHandoff = companionState?.handoffs.find(item => item.taskId === context.taskId)
     const handoff = selectedHandoff ? { taskId: selectedHandoff.taskId, version: selectedHandoff.version,
       progress: clipped(selectedHandoff.progress, 160), obstacle: clipped(selectedHandoff.obstacle, 120), nextStep: clipped(selectedHandoff.nextStep, 160),
@@ -874,10 +909,20 @@ export function createXixi({ db, complete, now = () => new Date() }) {
       { role: 'system', content: `${environmentPrefix}${JSON.stringify({
         page: context.page ?? 'home', taskId: context.taskId ?? null, selectedDate,
         selectedWish: context.wishId ? companion.listState({ date: todayDate, days: 1 }).wishes.find(wish => wish.id === context.wishId) ?? null : null,
+        selectedFreeTimeGoal: selectedFreeTimeGoal ? selectedGoalInCurrentRead
+          ? { id: selectedFreeTimeGoal.id, title: selectedFreeTimeGoal.title, status: selectedFreeTimeGoal.status,
+            version: selectedFreeTimeGoal.version, outlineInReadFreeTime: true }
+          : freeTimeGoalOutline(selectedFreeTimeGoal) : null,
         planner: plannerContext, today: todayContext,
         tasks: facts, selectedTask, areas, taskCount: allTasks.length, moreTasksAvailable: facts.length < allTasks.length,
         companion: companionState ? { handoff,
-          freeTimeGoals: (companionState.freeTimeGoals ?? []).slice(0, 8).map(goal => ({ id: goal.id, title: goal.title, priority: goal.priority, minPerWeek: goal.minPerWeek, status: goal.status, targetDate: goal.targetDate, version: goal.version })),
+          freeTimeGoals: (companionState.freeTimeGoals ?? []).slice(0, 8).map(goal => {
+            const week = currentPlanWeek(goal)
+            return { id: goal.id, title: goal.title, priority: goal.priority, minPerWeek: goal.minPerWeek, status: goal.status, targetDate: goal.targetDate, version: goal.version,
+              ...(goal.planWeeks?.length ? { planWeeksTotal: goal.planWeeks.length,
+                currentPlanWeek: week ? { week: week.week, title: week.title, status: week.status ?? 'active' } : null,
+                completedWeeks: goal.planWeeks.filter(item => item.status === 'completed').length } : {}) }
+          }),
           freeTimeGoalCount: companionState.freeTimeGoals?.length ?? 0, freeTimeReadMore: 'read_free_time',
           wishCount: companionState.wishes.length, previewCount: companionState.scenarios.filter(item => item.status === 'preview').length,
           opportunities, readMore: 'read_companion' } : { memoryDisabled: true },
@@ -1053,13 +1098,27 @@ export function createXixi({ db, complete, now = () => new Date() }) {
       const date = args.date ?? localDay(clock())
       const page = readPageOptions(args, 8, 20)
       const state = companion.listState({ date, days: 7 })
+      if (args.goalId !== undefined || args.planWeek !== undefined) {
+        if (args.goalId === undefined || args.planWeek === undefined) throw new ValidationError('读取单周详情需同时提供goalId和planWeek')
+        if (args.offset !== undefined || args.limit !== undefined) throw new ValidationError('读取单周详情不使用offset或limit；分页读取目标时省略goalId和planWeek')
+        const goalId = identifier(args.goalId)
+        if (!Number.isSafeInteger(args.planWeek) || args.planWeek < 1 || args.planWeek > 52) throw new ValidationError('计划周号应为1–52的整数')
+        const goal = state.freeTimeGoals.find(item => item.id === goalId)
+        if (!goal) throw new ValidationError('这个余时目标已不存在，请重新读取', 404)
+        const week = goal.planWeeks?.find(item => item.week === args.planWeek)
+        if (!week) throw new ValidationError('这个余时目标没有该计划周，请按完整大纲中的周号读取', 404)
+        return { goal: { id: goal.id, title: goal.title, status: goal.status, version: goal.version, source: compactSource(goal.source) },
+          planWeek: { ...week, status: week.status ?? (week.week === currentPlanWeek(goal)?.week ? 'active' : 'pending') },
+          planWeeksTotal: goal.planWeeks.length, date, days: 7,
+          notice: '仅返回指定阶段的完整详情，不是完整planWeeks大纲；保存时保留其他周号和主题，未改的details省略。' }
+      }
       const result = rowPage(state.freeTimeGoals ?? [], { ...page, units: 5000,
-        map: goal => ({ ...goal, source: compactSource(goal.source), sessions: (state.freeTimeSessions ?? []).filter(item => item.goalId === goal.id),
+        map: goal => ({ ...freeTimeGoalOutline(goal), source: compactSource(goal.source), sessions: (state.freeTimeSessions ?? []).filter(item => item.goalId === goal.id),
           progress: state.freeTimeProgress?.find(item => item.goalId === goal.id),
           feedback: (state.freeTimeFeedback ?? []).filter(item => item.goalId === goal.id).slice(0, 3) }),
         readMore: { tool: 'read_free_time', ...args } })
       const { items, ...pagination } = result
-      return { goals: items, ...pagination, date, days: 7, notice: 'scheduled为已安排，completed只计用户记录的完成。反馈可用于更新目标优先级、频率与单次时长。' }
+      return { goals: items, ...pagination, date, days: 7, notice: 'scheduled为已安排，completed只计用户记录的完成。detailsOmitted表示阶段详情未展开，并非空白；用goalId和planWeek读取该周全文。反馈可用于更新目标优先级、频率与单次时长。' }
     }
     if (name === 'read_companion') {
       const result = companion.listState(args)
@@ -1121,12 +1180,14 @@ export function createXixi({ db, complete, now = () => new Date() }) {
       const source = { kind: 'conversation', messageId: userMessageId, evidence: args.evidence || input.text, actionId: id, requestId: input.requestId }
       if (name === 'schedule_free_time') {
         const result = freeTime.schedule(args, source)
-        return { ok: true, ...result, operation: result.operation ? operationForContext(result.operation) : null }
+        return { ok: true, ...result, goals: result.goals.map(freeTimeGoalReceipt), operation: result.operation ? operationForContext(result.operation) : null }
       }
+      if (input.context.freeTimeGoalId && args.id !== input.context.freeTimeGoalId) throw new ValidationError('请更新当前选中的余时目标，沿用 selectedFreeTimeGoal 的 id 和最新 version，不另建目标', 409)
       const goal = companion.saveFreeTimeGoal(args, source)
-      if (goal.status !== 'active') return { ok: true, goal, notice: goal.status === 'paused' ? '余时目标已暂停，已保存的日程仍保留' : '余时目标已移除' }
+      if (goal.status !== 'active') return { ok: true, goal: freeTimeGoalReceipt(goal), notice: goal.status === 'paused' ? '余时目标已暂停，已保存的日程仍保留' : '余时目标已移除' }
       const scheduled = freeTime.schedule({ date: localDay(clock()) }, { ...source, actionId: stableId(id, 'schedule') })
-      return { ok: true, goal, ...scheduled, operation: scheduled.operation ? operationForContext(scheduled.operation) : null }
+      return { ok: true, ...scheduled, goal: freeTimeGoalReceipt(scheduled.goals.find(item => item.id === goal.id) ?? goal), goals: scheduled.goals.map(freeTimeGoalReceipt),
+        operation: scheduled.operation ? operationForContext(scheduled.operation) : null }
     }
     if (['save_handoff', 'remember_wish', 'update_wish', 'preview_scenario'].includes(name)) {
       const evidence = inputText(args.evidence, '用户原话', 2000)
@@ -1709,6 +1770,7 @@ export function createXixi({ db, complete, now = () => new Date() }) {
         ...(context.page ? { page: inputText(context.page, '页面', 50) } : {}),
         ...(context.date !== undefined ? { date: day(context.date, '所选日期') } : {}),
         ...(context.taskId ? { taskId: identifier(context.taskId) } : {}),
+        ...(context.freeTimeGoalId ? { freeTimeGoalId: identifier(context.freeTimeGoalId) } : {}),
         ...(context.wishId ? { wishId: identifier(context.wishId) } : {}) } }
       const previousLock = locks.get(conversationId)
       const ahead = previousLock && !db.getTurn(previousLock.requestId)?.retractedAt ? previousLock.promise : Promise.resolve()

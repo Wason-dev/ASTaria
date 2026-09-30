@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { localApi, LocalApiError } from './api'
 
-type State = { enabled: boolean; authorization: number; count: number; through: number | null; omitted: number; error: string | null; previewMode?: 'always' | 'when-unlocked' | 'never' | 'unknown'; iconAvailable?: boolean | null }
+type State = { enabled: boolean; authorization: number; count: number; through: number | null; omitted: number; error: string | null; previewMode?: 'always' | 'when-unlocked' | 'never' | 'unknown'; iconAvailable?: boolean | null; registeredBundleMatches?: boolean | null; registeredIconAvailable?: boolean | null }
 export function SystemReminders() {
   const [state, setState] = useState<State | null>(null), [busy, setBusy] = useState(false), [issue, setIssue] = useState(''), [supported, setSupported] = useState(true)
   useEffect(() => {
@@ -34,7 +34,8 @@ export function SystemReminders() {
     {state?.enabled && <p>最多预约未来 30 天内最近的 64 条；每次打开 App、恢复使用或修改日程后补充。{state.omitted > 0 ? `另有 ${state.omitted} 条将在后续补充。` : ''}系统专注模式、关机或通知权限会影响实际送达。</p>}
     {state?.enabled && state.previewMode === 'never' && <p>macOS 已关闭通知预览，所以提醒会隐藏正文。若希望显示内容，可在「系统设置 → 通知 → ASTaria」调整显示预览。</p>}
     {state?.enabled && state.previewMode === 'when-unlocked' && <p>通知正文会在解锁后显示，锁屏时隐藏。</p>}
-    {state?.enabled && state.iconAvailable === false && <p>系统提醒图标未能读取，可重新安装当前版本后再同步提醒。</p>}
+    {state?.enabled && state.registeredBundleMatches === false && <p>macOS 仍关联着旧版提醒组件，通知图标可能缺失。请从已安装的当前版本打开 ASTaria，再重新同步提醒。</p>}
+    {state?.enabled && state.registeredBundleMatches !== false && (state.iconAvailable === false || state.registeredIconAvailable === false) && <p>系统提醒图标未能读取，可重新安装当前版本后再同步提醒。</p>}
     {supported && <div className="xixi-settings-actions"><button type="button" disabled={busy} onClick={() => void update()}>重新同步提醒</button><button type="button" disabled={busy || !state || ![2, 3].includes(state.authorization)} onClick={() => void testReminder()}>发送测试提醒</button></div>}
   </section>
 }

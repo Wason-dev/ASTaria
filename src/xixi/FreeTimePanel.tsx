@@ -9,28 +9,90 @@ import { sameSnapshot } from '../stores/sameSnapshot'
 import { startVisiblePolling } from '../stores/visiblePolling'
 import { localApi } from './api'
 import type { Preferences } from './preferences'
-import type { CompanionState, FreeTimeGoal, Wish } from './companionTypes'
+import type { CompanionState, FreeTimeGoal, FreeTimePlanWeek, FreeTimeProgress, Wish } from './companionTypes'
 import { StringInvitation } from './StringStudio'
 import { FREE_TIME_STATUS_LABEL, freeTimeScheduleNotice } from './freeTimeScheduleResult'
 import type { FreeTimePlanResult as PlanResult } from './freeTimeScheduleResult'
 import './free-time.css'
 
-type Props = { onClarifyWish: (wish: Wish) => void; onChanged: () => void | Promise<void>; onNotice: (message: string) => void; active?: boolean; onOpenStrings: () => void; today: string; theme: Preferences['theme']; grid: boolean; glass: Preferences['glass'] }
-type Draft = { title: string; priority: FreeTimeGoal['priority']; minPerWeek: string; sessionMin: string; sessionMax: string; targetDate: string; targetNote: string }
+type Props = { onClarifyWish: (wish: Wish) => void; onRefinePlan: (goal: FreeTimeGoal) => void; onChanged: () => void | Promise<void>; onNotice: (message: string) => void; active?: boolean; onOpenStrings: () => void; today: string; theme: Preferences['theme']; grid: boolean; glass: Preferences['glass'] }
+type Draft = { title: string; priority: FreeTimeGoal['priority']; minPerWeek: string; sessionMin: string; sessionMax: string; targetDate: string; targetNote: string; planWeeks: string }
 type Editing = { goal?: FreeTimeGoal; wish?: Wish; draft: Draft }
 const PRIORITIES = { high: '优先', normal: '普通', low: '顺带' } as const
 const PAGE_SIZE = 4
-const EMPTY_DRAFT: Draft = { title: '', priority: 'normal', minPerWeek: '3', sessionMin: '20', sessionMax: '40', targetDate: '', targetNote: '' }
+const EMPTY_DRAFT: Draft = { title: '', priority: 'normal', minPerWeek: '3', sessionMin: '20', sessionMax: '40', targetDate: '', targetNote: '', planWeeks: '' }
 const errorText = (reason: unknown) => reason instanceof Error ? reason.message : '暂时无法完成，请重试'
 const dayLabel = (date: string, short = false) => new Intl.DateTimeFormat('zh-CN', short ? { weekday: 'short' } : { weekday: 'short', month: 'numeric', day: 'numeric' }).format(agendaDate(date) ?? new Date())
 
+function parsePlanWeeks(value: string): FreeTimePlanWeek[] {
+  const rows = value.split(/\r?\n/)
+
+  const weeks: FreeTimePlanWeek[] = []
+  const seen = new Set<number>()
+  for (const sourceRow of rows) {
+    if (!sourceRow.trim()) continue
+    const detail = sourceRow.match(/^\s*> ?(.*)$/)
+    if (detail) {
+      const previous = weeks.at(-1)
+      if (!previous) throw new Error('请先填写周计划，再补充详情')
+      previous.details = previous.details === undefined ? detail[1] : `${previous.details}\n${detail[1]}`
+      continue
+    }
+    const match = sourceRow.trim().match(/^第\s*(\d+)\s*周(?:[ \t]+(.*))?$/)
+    if (!match) throw new Error(`长期计划格式不正确：${sourceRow.trim()}`)
+    if (weeks.length >= 52) throw new Error('长期计划最多支持 52 周')
+    const week = Number(match[1])
+    const title = match[2]?.trim() ?? ''
+    if (!Number.isInteger(week) || week < 1 || week > 52) throw new Error('长期计划周数必须是 1 到 52')
+    if (seen.has(week)) throw new Error(`长期计划重复了第 ${week} 周`)
+    if (!title) throw new Error(`第 ${week} 周还没有填写内容`)
+    seen.add(week)
+    weeks.push({ week, title })
+  }
+  return weeks.sort((a, b) => a.week - b.week)
+}
+
+function formatPlanWeeks(planWeeks?: FreeTimePlanWeek[]) {
+  return (planWeeks ?? [])
+    .slice()
+    .sort((a, b) => a.week - b.week)
+    .map(item => `第 ${item.week} 周 ${item.title}${item.details ? `\n${item.details.split('\n').map(line => `  > ${line}`).join('\n')}` : ''}`)
+    .join('\n')
+}
+
+type PlanProgressSummary = { currentWeek?: number; total: number; completed: number; allCompleted: boolean; title?: string; details?: string }
+function planProgress(goal: FreeTimeGoal, progress?: FreeTimeProgress): PlanProgressSummary | null {
+  const weeks = (goal.planWeeks ?? []).slice().sort((a, b) => a.week - b.week)
+  const total = progress?.planWeeksTotal ?? weeks.length
+  if (!total) return null
+  const completed = progress?.planCompletedWeeks ?? weeks.filter(week => week.status === 'completed' || Boolean(week.completedAt)).length
+  const allCompleted = completed >= total
+  const fallbackCurrent = weeks.find(week => week.status === 'active') ?? weeks.find(week => week.status !== 'completed' && !week.completedAt) ?? weeks[0]
+  const currentWeek = allCompleted ? undefined : progress?.planCurrentWeek ?? fallbackCurrent?.week ?? Math.min(completed + 1, total)
+  const current = weeks.find(week => week.week === currentWeek)
+  return { currentWeek, total, completed, allCompleted, title: allCompleted ? undefined : progress?.planCurrentTitle ?? current?.title, details: allCompleted ? undefined : progress?.planCurrentDetails ?? current?.details }
+}
+
+function LongPlanProgress({ goal, plan }: { goal: FreeTimeGoal; plan: PlanProgressSummary }) {
+  const weeks = (goal.planWeeks ?? []).slice().sort((a, b) => a.week - b.week)
+  return <>
+    <p className="free-time-goal-note">{plan.allCompleted ? `长期计划 · 已完成全部 ${plan.total} 周` : `长期计划 · 第 ${plan.currentWeek} / ${plan.total} 周 · 已完成 ${plan.completed} / ${plan.total} 周`}</p>
+    {plan.title && <p className="free-time-goal-note">当前：{plan.title}{plan.details ? ` · ${plan.details}` : ''}</p>}
+    {weeks.length > 0 && <details className="free-time-shortfalls"><summary>查看完整计划与进度（{weeks.length} 周）</summary><ul>{weeks.map((week, index) => {
+      const done = week.status === 'completed' || Boolean(week.completedAt) || plan.allCompleted || (!week.status && index < plan.completed)
+      const current = !plan.allCompleted && week.week === plan.currentWeek
+      return <li key={week.week} data-status={done ? 'completed' : current ? 'active' : 'pending'}><strong>第 {week.week} 周 · {week.title}</strong><span>{done ? '已完成' : current ? '进行中' : '待开始'}{week.startDate ? ` · ${dayLabel(week.startDate)}起` : ''}</span>{week.details && <p style={{ whiteSpace: 'pre-wrap' }}>{week.details}</p>}</li>
+    })}</ul></details>}
+  </>
+}
+
 function Pane({ children, className = '', blur = 0, settleResize = false }: { children: ReactNode; className?: string; blur?: number; settleResize?: boolean }) {
-  return <section className={`free-time-pane ${className}`}><MeasuredGlassSurface radius={20} settleResize={settleResize} material={{ transmission: 100, blur, rim: 40, shadow: 0 }} /><div className="free-time-pane-content">{children}</div></section>
+  return <section className={`free-time-pane ${className}`}><MeasuredGlassSurface radius={20} settleResize={settleResize} material={{ transmission: 100, blur, rim: 40, shadow: 30 }} /><div className="free-time-pane-content">{children}</div></section>
 }
 
 // Retain editors across navigation without rerendering them for every camera
 // frame or starting another preference poll/clock behind the destination page.
-export const FreeTimePanel = memo(function FreeTimePanel({ onClarifyWish, onChanged, onNotice, active = true, onOpenStrings, today, theme, grid, glass }: Props) {
+export const FreeTimePanel = memo(function FreeTimePanel({ onClarifyWish, onRefinePlan, onChanged, onNotice, active = true, onOpenStrings, today, theme, grid, glass }: Props) {
   const id = useId()
   const heading = useRef<HTMLHeadingElement>(null)
   const [state, setState] = useState<CompanionState | null>(null)
@@ -128,17 +190,19 @@ export const FreeTimePanel = memo(function FreeTimePanel({ onClarifyWish, onChan
     showScheduleResult(result)
     try { await synchronize() } catch (reason) { setError(`目标已恢复，页面同步遇到问题：${errorText(reason)}`) }
   })
-  const edit = (goal: FreeTimeGoal) => setEditing({ goal, draft: { title: goal.title, priority: goal.priority, minPerWeek: String(goal.minPerWeek), sessionMin: String(goal.sessionMin), sessionMax: String(goal.sessionMax), targetDate: goal.targetDate ?? '', targetNote: goal.targetNote ?? '' } })
+  const edit = (goal: FreeTimeGoal) => setEditing({ goal, draft: { title: goal.title, priority: goal.priority, minPerWeek: String(goal.minPerWeek), sessionMin: String(goal.sessionMin), sessionMax: String(goal.sessionMax), targetDate: goal.targetDate ?? '', targetNote: goal.targetNote ?? '', planWeeks: formatPlanWeeks(goal.planWeeks) } })
   const save = (draft: Draft) => execute(async () => {
     if (!editing) return
     const numeric = [draft.minPerWeek, draft.sessionMin, draft.sessionMax].map(Number)
     if (numeric.some(value => !Number.isInteger(value)) || !draft.sessionMin || !draft.sessionMax || numeric[0] < 0 || numeric[0] > 14 || numeric[1] < 5 || numeric[2] > 720 || numeric[1] > numeric[2]) throw new Error('请填写有效次数和时长，最长时间不能小于最短时间')
     const goal = editing.goal
+    // Only send editable content; progress and schedule metadata are owned by the server.
+    const planWeeks = parsePlanWeeks(draft.planWeeks)
     await localApi<FreeTimeGoal>('/companion/free-time-goal', {
       ...(goal ? { id: goal.id, expectedVersion: goal.version } : {}),
       ...(editing.wish ? { fromWishId: editing.wish.id, expectedWishVersion: editing.wish.version } : {}),
       title: draft.title.trim(), evidence: goal?.evidence ?? editing.wish?.evidence ?? draft.title.trim(), priority: draft.priority,
-      minPerWeek: numeric[0], sessionMin: numeric[1], sessionMax: numeric[2], targetDate: draft.targetDate || null, targetNote: draft.targetNote.trim(), status: goal?.status ?? 'active',
+      minPerWeek: numeric[0], sessionMin: numeric[1], sessionMax: numeric[2], targetDate: draft.targetDate || null, targetNote: draft.targetNote.trim(), planWeeks, status: goal?.status ?? 'active',
     })
     setEditing(null); setTab('goals'); setFilter(''); setPage(0)
     announce(goal ? '余时目标已更新' : '已加入余时')
@@ -193,7 +257,7 @@ export const FreeTimePanel = memo(function FreeTimePanel({ onClarifyWish, onChan
 
   const goals = (state?.freeTimeGoals ?? []).filter(goal => goal.status !== 'deleted')
   const wishes = (state?.wishes ?? []).filter(wish => wish.status !== 'deleted' && !goals.some(goal => goal.fromWishId === wish.id))
-  const visibleGoals = goals.filter(goal => `${goal.title} ${goal.targetNote ?? ''}`.toLocaleLowerCase().includes(filter.toLocaleLowerCase()))
+  const visibleGoals = goals.filter(goal => `${goal.title} ${goal.targetNote ?? ''} ${(goal.planWeeks ?? []).map(week => `${week.title} ${week.details ?? ''}`).join(' ')}`.toLocaleLowerCase().includes(filter.toLocaleLowerCase()))
   const visibleWishes = wishes.filter(wish => wish.content.toLocaleLowerCase().includes(filter.toLocaleLowerCase()))
   const total = tab === 'goals' ? visibleGoals.length : visibleWishes.length
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE))
@@ -234,9 +298,10 @@ export const FreeTimePanel = memo(function FreeTimePanel({ onClarifyWish, onChan
             {tab === 'considering' && <p className="free-time-note">原来的牵挂都在这里。选「加入自动安排」后，析熙才会为它留出时间。</p>}
             <div className="free-time-list-region">{loading && !state ? <Empty title="正在读取目标" /> : !state ? <Empty title="余时暂时无法读取" detail="请用下方重试重新连接本机服务。" /> : total === 0 ? <Empty title={filter ? '没有匹配的目标' : tab === 'goals' ? '给想做的事一点时间' : '暂时没有待考虑的事'} detail={filter ? '试试别的关键词。' : tab === 'goals' ? '单词、数学复习、FRC 学习，都可以从这里开始。' : '聊天中提到的愿望可以先留在这里，准备好后再加入安排。'} /> : tab === 'goals' ? <ul className="free-time-goal-list">{visibleGoals.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE).map(goal => {
               const item = progress.find(value => value.goalId === goal.id)
+              const plan = planProgress(goal, item)
               const lastFeedback = state?.freeTimeFeedback?.find(value => value.goalId === goal.id)
               const goalState = goal.status === 'paused' ? 'paused' : 'active'
-              return <li key={goal.id} data-status={goalState} data-priority={goal.priority}><div className="free-time-goal-title"><strong>{goal.title}</strong><span>{goalState === 'active' ? PRIORITIES[goal.priority] : FREE_TIME_STATUS_LABEL[goalState]}</span></div><div className="free-time-goal-meta"><span>{goal.minPerWeek ? `每周至少 ${goal.minPerWeek} 次` : '不设最低频率'}</span><span>{goal.sessionMin}–{goal.sessionMax} 分钟 / 次</span></div>{(goal.targetNote || goal.targetDate) && <p className="free-time-goal-note">{goal.targetDate && `${dayLabel(goal.targetDate)} · `}{goal.targetNote || '阶段目标日期'}</p>}{lastFeedback?.nextStep && <p className="free-time-goal-note">下次继续：{lastFeedback.nextStep}</p>}<footer><span>{item ? `已安排 ${item.scheduledCount} 次${item.completedCount ? ` · 已完成 ${item.completedCount} 次` : ''}` : '还没有安排'}</span><div className="free-time-goal-actions"><button className="free-time-primary" type="button" disabled={busy} onClick={() => edit(goal)}>调整 <span aria-hidden="true">↗</span></button><button className="free-time-secondary" type="button" disabled={busy} onClick={() => void (goalState === 'active' ? updateStatus(goal, 'paused') : resumeGoal(goal))}>{goalState === 'active' ? '暂停' : '恢复并安排'}</button>{removing === goal.id ? <><span className="free-time-remove-note">取消未开始、未固定的安排</span><button className="free-time-secondary free-time-remove-confirm" type="button" disabled={busy} onClick={() => void updateStatus(goal, 'deleted')}>确认移除</button><button className="free-time-secondary" type="button" onClick={() => setRemoving(null)}>保留</button></> : <button className="free-time-secondary" type="button" disabled={busy} onClick={() => setRemoving(goal.id)}>移除</button>}</div></footer></li>
+              return <li key={goal.id} data-status={goalState} data-priority={goal.priority}><div className="free-time-goal-title"><strong>{goal.title}</strong><span>{goalState === 'active' ? PRIORITIES[goal.priority] : FREE_TIME_STATUS_LABEL[goalState]}</span></div><div className="free-time-goal-meta"><span>{goal.minPerWeek ? `每周至少 ${goal.minPerWeek} 次` : '不设最低频率'}</span><span>{goal.sessionMin}–{goal.sessionMax} 分钟 / 次</span></div>{plan && <LongPlanProgress goal={goal} plan={plan} />}{(goal.targetNote || goal.targetDate) && <p className="free-time-goal-note">{goal.targetDate && `${dayLabel(goal.targetDate)} · `}{goal.targetNote || '阶段目标日期'}</p>}{lastFeedback?.nextStep && <p className="free-time-goal-note">下次继续：{lastFeedback.nextStep}</p>}<footer><span>{item ? `已安排 ${item.scheduledCount} 次${item.completedCount ? ` · 已完成 ${item.completedCount} 次` : ''}` : '还没有安排'}</span><div className="free-time-goal-actions"><button className="free-time-primary" type="button" disabled={busy} onClick={() => edit(goal)}>调整 <span aria-hidden="true">↗</span></button>{plan && <button className="free-time-secondary" type="button" disabled={busy} onClick={() => onRefinePlan(goal)}>交给析熙细化</button>}<button className="free-time-secondary" type="button" disabled={busy} onClick={() => void (goalState === 'active' ? updateStatus(goal, 'paused') : resumeGoal(goal))}>{goalState === 'active' ? '暂停' : '恢复并安排'}</button>{removing === goal.id ? <><span className="free-time-remove-note">取消未开始、未固定的安排</span><button className="free-time-secondary free-time-remove-confirm" type="button" disabled={busy} onClick={() => void updateStatus(goal, 'deleted')}>确认移除</button><button className="free-time-secondary" type="button" onClick={() => setRemoving(null)}>保留</button></> : <button className="free-time-secondary" type="button" disabled={busy} onClick={() => setRemoving(goal.id)}>移除</button>}</div></footer></li>
             })}</ul> : <ul className="free-time-goal-list">{visibleWishes.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE).map(wish => <li key={wish.id}><div className="free-time-goal-title"><strong>{wish.content}</strong><span>{wish.status === 'paused' ? '已暂停' : wish.status === 'expired' ? '已到期' : '待考虑'}</span></div>{wish.clarification?.motivation && <p className="free-time-goal-note">想做到：{wish.clarification.motivation}</p>}{wish.clarification?.firstStep && <p className="free-time-goal-note">第一小步：{wish.clarification.firstStep}</p>}{wish.items.length > 0 && <p className="free-time-goal-note">准备：{wish.items.join('、')}</p>}<footer><span>{minutesLabel(wish.minutes)}</span><div className="free-time-goal-actions"><button className="free-time-secondary" type="button" disabled={busy} onClick={() => setWishEditing(wish)}>修改</button><button className="free-time-secondary" type="button" disabled={busy} onClick={() => onClarifyWish(wish)}>聊清楚</button>{wish.status !== 'expired' && <button className="free-time-secondary" type="button" disabled={busy} onClick={() => void updateWishStatus(wish)}>{wish.status === 'paused' ? '恢复留意' : '暂停留意'}</button>}<button className="free-time-primary" type="button" disabled={busy} onClick={() => migratedWish(wish)}>加入自动安排 <span aria-hidden="true">↗</span></button></div></footer></li>)}</ul>}</div>
             <Pagination page={currentPage} pages={pages} count={total} onPage={setPage} />
           </>}
@@ -273,7 +338,7 @@ function GoalEditor({ editing, busy, onCancel, onSave }: { editing: Editing; bus
     <div className="free-time-editor-fields"><label htmlFor={`${id}-title`}>目标名称<input id={`${id}-title`} required maxLength={160} value={draft.title} onChange={event => setDraft(value => ({ ...value, title: event.target.value }))} disabled={busy} placeholder="例如：数学复习、SAT 单词、FRC 学习" autoFocus /></label>
       <div className="free-time-form-grid"><label>优先级<select value={draft.priority} onChange={event => setDraft(value => ({ ...value, priority: event.target.value as Draft['priority'] }))} disabled={busy}>{Object.entries(PRIORITIES).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><label>每周至少<span className="free-time-unit"><input type="number" required min={0} max={14} step={1} value={draft.minPerWeek} onChange={event => setDraft(value => ({ ...value, minPerWeek: event.target.value }))} disabled={busy} />次</span></label></div>
       <fieldset><legend>单次时长偏好</legend><div className="free-time-duration"><label><span className="p0-sr-only">单次最短分钟数</span><input type="number" required min={5} max={720} step={1} value={draft.sessionMin} onChange={event => setDraft(value => ({ ...value, sessionMin: event.target.value }))} disabled={busy} /></label><span>至</span><label><span className="p0-sr-only">单次最长分钟数</span><input type="number" required min={5} max={720} step={1} value={draft.sessionMax} onChange={event => setDraft(value => ({ ...value, sessionMax: event.target.value }))} disabled={busy} /></label><span>分钟</span></div></fieldset>
-      <label>阶段目标 <span className="free-time-optional">可选</span><input maxLength={600} value={draft.targetNote} onChange={event => setDraft(value => ({ ...value, targetNote: event.target.value }))} disabled={busy} placeholder="例如：月考前补好函数，或学会 PID 控制" /></label><label>目标日期 <span className="free-time-optional">可选</span><input type="date" value={draft.targetDate} onChange={event => setDraft(value => ({ ...value, targetDate: event.target.value }))} disabled={busy} /></label>
+      <label>长期计划 <span className="free-time-optional">可选</span><textarea rows={4} value={draft.planWeeks} onChange={event => setDraft(value => ({ ...value, planWeeks: event.target.value }))} disabled={busy} placeholder="每行一周，例如：第 1 周 Java 变量、条件、循环、方法" /><small>留空就是普通余时目标；详情可另起一行，以 &gt; 开头。</small></label><label>阶段目标 <span className="free-time-optional">可选</span><input maxLength={600} value={draft.targetNote} onChange={event => setDraft(value => ({ ...value, targetNote: event.target.value }))} disabled={busy} placeholder="例如：月考前补好函数，或学会 PID 控制" /></label><label>目标日期 <span className="free-time-optional">可选</span><input type="date" value={draft.targetDate} onChange={event => setDraft(value => ({ ...value, targetDate: event.target.value }))} disabled={busy} /></label>
     </div><footer><p>{editing.goal?.status === 'paused' ? '目标仍保持暂停，恢复后参与安排。' : '保存后会在空余时段安排，已有课程和任务优先保留。'}</p><button type="submit" className="free-time-primary" disabled={busy || !draft.title.trim()}>{busy ? '正在保存…' : editing.goal ? '保存调整' : '加入自动安排'}</button></footer>
   </form>
 }

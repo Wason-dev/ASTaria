@@ -1,4 +1,4 @@
-import type { Wish } from '../xixi/companionTypes'
+import type { FreeTimeGoal, Wish } from '../xixi/companionTypes'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import type { Task, TaskStatus } from '../domain/task'
@@ -114,12 +114,15 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
   const [cameraMissing, setCameraMissing] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [clarifyingWish, setClarifyingWish] = useState<Wish | null>(null)
+  const [refiningPlan, setRefiningPlan] = useState<Pick<FreeTimeGoal, 'id' | 'title'> | null>(null)
   const [receiptScenarioId, setReceiptScenarioId] = useState<string | null>(null)
   const homeGlass = useMemo(() => ({ transmission: HOME_GLASS.chatTransmission, blur: preferences.value.glass === 'soft' ? 6 : 0, rim: HOME_GLASS.rim, reflection: HOME_GLASS.reflection, shadow: HOME_GLASS.shadow }), [preferences.value.glass])
   const [draft, setDraft] = useState(() => readDraft())
-  const draftKey = clarifyingWish ? `${DRAFT_KEY}:wish:${clarifyingWish.id}` : DRAFT_KEY
+  const draftKey = clarifyingWish ? `${DRAFT_KEY}:wish:${clarifyingWish.id}` : refiningPlan ? `${DRAFT_KEY}:plan:${refiningPlan.id}` : DRAFT_KEY
   const clarifyWishAction = useRef<(wish: Wish) => void>(() => {})
   const clarifyWish = useCallback((wish: Wish) => clarifyWishAction.current(wish), [])
+  const refinePlanAction = useRef<(goal: FreeTimeGoal) => Promise<void>>(async () => {})
+  const refinePlan = useCallback((goal: FreeTimeGoal) => { void refinePlanAction.current(goal) }, [])
   const draftRevision = useRef(0)
   const [inputPulse, setInputPulse] = useState<number | null>(null)
   const inputPulseSequence = useRef(0)
@@ -298,13 +301,28 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
   })
   clarifyWishAction.current = (wish: Wish) => {
     draftRevision.current += 1
+    setRefiningPlan(null)
     setClarifyingWish(wish)
     changePage('home', true)
     setDraft(readDraft(`${DRAFT_KEY}:wish:${wish.id}`) || `想把「${wish.content}」这份心愿聊清楚。先帮我想清楚从哪里开始，还没决定安排时间。`)
   }
+  refinePlanAction.current = async (goal: FreeTimeGoal) => {
+    if (chat.busy || chat.loading) { setNotification('析熙正在处理上一件事，请稍后再细化计划'); return }
+    const revision = ++draftRevision.current
+    setClarifyingWish(null)
+    setRefiningPlan({ id: goal.id, title: goal.title })
+    setDraft(readDraft(`${DRAFT_KEY}:plan:${goal.id}`))
+    changePage('home', true)
+    const sent = `帮我细化「${goal.title}」这份已保存的长期计划，把每周要做的事补充得更具体，更新到原计划里，保留已有进度。${goal.status === 'paused' ? '计划继续保持暂停，先不安排时间。' : '只安排当前阶段，后面的周计划先保留，不要重复创建目标。'}`
+    const accepted = await chat.send(sent, { page: 'home', freeTimeGoalId: goal.id, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone })
+    // A failed preflight has no outgoing chat message yet. Retain a retryable
+    // request with the same goal context without replacing an edited draft.
+    if (!accepted && revision === draftRevision.current) setDraft(value => value.trim() ? value : sent)
+  }
   const endClarification = (returnToWishes = false) => {
     draftRevision.current += 1
     setClarifyingWish(null)
+    setRefiningPlan(null)
     setDraft(readDraft())
     if (returnToWishes) changePage('free-time')
   }
@@ -328,7 +346,7 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
     setSaveError('')
     const sent = draft
     const revision = draftRevision.current
-    const accepted = await chat.send(sent, { page: 'home', ...(clarifyingWish ? { wishId: clarifyingWish.id } : {}), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone })
+    const accepted = await chat.send(sent, { page: 'home', ...(clarifyingWish ? { wishId: clarifyingWish.id } : {}), ...(refiningPlan ? { freeTimeGoalId: refiningPlan.id } : {}), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone })
     if (accepted && revision === draftRevision.current) {
       setDraft(value => value === sent ? '' : value)
       stopInputPulse()
@@ -472,7 +490,7 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
           <strong>析熙</strong>
         </div><div className="xixi-header-actions"><ConversationMenu chat={chat} />{compact && <button ref={informationToggle} className="home-information-toggle" onClick={() => setInformationActive(true)} aria-controls="home-agenda">日程 →</button>}</div></header>
         <ConversationLog chat={chat} active={page === 'home' && chatOpen && progress >= .99 && (!compact || !informationActive)} onSettings={openSettings}
-          context={{ page: 'home', ...(clarifyingWish ? { wishId: clarifyingWish.id } : {}), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }} onSent={sent => setDraft(value => value.trim() === sent ? '' : value)} onRetracted={restoreDraft}>
+          context={{ page: 'home', ...(clarifyingWish ? { wishId: clarifyingWish.id } : {}), ...(refiningPlan ? { freeTimeGoalId: refiningPlan.id } : {}), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }} onSent={sent => setDraft(value => value.trim() === sent ? '' : value)} onRetracted={restoreDraft}>
           {receipts.map(task => <div className="home-receipt" key={task.id}><span>已记为事项</span><button onClick={() => openTask(task.id)}>{task.title}</button></div>)}
         </ConversationLog>
         <form onSubmit={event => void submit(event)}>
@@ -485,6 +503,7 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
             <span className="home-input-rim" />
           </span>}
           {clarifyingWish && <div className="home-clarifying-wish"><span>正在聊：{clarifyingWish.content}</span><div><button className="xixi-text-button" type="button" onClick={() => endClarification(true)}>回心愿清单</button><button className="xixi-text-button" type="button" onClick={() => endClarification()}>结束澄清</button></div></div>}
+          {refiningPlan && <div className="home-clarifying-wish"><span>正在细化：{refiningPlan.title}</span><div><button className="xixi-text-button" type="button" onClick={() => endClarification(true)}>回长期计划</button><button className="xixi-text-button" type="button" onClick={() => endClarification()}>结束细化</button></div></div>}
           <textarea ref={compose} id="home-compose" placeholder="写下你的事情" rows={2} maxLength={4000} value={draft} disabled={data.saving || chat.busy}
             onChange={event => {
               const value = event.target.value
@@ -512,7 +531,7 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
     </GlassSamplingContext.Provider>
     <Workbench active={page === 'workbench'} appearance={appearance} data={data} now={now} onCapture={() => changePage('home', true)} onNotice={setNotification} chat={chat} onSettings={openSettings} />
     <PlannerWorkspace active={page === 'schedule'} tasks={data.tasks} tasksLoading={data.loading} tasksError={data.loadError} now={now} appearance={appearance} onNotice={setNotification} onRefresh={data.retry} />
-    {(freeTimeMounted || page === 'free-time') && <FreeTimePanel onClarifyWish={clarifyWish} active={page === 'free-time' && !stringCovered} today={today} theme={preferences.value.theme} grid={preferences.value.grid} glass={preferences.value.glass} onOpenStrings={openStrings} onChanged={freeTimeChanged} onNotice={setNotification} />}
+    {(freeTimeMounted || page === 'free-time') && <FreeTimePanel onClarifyWish={clarifyWish} onRefinePlan={refinePlan} active={page === 'free-time' && !stringCovered} today={today} theme={preferences.value.theme} grid={preferences.value.grid} glass={preferences.value.glass} onOpenStrings={openStrings} onChanged={freeTimeChanged} onNotice={setNotification} />}
     {settingsOpen && <LocalSettings initialTab={settingsTab} onClose={closeSettings} onSaved={chat.refreshStatus} onPreviewEffect={previewEffect} onPreviewPhaseChange={changePreviewPhase} onStopPreview={stopPreview} previewPhase={previewPhase} />}
     {stringsOpen && <OrbitStudio onReveal={() => setStringCovered(false)} onClose={closeStrings} onSaved={message => { data.retry(); void chat.refresh(); setNotification(message) }} />}
     {selectedId && <TaskDialog task={selectedTask} saving={data.saving} onClose={closeTask} onStatus={data.setStatus} />}

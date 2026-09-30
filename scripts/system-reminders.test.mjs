@@ -211,6 +211,20 @@ test('关闭开关时用空 replace 取消已预约的提醒', async t => {
   assert.deepEqual(JSON.parse(await readFile(stateFile, 'utf8')), { enabled: false })
 })
 
+test('系统注册身份诊断和图标诊断只透传布尔值', async t => {
+  const native = nativeRun()
+  const original = native.run
+  native.run = async (command, input) => command === 'status'
+    ? { ...(await original(command, input)), showPreviews: 1, iconAvailable: true, registeredBundleMatches: false, registeredIconAvailable: false }
+    : original(command, input)
+  const { service } = await fixture(t, { native })
+  const status = await service.initialize()
+  assert.equal(status.previewMode, 'when-unlocked')
+  assert.equal(status.iconAvailable, true)
+  assert.equal(status.registeredBundleMatches, false)
+  assert.equal(status.registeredIconAvailable, false)
+})
+
 test('权限未授权时不启用也不落盘', async t => {
   for (const authorization of [0, 1, 4, -1]) {
     const { service, native, stateFile } = await fixture(t, { native: nativeRun({ authorization }) })

@@ -9,7 +9,7 @@ import { getModelSettings, saveModelSettings, validateContextBudget, resolveCont
 const input = text => ({ requestId: randomUUID(), conversationId: 'budget-test', text, context: { timezone: 'Asia/Shanghai' } })
 const reply = content => ({ choices: [{ message: { role: 'assistant', content, reasoning_content: '' } }] })
 
-test('budget settings migrate, validate, persist and survive backup without altering Max', t => {
+test('budget settings migrate, validate, persist and survive backup without altering the reasoning default', t => {
   const db = createDatabase(':memory:'); t.after(() => db.close())
   const legacy = getModelSettings(db)
   assert.deepEqual(legacy.contextBudget, { mode: 'auto', maxUnits: 48000 })
@@ -18,7 +18,7 @@ test('budget settings migrate, validate, persist and survive backup without alte
   for (const setting of [{ mode: 'off', maxUnits: 128000 }, { mode: 'custom', maxUnits: 128000 }, { mode: 'auto', maxUnits: 128000 }]) {
     const saved = saveModelSettings(db, { ...legacy, contextBudget: setting })
     assert.deepEqual(getModelSettings(db).contextBudget, setting)
-    assert.equal(saved.reasoningEffort, 'max')
+    assert.equal(saved.reasoningEffort, 'low')
     const restored = createDatabase(':memory:')
     try { restored.importData(db.exportData()); assert.deepEqual(getModelSettings(restored).contextBudget, setting) } finally { restored.close() }
   }

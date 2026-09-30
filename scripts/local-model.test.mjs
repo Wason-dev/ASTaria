@@ -112,11 +112,11 @@ test('local settings validate before changing the provider, model or saved conne
   } finally { db.close() }
 })
 
-test('reasoning depth defaults to max for old settings and accepts the four cloud choices', () => {
+test('reasoning depth defaults to low for old settings and accepts the four cloud choices', () => {
   const base = localSettings()
   delete base.reasoningEffort
   const migrated = validateModelSettings(base)
-  assert.equal(migrated.reasoningEffort, 'max')
+  assert.equal(migrated.reasoningEffort, 'low')
   for (const reasoningEffort of ['off', 'low', 'high', 'max']) {
     const saved = validateModelSettings({ ...base, reasoningEffort })
     assert.equal(saved.reasoningEffort, reasoningEffort)
@@ -124,10 +124,10 @@ test('reasoning depth defaults to max for old settings and accepts the four clou
   assert.throws(() => validateModelSettings({ ...base, reasoningEffort: 'disabled' }), ValidationError)
   const db = createDatabase(':memory:')
   try {
-    assert.equal(getModelSettings(db).reasoningEffort, 'max', 'new connections default to maximum thinking')
+    assert.equal(getModelSettings(db).reasoningEffort, 'low', 'new connections default to light thinking')
     db.setPreference('model-connection', base)
     const restored = getModelSettings(db)
-    assert.equal(restored.reasoningEffort, 'max', 'pre-existing preferences adopt the default')
+    assert.equal(restored.reasoningEffort, 'low', 'pre-existing preferences adopt the default')
     assert.equal(restored.provider, base.provider)
     assert.deepEqual(restored.local, base.local)
   } finally { db.close() }
@@ -190,7 +190,7 @@ test('streaming HTTP setting survives restart and backup and old backups default
 
 test('reasoning depth saves through HTTP and survives restart and backup restore', async t => {
   const f = fixture(t)
-  assert.equal((await f.ok('/status')).providerSettings.reasoningEffort, 'max')
+  assert.equal((await f.ok('/status')).providerSettings.reasoningEffort, 'low')
   for (const reasoningEffort of ['high', 'off']) {
     const saved = await f.ok('/settings/provider', { ...localSettings(), reasoningEffort })
     assert.equal(saved.providerSettings.reasoningEffort, reasoningEffort)
@@ -217,7 +217,7 @@ test('reasoning depth saves through HTTP and survives restart and backup restore
   record.value = JSON.stringify(legacy)
   await f.ok('/data/import', { backup: sign(legacyBackup), confirmed: true })
   f.restart()
-  assert.equal((await f.ok('/status')).providerSettings.reasoningEffort, 'max', 'old backups adopt maximum thinking')
+  assert.equal((await f.ok('/status')).providerSettings.reasoningEffort, 'low', 'old backups adopt light thinking')
   assert.equal(f.requests.length, 0, 'editing preferences does not make a model request')
   assert.deepEqual(f.vaultCalls, [])
 })

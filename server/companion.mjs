@@ -3,6 +3,7 @@ import { ValidationError, knownKeys, text, identifier, choice, day, dateTime, nu
 import { dayCapacity, carryItems, blocksForDay, routinesForDay, minuteOf } from '../src/planner/model.ts'
 import { localDay } from '../src/home/agenda.ts'
 import { freeTimeState } from './freeTime.mjs'
+import { planWeeksValue, freeTimeTaskNotes } from './freeTimePlan.mjs'
 
 const fail = (message, status = 400) => { throw new ValidationError(message, status) }
 const active = task => task && !task.deletedAt && ['todo', 'doing'].includes(task.status)
@@ -135,7 +136,7 @@ export function createCompanion({ db, now = () => new Date() }) {
    * minimum when it chooses otherwise-empty time.
    */
   function saveFreeTimeGoal(input, source) {
-    knownKeys(input, ['id', 'title', 'evidence', 'priority', 'minPerWeek', 'sessionMin', 'sessionMax', 'targetDate', 'targetNote', 'status', 'expectedVersion', 'fromWishId', 'expectedWishVersion'], '余时目标')
+    knownKeys(input, ['id', 'title', 'evidence', 'priority', 'minPerWeek', 'sessionMin', 'sessionMax', 'targetDate', 'targetNote', 'status', 'expectedVersion', 'fromWishId', 'expectedWishVersion', 'planWeeks'], '余时目标')
     return db.transaction(() => {
       const value = state(), previous = input.id ? value.freeTimeGoals.find(item => item.id === identifier(input.id)) : undefined
       const wish = input.fromWishId ? value.wishes.find(item => item.id === identifier(input.fromWishId)) : null
@@ -145,7 +146,7 @@ export function createCompanion({ db, now = () => new Date() }) {
         if (!wish || !validSource(wish.source)) fail('这条牵挂已不存在', 404)
         version(wish, input.expectedWishVersion)
       }
-      const replay = source?.actionId && value.freeTimeGoals.find(item => item.source?.actionId === source.actionId)
+      const replay = source?.actionId && value.freeTimeGoals.find(item => item.lastActionId === source.actionId || item.source?.actionId === source.actionId)
       if (replay) return replay
       if (input.id && !previous) fail('找不到这个余时目标', 404)
       if (previous?.status === 'deleted') fail('这个余时目标已移除', 410)
@@ -161,11 +162,14 @@ export function createCompanion({ db, now = () => new Date() }) {
       const status = choice(input.status, ['active', 'paused', 'deleted'], '余时目标状态', previous?.status ?? 'active')
       const targetDate = input.targetDate === undefined ? previous?.targetDate ?? null : input.targetDate == null ? null : day(input.targetDate, '阶段目标日期')
       const targetNote = text(input.targetNote ?? previous?.targetNote ?? '', '阶段目标', 1500, { empty: true })
+      const planWeeks = planWeeksValue(input.planWeeks, previous?.planWeeks)
       const stamp = clock().toISOString()
+      const submittedSource = sourceValue(source, evidence)
       const record = { id: previous?.id ?? randomUUID(), title, evidence, priority, minPerWeek, sessionMin, sessionMax,
-        targetDate, targetNote, ...(previous?.taskId ? { taskId: previous.taskId } : {}),
+        targetDate, targetNote, ...(planWeeks.length ? { planWeeks } : {}), ...(previous?.taskId ? { taskId: previous.taskId } : {}),
         ...(previous?.fromWishId || wish ? { fromWishId: previous?.fromWishId ?? wish.id } : {}),
-        status, version: (previous?.version ?? 0) + 1, source: sourceValue(source, evidence),
+        status, version: (previous?.version ?? 0) + 1, source: previous?.source ?? submittedSource,
+        ...(submittedSource.actionId || previous?.lastActionId ? { lastActionId: submittedSource.actionId ?? previous.lastActionId } : {}),
         createdAt: previous?.createdAt ?? stamp, updatedAt: stamp }
       value.freeTimeGoals = status === 'deleted'
         ? value.freeTimeGoals.filter(item => item.id !== record.id)
@@ -174,7 +178,8 @@ export function createCompanion({ db, now = () => new Date() }) {
       if (status === 'deleted') value.freeTimeHistory = value.freeTimeHistory.filter(item => item.goalId !== record.id)
       else if (record.taskId) {
         const task = db.getTask(record.taskId)
-        if (task && !task.deletedAt) db.updateTask(task.id, { title, importance: priority === 'high' ? 3 : priority === 'low' ? 1 : 2, estimateMin: sessionMin })
+        if (task && !task.deletedAt) db.updateTask(task.id, { title, importance: priority === 'high' ? 3 : priority === 'low' ? 1 : 2, estimateMin: sessionMin,
+          ...(planWeeks.length ? { notes: freeTimeTaskNotes(record) } : {}) })
       }
       if (wish) value.wishes = value.wishes.map(item => item.id === wish.id ? { ...item, status: 'paused', version: item.version + 1, updatedAt: stamp } : item)
       save(value)

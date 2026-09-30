@@ -1,4 +1,4 @@
-import { createContext, useContext, useId, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createContext, useContext, useId, useImperativeHandle, useLayoutEffect, useMemo, useRef } from 'react'
 import type { CSSProperties, Ref } from 'react'
 import { glassDisplacement, HOME_GLASS } from './glass'
 
@@ -12,30 +12,26 @@ export const GlassSamplingContext = createContext(true)
 export function MeasuredGlassSurface({ radius, progress = 0, material, settleResize = false }: Pick<Props, 'radius' | 'progress' | 'material'> & { settleResize?: boolean }) {
   const sampling = useContext(GlassSamplingContext)
   const host = useRef<HTMLSpanElement>(null)
-  const [size, setSize] = useState(() => settleResize ? { width: 320, height: 640 } : { width: 1, height: 1 })
+  const geometry = useRef<GlassGeometryHandle>(null)
   useLayoutEffect(() => {
     const element = host.current
     if (!element || !sampling) return
-    let timer: ReturnType<typeof setTimeout> | undefined
     const measure = () => {
       // Layout dimensions exclude entry/exit transforms on the panel.
-      const next = { width: Math.max(1, element.clientWidth), height: Math.max(1, element.clientHeight) }
-      // A collapsed chat track has no usable edge texture yet. Stretch the
-      // initial texture with its live viewport until the opening settles.
-      if (settleResize && (next.width < 32 || next.height < 32)) return
-      setSize(current => current.width === next.width && current.height === next.height ? current : next)
+      const width = Math.max(1, element.clientWidth), height = Math.max(1, element.clientHeight)
+      if (settleResize && (width < 32 || height < 32)) return
+      // ResizeObserver delivers the current geometry before paint. Updating
+      // only the optical attributes avoids React commits during expansion and
+      // a stretched old texture snapping into place after a debounce timer.
+      geometry.current?.update(width, height, radius, progress)
     }
-    const observer = new ResizeObserver(() => {
-      clearTimeout(timer)
-      if (settleResize) timer = setTimeout(measure, 120)
-      else measure()
-    })
+    const observer = new ResizeObserver(measure)
     observer.observe(element)
     measure()
-    return () => { observer.disconnect(); clearTimeout(timer) }
-  }, [sampling, settleResize])
-  return <span ref={host} className="home-glass-measure" aria-hidden="true">
-    <GlassSurface width={size.width} height={size.height} radius={radius} progress={progress} material={material} responsive={settleResize} />
+    return () => observer.disconnect()
+  }, [sampling, settleResize, radius, progress])
+  return <span ref={host} className="home-glass-measure" style={{ '--glass-shadow': (material?.shadow ?? HOME_GLASS.shadow) / 100 } as CSSProperties} aria-hidden="true">
+    <GlassSurface width={1} height={1} radius={radius} progress={progress} material={material} responsive geometryRef={geometry} />
   </span>
 }
 
@@ -50,17 +46,23 @@ export function GlassSurface({ width, height, radius, progress = 0, material, re
   const filter = useRef<SVGFilterElement>(null)
   const edge = useRef<SVGFEImageElement>(null)
   const surface = useRef<HTMLSpanElement>(null)
+  const lastGeometry = useRef('')
   useImperativeHandle(geometryRef, () => ({ update(nextWidth, nextHeight, nextRadius, nextProgress) {
     // The camera moves only these optical attributes, with the same rounded
     // edge formula as a React render. No stretched corner or lower-quality map.
     const w = Math.max(1, Math.round(nextWidth)), h = Math.max(1, Math.round(nextHeight))
-    for (const element of [svg.current, filter.current, edge.current]) {
-      element?.setAttribute('width', String(w)); element?.setAttribute('height', String(h))
+    const key = `${w}:${h}:${nextRadius}`
+    if (lastGeometry.current !== key) {
+      lastGeometry.current = key
+      for (const element of [svg.current, filter.current, edge.current]) {
+        element?.setAttribute('width', String(w)); element?.setAttribute('height', String(h))
+      }
+      if (sampling && svgBackdrop) edge.current?.setAttribute('href', glassDisplacement(w, h, nextRadius))
     }
-    if (sampling && svgBackdrop) edge.current?.setAttribute('href', glassDisplacement(w, h, nextRadius))
     const transmission = material?.transmission ?? HOME_GLASS.pillTransmission + (HOME_GLASS.chatTransmission - HOME_GLASS.pillTransmission) * nextProgress
     surface.current?.style.setProperty('--glass-tint', String(1 - transmission / 100))
   } }), [sampling, svgBackdrop, material])
+  useLayoutEffect(() => { lastGeometry.current = '' }, [sampling, width, height, radius])
   // Hidden retained pages can change size with the window or their data. They
   // must not allocate/encode a displacement canvas until sampling resumes.
   const map = useMemo(() => sampling && svgBackdrop ? glassDisplacement(width, height, radius) : '', [width, height, radius, sampling, svgBackdrop])

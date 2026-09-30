@@ -113,7 +113,7 @@ try {
   await send('Emulation.setDeviceMetricsOverride', { width: 1366, height: 768, deviceScaleFactor: 1, mobile: false })
   await send('Page.navigate', { url: base }); await wait('!!window.__ASTARIA_P0__&&!!document.querySelector(".home-current-title:not(:disabled)")')
   await openSettings()
-  await check('fresh settings default to high personality with the matching description', selected('高', '有主见，嘴硬一点，做事认真'))
+  await check('fresh settings default to medium personality with the matching description', selected('中', '自然俏皮'))
   for (const [index, value, label, description] of [[1, 'low', '低', '简洁温和'], [2, 'medium', '中', '自然俏皮'], [3, 'high', '高', '有主见，嘴硬一点，做事认真']]) {
     await click(`.xixi-personality-options button:nth-child(${index})`)
     await wait(`${selected(label, description)}&&!document.querySelector('.xixi-personality-options button').disabled`)

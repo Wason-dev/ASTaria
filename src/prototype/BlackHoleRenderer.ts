@@ -319,6 +319,7 @@ export class BlackHoleRenderer {
         uCameraRadius: { value: geodesics.cameraRadius },
         uFlightCameraRadius: { value: STRING_FLIGHT_START_RADIUS },
         uFlightEdgeFocus: { value: 0 },
+        uFlightApproach: { value: 0 },
         uFlightEdgePull: { value: new THREE.Vector3(0, 0, .1) },
         uResponseStrength: { value: 0 },
         uResponseReply: { value: 0 },
@@ -746,6 +747,7 @@ export class BlackHoleRenderer {
     uniforms.uFlightCameraRadius.value = STRING_FLIGHT_START_RADIUS
     uniforms.uFlightEdgeFocus.value = this.stringFlightMode === 'edge'
       ? THREE.MathUtils.smoothstep(this.stringFlightProgress, .4, .96) : 0
+    uniforms.uFlightApproach.value = this.stringFlightMode === 'edge' ? this.stringFlightProgress : 0
     const pull = getStringFlightEdgePull()
     uniforms.uFlightEdgePull.value.set(pull.angle,
       this.stringFlightMode === 'edge' && this.stringFlightProgress > 0 && !this.reducedMotion ? pull.displacement : 0,

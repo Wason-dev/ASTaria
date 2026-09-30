@@ -19,7 +19,7 @@ import { HOME_GLASS, glassDisplacement } from '../src/home/glass.ts'
 const PNG_SIGNATURE = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
 const PNG_PAYLOAD_BYTES = 48
 
-const host = { canvases: 0, puts: 0, urls: 0, last: null, lastType: '', failContext: false, viewOffset: 0 }
+const host = { canvases: 0, puts: 0, urls: 0, last: null, lastType: '', lastContextOptions: null, failContext: false, viewOffset: 0 }
 
 class FakeImageData {
   constructor(width, height) {
@@ -40,7 +40,8 @@ globalThis.document = {
     const canvas = {
       width: 0,
       height: 0,
-      getContext(type) {
+      getContext(type, options) {
+        host.lastContextOptions = options
         if (type !== '2d' || host.failContext) return null
         return {
           createImageData: (width, height) => new FakeImageData(width, height),
@@ -214,6 +215,11 @@ test('the texture stays neutral away from the edge frame and only the frame is s
   } finally {
     Math.hypot = original
   }
+})
+
+test('the upload-and-encode canvas requests a readback-friendly context without changing pixel output', () => {
+  assertMatchesReference(341, 619, 23)
+  assert.deepEqual(host.lastContextOptions, { willReadFrequently: true })
 })
 
 test('a cached texture is returned for the exact rounded size without touching the canvas', () => {

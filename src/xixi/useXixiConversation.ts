@@ -7,7 +7,7 @@ import { advanceChatStream, restoreChatReasoning } from './stream'
 import { sameSnapshot } from '../stores/sameSnapshot.ts'
 import { startVisiblePolling } from '../stores/visiblePolling.ts'
 
-export type XixiContext = { page: 'home' | 'workbench' | 'calendar' | 'timetable'; taskId?: string; wishId?: string; date?: string; timezone: string }
+export type XixiContext = { page: 'home' | 'workbench' | 'calendar' | 'timetable'; taskId?: string; wishId?: string; freeTimeGoalId?: string; date?: string; timezone: string }
 type PendingMessage = { requestId: string; conversationId: string; text: string; context: XixiContext; createdAt?: string; seq?: number }
 type OutgoingMessage = PendingMessage & { delivery: 'sending' | 'failed' }
 const SELECTED_KEY = 'astaria-xixi-conversation-v1'
@@ -164,7 +164,7 @@ export function useXixiConversation(onTasksChanged: () => void, onNotice: (messa
     let retrying = false
     try {
       const pending = pendingRequests()
-      const previous = pending.find(item => !cancelledRequests.current.has(item.requestId) && item.text === content && item.conversationId === conversation.conversationId && item.context.page === context.page && item.context.taskId === context.taskId && item.context.date === context.date)
+      const previous = pending.find(item => !cancelledRequests.current.has(item.requestId) && item.text === content && item.conversationId === conversation.conversationId && item.context.page === context.page && item.context.taskId === context.taskId && item.context.wishId === context.wishId && item.context.freeTimeGoalId === context.freeTimeGoalId && item.context.date === context.date)
       request = previous ?? { requestId: crypto.randomUUID(), conversationId: conversation.conversationId, text: content, context, createdAt: new Date().toISOString(), seq: Math.max(0, ...conversation.messages.map(item => item.seq), ...pending.filter(item => item.conversationId === conversation.conversationId).map(item => item.seq ?? 0)) + 1 }
       retrying = Boolean(previous)
       if (!previous) sessionStorage.setItem(PENDING_KEY, JSON.stringify([...pending, request]))

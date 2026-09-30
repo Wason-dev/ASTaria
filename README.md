@@ -1,10 +1,10 @@
 # ASTaria
 
-**让想做的事，落到真正有空的时间里。**
+**让时间有引力**
 
 ASTaria 是一款本机优先的个人时间与事项应用。和析熙聊作业、计划或心愿，把任务放进课程和日常活动之间的真实空档，再从工作台开始专注。
 
-当前版本：**0.1.0-beta.5** · macOS 13+ · Apple Silicon（arm64）
+当前版本：**0.1.0-beta.6** · macOS 13+ · Apple Silicon（arm64）
 
 [下载最新版本](https://github.com/Wason-dev/ASTaria/releases) · [安装说明](docs/INSTALL.md) · [更新记录](CHANGELOG.md) · [功能详情](docs/FEATURES.md)
 
@@ -35,7 +35,7 @@ ASTaria 是一款本机优先的个人时间与事项应用。和析熙聊作业
 
 ## 安装
 
-1. 从 [Releases](https://github.com/Wason-dev/ASTaria/releases) 下载 `mac-arm64-adhoc.dmg`，打开后把 **ASTaria** 拖入应用程序。
+1. 从 [Releases](https://github.com/Wason-dev/ASTaria/releases) 下载 `ASTaria-0.1.0-beta.6-mac-arm64-adhoc.dmg`，打开后把 **ASTaria** 拖入应用程序。
 2. 第一次打开若被 macOS 拦截，按[安装说明](docs/INSTALL.md)处理。本版使用 ad-hoc 签名，尚未 Apple 公证。
 3. 打开「设置 → 析熙」连接模型，然后录入课程、事项和可用时间。
 
@@ -80,6 +80,18 @@ CI 自动执行源码测试、桌面网页构建、许可清单和版本文档�
 | `docs/` | 功能、安装与版本说明 |
 
 详细开发与打包说明见[功能与开发文档](docs/FEATURES.md)。遇到问题请提交 [Bug report](https://github.com/Wason-dev/ASTaria/issues/new?template=bug_report.yml)，附版本、系统和复现步骤，避免上传密钥、课表或私密聊天。
+
+## 0.1.0-beta.6
+
+**0.1.0-beta.6** 已上传 GitHub Releases，适用于 macOS 13+ Apple Silicon（arm64）。以下内容属于本次发布范围，视觉与流畅性结论以实际设备手测为准：
+
+- **长期按周计划**：在余时粘贴多周大纲，保存后可交给析熙细化。只安排当前未完成阶段；完成后，下一次排程再安排后续阶段，保留已有完成记录与固定时段。
+- **默认值**：新安装与恢复默认时使用思考档位 `low`、析熙个性「中」；已经明确保存的设置不会被覆盖。
+- **析熙**：精简提示词，真实模型效果待手测。
+- **玻璃与浅色**：优化玻璃渲染与浅色模式切换时的层次和过渡。
+- **通知**：调整版本号以规避旧组件注册冲突并增加诊断，系统显示待安装包手测。
+
+改动与手测清单见 [0.1.0-beta.6 发布说明](docs/RELEASE_NOTES_v0.1.0-beta.6.md)。实际发布与下载以 [Releases](https://github.com/Wason-dev/ASTaria/releases/tag/v0.1.0-beta.6) 为准。
 
 ## 许可
 

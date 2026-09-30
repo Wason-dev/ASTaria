@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { validateModelSettings } from './modelSettings.mjs'
 import { validateRouteJudgment } from './routeAnalysis.mjs'
+import { planWeeksValue } from './freeTimePlan.mjs'
 import { ValidationError, knownKeys, identifier, text, object, choice, dateTime, day, clockTime, taskInput, questionOptions, validateMemory } from './validation.mjs'
 import { dayEventValue, validateDayEvents, horizonGroupValue } from './planner.mjs'
 import { BACKUP_MAX_BYTES, BACKUP_EXPORT_TOO_LARGE, BACKUP_IMPORT_TOO_LARGE, backupByteLength, serializeBackup } from '../src/xixi/backupLimits.ts'
@@ -71,14 +72,15 @@ function companion(value) {
   }
   unique(value.wishes, 'id')
   for (const item of array(value.freeTimeGoals ?? [], 500)) {
-    knownKeys(item, ['id', 'title', 'evidence', 'priority', 'minPerWeek', 'sessionMin', 'sessionMax', 'targetDate', 'targetNote', 'taskId', 'fromWishId', 'status', 'version', 'source', 'createdAt', 'updatedAt'])
+    knownKeys(item, ['id', 'title', 'evidence', 'priority', 'minPerWeek', 'sessionMin', 'sessionMax', 'targetDate', 'targetNote', 'taskId', 'fromWishId', 'status', 'version', 'source', 'createdAt', 'updatedAt', 'planWeeks', 'lastActionId'])
     identifier(item.id); text(item.title, '余时目标名称', 160); text(item.evidence, '原话', 2000)
     choice(item.priority, ['high', 'normal', 'low'], '余时目标优先级'); integer(item.minPerWeek, 0, 14)
     integer(item.sessionMin, 5, 720); integer(item.sessionMax, 5, 720); if (item.sessionMax < item.sessionMin) fail('余时目标时长范围无效')
     choice(item.status, ['active', 'paused', 'deleted'], '余时目标状态'); integer(item.version, 1); source(item.source); stamp(item.createdAt); stamp(item.updatedAt)
     if (item.targetDate != null) day(item.targetDate)
     if (item.targetNote !== undefined) text(item.targetNote, '阶段目标', 1500, { empty: true })
-    for (const key of ['taskId', 'fromWishId']) if (item[key] !== undefined) identifier(item[key])
+    for (const key of ['taskId', 'fromWishId', 'lastActionId']) if (item[key] !== undefined) identifier(item[key])
+    if (item.planWeeks !== undefined) planWeeksValue(item.planWeeks, [], { persisted: true })
   }
   unique(value.freeTimeGoals ?? [], 'id')
   for (const item of array(value.freeTimeHistory ?? [], 5000)) {
@@ -179,7 +181,8 @@ function validateDocument(table, document) {
   } else if (table === 'turns') {
     knownKeys(document, ['requestId', 'conversationId', 'text', 'context', 'userMessageId', 'status', 'ownerPid', 'ownerToken', 'createdAt', 'updatedAt', 'error', 'result', 'progress', 'retractedAt'])
     identifier(document.requestId); identifier(document.conversationId); identifier(document.userMessageId); text(document.text, '请求', 16000)
-    knownKeys(document.context, ['timezone', 'page', 'taskId', 'date', 'wishId']); text(document.context.timezone, '时区', 100)
+    knownKeys(document.context, ['timezone', 'page', 'taskId', 'date', 'wishId', 'freeTimeGoalId']); text(document.context.timezone, '时区', 100)
+    if (document.context.freeTimeGoalId !== undefined) identifier(document.context.freeTimeGoalId)
     if (document.context.wishId !== undefined) identifier(document.context.wishId)
     if (document.context.taskId !== undefined) identifier(document.context.taskId)
     if (document.context.date !== undefined) day(document.context.date)

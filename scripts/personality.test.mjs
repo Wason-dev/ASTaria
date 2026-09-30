@@ -5,13 +5,13 @@ import { createDatabase } from '../server/database.mjs'
 import { getPreferences, savePreferences } from '../server/preferences.mjs'
 import { createXixi } from '../server/xixi.mjs'
 
-test('legacy personality defaults to high, all levels persist independently, and backups restore the chosen level', () => {
+test('legacy personality defaults to medium, all levels persist independently, and backups restore the chosen level', () => {
   const db = createDatabase(':memory:')
   try {
     const legacy = getPreferences(db)
     delete legacy.assistant.personality
     db.setPreference('app', legacy)
-    assert.equal(getPreferences(db).assistant.personality, 'high')
+    assert.equal(getPreferences(db).assistant.personality, 'medium')
     for (const personality of ['low', 'medium', 'high']) {
       const before = getPreferences(db)
       const next = { ...before, assistant: { ...before.assistant, personality } }

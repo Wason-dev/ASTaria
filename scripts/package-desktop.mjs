@@ -38,6 +38,17 @@ function argumentsFor(argv) {
   if (!result['--runtime'] || !result['--out']) fail(`Both --runtime and --out are required.\n${USAGE}`)
   return { runtime: result['--runtime'], out: result['--out'] }
 }
+export function bundleVersionFor(version) {
+  const match = /^(\d+)\.(\d+)\.(\d+)(?:-(alpha|beta|rc)\.(\d+))?(?:\+[0-9A-Za-z.-]+)?$/u.exec(version)
+  if (!match) fail('Desktop bundle version requires major.minor.patch with an optional alpha, beta, or rc number.')
+  const [, major, minor, patch, stage, stageNumber] = match
+  if ([major, minor, patch].some(value => Number(value) > 9999) || Number(major) > 9997
+    || (stage && (Number(stageNumber) < 1 || Number(stageNumber) > 255))) fail('Desktop bundle version exceeds macOS version limits.')
+  // Reserve versions 0-1 for early signed helpers, including the iconless
+  // verification app registered as version 1 on development machines.
+  const suffix = stage ? `${{ alpha: 'a', beta: 'b', rc: 'fc' }[stage]}${Number(stageNumber)}` : ''
+  return `${Number(major) + 2}.${Number(minor)}.${Number(patch)}${suffix}`
+}
 async function requirePath(path, kind) {
   const stat = await lstat(path).catch(error => { if (error.code === 'ENOENT') fail(`Required ${kind} missing: ${path}`); throw error })
   if (stat.isSymbolicLink() || (kind === 'directory' ? !stat.isDirectory() : !stat.isFile())) fail(`Expected a regular ${kind}, not a symlink: ${path}`)
@@ -142,7 +153,7 @@ async function main() {
   if (process.platform !== 'darwin' || process.arch !== ARCH) fail('This packager requires an Apple Silicon Mac and an arm64 Node runtime.')
   const pkg = JSON.parse(await readFile(join(ROOT, 'package.json'), 'utf8'))
   if (typeof pkg.version !== 'string' || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/u.test(pkg.version)) fail('package.json must contain a valid, path-safe semantic version.')
-  const version = pkg.version, numericVersion = version.split(/[+-]/u)[0]
+  const version = pkg.version, numericVersion = version.split(/[+-]/u)[0], bundleVersion = bundleVersionFor(version)
   const stem = `${NAME}-${version}-mac-${ARCH}`, release = join(args.out, stem)
   // Refuse an existing version before doing any work; failed partial builds
   // remain separately named and are never silently removed or overwritten.
@@ -207,7 +218,7 @@ async function main() {
     await writePlist(join(reminderApp, 'Contents', 'Info.plist'), { CFBundleIdentifier: `${BUNDLE_ID}.reminders`,
       CFBundleExecutable: 'astaria-reminders', CFBundleName: 'ASTaria 提醒', CFBundleDisplayName: 'ASTaria 提醒',
       CFBundleIconFile: 'ASTaria.icns',
-      CFBundlePackageType: 'APPL', CFBundleVersion: numericVersion, CFBundleShortVersionString: numericVersion,
+      CFBundlePackageType: 'APPL', CFBundleVersion: bundleVersion, CFBundleShortVersionString: numericVersion,
       LSUIElement: true, LSMinimumSystemVersion: '13.0' }, scratch)
 
 
@@ -215,7 +226,7 @@ async function main() {
     await mkdir(join(reminderApp, 'Contents', 'Resources'))
     await copyFile(join(resources, 'ASTaria.icns'), join(reminderApp, 'Contents', 'Resources', 'ASTaria.icns'))
     const info = { ...runtimeInfo, CFBundleName: NAME, CFBundleDisplayName: NAME, CFBundleIdentifier: BUNDLE_ID,
-      CFBundleShortVersionString: numericVersion, CFBundleVersion: numericVersion, CFBundleIconFile: 'ASTaria.icns', LSApplicationCategoryType: 'public.app-category.productivity' }
+      CFBundleShortVersionString: numericVersion, CFBundleVersion: bundleVersion, CFBundleIconFile: 'ASTaria.icns', LSApplicationCategoryType: 'public.app-category.productivity' }
     delete info.ElectronAsarIntegrity
     await writePlist(join(contents, 'Info.plist'), info, scratch)
 
@@ -226,7 +237,7 @@ async function main() {
       child.CFBundleIdentifier = `${BUNDLE_ID}.helper${variant ? `.${variant}` : ''}`
       child.CFBundleName = String(child.CFBundleName ?? 'Electron Helper').replaceAll('Electron', NAME)
       child.CFBundleDisplayName = child.CFBundleName
-      child.CFBundleShortVersionString = numericVersion; child.CFBundleVersion = numericVersion
+      child.CFBundleShortVersionString = numericVersion; child.CFBundleVersion = bundleVersion
       await writePlist(path, child, scratch)
     }
     const entitlements = join(scratch, 'entitlements.plist')

@@ -60,6 +60,31 @@ test('preparing a copied app never changes the existing app; rejects aliases', a
   await symlink(f.app, join(f.root, 'linked.app'))
   await assert.rejects(prepareMacUpdate({ trustedKeys: testReleaseKeys, appBundle: join(f.root, 'linked.app'), path: '', manifest, resultFile: '' }), /结构/)
 })
+
+test('a real app behind a parent alias remains eligible for automatic updates', async t => {
+  const f = await fixture(t), commands = [], aliasParent = join(f.root, 'Applications')
+  await symlink(f.root, aliasParent)
+  const appBundle = join(aliasParent, 'ASTaria.app')
+  await writeFile(join(f.root, 'payload.dmg'), dmgBytes)
+  const prepared = await prepareMacUpdate({ trustedKeys: testReleaseKeys, appBundle, path: join(f.root, 'payload.dmg'), manifest,
+    resultFile: join(f.root, 'result'), run: async (tool, args) => {
+      commands.push([tool, args])
+      if (tool.endsWith('/hdiutil')) { if (args[0] === 'attach') await cp(f.app, join(args[4], 'ASTaria.app'), { recursive: true }); return {} }
+      if (tool.endsWith('/ditto')) { await cp(args[0], args[1], { recursive: true }); return {} }
+      return f.execute(tool, args)
+    } })
+  assert.equal(prepared.target, appBundle)
+  assert.ok(commands.some(([tool, args]) => tool.endsWith('/hdiutil') && args[0] === 'detach'))
+  await rm(prepared.staging, { recursive: true, force: true })
+})
+
+test('apps launched from App Translocation are rejected with a specific reason', async t => {
+  const f = await fixture(t), location = join(f.root, 'AppTranslocation', 'Data', 'ASTaria.app')
+  await mkdir(join(f.root, 'AppTranslocation', 'Data'), { recursive: true })
+  await cp(f.app, location, { recursive: true })
+  await assert.rejects(prepareMacUpdate({ trustedKeys: testReleaseKeys, appBundle: location, path: '', manifest, resultFile: '' }), /App Translocation/u)
+})
+
 for (const success of [true, false]) test(`atomic replacement ${success ? 'waits for startup acknowledgement' : 'rolls back a crashed new app'}`, async t => {
   const f = await fixture(t), staging = await mkdtemp(join(f.root, '.astaria-update-'))
   const newApp = join(staging, 'ASTaria.app')

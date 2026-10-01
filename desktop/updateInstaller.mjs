@@ -68,8 +68,17 @@ trap - EXIT
 /** Acknowledge only an update launched from our own adjacent private staging. */
 export async function acknowledgeMacUpdate(appBundle, health) {
   const target = resolve(appBundle), staging = dirname(health), info = await lstat(staging)
-  if (basename(health) !== 'started' || dirname(staging) !== dirname(target)
-    || !basename(staging).startsWith('.astaria-update-') || await realpath(staging) !== staging
+  let targetParent, stagingParent, stagingCanonical
+  try {
+    [targetParent, stagingParent, stagingCanonical] = await Promise.all([
+      realpath(dirname(target)), realpath(dirname(staging)), realpath(staging),
+    ])
+  } catch {
+    throw new Error('Invalid update acknowledgement')
+  }
+  if (basename(health) !== 'started' || stagingParent !== targetParent
+    || dirname(stagingCanonical) !== targetParent || basename(stagingCanonical) !== basename(staging)
+    || !basename(staging).startsWith('.astaria-update-')
     || !info.isDirectory() || info.isSymbolicLink() || info.uid !== process.getuid() || (info.mode & 0o077)) throw new Error('Invalid update acknowledgement')
   await regular(join(staging, 'previous.app'), true)
   await writeFile(health, 'ready', { flag: 'wx', mode: 0o600 })
@@ -87,6 +96,78 @@ async function safeLinks(directory, root = directory) {
       if (!inside(await realpath(path), root)) throw new Error('更新包包含外部链接')
     } else if (entry.isDirectory()) await safeLinks(path, root)
   }
+}
+
+function installLocationError(reason) {
+  return new Error(`请先把 ASTaria 移到可写的应用目录：${reason}`)
+}
+
+function isMountedImagePath(path) {
+  const value = path.toLowerCase()
+  return value === '/volumes' || value.startsWith('/volumes/')
+}
+
+function isAppTranslocationPath(path) {
+  return path.toLowerCase().includes('/apptranslocation/')
+}
+
+/**
+ * Resolve the location that the running app can replace safely.
+ *
+ * The bundle itself must be a real directory. Parent aliases are harmless on
+ * macOS (and /Applications can be represented by a firmlink), so only the
+ * bundle symlink is rejected; all policy checks also run against its canonical
+ * parent to catch a DMG or App Translocation path hidden behind an alias.
+ */
+async function validateInstallLocation(appBundle) {
+  const target = resolve(appBundle)
+  if (basename(target) !== 'ASTaria.app') {
+    throw installLocationError('应用包结构无效，必须命名为 ASTaria.app')
+  }
+
+  let targetInfo
+  try {
+    targetInfo = await lstat(target)
+  } catch (error) {
+    if (error?.code === 'ENOENT' || error?.code === 'ENOTDIR') {
+      throw installLocationError('找不到当前应用包')
+    }
+    throw installLocationError('无法访问当前应用包')
+  }
+  if (targetInfo.isSymbolicLink()) {
+    throw installLocationError('当前应用是符号链接或 Finder 替身，请复制实际的 ASTaria.app')
+  }
+  if (!targetInfo.isDirectory()) {
+    throw installLocationError('当前应用包不是有效的目录')
+  }
+
+  const parent = dirname(target)
+  let canonicalParent
+  try {
+    canonicalParent = await realpath(parent)
+  } catch {
+    throw installLocationError('无法解析当前应用所在目录')
+  }
+  const canonicalTarget = join(canonicalParent, basename(target))
+  const paths = [target, parent, canonicalTarget, canonicalParent]
+  if (paths.some(isMountedImagePath)) {
+    throw installLocationError('当前应用仍在磁盘映像（/Volumes）中运行，请先拖入“应用程序”文件夹')
+  }
+  if (paths.some(isAppTranslocationPath)) {
+    throw installLocationError('当前应用由 macOS App Translocation 临时运行，请先移动到“应用程序”文件夹后重新打开')
+  }
+
+  try {
+    await access(parent, constants.W_OK)
+  } catch {
+    throw installLocationError('应用所在目录不可写')
+  }
+  try {
+    await access(target, constants.W_OK)
+  } catch {
+    throw installLocationError('当前应用包不可写')
+  }
+  return { target, parent, canonicalParent }
 }
 
 /** Verify identity, exact provenance and sealed resources before the running app exits. */
@@ -116,13 +197,8 @@ export async function validateUpdateBundle(bundle, manifest, run = execute) {
 
 export async function prepareMacUpdate({ appBundle, path: dmg, manifest, resultFile, run = execute, trustedKeys = RELEASE_KEYS }) {
   verifyReleaseManifest(manifest, trustedKeys)
-  const target = resolve(appBundle)
-  await regular(target, true)
-  if (basename(target) !== 'ASTaria.app' || await realpath(target) !== target || target.startsWith('/Volumes/') || target.includes('/AppTranslocation/')) {
-    throw new Error('请先把 ASTaria 移到可写的应用目录，再使用自动安装')
-  }
-  await access(dirname(target), constants.W_OK)
-  const staging = await mkdtemp(join(dirname(target), '.astaria-update-'))
+  const { target, parent } = await validateInstallLocation(appBundle)
+  const staging = await mkdtemp(join(parent, '.astaria-update-'))
   const mount = join(staging, 'image'), candidate = join(staging, 'ASTaria.app')
   let mounted = false, prepared = false, attachAttempted = false
   try {

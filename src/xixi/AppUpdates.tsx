@@ -121,6 +121,11 @@ export function AppUpdates({ visible = true }: { visible?: boolean }) {
   const checkedAt = localTime(state?.lastCheckedAt)
   const builtAt = localTime(state?.current.builtAt)
   const releaseDate = localTime(latest?.publishedAt)
+  const downloadBytes = state?.download?.downloadedBytes ?? 0
+  const downloadSizeBytes = state?.download?.sizeBytes ?? 0
+  const downloadPercent = downloadSizeBytes > 0
+    ? Math.min(100, Math.max(0, (downloadBytes / downloadSizeBytes) * 100))
+    : 0
   const statusText = unavailable ? '请在 ASTaria 桌面 App 内检测更新，浏览器预览不支持。'
     : issue || (pending === 'automatic' ? '正在保存自动检查设置…'
       : pending === 'download' || state?.status === 'downloading' ? '正在下载并校验安装包…'
@@ -156,7 +161,11 @@ export function AppUpdates({ visible = true }: { visible?: boolean }) {
       {latest?.downloadUrl && <a href={latest.downloadUrl} target="_blank" rel="noopener noreferrer">手动下载</a>}
       {state?.releasesUrl && <a href={latest?.releaseUrl || state.releasesUrl} target="_blank" rel="noopener noreferrer">GitHub 发布页</a>}
     </div>}
-    {state?.download && state.status === 'downloading' && <div className="xixi-update-progress"><progress aria-label="更新下载进度" max={state.download.sizeBytes} value={state.download.downloadedBytes} /><small>{(state.download.downloadedBytes / 1024 / 1024).toFixed(1)} / {(state.download.sizeBytes / 1024 / 1024).toFixed(1)} MB</small></div>}
+    {state?.download && state.status === 'downloading' && <div className="xixi-update-progress">
+      <progress className="xixi-update-progress-native" aria-label="更新下载进度" max={state.download.sizeBytes} value={state.download.downloadedBytes} />
+      <div className="xixi-update-progress-track" aria-hidden="true"><span style={{ width: `${downloadPercent}%` }} /></div>
+      <small>{(state.download.downloadedBytes / 1024 / 1024).toFixed(1)} / {(state.download.sizeBytes / 1024 / 1024).toFixed(1)} MB</small>
+    </div>}
     {latest && <>
       {latest.notes && <details className="xixi-app-update-notes"><summary>更新说明{releaseDate && <small>{releaseDate}</small>}</summary><p>{latest.notes}</p></details>}
       {latest.downloadUrl && <p className="xixi-settings-note xixi-app-update-install">安装包会先校验 SHA-256；安装时退出并重启 App，本机事项、日程和对话数据会保留。</p>}

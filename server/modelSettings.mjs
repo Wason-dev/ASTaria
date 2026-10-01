@@ -5,6 +5,9 @@ export const LOCAL_DEFAULT = { engine: 'ollama', baseUrl: 'http://127.0.0.1:1143
 export const DEFAULT_REASONING_EFFORT = 'low'
 export const DEFAULT_STREAM_RESPONSES = true
 export const DEFAULT_CONTEXT_BUDGET = { mode: 'auto', maxUnits: 48_000 }
+// External search is a separate, explicitly enabled channel. It stays off for
+// every new connection, including local-model connections.
+export const DEFAULT_WEB_SEARCH = { enabled: false, maxUses: 2 }
 export const REASONING_EFFORTS = ['off', 'low', 'high', 'max']
 const cloudModels = ['deepseek-flash', 'deepseek-v4-pro']
 
@@ -37,8 +40,18 @@ export function resolveContextBudget(settings = {}) {
   return { enabled: value.mode !== 'off', soft: hard * 2 / 3, hard, turns: local ? 4 : 8 }
 }
 
+export function validateWebSearch(value = DEFAULT_WEB_SEARCH) {
+  object(value, '联网搜索')
+  knownKeys(value, ['enabled', 'maxUses'], '联网搜索')
+  const enabled = value.enabled === undefined ? DEFAULT_WEB_SEARCH.enabled : value.enabled
+  if (typeof enabled !== 'boolean') throw new ValidationError('联网搜索开关不正确')
+  const maxUses = value.maxUses === undefined ? DEFAULT_WEB_SEARCH.maxUses : value.maxUses
+  if (!Number.isInteger(maxUses) || maxUses < 1 || maxUses > 4) throw new ValidationError('联网搜索次数应为 1–4')
+  return { enabled, maxUses }
+}
+
 export function validateModelSettings(input) {
-  object(input); knownKeys(input, ['provider', 'cloudModel', 'reasoningEffort', 'streamResponses', 'contextBudget', 'local'])
+  object(input); knownKeys(input, ['provider', 'cloudModel', 'reasoningEffort', 'streamResponses', 'contextBudget', 'local', 'webSearch'])
   choice(input.provider, ['deepseek', 'local'], '模型来源')
   choice(input.cloudModel, cloudModels, '云端模型')
   // Older saved connections and backups had no thinking preference. They adopt
@@ -48,11 +61,12 @@ export function validateModelSettings(input) {
   const streamResponses = input.streamResponses === undefined ? DEFAULT_STREAM_RESPONSES : input.streamResponses
   choice(streamResponses, [true, false], '流式输出')
   const contextBudget = validateContextBudget(input.contextBudget)
+  const webSearch = validateWebSearch(input.webSearch)
   const local = object(input.local)
   knownKeys(local, ['engine', 'baseUrl', 'model'])
   choice(local.engine, ['ollama', 'lmstudio', 'openai'], '本地服务')
   if (typeof local.model !== 'string' || local.model.length > 200 || /[\x00-\x1f\x7f]/u.test(local.model)) throw new ValidationError('模型名称不正确')
-  return { provider: input.provider, cloudModel: input.cloudModel, reasoningEffort, streamResponses, contextBudget, local: { engine: local.engine, baseUrl: localEndpoint(local.baseUrl), model: local.model.trim() } }
+  return { provider: input.provider, cloudModel: input.cloudModel, reasoningEffort, streamResponses, contextBudget, webSearch, local: { engine: local.engine, baseUrl: localEndpoint(local.baseUrl), model: local.model.trim() } }
 }
 
 export function getModelSettings(db) {

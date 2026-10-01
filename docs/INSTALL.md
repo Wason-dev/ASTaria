@@ -11,7 +11,7 @@ ASTaria 0.1.0-beta.7 · GitHub 内测发布
 2. 打开 DMG（ASTaria-0.1.0-beta.7-mac-arm64-adhoc.dmg），把 ASTaria.app 拖到旁边的 Applications（应用程序）。
 3. 从「应用程序」打开 ASTaria，安装完成后可以推出磁盘映像。
 
-说明：这个 beta.7 包需完成本地验收后上传 GitHub Releases；也可以在「设置 → 通用 → App 更新」中检查更新。
+说明：这个 beta.7 包已上传到 GitHub Releases；也可以在「设置 → 通用 → App 更新」中检查更新。
 
 检查与安装更新
 从 beta.3 起可在「设置 → 通用 → App 更新」查看版本、检查 GitHub 发布并下载 DMG。
@@ -22,6 +22,7 @@ Beta 用户能收到后续 beta 和正式版；正式版用户只收到正式发
 点击「下载并校验」，完成后选择「安装并重启」。安装前校验大小、SHA-256、App 身份与签名；
 新版本启动未成功时会尝试回退。App 须位于可写目录，不能直接在 DMG 内更新。
 安装包不会覆盖 Application Support 中的本机数据，建议更新前在「设置 → 数据」导出备份。
+联网搜索是独立的可选通道，默认关闭。打开前请确认你接受查询词发送到 DeepSeek 云端；本地模型正文仍由本机服务处理。它使用现有 DeepSeek API Key 和官方 Anthropic 搜索端点，不会把课表、事项、聊天或记忆拼入搜索请求。
 旧 beta.2 需要先手动安装一次 beta.3 或更新版本；也可随时退出旧版，将下载的新版拖入「应用程序」替换。
 若检查暂时失败，可直接访问 https://github.com/Wason-dev/ASTaria/releases 。
 

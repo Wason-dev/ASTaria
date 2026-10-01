@@ -1,4 +1,4 @@
-import type { ChatResult, ChatStreamDraft, ChatStreamEvent, SavedReasoning } from './types'
+import type { ChatResult, ChatStreamActivity, ChatStreamDraft, ChatStreamEvent, SavedReasoning } from './types'
 
 const interrupted = () => new Error('回复连接已中断，正在核对已保存的内容，可用原消息重试')
 
@@ -20,6 +20,17 @@ function parseEvent(data: string): ChatStreamEvent | null {
   }
   if (value.type === 'error' && typeof value.error === 'string') return { type: 'error', error: value.error }
   if (value.type === 'phase' && (value.phase === 'thinking' || value.phase === 'replying' || value.phase === 'executing')) return { type: 'phase', phase: value.phase }
+  if (value.type === 'activity' && value.activity && typeof value.activity === 'object' && !Array.isArray(value.activity)) {
+    const activity = value.activity as Record<string, unknown>
+    const stages = ['reading', 'searching', 'thinking', 'planning', 'saving', 'asking']
+    const states = ['running', 'done', 'failed']
+    if (typeof activity.id === 'string' && activity.id.length > 0 && activity.id.length <= 160
+      && stages.includes(String(activity.stage)) && states.includes(String(activity.state))
+      && typeof activity.title === 'string' && activity.title.length > 0 && activity.title.length <= 180
+      && (activity.detail === undefined || (typeof activity.detail === 'string' && activity.detail.length <= 600))) {
+      return { type: 'activity', activity: { id: activity.id, stage: activity.stage as ChatStreamActivity['stage'], state: activity.state as ChatStreamActivity['state'], title: activity.title, ...(activity.detail === undefined ? {} : { detail: activity.detail }) } }
+    }
+  }
   if (typeof value.round === 'number' && Number.isInteger(value.round) && value.round >= 0) {
     if (value.type === 'round') return { type: 'round', round: value.round }
     if ((value.type === 'reasoning' || value.type === 'content') && typeof value.delta === 'string') return { type: value.type, round: value.round, delta: value.delta }
@@ -39,6 +50,11 @@ export function restoreChatReasoning(draft: ChatStreamDraft, saved: SavedReasoni
 /** Keep the provider's reasoning across tools; temporary prose is not a receipt. */
 export function advanceChatStream(draft: ChatStreamDraft, event: ChatStreamEvent): ChatStreamDraft {
   if (event.type === 'phase') return { ...draft, phase: event.phase }
+  if (event.type === 'activity') {
+    const previous = draft.activities ?? []
+    const activities = [...previous.filter(item => item.id !== event.activity.id), event.activity].slice(-12)
+    return { ...draft, activities }
+  }
   if (event.type !== 'round' && event.type !== 'reasoning' && event.type !== 'content') return draft
   if (event.round < draft.round) return draft
   const next = event.round > draft.round

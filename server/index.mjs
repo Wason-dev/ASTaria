@@ -5,6 +5,7 @@ import { createDatabase } from './database.mjs'
 import { createKeychain } from './keychain.mjs'
 import { createCompletion, discoverLocalModels, testLocalCompletion, MODELS, ProviderError } from './provider.mjs'
 import { getModelSettings, saveModelSettings, deviceRecommendation } from './modelSettings.mjs'
+import { createWebSearch } from './webSearch.mjs'
 import { createLocalModelInstaller } from './localModelInstall.mjs'
 import { createXixi } from './xixi.mjs'
 import { createCompanion } from './companion.mjs'
@@ -64,7 +65,8 @@ export function createLocalService({ db = createDatabase(join(DATA_DIRECTORY, 'a
   const completionScope = new AsyncLocalStorage()
   const selectedCompletion = (config = getModelSettings(db)) => createCompletion(vault, fetcher, () => config.cloudModel, () => config)
   const completion = complete ?? ((payload, options) => (completionScope.getStore() ?? selectedCompletion())(payload, options))
-  const xixi = createXixi({ db, complete: completion })
+  const webSearch = createWebSearch({ keychain: vault, fetcher, getSettings: () => getModelSettings(db) })
+  const xixi = createXixi({ db, complete: completion, webSearch })
   const companion = createCompanion({ db })
   const routeAnalysis = createRouteAnalysis({ db, companion, complete: completion })
   const stringOrder = createStringOrder({ db, complete: completion })
@@ -134,7 +136,10 @@ export function createLocalService({ db = createDatabase(join(DATA_DIRECTORY, 'a
     // cloud mode an unavailable vault simply means "not configured" until the
     // user fixes access or switches provider.
     let cloudConfigured = null
-    if (providerSettings.provider !== 'local') {
+    // A local conversation does not need the cloud key. Once the user
+    // explicitly enables external search, however, show whether that separate
+    // DeepSeek channel is configured as well.
+    if (providerSettings.provider !== 'local' || providerSettings.webSearch.enabled) {
       try { cloudConfigured = await vault.status() } catch { cloudConfigured = false }
     }
     return { service: 'astaria-local', provider: providerSettings.provider, providerSettings, cloudConfigured,
@@ -241,7 +246,7 @@ export function createLocalService({ db = createDatabase(join(DATA_DIRECTORY, 'a
       const fields = {
         '/planner': ['expectedRevision', 'action'],
         '/settings/key': ['key'], '/settings/key/remove': [], '/settings/test': [], '/settings/model': ['model'],
-        '/settings/provider': ['provider', 'cloudModel', 'reasoningEffort', 'streamResponses', 'contextBudget', 'local'], '/settings/local/models': ['engine', 'baseUrl'],
+        '/settings/provider': ['provider', 'cloudModel', 'reasoningEffort', 'streamResponses', 'contextBudget', 'webSearch', 'local'], '/settings/local/models': ['engine', 'baseUrl'],
         '/settings/local/install': ['baseUrl', 'model', 'confirmed'],
         '/chat': ['requestId', 'conversationId', 'text', 'context'], '/conversations': [],
         '/conversations/select': ['id'], '/conversations/rename': ['conversationId', 'title'], '/conversations/delete': ['conversationId'], '/operations/read': ['ids'],

@@ -45,6 +45,8 @@ Ollama 用户可展开「还没有模型？帮我安装」，从 Qwen3 4B / 8B /
 
 设置中的默认模型可选择 DeepSeek Flash 或 DeepSeek V4 Pro，初始为 Flash，选择保存在本机数据库并跨浏览器共享。思考深度默认 Max，可选 High、Low 或关闭；设置直接传给 DeepSeek，工具调用轮次会原样保留模型返回的 reasoning_content。聊天按 Enter 发送、Shift+Enter 换行，中文输入法确认候选字不会误发；自己的消息即时显示，失败后可重试。析熙可以提出带快捷选项的问题，也支持自由输入回答。消息可复制，自己的消息可撤回；撤回后停止该轮后续处理并排除相关上下文，已执行的事项变更仍可从回执单独撤销。
 
+联网搜索位于同一连接设置中，默认关闭，且本地模型模式不会默认打开。用户明确开启后，析熙才会收到 `web_search` 工具；搜索请求固定使用 DeepSeek Anthropic 原生 `web_search_20250305`，只发送查询词，不附带本机课表、任务、聊天、记忆或 API Key。返回结果只保留标题、链接、摘要和发布时间，网页内容视为不可信资料，网页里的指令不会改变 ASTaria 权限，也不会自动写入事项、日历或记忆。搜索失败、限流、无结果和取消会以真实错误结束，不伪造来源。网页抓取和其他搜索 provider 尚未接入。
+
 「流式输出」默认开启，可在同一连接设置中关闭。思考过程与回复逐步显示，思考区可折叠；这些是模型实际返回的内容，本地模型是否返回思考字段取决于服务。生成中的文字不代替执行回执，最终以已保存状态为准。网络中断保留原请求 ID 和已保存进度，重试不会重复执行已完成的操作。开关从下一条消息生效，不改变正在执行的请求。
 
 黑洞渲染档位位于「设置 → 外观与动画」：满特效 120、满特效 90、满特效 60、轻特效 45、低特效 30。满特效档保持完整折射与 Bloom，低档保留整体视觉语言并降低渲染预算。首页与首页聊天按所选帧率运行；工作台及其他子页面自动将目标限制为 60 FPS。实际帧率受显示器刷新率与设备性能限制，页面隐藏时渲染会自动暂停；测试浏览器应在验证结束后退出，避免后台残留持续消耗 GPU。
@@ -167,7 +169,7 @@ node scripts/third-party-notices.mjs
 npm run package:desktop -- --runtime /path/to/Electron.app --out desktop-builds
 ```
 
-打包器拒绝覆盖同版本产物，只复制指定源码和构建文件，编译并随包放入钥匙串及提醒助手、Electron/Chromium 许可和 [第三方依赖许可清单](../THIRD_PARTY_NOTICES.txt)，然后完成 ad-hoc 签名、压缩和 SHA-256 清单。`--runtime` 必须指向 arm64 Electron.app，Electron 的两份许可文件须与它同目录。打包不包含个人数据库、密钥、环境文件或测试日志。完成本地验收后，包与校验文件上传到 [v0.1.0-beta.7 Release](https://github.com/Wason-dev/ASTaria/releases/tag/v0.1.0-beta.7)。
+打包器拒绝覆盖同版本产物，只复制指定源码和构建文件，编译并随包放入钥匙串及提醒助手、Electron/Chromium 许可和 [第三方依赖许可清单](../THIRD_PARTY_NOTICES.txt)，然后完成 ad-hoc 签名、压缩和 SHA-256 清单。`--runtime` 必须指向 arm64 Electron.app，Electron 的两份许可文件须与它同目录。打包不包含个人数据库、密钥、环境文件或测试日志。包与校验文件已上传到 [v0.1.0-beta.7 Release](https://github.com/Wason-dev/ASTaria/releases/tag/v0.1.0-beta.7)。
 
 以上命令默认将新产物写入 `desktop-builds/ASTaria-0.1.0-beta.7-mac-arm64/`。版本 Release 提供 DMG、SHA-256、安装说明和记录源码提交的构建清单；本机开发产物留在被 Git 忽略的 `desktop-builds/`。应用使用层叠三瓣 SVG 图标及透明顶部拖动区；图标生成方法见 [图标说明](../design/icon-vector/README.md)。
 

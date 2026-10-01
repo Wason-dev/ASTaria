@@ -1,5 +1,5 @@
 import { DEFAULT_PREFERENCES } from './preferences.mjs'
-import { DEFAULT_CONTEXT_BUDGET, DEFAULT_REASONING_EFFORT, DEFAULT_STREAM_RESPONSES, LOCAL_DEFAULT, resolveContextBudget } from './modelSettings.mjs'
+import { DEFAULT_CONTEXT_BUDGET, DEFAULT_REASONING_EFFORT, DEFAULT_STREAM_RESPONSES, DEFAULT_WEB_SEARCH, LOCAL_DEFAULT, resolveContextBudget } from './modelSettings.mjs'
 
 // Product knowledge is separate from task facts and execution policy. Keep this
 // aligned with shipped screens; planned features are not available capabilities.
@@ -37,8 +37,9 @@ export const ASTARIA_PRODUCT_GUIDE = {
     },
     settings: {
       name: '设置', purpose: '用户管理析熙、模型、通知、时间安排、外观和本机数据',
-      userControls: '析熙：个性低/中/高、直接执行或先提议、记忆和历史开关、查看/更正/忘记记忆；模型：DeepSeek API或本地服务、模型选择/连接测试、受支持的本地模型安装、流式输出和上下文预算；云端思考深度Max/High/Low/关闭；时间安排：专注/休息/缓冲；通知及免打扰、变更记录与可用撤销；外观与动画（包括弦轨地平线、光流、指针牵动和退出时长）；数据备份导入导出',
+      userControls: '析熙：个性低/中/高、直接执行或先提议、记忆和历史开关、查看/更正/忘记记忆；模型：DeepSeek API或本地服务、模型选择/连接测试、受支持的本地模型安装、流式输出和上下文预算；云端思考深度Max/High/Low/关闭；联网搜索默认关闭，打开后只把明确查询词发送到DeepSeek云端，本地模型正文仍留在本机；时间安排：专注/休息/缓冲；通知及免打扰、变更记录与可用撤销；外观与动画（包括弦轨地平线、光流、指针牵动和退出时长）；数据备份导入导出',
       tools: ['remember', 'forget_memory', 'search_history'],
+      optionalTools: ['web_search（仅在设置中明确打开后提供）'],
     },
   },
   records: {
@@ -54,7 +55,7 @@ export const ASTARIA_PRODUCT_GUIDE = {
     deletion: '工具update_task可把事项标为dropped，不能声称已彻底删除记录；remove_plan只是取消时间，撤销回执是回退那次操作，不能混用',
     notifications: '现有站内通知与免打扰不等于定时唤醒；你没有定时提醒工具，不能承诺到点叫用户',
     visibility: '你看到的是传入的数据与页面标识，不会自动看见屏幕、拖动草稿、未保存输入或其他软件。truncated/readMore表示还可读，不表示不存在',
-    settings: '当前设置见applicationSettings；不因回复慢或上下文不足擅自改思考深度/预算。流式展示取决于模型实际返回的内容；关闭应用上下文限制不取消模型接口上限',
+    settings: '当前设置见applicationSettings；不因回复慢或上下文不足擅自改思考深度/预算。联网搜索是独立的显式开关，关闭时不会提供web_search工具；打开时只发送用户明确查询词到DeepSeek，不上传本机资料。流式展示取决于模型实际返回的内容；关闭应用上下文限制不取消模型接口上限',
   },
 }
 
@@ -76,7 +77,8 @@ export function applicationSettings(db) {
   const preferences = db.getPreference('app') ?? {}
   const connection = db.getPreference('model-connection') ?? {}
   const model = { provider: 'deepseek', reasoningEffort: DEFAULT_REASONING_EFFORT,
-    streamResponses: DEFAULT_STREAM_RESPONSES, contextBudget: DEFAULT_CONTEXT_BUDGET, ...connection,
+    streamResponses: DEFAULT_STREAM_RESPONSES, contextBudget: DEFAULT_CONTEXT_BUDGET, webSearch: DEFAULT_WEB_SEARCH, ...connection,
+    webSearch: { ...DEFAULT_WEB_SEARCH, ...(connection.webSearch ?? {}) },
     cloudModel: db.getModel(), local: { ...LOCAL_DEFAULT, ...connection.local } }
   const budget = resolveContextBudget(model)
   return {
@@ -88,6 +90,7 @@ export function applicationSettings(db) {
       name: model.provider === 'local' ? model.local.model || null : model.cloudModel,
       ...(model.provider === 'local' ? { engine: model.local.engine } : { reasoningEffort: model.reasoningEffort }),
       streamResponses: model.streamResponses,
+      webSearch: model.webSearch.enabled,
       contextBudget: { mode: model.contextBudget.mode, applicationLimit: budget.enabled ? budget.hard : null },
     },
   }

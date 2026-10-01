@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent, PointerEvent } from 'react'
+import { gsap } from 'gsap'
 import { setStringFlight, setStringFlightEdgeFrame } from '../prototype/stringFlight'
 import { GlassSamplingContext, MeasuredGlassSurface } from '../home/GlassSurface'
 import { usePreferences } from './preferences'
@@ -59,6 +60,7 @@ export function HorizonStudio({ onReveal, onClose, onSaved }: Props) {
   const [dropDay, setDropDay] = useState<OrbitDay | null>(null), [phase, setPhase] = useState<'entering' | 'ready' | 'leaving'>('entering')
   const [announcement, setAnnouncement] = useState(''), [error, setError] = useState('')
   const grab = useRef<Grab | null>(null), frame = useRef(0), flight = useRef(0), leaving = useRef(false)
+  const uiMotion = useRef<gsap.Context | null>(null), uiEntering = useRef(false)
   const focusAfterMove = useRef<string | null>(null)
   const callbacks = useRef({ onReveal, onClose, onSaved }); callbacks.current = { onReveal, onClose, onSaved }
   const preferences = usePreferences().value
@@ -138,17 +140,25 @@ export function HorizonStudio({ onReveal, onClose, onSaved }: Props) {
     cancelAnimationFrame(frame.current)
     const started = performance.now(), from = flight.current
     const duration = orbitTransitionDuration(exit, visual.current.reduced, visual.current.tuning.exitSeconds)
-    const initialUi = Number(dialog.current?.style.getPropertyValue('--horizon-ui-reveal') || visual.current.reveal)
+    const shell = dialog.current
+    const animateGlass = (opacity: number, seconds: number) => {
+      if (!shell) return
+      gsap.killTweensOf(shell, '--horizon-ui-reveal')
+      if (visual.current.reduced) { gsap.set(shell, { '--horizon-ui-reveal': opacity }); return }
+      uiMotion.current?.add(() => { gsap.to(shell, { '--horizon-ui-reveal': opacity, duration: seconds, ease: 'power2.inOut', overwrite: true }) })
+    }
+    if (exit) animateGlass(0, .9)
     const tick = (now: number) => {
       const t = Math.min(1, (now - started) / duration), next = orbitTransitionFrame(t, from, exit, visual.current.reduced)
       flight.current = next.flight; setStringFlight(next.flight, 'edge')
       visual.current.reveal = next.reveal
       dialog.current?.style.setProperty('--orbit-reveal', String(next.reveal))
-      // Reading controls leave promptly while the configured camera pullback
-      // and light band continue at their own pace (even with a long exit).
-      const fade = Math.min(1, (now - started) / Math.min(360, duration))
-      const uiReveal = exit ? initialUi * (1 - fade * fade * (3 - 2 * fade)) : next.reveal
-      dialog.current?.style.setProperty('--horizon-ui-reveal', String(uiReveal))
+      // GSAP reveals only the glass DOM controls. The event-horizon canvas and
+      // camera keep their own clock, so neither system writes the other's state.
+      if (!exit && !uiEntering.current && next.reveal > .01) {
+        uiEntering.current = true
+        animateGlass(1, 1.15)
+      }
       // Only the task overlay fades in; the homepage sky and disk stay visible.
       dialog.current?.style.setProperty('--orbit-darkness', '0')
       if (t < 1) frame.current = requestAnimationFrame(tick)
@@ -181,6 +191,10 @@ export function HorizonStudio({ onReveal, onClose, onSaved }: Props) {
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null
     const element = dialog.current
     if (element && !element.open) element.showModal()
+    if (element) {
+      element.style.setProperty('--horizon-ui-reveal', '0')
+      uiMotion.current = gsap.context(() => {}, element)
+    }
     travel(); void refresh()
     return () => {
       mounted.current = false; loadVersion.current++
@@ -188,6 +202,8 @@ export function HorizonStudio({ onReveal, onClose, onSaved }: Props) {
       suggestionVersion.current++; suggestion.current?.abort()
       grab.current = null; visual.current.dragging = null
       cancelAnimationFrame(frame.current); setStringFlight(0, 'edge')
+      if (element) gsap.killTweensOf(element, '--horizon-ui-reveal')
+      uiMotion.current?.revert(); uiMotion.current = null
       element?.close()
       if (opener?.isConnected && !opener.closest('[inert]')) opener.focus({ preventScroll: true })
     }

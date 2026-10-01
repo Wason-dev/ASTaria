@@ -2,7 +2,8 @@ import test from 'node:test'
 import { createHash } from 'node:crypto'
 import { signTestManifest, testReleaseKeys } from './fixtures/release-signing.mjs'
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, writeFile, readFile, rm, symlink, cp, realpath, stat } from 'node:fs/promises'
+import { mkdtemp, mkdir, writeFile, readFile, rm, symlink, cp, realpath, stat, readdir, chmod, access } from 'node:fs/promises'
+import { constants } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { execFile, spawn } from 'node:child_process'
@@ -30,6 +31,23 @@ async function fixture(t) {
     throw Error(`Unexpected command ${tool} ${args}`)
   }
   return { root, app, payload, execute }
+}
+const installReason = reason => `请先把 ASTaria 移到可写的应用目录：${reason}`
+const rejectsInstall = (promise, reason) => assert.rejects(promise, { message: installReason(reason) })
+const installable = appBundle => prepareMacUpdate({ trustedKeys: testReleaseKeys, appBundle, path: '', manifest, resultFile: '' })
+const directoryWritable = path => access(path, constants.W_OK).then(() => true, () => false)
+// macOS publishes every mounted volume below /Volumes and exposes the boot
+// volume through an alias there. Addressing a real bundle through that alias
+// yields a genuine /Volumes path whose final directory is not a link, so only
+// the disk image policy can reject it.
+async function volumesMountPath(app) {
+  let entries = []
+  try { entries = await readdir('/Volumes') } catch { return null }
+  for (const entry of entries) {
+    const candidate = join('/Volumes', entry, app)
+    try { if (await realpath(candidate) === app) return candidate } catch { /* This volume does not expose the bundle. */ }
+  }
+  return null
 }
 test('updater validates exact bundle identity, architecture, provenance and seal', async t => {
   const f = await fixture(t)
@@ -83,6 +101,63 @@ test('apps launched from App Translocation are rejected with a specific reason',
   await mkdir(join(f.root, 'AppTranslocation', 'Data'), { recursive: true })
   await cp(f.app, location, { recursive: true })
   await assert.rejects(prepareMacUpdate({ trustedKeys: testReleaseKeys, appBundle: location, path: '', manifest, resultFile: '' }), /App Translocation/u)
+})
+
+test('an ASTaria.app symbolic link is rejected as a Finder alias with the exact reason', async t => {
+  const f = await fixture(t), aliases = join(f.root, 'aliases')
+  await mkdir(aliases)
+  const link = join(aliases, 'ASTaria.app')
+  await symlink(f.app, link)
+  // The basename is genuine, so only the bundle symlink check may reject it.
+  await rejectsInstall(installable(link), '当前应用是符号链接或 Finder 替身，请复制实际的 ASTaria.app')
+  assert.deepEqual(await readdir(aliases), ['ASTaria.app'], '被拒绝的替身不会留下暂存目录')
+})
+
+test('an app addressed through a /Volumes mount is rejected with the exact disk image reason', async t => {
+  const f = await fixture(t)
+  const mounted = await volumesMountPath(f.app)
+  if (!mounted) { t.skip('此环境没有可通过 /Volumes 访问的挂载点'); return }
+  assert.equal(await realpath(mounted), f.app, '/Volumes 路径必须指向真实应用包而不是替身')
+  await rejectsInstall(installable(mounted), '当前应用仍在磁盘映像（/Volumes）中运行，请先拖入“应用程序”文件夹')
+})
+
+test('a read-only parent directory is rejected with the exact reason', async t => {
+  const f = await fixture(t), parent = join(f.root, 'readonly')
+  await mkdir(parent)
+  const app = join(parent, 'ASTaria.app')
+  await cp(f.app, app, { recursive: true })
+  await chmod(parent, 0o500)
+  try {
+    if (await directoryWritable(parent)) { t.skip('此环境忽略目录写权限位，无法验证只读父目录'); return }
+    await rejectsInstall(installable(app), '应用所在目录不可写')
+    assert.deepEqual(await readdir(parent), ['ASTaria.app'], '拒绝发生在创建暂存目录之前')
+  } finally { await chmod(parent, 0o700) }
+})
+
+test('an unwritable app bundle is rejected with the exact reason', async t => {
+  const f = await fixture(t), parent = join(f.root, 'writable')
+  await mkdir(parent)
+  const app = join(parent, 'ASTaria.app')
+  await cp(f.app, app, { recursive: true })
+  await chmod(app, 0o500)
+  try {
+    if (await directoryWritable(app)) { t.skip('此环境忽略目录写权限位，无法验证不可写应用包'); return }
+    assert.equal(await directoryWritable(parent), true, '父目录仍可写，只有应用包本身不可写')
+    await rejectsInstall(installable(app), '当前应用包不可写')
+    assert.deepEqual(await readdir(parent), ['ASTaria.app'], '拒绝发生在创建暂存目录之前')
+  } finally { await chmod(app, 0o700) }
+})
+
+test('every install location failure names its own reason', async t => {
+  const f = await fixture(t), plain = join(f.root, 'plain')
+  await mkdir(plain)
+  await writeFile(join(plain, 'ASTaria.app'), 'not a bundle')
+  const cases = [
+    [join(f.root, 'missing', 'ASTaria.app'), '找不到当前应用包'],
+    [join(plain, 'ASTaria.app'), '当前应用包不是有效的目录'],
+    [join(plain, 'ASTaria Beta.app'), '应用包结构无效，必须命名为 ASTaria.app'],
+  ]
+  for (const [appBundle, reason] of cases) await rejectsInstall(installable(appBundle), reason)
 })
 
 for (const success of [true, false]) test(`atomic replacement ${success ? 'waits for startup acknowledgement' : 'rolls back a crashed new app'}`, async t => {

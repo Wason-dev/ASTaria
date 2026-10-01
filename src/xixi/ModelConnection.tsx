@@ -17,11 +17,13 @@ function fromStatus(status: LocalStatus | null): ProviderSettings {
     reasoningEffort: status.providerSettings.reasoningEffort ?? 'low',
     streamResponses: status.providerSettings.streamResponses ?? true,
     contextBudget: status.providerSettings.contextBudget ?? { mode: 'auto', maxUnits: 48_000 },
+    webSearch: status.providerSettings.webSearch ?? { enabled: false, maxUses: 2 },
   } : {
     provider: status?.provider ?? 'deepseek', cloudModel: status?.provider === 'local' ? 'deepseek-flash' : status?.model ?? 'deepseek-flash',
     reasoningEffort: 'low',
     streamResponses: true,
     contextBudget: { mode: 'auto', maxUnits: 48_000 },
+    webSearch: { enabled: false, maxUses: 2 },
     local: { engine: 'ollama', baseUrl: LOCAL_ENGINES.ollama.baseUrl, model: '' },
   }
 }
@@ -116,7 +118,7 @@ export function ModelConnection({ status, busy, onAction }: Props) {
       <label htmlFor="deepseek-local-key">{cloudConfigured ? '替换 API Key' : 'API Key'}</label>
       <div className="xixi-model-input-action"><input id="deepseek-local-key" name="astaria-connection-secret" type="password" autoComplete="new-password" autoCapitalize="none" spellCheck={false} value={key} onChange={event => setKey(event.target.value)} placeholder="保存到本机钥匙串，不回显" disabled={disabled} /><button type="submit" disabled={disabled || !key.trim()}>保存密钥</button></div>
     </form>
-    <p className="xixi-settings-note">密钥存本机钥匙串。相关对话与事项交给 DeepSeek，测试会产生少量用量。</p>
+    <p className="xixi-settings-note">密钥存本机钥匙串。{local ? '联网搜索只发送你明确输入的查询词到 DeepSeek，模型正文仍留在本机。' : '相关对话与事项交给 DeepSeek，测试会产生少量用量。'}</p>
     {cloudConfigured && <button type="button" disabled={disabled} onClick={() => void run('key', async () => { await localApi('/settings/key/remove', {}); setTest(null) }, '已从钥匙串移除密钥')}>移除密钥</button>}
   </>
 
@@ -156,12 +158,18 @@ export function ModelConnection({ status, busy, onAction }: Props) {
         await localApi<LocalStatus>('/settings/provider', value)
         setModelsNote('模型已选用，点「测试连接与工具」确认能否执行任务')
       }, '已选用本地模型')} /></details> : <p className="xixi-settings-note">先在 {LOCAL_ENGINES[draft.local.engine].label} 中加载模型，再读取并选择。</p>}
+      <div className="xixi-model-search-key"><strong>联网搜索的 DeepSeek Key</strong>{keySettings}</div>
     </> : <>
       <div className="xixi-model-cloud-row"><label htmlFor="xixi-cloud-model">默认模型</label><select id="xixi-cloud-model" aria-label="默认模型" value={draft.cloudModel} disabled={disabled} onChange={event => change({ ...draft, cloudModel: event.target.value })}><option value="deepseek-flash">DeepSeek Flash</option><option value="deepseek-v4-pro">DeepSeek V4 Pro</option></select></div>
       <div className="xixi-model-cloud-row xixi-model-thinking-row"><label htmlFor="xixi-reasoning-effort">思考深度</label><select id="xixi-reasoning-effort" value={draft.reasoningEffort} disabled={disabled} aria-describedby="xixi-reasoning-note" onChange={event => change({ ...draft, reasoningEffort: event.target.value as ReasoningEffort })}><option value="low">轻量 Low（默认）</option><option value="high">深入 High</option><option value="max">最高 Max</option><option value="off">关闭</option></select></div>
       <small id="xixi-reasoning-note" className="xixi-model-reasoning-note">{!status ? '默认轻量深度' : draft.reasoningEffort !== fromStatus(status).reasoningEffort ? '思考深度尚未保存' : '思考深度已保存'} · 下一条消息生效，深度越高可能等得越久</small>
       {cloudConfigured ? <details className="xixi-model-key-manager"><summary>API Key 已保存 · 管理</summary>{keySettings}</details> : <div className="xixi-model-key-setup">{keySettings}</div>}
     </>}
+    <div className="xixi-model-web-search">
+      <div className="xixi-model-web-search-heading"><strong>联网搜索（可选）</strong><button className="xixi-toggle" type="button" role="switch" aria-label="联网搜索" aria-checked={draft.webSearch.enabled} disabled={disabled} onClick={() => change({ ...draft, webSearch: { ...draft.webSearch, enabled: !draft.webSearch.enabled } })}><span /></button></div>
+      <small>打开后，析熙才会调用 DeepSeek 的联网搜索，并且只发送查询词；课表、事项、聊天和记忆不会随搜索请求发送。{local ? '当前正文仍由本地模型处理。' : ''} 默认关闭。</small>
+      {draft.webSearch.enabled && <small className="xixi-model-web-search-warning">这是独立的云端通道，会产生网络请求和 DeepSeek 用量；请确认你愿意把查询词交给 DeepSeek。</small>}
+    </div>
     <div className="xixi-model-context-budget">
       <div className="xixi-model-cloud-row"><label htmlFor="xixi-context-budget-mode">上下文预算</label><select id="xixi-context-budget-mode" value={draft.contextBudget.mode} disabled={disabled} aria-describedby="xixi-context-budget-note" onChange={event => change({ ...draft, contextBudget: { ...draft.contextBudget, mode: event.target.value as ContextBudgetSettings['mode'] } })}><option value="auto">自动（{local ? '本地 24K' : '云端 48K'}）</option><option value="custom">自定义</option><option value="off">关闭应用限制</option></select></div>
       {customBudget && <div className="xixi-model-budget-custom">

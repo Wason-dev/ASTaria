@@ -90,6 +90,8 @@ CI 自动执行源码测试、桌面网页构建、许可清单和版本文档�
 - **自动安装**：正常位于 `/Applications/ASTaria.app` 的 App 不再被误判为不可写；DMG、App Translocation、符号链接和只读位置仍会被拦截。
 - **回归验证**：更新下载、发布信任、安装器路径和原子替换测试覆盖新增场景。
 - **按需联网搜索**：显式打开后才提供 `web_search` 工具，使用 DeepSeek Anthropic 原生搜索并只返回结构化来源；本地模型仍在本机处理正文。
+- **真实执行阶段**：聊天显示实际读取、搜索、排程、保存等进度，中断后的结果以本机回执核对。
+- **弦轨过渡试点**：玻璃界面的进入与退出使用 GSAP，黑洞与飞行动画仍沿用原有控制。
 
 改动与手测清单见 [0.1.0-beta.7 发布说明](docs/RELEASE_NOTES_v0.1.0-beta.7.md)，安装包与校验文件已发布到 [Releases](https://github.com/Wason-dev/ASTaria/releases/tag/v0.1.0-beta.7)。
 

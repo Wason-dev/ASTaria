@@ -1,17 +1,17 @@
 # macOS beta 安装
 
 ```text
-ASTaria 0.1.0-beta.6 · GitHub 内测发布
+ASTaria 0.1.0-beta.7 · GitHub 内测发布
 
 系统要求：macOS 13 或更新版本，Apple Silicon（M 系列芯片）。不支持 Intel Mac。
 此包采用 ad-hoc 签名，未经 Apple 公证；不是正式公开发行版。
 
 安装
 1. 退出正在运行的旧版 ASTaria。
-2. 打开 DMG（ASTaria-0.1.0-beta.6-mac-arm64-adhoc.dmg），把 ASTaria.app 拖到旁边的 Applications（应用程序）。
+2. 打开 DMG（ASTaria-0.1.0-beta.7-mac-arm64-adhoc.dmg），把 ASTaria.app 拖到旁边的 Applications（应用程序）。
 3. 从「应用程序」打开 ASTaria，安装完成后可以推出磁盘映像。
 
-说明：这个 beta.6 包已上传 GitHub Releases；也可以在「设置 → 通用 → App 更新」中检查更新。
+说明：这个 beta.7 包需完成本地验收后上传 GitHub Releases；也可以在「设置 → 通用 → App 更新」中检查更新。
 
 检查与安装更新
 从 beta.3 起可在「设置 → 通用 → App 更新」查看版本、检查 GitHub 发布并下载 DMG。

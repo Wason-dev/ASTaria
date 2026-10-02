@@ -23,7 +23,7 @@ import { orbitTransitionDuration, orbitTransitionFrame } from './orbitTransition
 import './orbit-studio.css'
 import './horizon-studio.css'
 
-type Props = { onReveal: () => void; onClose: () => void; onSaved: (message: string) => void }
+type Props = { onReveal: () => void; onClose: () => void; onSaved: (message: string) => void; preview?: boolean; onPreviewDayChange?: () => void }
 type Target = { day: OrbitDay; index: number }
 type Grab = { id: string; pointerId: number; startX: number; startY: number; x: number; y: number; offsetX: number; offsetY: number; moved: boolean; target: Target }
 const DAYS = ['今天', '明天', '后天'] as const
@@ -33,7 +33,7 @@ const dateLabel = (base: string, day: OrbitDay) => {
 }
 
 /** A local draft of three days of actual scheduled work, committed only on completion. */
-export function HorizonStudio({ onReveal, onClose, onSaved }: Props) {
+export function HorizonStudio({ onReveal, onClose, onSaved, preview = false, onPreviewDayChange }: Props) {
   const dialog = useRef<HTMLDialogElement>(null), canvas = useRef<HTMLCanvasElement>(null)
   const buttons = useRef(new Map<string, HTMLButtonElement>()), destinations = useRef(new Map<OrbitDay, HTMLButtonElement>())
   const positions = useRef(new Map<string, HorizonPoint>())
@@ -60,7 +60,8 @@ export function HorizonStudio({ onReveal, onClose, onSaved }: Props) {
   const [dropDay, setDropDay] = useState<OrbitDay | null>(null), [phase, setPhase] = useState<'entering' | 'ready' | 'leaving'>('entering')
   const [announcement, setAnnouncement] = useState(''), [error, setError] = useState('')
   const grab = useRef<Grab | null>(null), frame = useRef(0), flight = useRef(0), leaving = useRef(false)
-  const uiMotion = useRef<gsap.Context | null>(null), uiEntering = useRef(false)
+  const uiEntering = useRef(false)
+  const uiTween = useRef<ReturnType<typeof gsap.to> | null>(null)
   const focusAfterMove = useRef<string | null>(null)
   const callbacks = useRef({ onReveal, onClose, onSaved }); callbacks.current = { onReveal, onClose, onSaved }
   const preferences = usePreferences().value
@@ -74,7 +75,7 @@ export function HorizonStudio({ onReveal, onClose, onSaved }: Props) {
   const currentGroups = view.all, active = currentGroups.find(group => group.id === expanded)
   const baseDate = snapshot?.date ?? localDay(new Date())
   const fixed = snapshot?.items.filter(item => !item.movable && item.date === horizonDate(baseDate, day)) ?? []
-  const editable = phase === 'ready' && !loading && !processing && !groupEditor && !refreshNeeded && !uncertain && Boolean(snapshot)
+  const editable = !preview && phase === 'ready' && !loading && !processing && !groupEditor && !refreshNeeded && !uncertain && Boolean(snapshot)
   const changed = Boolean(snapshot && JSON.stringify(horizonDraft(groups)) !== JSON.stringify(horizonDraft(snapshot.groups)))
   const needsReschedule = snapshot?.items.some(item => item.movable && item.needsReschedule) ?? false
   const previousActivities = progressCopy.activities.slice(0, -1)
@@ -89,7 +90,7 @@ export function HorizonStudio({ onReveal, onClose, onSaved }: Props) {
   const cancelSuggestion = useCallback(() => {
     suggestionVersion.current++; suggestion.current?.abort(); suggestion.current = null; setSuggesting(false)
   }, [])
-  const suggestGroups = useCallback(async (current: HorizonSnapshot) => {
+  const suggestGroups = useCallback(async (current: HorizonSnapshot, regenerate = false) => {
     suggestion.current?.abort()
     const version = ++suggestionVersion.current, controller = new AbortController()
     suggestion.current = controller; setSuggesting(true); setGroupingNote(''); setExpanded(null); setShowActivities(false)
@@ -98,7 +99,7 @@ export function HorizonStudio({ onReveal, onClose, onSaved }: Props) {
     try {
       const result = await horizonGroupingApi(current, crypto.randomUUID(),
         next => { if (active()) setProgress(value => advanceHorizonProgress(value, next)) }, controller.signal,
-        activity => { if (active()) setProgress(value => advanceHorizonActivity(value, activity)) })
+        activity => { if (active()) setProgress(value => advanceHorizonActivity(value, activity)) }, regenerate)
       if (!active()) return
       setGroups(result.groups); setManualDirty(false); setPage(0); setGroupingNote('智能分组已备好，可以继续调整；完成后才会保存')
     } catch (reason) {
@@ -119,10 +120,10 @@ export function HorizonStudio({ onReveal, onClose, onSaved }: Props) {
       setSnapshot(next); setGroups(next.groups); setManualDirty(false); setPage(0); setDay(0)
       operation.current = { id: crypto.randomUUID(), draft: '' }
       setRefreshNeeded(false); setUncertain(false)
-      if (!next.groupingSaved && next.items.filter(item => item.movable).length >= 2) void suggestGroups(next)
+      if (!preview && !next.groupingSaved && next.items.filter(item => item.movable).length >= 2) void suggestGroups(next)
     } catch (reason) { if (mounted.current && version === loadVersion.current) setError(reason instanceof Error ? reason.message : '暂时无法读取安排，请重试') }
     finally { if (mounted.current && version === loadVersion.current) setLoading(false) }
-  }, [cancelSuggestion, suggestGroups])
+  }, [cancelSuggestion, suggestGroups, preview])
   useEffect(() => {
     const resize = () => setPageSize(Math.max(1, Math.min(5, Math.floor(innerWidth * .68 / 170))))
     window.addEventListener('resize', resize)
@@ -138,14 +139,16 @@ export function HorizonStudio({ onReveal, onClose, onSaved }: Props) {
 
   const travel = useCallback((exit = false) => {
     cancelAnimationFrame(frame.current)
+    if (!exit) uiEntering.current = false
     const started = performance.now(), from = flight.current
     const duration = orbitTransitionDuration(exit, visual.current.reduced, visual.current.tuning.exitSeconds)
     const shell = dialog.current
     const animateGlass = (opacity: number, seconds: number) => {
       if (!shell) return
-      gsap.killTweensOf(shell, '--horizon-ui-reveal')
-      if (visual.current.reduced) { gsap.set(shell, { '--horizon-ui-reveal': opacity }); return }
-      uiMotion.current?.add(() => { gsap.to(shell, { '--horizon-ui-reveal': opacity, duration: seconds, ease: 'power2.inOut', overwrite: true }) })
+      uiTween.current?.kill()
+      if (visual.current.reduced) { shell.style.setProperty('--horizon-ui-reveal', String(opacity)); return }
+      const state = { value: Number(shell.style.getPropertyValue('--horizon-ui-reveal')) || 0 }
+      uiTween.current = gsap.to(state, { value: opacity, duration: seconds, ease: 'power2.inOut', onUpdate: () => shell.style.setProperty('--horizon-ui-reveal', String(state.value)) })
     }
     if (exit) animateGlass(0, .9)
     const tick = (now: number) => {
@@ -191,9 +194,9 @@ export function HorizonStudio({ onReveal, onClose, onSaved }: Props) {
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null
     const element = dialog.current
     if (element && !element.open) element.showModal()
+    uiEntering.current = false
     if (element) {
       element.style.setProperty('--horizon-ui-reveal', '0')
-      uiMotion.current = gsap.context(() => {}, element)
     }
     travel(); void refresh()
     return () => {
@@ -202,8 +205,7 @@ export function HorizonStudio({ onReveal, onClose, onSaved }: Props) {
       suggestionVersion.current++; suggestion.current?.abort()
       grab.current = null; visual.current.dragging = null
       cancelAnimationFrame(frame.current); setStringFlight(0, 'edge')
-      if (element) gsap.killTweensOf(element, '--horizon-ui-reveal')
-      uiMotion.current?.revert(); uiMotion.current = null
+      uiTween.current?.kill(); uiTween.current = null
       element?.close()
       if (opener?.isConnected && !opener.closest('[inert]')) opener.focus({ preventScroll: true })
     }
@@ -219,6 +221,9 @@ export function HorizonStudio({ onReveal, onClose, onSaved }: Props) {
     try {
       renderer = new HorizonCanvas(canvas.current, () => visual.current, (next, projection) => {
         positions.current = next; geometry.current = projection
+        const browseY = Math.min((projection.apexY + projection.height) / 2, projection.height - 180)
+        const browsePosition = `${Math.round(browseY)}px`
+        if (dialog.current?.style.getPropertyValue('--horizon-browse-y') !== browsePosition) dialog.current?.style.setProperty('--horizon-browse-y', browsePosition)
         const progressEdge = .5 - Math.min(540, projection.width - 48) / projection.width / 2
         const progressCeiling = horizonPoint(projection, progressEdge).y + 20
         dialog.current?.style.setProperty('--horizon-progress-height', `${Math.max(100, Math.min(180, projection.height - 102 - progressCeiling))}px`)
@@ -254,6 +259,7 @@ export function HorizonStudio({ onReveal, onClose, onSaved }: Props) {
 
   const selectDay = (next: OrbitDay) => {
     if (phase !== 'ready' || processing || groupEditor || grab.current) return
+    if (preview && next !== day) onPreviewDayChange?.()
     setExpanded(null); setShowFixed(false); setDay(next); setPage(0); setAnnouncement(`${DAYS[next]}，${orbitDayGroups(groupsRef.current, next).length}组`)
   }
   const start = (event: PointerEvent<HTMLButtonElement>, group: OrbitGroup) => {
@@ -371,7 +377,7 @@ export function HorizonStudio({ onReveal, onClose, onSaved }: Props) {
     {!active && !processing && view.count > 1 && <nav className="horizon-browse" aria-label="浏览任务组">
       {([-1, 1] as const).map(direction => <button key={direction} type="button" ref={node => { if (node) pageButtons.current.set(direction, node); else pageButtons.current.delete(direction) }}
         disabled={!editable || (direction < 0 ? view.page === 0 : view.page === view.count - 1)}
-        onClick={() => setPage(view.page + direction)} aria-label={direction < 0 ? '前面的组' : '后面的组'}>{direction < 0 ? '‹' : '›'}</button>)}
+        onClick={() => setPage(view.page + direction)} aria-label={direction < 0 ? '前面的组' : '后面的组'} data-direction={direction} />)}
       <span>{view.offset + 1}–{view.offset + view.visible.length} / {currentGroups.length} 组</span>
     </nav>}
     {processing ? <section className="horizon-progress" aria-label={suggesting ? '智能分组进度' : '安排进度'} data-step={progress.phase} data-expanded={showActivities}>
@@ -380,16 +386,16 @@ export function HorizonStudio({ onReveal, onClose, onSaved }: Props) {
       {recentActivities.length > 0 && <ol className="horizon-progress-trail" aria-label="具体活动轨迹">{recentActivities.map(activity => <li key={`${activity.source}:${activity.id}`} data-state={activity.state} data-source={activity.source}><span aria-hidden="true">{activity.state === 'done' ? '✓' : activity.source === 'model' ? '◇' : '·'}</span><div><span className="horizon-activity-source">{activity.source === 'model' ? '模型建议' : '本地'}</span><span>{activity.title}</span>{showActivities && activity.detail && <small>{activity.detail}</small>}</div></li>)}</ol>}
       {progressCopy.activities.length > 2 && <button type="button" className="horizon-progress-expand" aria-expanded={showActivities} onClick={() => setShowActivities(value => !value)}>{showActivities ? '收起活动轨迹' : `查看 ${progressCopy.activities.length} 条活动`}</button>}
       {progressCopy.reassurance && !showActivities && <p className="horizon-progress-note">{suggesting ? '仍在等待分组建议，可以直接选择「调整分组」' : progressCopy.reassurance}</p>}
-    </section> : <div className="orbit-caption"><p>{draggedId ? dropDay !== null && dropDay !== day ? `松手，放到${DAYS[dropDay]}` : '沿光带排序 · 拖到顶部日期换天' : uncertain ? '保存结果待核对，请重试完成' : groupingNote || (needsReschedule ? '有未完成事项错过原时段 · 完成为它们重新找空档' : changed ? '完成后保存新顺序 · 取消保留原安排' : currentGroups.length ? '拖动光带或组名排序 · 点击展开' : '')}</p></div>}
-    <footer className="orbit-footer"><div className="horizon-tools"><div className="horizon-group-controls">
-      <button type="button" title={manualDirty ? '先完成当前手动调整，再请求新的智能分组' : '请析熙按事项内容与关联重新建议分组'} disabled={loading || busy || suggesting || manualDirty || uncertain || refreshNeeded || !snapshot || phase !== 'ready' || groupEditor} onClick={() => { if (snapshot && !manualDirty) void suggestGroups(snapshot) }}>智能整理</button>
+    </section> : !preview && <div className="orbit-caption"><p>{draggedId ? dropDay !== null && dropDay !== day ? `松手，放到${DAYS[dropDay]}` : '沿光带排序 · 拖到顶部日期换天' : uncertain ? '保存结果待核对，请重试完成' : groupingNote || (needsReschedule ? '有未完成事项错过原时段 · 完成为它们重新找空档' : changed ? '完成后保存新顺序 · 取消保留原安排' : currentGroups.length ? '拖动光带或组名排序 · 点击展开' : '')}</p></div>}
+    <footer className="orbit-footer">{preview ? <p className="horizon-preview-note">切换上方日期，查看不同日的安排。预览不会修改日程。</p> : <div className="horizon-tools"><div className="horizon-group-controls">
+      <button type="button" title={manualDirty ? '先完成当前手动调整，再请求新的智能分组' : '请析熙按事项内容与关联重新建议分组'} disabled={loading || busy || suggesting || manualDirty || uncertain || refreshNeeded || !snapshot || phase !== 'ready' || groupEditor} onClick={() => { if (snapshot && !manualDirty) void suggestGroups(snapshot, true) }}>智能整理</button>
       <button type="button" disabled={loading || busy || uncertain || refreshNeeded || !snapshot || phase !== 'ready' || groupEditor} onClick={() => { cancelSuggestion(); setGroupingNote(''); setExpanded(null); setGroupEditor(true) }}>调整分组</button>
       {suggesting && <button type="button" onClick={() => { cancelSuggestion(); setGroupingNote('已停止等待，当前分组保留') }}>停止等待</button>}
     </div><div className="horizon-fixed">
       {fixed.length > 0 && <button type="button" aria-expanded={showFixed} disabled={processing || phase !== 'ready' || groupEditor} onClick={() => setShowFixed(value => !value)}>{fixed.length} 项固定安排</button>}
       {showFixed && <ul>{fixed.map(item => <li key={item.id}><span>{item.start}–{item.end}</span><strong>{item.title}</strong><small>{item.reason ?? '保持原安排'}</small></li>)}</ul>}
-    </div></div>
-      <div className="orbit-actions"><button type="button" className="orbit-cancel" onClick={close} disabled={busy || phase === 'leaving' || groupEditor}>{uncertain ? '返回' : '取消'}</button><button type="button" className="orbit-select" onClick={() => void choose()} disabled={processing || groupEditor || loading || phase !== 'ready' || Boolean(draggedId)}>{busy ? '安排中' : refreshNeeded || !snapshot ? '重新读取' : uncertain ? '重试完成' : '完成'}</button></div>
+    </div></div>}
+      <div className="orbit-actions"><button type="button" className="orbit-cancel" onClick={close} disabled={busy || phase === 'leaving' || groupEditor}>{preview ? '返回引导' : uncertain ? '返回' : '取消'}</button>{!preview && <button type="button" className="orbit-select" onClick={() => void choose()} disabled={processing || groupEditor || loading || phase !== 'ready' || Boolean(draggedId)}>{busy ? '安排中' : refreshNeeded || !snapshot ? '重新读取' : uncertain ? '重试完成' : '完成'}</button>}</div>
     </footer>
     {error && <p className="orbit-error" role="alert">{error}{refreshNeeded && <span>重新读取会以最新日程替换当前草稿</span>}</p>}
     <p className="p0-sr-only" id="horizon-instructions">一条地平线呈现一天，顶部切换今天、明天、后天。组名常驻。拖动组调整顺序，拖到顶部日期移动到另一天末尾。方向键调整顺序，Alt加方向键换天。点开组，事项沿地平线展开，可以拖动或用方向键调整内部顺序。Escape取消拖动或收拢组。任务多时可翻页查看；拖到左右翻页按钮或使用方向键可跨页移动。完成后析熙根据所选日期和顺序重新安排具体时间，取消不提交。外观在设置中调整。</p>

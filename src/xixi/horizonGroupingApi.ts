@@ -29,8 +29,9 @@ export function isHorizonGroupingResult(value: unknown, snapshot: HorizonSnapsho
 }
 
 export function horizonGroupingApi(snapshot: HorizonSnapshot, requestId: string, onPhase: (phase: HorizonPhase) => void,
-  signal?: AbortSignal, onActivity?: (activity: HorizonActivity) => void) {
+  signal?: AbortSignal, onActivity?: (activity: HorizonActivity) => void, regenerate = false) {
   return requestHorizonEvents('/api/companion/horizon-groups', {
     date: snapshot.date, expectedRevision: snapshot.revision, snapshotKey: snapshot.snapshotKey, requestId,
+    ...(regenerate ? { regenerate: true } : {}),
   }, (value): value is HorizonGroupingResult => isHorizonGroupingResult(value, snapshot), onPhase, signal, onActivity)
 }

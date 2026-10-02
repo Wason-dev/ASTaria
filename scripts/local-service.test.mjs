@@ -91,6 +91,37 @@ test('HTTP exposes no CORS permission and rejects browser form or cross-origin w
   assert.equal(f.db.listTasks().length, 0)
 })
 
+test('first-run completion is validated and persists across reads', async t => {
+  const f = await fixture(t)
+  await f.request('/conversation')
+  assert.deepEqual((await f.request('/onboarding')).value, { completed: false })
+  assert.equal(f.db.getPreference('onboarding-completed'), false, 'an empty chat is not prior usage')
+  assert.equal((await f.request('/onboarding', { completed: false })).status, 400)
+  assert.equal((await f.request('/onboarding', { completed: true, extra: 1 })).status, 400)
+  const preferences = (await f.request('/preferences')).value
+  assert.equal((await f.request('/preferences', { expected: preferences, value: { ...preferences, glass: 'soft' } })).status, 200)
+  assert.deepEqual((await f.request('/onboarding')).value, { completed: false }, 'reloading during setup resumes the guide')
+  assert.deepEqual((await f.request('/onboarding', { completed: true })).value, { completed: true })
+  assert.deepEqual((await f.request('/onboarding')).value, { completed: true })
+})
+
+test('existing beta data skips first-run guide on upgrade', async t => {
+  const f = await fixture(t)
+  f.db.createTask({ title: '已有的事项', estimateMin: 30 })
+  assert.deepEqual((await f.request('/onboarding')).value, { completed: true })
+  assert.equal(f.db.getPreference('onboarding-completed'), true)
+  assert.deepEqual((await f.request('/onboarding')).value, { completed: true })
+})
+
+test('existing chat history or companion plans skip first-run guide on upgrade', async t => {
+  const chat = await fixture(t)
+  chat.db.appendMessage({ conversationId: chat.db.getActiveConversation().id, role: 'user', content: '已有对话' })
+  assert.deepEqual((await chat.request('/onboarding')).value, { completed: true })
+  const plans = await fixture(t)
+  plans.db.saveCompanionState({ handoffs: [], wishes: [{ id: 'saved-wish' }], freeTimeGoals: [], scenarios: [] })
+  assert.deepEqual((await plans.request('/onboarding')).value, { completed: true })
+})
+
 test('decision HTTP endpoint returns persisted draft metadata and applies through the existing receipt route', async t => {
   const f = await fixture(t)
   const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1)

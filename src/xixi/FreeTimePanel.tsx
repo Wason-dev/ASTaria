@@ -15,7 +15,7 @@ import { FREE_TIME_STATUS_LABEL, freeTimeScheduleNotice } from './freeTimeSchedu
 import type { FreeTimePlanResult as PlanResult } from './freeTimeScheduleResult'
 import './free-time.css'
 
-type Props = { onClarifyWish: (wish: Wish) => void; onRefinePlan: (goal: FreeTimeGoal) => void; onChanged: () => void | Promise<void>; onNotice: (message: string) => void; active?: boolean; onOpenStrings: () => void; today: string; theme: Preferences['theme']; grid: boolean; glass: Preferences['glass'] }
+type Props = { onClarifyWish: (wish: Wish) => void; onRefinePlan: (goal: FreeTimeGoal) => void; onChanged: () => void | Promise<void>; onNotice: (message: string) => void; active?: boolean; onOpenStrings: () => void; stringsEnabled?: boolean; today: string; theme: Preferences['theme']; grid: boolean; glass: Preferences['glass'] }
 type Draft = { title: string; priority: FreeTimeGoal['priority']; minPerWeek: string; sessionMin: string; sessionMax: string; targetDate: string; targetNote: string; planWeeks: string }
 type Editing = { goal?: FreeTimeGoal; wish?: Wish; draft: Draft }
 const PRIORITIES = { high: '优先', normal: '普通', low: '顺带' } as const
@@ -92,7 +92,7 @@ function Pane({ children, className = '', blur = 0, settleResize = false }: { ch
 
 // Retain editors across navigation without rerendering them for every camera
 // frame or starting another preference poll/clock behind the destination page.
-export const FreeTimePanel = memo(function FreeTimePanel({ onClarifyWish, onRefinePlan, onChanged, onNotice, active = true, onOpenStrings, today, theme, grid, glass }: Props) {
+export const FreeTimePanel = memo(function FreeTimePanel({ onClarifyWish, onRefinePlan, onChanged, onNotice, active = true, onOpenStrings, stringsEnabled = true, today, theme, grid, glass }: Props) {
   const id = useId()
   const heading = useRef<HTMLHeadingElement>(null)
   const [state, setState] = useState<CompanionState | null>(null)
@@ -278,7 +278,7 @@ export const FreeTimePanel = memo(function FreeTimePanel({ onClarifyWish, onRefi
     <div className="free-time-background" aria-hidden="true" />
     <div className="free-time-viewport workspace-page-viewport"><div className="free-time-container workspace-page-container">
       <WorkspaceHeading className="free-time-header" title="余时" description="想推进的事，在合适的空档继续" titleId={`${id}-title`} headingRef={heading}><dl className="workspace-metrics free-time-metrics"><div><dt>自动安排中</dt><dd>{goals.filter(isScheduling).length}<small> 项</small></dd></div><div><dt>未来七天已安排</dt><dd>{minutesLabel(weekMinutes).split(/(\d+)/).filter(Boolean).map((part, index) => /\d/.test(part) ? <span key={index}>{part}</span> : <small key={index}>{part}</small>)}</dd></div><div><dt>最低频率待满足</dt><dd>{remaining}<small> 次</small></dd></div></dl></WorkspaceHeading>
-      <StringInvitation onEnter={onOpenStrings} glass={glass} />
+      <StringInvitation onEnter={onOpenStrings} glass={glass} disabled={!stringsEnabled} />
       <Pane className="free-time-wish-entry" blur={glass === 'soft' ? 6 : 0} settleResize>
         <div className="free-time-wish-heading"><div className="free-time-wish-copy"><h3>把心愿聊清楚</h3><p>有个想法，还不知道从哪里开始？和析熙一起理清第一步。</p></div><button ref={wishTrigger} className="free-time-secondary" type="button" disabled={busy} aria-expanded={wishOpen} aria-controls={`${id}-wish-start`} onClick={() => {
           if (wishOpen) closeWish()

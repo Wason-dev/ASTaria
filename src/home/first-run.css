@@ -1,0 +1,105 @@
+.home-workspace:has(.first-run[data-tour=false]) > :is(.home-nav,.home-scene-ui,.home-notification),
+.home-workspace:has(.first-run[data-tour=false]) .home-clock,
+.p0:has(.first-run) > .p0-whisper { display: none !important }
+.home-workspace:has(.first-run[data-tour=true]) > :is(.home-clock,.home-notification) { display: none !important }
+.home-workspace:has(.first-run[data-step="2"]) .home-launch,
+.home-workspace:has(.first-run[data-step="3"]) .free-time-tabs[aria-label="余时目标分类"],
+.home-workspace:has(.first-run[data-step="4"]) .pl-segment[aria-label="日程视图"],
+.home-workspace:has(.first-run[data-step="5"]) .wb-available .wb-task:first-child { outline: 1px solid color-mix(in srgb,#d5bb8b 72%,transparent); outline-offset: 4px; border-radius: 8px }
+
+.p0 .first-run {
+  --guide-ink: #eeeae3;
+  --guide-muted: #b9b6af;
+  --guide-line: #e1ded526;
+  --guide-control: #ffffff08;
+  --guide-accent: #d5bb8b;
+  position: fixed;
+  inset: auto;
+  top: 50%;
+  left: var(--home-left);
+  box-sizing: border-box;
+  width: min(398px, calc(100vw - 2 * var(--home-left)));
+  max-width: none;
+  max-height: calc(100dvh - 64px);
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid #ffffff26;
+  border-radius: 20px;
+  background: transparent;
+  color: var(--guide-ink);
+  color-scheme: dark;
+  box-shadow: 0 12px 36px #0007;
+  font: inherit;
+  transform: translateY(-50%);
+  isolation: isolate;
+  z-index: 10;
+}
+.p0 .first-run[open] { display: flex }
+.first-run::backdrop { background: transparent }
+.p0 .first-run[data-theme=light] {
+  --guide-ink: #30343a;
+  --guide-muted: #55616b;
+  --guide-line: #41465026;
+  --guide-control: #ffffff70;
+  --guide-accent: #927443;
+  border-color: #41465030;
+  color-scheme: light;
+  box-shadow: 0 10px 28px #252d3926;
+}
+.p0 .first-run[data-theme=light] .home-glass-surface { background: rgb(250 251 252 / var(--glass-tint)) }
+.p0 .first-run[data-tour=true] { inset: auto 24px 24px auto; width: 364px; transform: none }
+.first-run[data-tour=true] .first-run-content { padding: 18px 20px }
+.first-run[data-tour=true] main { padding: 14px 0 12px }
+.first-run[data-tour=true] h2 { margin-bottom: 10px; font-size: 19px }
+@media (min-width: 1101px) {
+  .home-workspace:has(.first-run[data-tour=true]) :is(.wb-scroll,.pl-scroll,.free-time-viewport) { right: 412px }
+}
+.p0 .first-run > .home-glass-measure { z-index: 0 }
+.first-run-content { position: relative; z-index: 1; display: flex; flex: 1; flex-direction: column; min-width: 0; max-height: inherit; padding: 22px 24px 20px }
+.first-run header,.first-run footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex: none }
+.first-run header { min-height: 22px }
+.first-run-brand { font-size: 12px; font-weight: 600 }
+.first-run-brand span { font-weight: 400 }
+.first-run-count { color: var(--guide-muted); font-size: 10px; font-variant-numeric: tabular-nums }
+.first-run-progress { display: grid; grid-template-columns: repeat(7,minmax(0,1fr)); gap: 5px; margin-top: 18px }
+.first-run-progress i { height: 1px; background: var(--guide-line); transition: background 180ms,box-shadow 180ms }
+.first-run-progress i[data-complete=true] { background: color-mix(in srgb,var(--guide-accent) 60%,transparent) }
+.first-run-progress i[data-current=true] { background: var(--guide-accent); box-shadow: 0 0 7px color-mix(in srgb,var(--guide-accent) 40%,transparent) }
+.first-run main { display: flex; flex-direction: column; justify-content: center; flex: 1; min-height: 0; overflow-y: auto; padding: 32px 0 24px; scrollbar-width: thin; scrollbar-color: var(--guide-line) transparent }
+.first-run-eyebrow { display: block; margin-bottom: 8px; color: var(--guide-accent); font-size: 10px }
+.first-run h2 { margin: 0 0 22px; font-size: 22px; font-weight: 500; line-height: 1.4 }
+.first-run p { margin: 0 0 12px; color: var(--guide-muted); font-size: 13px; line-height: 1.65 }
+.first-run .first-run-action { margin-top: 8px; padding-top: 10px; border-top: 1px solid var(--guide-line); color: var(--guide-ink) }
+.first-run .first-run-feedback { margin: -6px 0 0; color: var(--guide-accent); font-size: 12px }
+.p0 .first-run .first-run-preview { align-self:flex-start; margin:0 0 16px; padding:7px 14px; border-color:color-mix(in srgb,var(--guide-accent) 50%,transparent); color:var(--guide-accent) }
+.first-run fieldset { margin: 0 0 20px; padding: 0; border: 0 }
+.first-run legend,.first-run label { display: block; margin: 0 0 8px; color: var(--guide-ink); font-size: 11px }
+.first-run-options { display: inline-flex; flex-wrap: wrap; gap: 3px; max-width: 100%; padding: 3px; border: 1px solid var(--guide-line); border-radius: 13px; background: var(--guide-control) }
+.p0 .first-run button { min-height: 34px; padding: 6px 10px; border: 1px solid transparent; border-radius: 9px; background: transparent; color: var(--guide-ink); font: inherit; font-size: 12px; line-height: 1.5; cursor: pointer; transition: background 180ms,border-color 180ms,color 180ms }
+.p0 .first-run button:hover { background: color-mix(in srgb,var(--guide-accent) 12%,transparent) }
+.p0 .first-run-options button[aria-pressed=true] { border-color: color-mix(in srgb,var(--guide-accent) 45%,transparent); background: color-mix(in srgb,var(--guide-accent) 13%,transparent); color: var(--guide-accent) }
+.p0 .first-run button:disabled { opacity: .5; cursor: default }
+.first-run input { box-sizing: border-box; display: block; width: 100%; min-height: 40px; padding: 9px 11px; border: 1px solid var(--guide-line); border-radius: 12px; background: var(--guide-control); color: var(--guide-ink); font: inherit; font-size: 12px }
+.first-run footer { min-height: 38px; padding-top: 15px; border-top: 1px solid var(--guide-line) }
+.first-run footer > span { min-width: 0; color: #e9a894; font-size: 11px; line-height: 1.5 }
+.first-run[data-theme=light] footer > span { color: #965944 }
+.first-run footer > div { display: flex; flex: none; gap: 8px; margin-left: auto }
+.p0 .first-run .first-run-next { padding-inline: 15px; border-color: color-mix(in srgb,var(--guide-accent) 50%,transparent); background: color-mix(in srgb,var(--guide-accent) 10%,transparent); color: var(--guide-accent) }
+.first-run :is(button,input):focus-visible { outline: 2px solid var(--guide-accent); outline-offset: 3px }
+@media (max-width: 1100px) {
+  .home-workspace:has(.first-run[data-tour=true]) :is(.wb-scroll,.pl-scroll,.free-time-viewport) { bottom: calc(var(--first-run-tour-height, 340px) + 36px) }
+  .p0 .first-run[data-tour=true] { right: 18px; bottom: 18px; width: min(356px,calc(100vw - 36px)) }
+}
+@media (max-width: 600px) {
+  .p0 .first-run { left: 18px; width: calc(100vw - 36px); max-height: calc(100dvh - 36px) }
+  .p0 .first-run[data-tour=true] { inset: auto 18px 18px; width: calc(100vw - 36px) }
+  .p0 .first-run .home-glass-surface { background: rgb(8 10 14 / .72) }
+  .p0 .first-run[data-theme=light] .home-glass-surface { background: rgb(250 251 252 / .82) }
+  .first-run-content { padding: 18px 20px }
+  .first-run main { padding: 24px 0 18px }
+  .first-run h2 { font-size: 20px }
+}
+@media (prefers-reduced-motion: reduce) {
+  .first-run-progress i,.p0 .first-run button { transition: none }
+}

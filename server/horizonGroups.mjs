@@ -110,10 +110,12 @@ const SYSTEM = `你是 ASTaria 的析熙，为三日弦轨按事项的共同目�
 已有的 initialGroups 只是粗略分类线索，可能把无关事项归在一起；你需要重新判断每个成员是否确实服务于同一目标，不要照搬原成员。无明确关系时优先独立成组；相似标题不代表可以删重。同一具体成果涉及不同分类时仍可归为一组。最后检查每个多项组是否有清晰的共同目标。尽量沿用每一天原有的先后节奏，组内按合理工作顺序排列。不改日期、时刻、时长、任务内容或状态。`
 
 function normalize(raw) {
-  knownKeys(raw, ['date', 'expectedRevision', 'snapshotKey', 'requestId'], '智能分组')
+  knownKeys(raw, ['date', 'expectedRevision', 'snapshotKey', 'requestId', 'regenerate'], '智能分组')
   if (!Number.isSafeInteger(raw.expectedRevision) || raw.expectedRevision < 0) fail('日程版本不正确，请重新读取')
   if (typeof raw.snapshotKey !== 'string' || !/^[a-f0-9]{64}$/u.test(raw.snapshotKey)) fail('日程快照标识不正确，请重新读取')
-  return { date: day(raw.date), expectedRevision: raw.expectedRevision, snapshotKey: raw.snapshotKey, requestId: identifier(raw.requestId, '分组请求标识') }
+  if (raw.regenerate !== undefined && typeof raw.regenerate !== 'boolean') fail('智能分组重试参数不正确')
+  return { date: day(raw.date), expectedRevision: raw.expectedRevision, snapshotKey: raw.snapshotKey,
+    requestId: identifier(raw.requestId, '分组请求标识'), regenerate: raw.regenerate === true }
 }
 function assertSnapshot(input, snapshot) {
   if (snapshot.date !== input.date || snapshot.revision !== input.expectedRevision || snapshot.snapshotKey !== input.snapshotKey) {
@@ -153,6 +155,7 @@ function suggestedGroups(result, snapshot) {
 export function createHorizonGrouping({ db, list, complete, timeoutMs = 60_000 }) {
   const pending = new Map(), requests = new Map(), cache = new Map()
   const cacheLifetime = 120_000
+  const savedKey = 'horizon-grouping-suggestion'
   const send = (listener, event) => { try { listener(event) } catch { /* A disconnected UI does not change a draft. */ } }
   const emit = (entry, event) => {
     if (event.type === 'phase' && entry.events.get('phase')?.phase === event.phase) return
@@ -238,10 +241,24 @@ export function createHorizonGrouping({ db, list, complete, timeoutMs = 60_000 }
       subscribe(existing, onEvent)
       return existing.promise
     }
-    const cached = cache.get(input.snapshotKey)
+    const saved = db?.getPreference?.(savedKey)
+    let persisted = !input.regenerate && saved?.snapshotKey === input.snapshotKey && saved?.value?.snapshotKey === input.snapshotKey
+      ? saved.value : null
+    if (persisted) {
+      try {
+        assertGroups({ groups: persisted.groups.map(group => ({ id: group.id, title: group.title,
+          day: group.day, itemIds: group.tasks.map(task => task.id) })) }, snapshot)
+        const original = new Map(snapshot.groups.flatMap(group => group.tasks.map(task => [task.id, { task, day: group.day }])))
+        if (persisted.groups.some(group => group.tasks.some(task => {
+          const current = original.get(task.id)
+          return !current || current.day !== group.day || JSON.stringify(current.task) !== JSON.stringify(task)
+        }))) persisted = null
+      } catch { persisted = null }
+    }
+    const cached = input.regenerate ? null : cache.get(input.snapshotKey) ?? (persisted ? { value: persisted } : null)
     if (cached) {
       if (typeof onEvent === 'function') send(onEvent, { type: 'activity', activity: { id: 'group-cache', source: 'local', state: 'done',
-        title: '沿用刚核对过的分组建议', detail: '日程没有变化，复用两分钟内的结果。' } })
+        title: '沿用已核对的分组建议', detail: '日程没有变化，复用本机保存的结果。' } })
       return Promise.resolve(structuredClone(cached.value))
     }
     if (pending.size >= 16) return Promise.reject(new ValidationError('智能分组请求较多，请稍后重试', 429))
@@ -251,6 +268,8 @@ export function createHorizonGrouping({ db, list, complete, timeoutMs = 60_000 }
     subscribe(entry, onEvent)
     entry.promise = Promise.resolve().then(() => perform(input, snapshot, entry)).then(value => {
       cache.set(input.snapshotKey, { at: Date.now(), value: structuredClone(value) })
+      try { db?.setPreference?.(savedKey, { snapshotKey: input.snapshotKey, value }) }
+      catch { /* A full or read-only local store must not discard a valid result. */ }
       return value
     }).catch(error => {
       // A retry after a transient failure is a real retry, even with the same ID.

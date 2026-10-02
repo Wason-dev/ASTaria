@@ -90,11 +90,14 @@
   .horizon-studio .orbit-caption { bottom:84px }
 }
 
-.horizon-browse { position:absolute; z-index:5; bottom:145px; left:50%; translate:-50% 0; display:flex; align-items:center; gap:18px; opacity:var(--orbit-reveal) }
-.p0 .horizon-browse button { width:36px; height:36px; padding:0; border:1px solid #d1b17a44; border-radius:50%; background:transparent; color:#d3bd95; font-size:23px; cursor:pointer }
+.horizon-browse { position:absolute; z-index:5; top:var(--horizon-browse-y,80%); left:50%; translate:-50% -50%; display:flex; align-items:center; gap:18px; opacity:var(--orbit-reveal) }
+.p0 .horizon-browse button { display:grid; place-items:center; flex:none; width:36px; height:36px; padding:0; border:1px solid #d1b17a44; border-radius:50%; background:transparent; color:#d3bd95; cursor:pointer }
+.horizon-browse button::before { content:""; width:8px; height:8px; border-left:2px solid currentColor; border-bottom:2px solid currentColor; transform:translateX(2px) rotate(45deg) }
+.horizon-browse button[data-direction="1"]::before { transform:translateX(-2px) rotate(225deg) }
 .horizon-browse button:first-child { order:0 }
 .horizon-browse button:nth-child(2) { order:2 }
 .horizon-browse span { order:1; color:#aa9b81; font-size:11px; font-variant-numeric:tabular-nums }
+.horizon-preview-note { max-width:min(440px,58vw); margin:0; color:#a9a397; font-size:11px; line-height:1.7 }
 .horizon-fixed { position:relative; max-width:50% }
 .horizon-tools { display:flex; flex-direction:column; align-items:flex-start; gap:12px; max-width:62%; min-width:0 }
 .horizon-group-controls { display:flex; flex-wrap:wrap; gap:16px; align-items:center }

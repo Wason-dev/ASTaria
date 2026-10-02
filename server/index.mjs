@@ -163,6 +163,20 @@ export function createLocalService({ db = createDatabase(join(DATA_DIRECTORY, 'a
       const localInstall = path.match(/^\/settings\/local\/install\/([^/]+)$/)
       if (localInstall) return localModelInstaller.get(decodeId(localInstall[1]))
       if (path === '/preferences') return getPreferences(db)
+      if (path === '/onboarding') {
+        const completed = db.getPreference('onboarding-completed')
+        if (completed !== null) return { completed: completed === true }
+        // The chat status endpoint creates an empty conversation on first launch.
+        // Only durable user data distinguishes an existing beta profile.
+        const companion = db.getCompanionState()
+        const used = db.getPreference('app') !== null || db.getPreference('model-connection') !== null
+          || db.listTasks({ includeDeleted: true }).length > 0 || db.getPlanner().blocks.length > 0
+          || db.listEvents().length > 0 || db.listAssignments().length > 0
+          || db.listConversations().some(conversation => db.listMessages(conversation.id, { limit: 1 }).length > 0)
+          || ['handoffs', 'wishes', 'freeTimeGoals', 'scenarios'].some(key => companion[key]?.length > 0)
+        db.setPreference('onboarding-completed', used)
+        return { completed: used }
+      }
       if (path === '/operations') return publicOperations(db.listOperations(), db)
       if (path === '/data/export') return db.exportData()
       if (path === '/companion') return companion.listState({ ...(url.searchParams.get('date') ? { date: url.searchParams.get('date') } : {}), ...(url.searchParams.get('days') ? { days: Number(url.searchParams.get('days')) } : {}) })
@@ -213,6 +227,12 @@ export function createLocalService({ db = createDatabase(join(DATA_DIRECTORY, 'a
       if (path === '/assignments') return db.listAssignments()
     } else {
       if (path === '/preferences') return savePreferences(db, input)
+      if (path === '/onboarding') {
+        knownKeys(input, ['completed'], '首次引导')
+        if (input.completed !== true) throw new ValidationError('首次引导状态不正确')
+        db.setPreference('onboarding-completed', true)
+        return { completed: true }
+      }
       if (path === '/data/import') { knownKeys(input, ['backup', 'confirmed']); if (input.confirmed !== true) throw new ValidationError('请先确认恢复备份'); return db.importData(input.backup) }
       if (path === '/companion/handoff') return companion.saveHandoff(input)
       if (path === '/companion/handoff/clear') { knownKeys(input, ['taskId', 'expectedVersion']); return companion.clearHandoff(input.taskId, input.expectedVersion) }

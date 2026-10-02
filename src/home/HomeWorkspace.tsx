@@ -33,6 +33,7 @@ import { OrbitStudio } from '../xixi/OrbitStudio'
 import { FreeTimePanel } from '../xixi/FreeTimePanel'
 import { useXixiNotice } from '../xixi/useXixiNotice'
 import { BlackHoleEntry } from './BlackHoleEntry'
+import { FirstRunGuide } from './FirstRunGuide'
 import { ScenarioReceiptDialog } from '../xixi/ScenarioReceiptDialog'
 import { HOME_GLASS } from './glass'
 import './home.css'
@@ -65,18 +66,31 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
     return () => { current = false }
   }, [today])
   const [page, setPage] = useState<WorkspacePage>('home')
+  const [showFirstRun, setShowFirstRun] = useState(false)
+  const [firstRunTheme, setFirstRunTheme] = useState<'dark' | 'light' | null>(null)
+  useEffect(() => {
+    let mounted = true
+    void localApi<{ completed: boolean }>('/onboarding').then(value => {
+      if (mounted && !value.completed) setShowFirstRun(true)
+    }).catch(() => undefined)
+    return () => { mounted = false }
+  }, [])
   const [freeTimeMounted, setFreeTimeMounted] = useState(false)
   useEffect(() => { if (page === 'free-time') setFreeTimeMounted(true) }, [page])
   const appearance = useAppearance()
   const preferences = usePreferences()
   const started = useRef(false)
   const [stringsOpen, setStringsOpen] = useState(false)
+  const [stringsPreview, setStringsPreview] = useState(false)
+  const [previewDayChanged, setPreviewDayChanged] = useState(false)
+  const [previewReturned, setPreviewReturned] = useState(false)
   const stringsOpener = useRef<HTMLElement | null>(null)
   const [stringCovered, setStringCovered] = useState(false)
   const [previewPhase, setPreviewPhase] = useState<ResponsePhase | null>(null)
+  const visibleTheme = firstRunTheme ?? appearance.value.theme
   useEffect(() => {
-    onThemeChange(appearance.value.theme === 'dark')
-  }, [appearance.value.theme, onThemeChange])
+    onThemeChange(visibleTheme === 'dark')
+  }, [visibleTheme, onThemeChange])
   const [notification, setNotification] = useState('')
   const proactiveNotice = useXixiNotice(preferences.value, preferences.loaded)
   useEffect(() => { if (!notification) return; const timer = setTimeout(() => setNotification(''), 12000); return () => clearTimeout(timer) }, [notification])
@@ -273,22 +287,25 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
     if (destination === 'free-time') setFreeTimeMounted(true)
     commitPage(destination, openChat)
   }
-  const openStrings = useCallback(() => {
+  const openStrings = useCallback((preview = false) => {
+    if (showFirstRun && !preview) return
     // Both entry surfaces already show the panorama. Preserve its actual
     // camera position rather than starting a second preset transition.
     focusAfterTransition.current = false
     clearTimeout(menuTimer.current)
     stringsOpener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    setMenuOpen(false); setStringCovered(true); setStringsOpen(true)
-  }, [])
+    setMenuOpen(false); setStringsPreview(preview); setStringCovered(true); setStringsOpen(true)
+  }, [showFirstRun])
   const closeStrings = useCallback(() => {
+    if (stringsPreview) setPreviewReturned(true)
+    setStringsPreview(false)
     setStringsOpen(false); setStringCovered(false)
     // The dialog unmounts before its original homepage control leaves inert.
     requestAnimationFrame(() => {
       const opener = stringsOpener.current
       if (opener?.isConnected && !opener.closest('[inert]')) opener.focus({ preventScroll: true })
     })
-  }, [])
+  }, [stringsPreview])
   const freeTimeChanged = useCallback(() => { data.retry(); void chat.refresh() }, [data.retry, chat.refresh])
   useEffect(() => {
     const escape = (event: KeyboardEvent) => {
@@ -405,7 +422,7 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
   const radius = 19 + (15 - 19) * progress
   const chatVisible = progress > .35
 
-  return <div ref={root} className="home-workspace" data-spatial-ui data-string-covered={stringCovered} data-theme={appearance.value.theme} data-chat-open={chatOpen} data-page={page} data-grid={preferences.value.grid} data-card-edges={preferences.value.cardEdges ?? 'both'} data-motion={preferences.value.effect.motion} data-effect-preview={previewPhase !== null}>
+  return <div ref={root} className="home-workspace" data-spatial-ui data-string-covered={stringCovered} data-theme={visibleTheme} data-chat-open={chatOpen} data-page={page} data-grid={preferences.value.grid} data-card-edges={preferences.value.cardEdges ?? 'both'} data-motion={preferences.value.effect.motion} data-effect-preview={previewPhase !== null}>
     <nav ref={nav} className="home-nav" aria-label="ASTaria 导航" data-menu-open={menuOpen} inert={previewPhase !== null} aria-hidden={previewPhase !== null}
       onPointerEnter={event => { if (event.pointerType !== 'touch') { clearTimeout(menuTimer.current); menuOpenedByHover.current = !menuOpen; setMenuOpen(true) } }}
       onPointerLeave={() => { menuTimer.current = setTimeout(() => { if (!nav.current?.contains(document.activeElement)) setMenuOpen(false) }, 180) }}
@@ -463,8 +480,8 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
       camera={camera}
       width={layout.width}
       height={layout.height}
-      visible={page === 'home' && !chatOpen && !stringCovered && !stringsOpen && !sceneUnavailable && !camera.cameraTransition && progress < .08}
-      onEnter={openStrings}
+      visible={page === 'home' && !showFirstRun && !chatOpen && !stringCovered && !stringsOpen && !sceneUnavailable && !camera.cameraTransition && progress < .08}
+      onEnter={() => openStrings()}
     />
     <div ref={current} className="home-current" style={{ opacity: Math.max(0, 1 - progress * 3), visibility: progress > .6 ? 'hidden' : 'visible' }} inert={chatOpen}>
       <span>当前任务</span>
@@ -531,9 +548,10 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
     </GlassSamplingContext.Provider>
     <Workbench active={page === 'workbench'} appearance={appearance} data={data} now={now} onCapture={() => changePage('home', true)} onNotice={setNotification} chat={chat} onSettings={openSettings} />
     <PlannerWorkspace active={page === 'schedule'} tasks={data.tasks} tasksLoading={data.loading} tasksError={data.loadError} now={now} appearance={appearance} onNotice={setNotification} onRefresh={data.retry} />
-    {(freeTimeMounted || page === 'free-time') && <FreeTimePanel onClarifyWish={clarifyWish} onRefinePlan={refinePlan} active={page === 'free-time' && !stringCovered} today={today} theme={preferences.value.theme} grid={preferences.value.grid} glass={preferences.value.glass} onOpenStrings={openStrings} onChanged={freeTimeChanged} onNotice={setNotification} />}
+    {(freeTimeMounted || page === 'free-time') && <FreeTimePanel onClarifyWish={clarifyWish} onRefinePlan={refinePlan} active={page === 'free-time' && !stringCovered} today={today} theme={preferences.value.theme} grid={preferences.value.grid} glass={preferences.value.glass} onOpenStrings={() => openStrings()} stringsEnabled={!showFirstRun} onChanged={freeTimeChanged} onNotice={setNotification} />}
     {settingsOpen && <LocalSettings initialTab={settingsTab} onClose={closeSettings} onSaved={chat.refreshStatus} onPreviewEffect={previewEffect} onPreviewPhaseChange={changePreviewPhase} onStopPreview={stopPreview} previewPhase={previewPhase} />}
-    {stringsOpen && <OrbitStudio onReveal={() => setStringCovered(false)} onClose={closeStrings} onSaved={message => { data.retry(); void chat.refresh(); setNotification(message) }} />}
+    {stringsOpen && <OrbitStudio preview={stringsPreview} onPreviewDayChange={() => setPreviewDayChanged(true)} onReveal={() => setStringCovered(false)} onClose={closeStrings} onSaved={message => { data.retry(); void chat.refresh(); setNotification(message) }} />}
+    {showFirstRun && preferences.loaded && <FirstRunGuide preferences={preferences.value} previewOpen={stringsPreview} previewComplete={previewReturned && previewDayChanged} onStartHorizon={() => { setPreviewReturned(false); setPreviewDayChanged(false); openStrings(true) }} onPreviewThemeChange={setFirstRunTheme} onTourPageChange={next => changePage(next)} onDone={() => { setShowFirstRun(false); void chat.refreshStatus() }} />}
     {selectedId && <TaskDialog task={selectedTask} saving={data.saving} onClose={closeTask} onStatus={data.setStatus} />}
     {receiptScenarioId && <ScenarioReceiptDialog scenarioId={receiptScenarioId} tasks={data.tasks} tasksLoading={data.loading} tasksError={data.loadError} onChanged={freeTimeChanged} onClose={() => setReceiptScenarioId(null)} onNotice={setNotification} />}
   </div>

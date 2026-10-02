@@ -273,9 +273,9 @@ function StringStylePreview({ style }: { style: StringStyle }) {
 }
 
 /** An invitation inside 余时, not another item in the global navigation. */
-export function StringInvitation({ onEnter, glass }: { onEnter: () => void; glass: Preferences['glass'] }) {
+export function StringInvitation({ onEnter, glass, disabled = false }: { onEnter: () => void; glass: Preferences['glass']; disabled?: boolean }) {
   const paint = useId().replaceAll(':', '')
-  return <button type="button" className="string-invitation" onClick={onEnter} aria-label="进入弦轨，事件视界">
+  return <button type="button" className="string-invitation" onClick={onEnter} disabled={disabled} title={disabled ? '完成首次引导后进入弦轨' : undefined} aria-label="进入弦轨，事件视界">
     <MeasuredGlassSurface radius={20} material={{ transmission: 100, blur: glass === 'soft' ? 6 : 0, rim: 40, shadow: 0, reflection: 10 }} />
     <span className="string-invitation-art string-invitation-orbits" aria-hidden="true"><svg viewBox="0 0 240 100">
       <defs>

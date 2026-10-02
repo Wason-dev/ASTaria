@@ -168,7 +168,7 @@ export function AppUpdates({ visible = true }: { visible?: boolean }) {
     </div>}
     {latest && <>
       {latest.notes && <details className="xixi-app-update-notes"><summary>更新说明{releaseDate && <small>{releaseDate}</small>}</summary><p>{latest.notes}</p></details>}
-      {latest.downloadUrl && <p className="xixi-settings-note xixi-app-update-install">安装包会先校验 SHA-256；安装时退出并重启 App，本机事项、日程和对话数据会保留。</p>}
+      {latest.downloadUrl && <p className="xixi-settings-note xixi-app-update-install">安装包会先校验 SHA-256；安装时退出并重启 App，本机事项、日程和对话数据会保留。自动安装需要 App 位于当前账户可替换的位置，通常是「应用程序」文件夹；若从 DMG 直接运行，请先拖入该文件夹。</p>}
     </>}
   </section>
 }

@@ -4,9 +4,9 @@
 
 ASTaria 是一款本机优先的个人时间与事项应用。和析熙聊作业、计划或心愿，把任务放进课程和日常活动之间的真实空档，再从工作台开始专注。
 
-当前版本：**0.1.0-beta.7** · macOS 13+ · Apple Silicon（arm64）
+当前版本：**0.1.0-beta.8** · macOS 13+ · Apple Silicon（arm64）
 
-[下载最新版本](https://github.com/Wason-dev/ASTaria/releases) · [安装说明](docs/INSTALL.md) · [更新记录](CHANGELOG.md) · [功能详情](docs/FEATURES.md)
+[下载最新版本](https://github.com/Wason-dev/ASTaria/releases) · [安装说明](docs/INSTALL.md) · [更新记录](CHANGELOG.md) · [功能详情](docs/FEATURES.md) · [界面与交互规范](docs/UI_DESIGN_SYSTEM.md)
 
 ## 看看 ASTaria
 
@@ -28,6 +28,10 @@ ASTaria 是一款本机优先的个人时间与事项应用。和析熙聊作业
 
 ![余时：编程、英语阅读和速写目标，以及实际排入日历的练习时段](docs/images/free-time.png)
 
+**弦轨**：在真实日期的地平线上按组查看、调整和保存安排；组多时沿可见中轴翻页。
+
+![弦轨：明天的任务组沿地平线展开，屏内箭头浏览其余组](docs/images/horizon.png)
+
 - **析熙**：理解请求、读取空档、记录与安排，修改留下可核对和撤销的回执。支持 DeepSeek API 与本机兼容模型。
 - **联网搜索（可选）**：设置中明确打开后，析熙可用 DeepSeek 的独立搜索通道查找最新公开资料；只发送查询词，关闭时不会联网，本地模型正文仍留在本机。
 - **日程**：课程、固定活动、任务时段与截止一起查看，支持单双周课表。
@@ -36,9 +40,9 @@ ASTaria 是一款本机优先的个人时间与事项应用。和析熙聊作业
 
 ## 安装
 
-1. 从 [Releases](https://github.com/Wason-dev/ASTaria/releases) 下载 `ASTaria-0.1.0-beta.7-mac-arm64-adhoc.dmg`，打开后把 **ASTaria** 拖入应用程序。
+1. 从 [Releases](https://github.com/Wason-dev/ASTaria/releases) 下载 `ASTaria-0.1.0-beta.8-mac-arm64-adhoc.dmg`，打开后把 **ASTaria** 拖入应用程序。
 2. 第一次打开若被 macOS 拦截，按[安装说明](docs/INSTALL.md)处理。本版使用 ad-hoc 签名，尚未 Apple 公证。
-3. 打开「设置 → 析熙」连接模型，然后录入课程、事项和可用时间。
+3. 首次启动按引导选择外观与个性，可导入 API Key，也可稍后在「设置 → 析熙」连接模型；然后录入课程、事项和可用时间。
 
 设置中可检查、下载并安装 GitHub 更新。beta.5 起，自动安装还会验证内置公钥对应的发布清单签名。Windows、Intel Mac、Android 暂无安装包。
 
@@ -82,18 +86,16 @@ CI 自动执行源码测试、桌面网页构建、许可清单和版本文档�
 
 详细开发与打包说明见[功能与开发文档](docs/FEATURES.md)。遇到问题请提交 [Bug report](https://github.com/Wason-dev/ASTaria/issues/new?template=bug_report.yml)，附版本、系统和复现步骤，避免上传密钥、课表或私密聊天。
 
-## 0.1.0-beta.7
+## 0.1.0-beta.8
 
-**0.1.0-beta.7** 聚焦更新体验，适用于 macOS 13+ Apple Silicon（arm64）。以下内容属于本次发布范围，视觉与流畅性结论以实际设备手测为准：
+**0.1.0-beta.8** 聚焦首次使用和弦轨响应速度，适用于 macOS 13+ Apple Silicon（arm64）。视觉与流畅性结论仍以实际设备手测为准：
 
-- **更新进度**：真实下载进度采用 ASTaria 玻璃与低饱和金色样式，并支持减少动态效果。
-- **自动安装**：正常位于 `/Applications/ASTaria.app` 的 App 不再被误判为不可写；DMG、App Translocation、符号链接和只读位置仍会被拦截。
-- **回归验证**：更新下载、发布信任、安装器路径和原子替换测试覆盖新增场景。
-- **按需联网搜索**：显式打开后才提供 `web_search` 工具，使用 DeepSeek Anthropic 原生搜索并只返回结构化来源；本地模型仍在本机处理正文。
-- **真实执行阶段**：聊天显示实际读取、搜索、排程、保存等进度，中断后的结果以本机回执核对。
-- **弦轨过渡试点**：玻璃界面的进入与退出使用 GSAP，黑洞与飞行动画仍沿用原有控制。
+- **首次引导**：选择个性、玻璃与主题，可导入或跳过 API Key；随后在真实页面试用首页、余时、日程、工作台和只读弦轨预览。
+- **弦轨速度**：智能整理与完成排序始终使用 `low` 思考强度；聊天的档位不受影响。已核验的分组建议随日程快照复用。
+- **弦轨操作**：多组时在可见中轴翻页；等待过程展示实际执行活动，断线重试先核对本机写入。
+- **外观和过渡**：改善浅色玻璃阴影、更新面板及心愿展开时的玻璃取样，延续 GSAP 弦轨控件过渡。
 
-改动与手测清单见 [0.1.0-beta.7 发布说明](docs/RELEASE_NOTES_v0.1.0-beta.7.md)，安装包与校验文件已发布到 [Releases](https://github.com/Wason-dev/ASTaria/releases/tag/v0.1.0-beta.7)。
+改动与手测清单见 [0.1.0-beta.8 发布说明](docs/RELEASE_NOTES_v0.1.0-beta.8.md)，安装包与校验文件见 [Releases](https://github.com/Wason-dev/ASTaria/releases/tag/v0.1.0-beta.8)。
 
 ## 许可
 

@@ -34,9 +34,9 @@ export function createCompletion(keychain, fetcher = fetch, getModel = () => MOD
     if (!model || (!local && !MODELS.some(option => option.id === model))) throw new ProviderError('请在设置中选择有效模型')
     const endpoint = local ? `${localEndpoint(settings.local.baseUrl)}/chat/completions` : ENDPOINT
     const configuredEffort = settings?.reasoningEffort ?? DEFAULT_REASONING_EFFORT
-    // A constrained review of an already feasible three-day plan needs only
-    // light reasoning. This request-local cap never mutates chat preferences.
-    const reasoningEffort = ['horizon-order', 'horizon-grouping'].includes(purpose) && ['high', 'max'].includes(configuredEffort) ? 'low' : configuredEffort
+    // Horizon grouping and ordering use light reasoning to keep the interaction responsive.
+    // This request-local cap does not change the user's chat preference.
+    const reasoningEffort = ['horizon-order', 'horizon-grouping'].includes(purpose) ? 'low' : configuredEffort
     if (!local && !REASONING_EFFORTS.includes(reasoningEffort)) throw new ProviderError('请在设置中选择有效的思考深度')
     const thinkingEnabled = !local && reasoningEffort !== 'off'
     // max_tokens includes reasoning. A short-answer budget of 1800 would cut
@@ -63,7 +63,7 @@ export function createCompletion(keychain, fetcher = fetch, getModel = () => MOD
         headers,
         // DeepSeek's OpenAI-compatible API exposes both the thinking toggle and
         // effort control. Keep these fields off local providers because Ollama
-        // and LM Studio use different controls. `max` is the app default.
+        // and LM Studio use different controls. `low` is the app default.
         body: JSON.stringify(body),
       })
     } catch { throw new ProviderError(local ? '无法连接本地模型，请确认服务已启动、模型已加载；对话已保留，可以重试' : '连接 DeepSeek 暂时失败，对话已保留，可以重试') }

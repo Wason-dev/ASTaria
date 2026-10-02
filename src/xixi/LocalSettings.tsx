@@ -136,7 +136,7 @@ export function LocalSettings({ onClose, onSaved, onEffectChange, onPreviewEffec
     previewTrigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     onPreviewEffect?.()
   }
-  const personality = preferences.assistant.personality ?? 'high'
+  const personality = preferences.assistant.personality ?? 'medium'
   const memoryPageCount = Math.max(1, Math.ceil(memories.length / 3))
   const shownMemoryPage = Math.min(memoryPage, memoryPageCount - 1)
   const glass = { transmission: 70, blur: preferences.glass === 'soft' ? 6 : 0, rim: 40, shadow: 30 }

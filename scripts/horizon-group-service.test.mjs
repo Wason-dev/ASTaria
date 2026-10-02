@@ -4,6 +4,7 @@ import { createServer } from 'node:http'
 import { randomUUID } from 'node:crypto'
 import { createDatabase } from '../server/database.mjs'
 import { createLocalService } from '../server/index.mjs'
+import { createHorizonGrouping } from '../server/horizonGroups.mjs'
 import { localDay } from '../src/home/agenda.ts'
 
 const resultOf = groups => ({ choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: JSON.stringify({ groups }) } }] })
@@ -148,6 +149,19 @@ test('cached grouping travels through the same SSE result contract without anoth
   assert.equal(cached.events.at(-1).type, 'result')
   assert.deepEqual(cached.events.at(-1).result, first.value)
   assert.deepEqual(f.db.getPlanner(), before)
+})
+
+test('a verified grouping survives a new service instance and explicit regeneration calls the model', async t => {
+  const f = await fixture(t), snapshot = await f.snapshot()
+  const first = await f.request('/companion/horizon-groups', draftInput(snapshot))
+  assert.equal(first.status, 200)
+  const restored = createHorizonGrouping({ db: f.db, list: () => snapshot,
+    complete: () => { throw new Error('the model should not run for an unchanged snapshot') } })
+  assert.deepEqual(await restored.suggest(draftInput(snapshot)), first.value)
+  assert.equal(f.calls.length, 1)
+  const refreshed = await f.request('/companion/horizon-groups', { ...draftInput(snapshot), regenerate: true })
+  assert.equal(refreshed.status, 200)
+  assert.equal(f.calls.length, 2)
 })
 
 test('incomplete model membership fails the endpoint and cannot publish a partial grouping result', async t => {

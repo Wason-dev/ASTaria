@@ -99,7 +99,7 @@ async function safeLinks(directory, root = directory) {
 }
 
 function installLocationError(reason) {
-  return new Error(`请先把 ASTaria 移到可写的应用目录：${reason}`)
+  return new Error(`无法在当前位置替换 ASTaria（${reason}）。请从 DMG 将 App 拖到「应用程序」文件夹，再从那里启动并重试更新；如果由其他账户安装，请使用有写入权限的账户。`)
 }
 
 function isMountedImagePath(path) {

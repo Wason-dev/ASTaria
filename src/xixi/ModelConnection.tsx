@@ -162,7 +162,7 @@ export function ModelConnection({ status, busy, onAction }: Props) {
     </> : <>
       <div className="xixi-model-cloud-row"><label htmlFor="xixi-cloud-model">默认模型</label><select id="xixi-cloud-model" aria-label="默认模型" value={draft.cloudModel} disabled={disabled} onChange={event => change({ ...draft, cloudModel: event.target.value })}><option value="deepseek-flash">DeepSeek Flash</option><option value="deepseek-v4-pro">DeepSeek V4 Pro</option></select></div>
       <div className="xixi-model-cloud-row xixi-model-thinking-row"><label htmlFor="xixi-reasoning-effort">思考深度</label><select id="xixi-reasoning-effort" value={draft.reasoningEffort} disabled={disabled} aria-describedby="xixi-reasoning-note" onChange={event => change({ ...draft, reasoningEffort: event.target.value as ReasoningEffort })}><option value="low">轻量 Low（默认）</option><option value="high">深入 High</option><option value="max">最高 Max</option><option value="off">关闭</option></select></div>
-      <small id="xixi-reasoning-note" className="xixi-model-reasoning-note">{!status ? '默认轻量深度' : draft.reasoningEffort !== fromStatus(status).reasoningEffort ? '思考深度尚未保存' : '思考深度已保存'} · 下一条消息生效，深度越高可能等得越久</small>
+      <small id="xixi-reasoning-note" className="xixi-model-reasoning-note">{!status ? '默认轻量深度' : draft.reasoningEffort !== fromStatus(status).reasoningEffort ? '思考深度尚未保存' : '思考深度已保存'} · 此设置只影响聊天；弦轨整理始终使用 Low，避免久等</small>
       {cloudConfigured ? <details className="xixi-model-key-manager"><summary>API Key 已保存 · 管理</summary>{keySettings}</details> : <div className="xixi-model-key-setup">{keySettings}</div>}
     </>}
     <div className="xixi-model-web-search">

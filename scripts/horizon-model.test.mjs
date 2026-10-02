@@ -463,7 +463,7 @@ test('simultaneous identical submissions share one model call and one write; ano
   assert.deepEqual(phaseNames(events), ['checking', 'preparing', 'waiting', 'validating', 'saving'])
 })
 
-for (const [effort, expected, thinking] of [['max', 'low', 'enabled'], ['high', 'low', 'enabled'], ['low', 'low', 'enabled'], ['off', 'none', 'disabled']]) test(`cloud scheduling caps thinking at ${expected} for ${effort} without touching chat settings`, async t => {
+for (const effort of ['max', 'high', 'low', 'off']) test(`cloud scheduling uses low thinking for ${effort} without touching chat settings`, async t => {
   const sent = []
   const fixture = liveFixture(t, { fetcher: async (url, options) => {
     sent.push({ url: String(url), body: JSON.parse(options.body) })
@@ -478,8 +478,8 @@ for (const [effort, expected, thinking] of [['max', 'low', 'enabled'], ['high', 
   assert.equal(sent.length, 1)
   assert.equal(sent[0].url, 'https://api.deepseek.com/chat/completions')
   assert.equal(sent[0].body.model, 'deepseek-v4-pro')
-  assert.equal(sent[0].body.reasoning_effort, expected)
-  assert.equal(sent[0].body.thinking.type, thinking)
+  assert.equal(sent[0].body.reasoning_effort, 'low')
+  assert.equal(sent[0].body.thinking.type, 'enabled')
   assert.equal(sent[0].body.tools, undefined)
   assert.equal(sent[0].body.response_format.type, 'json_object')
   // Chat keeps the user's own setting: the cap is request-local.

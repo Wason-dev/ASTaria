@@ -3,7 +3,7 @@ import type { CSSProperties, Ref } from 'react'
 import { glassDisplacement, HOME_GLASS } from './glass'
 
 export type GlassMaterial = { transmission: number; blur: number; rim: number; shadow: number; reflection?: number }
-export type GlassGeometryHandle = { update: (width: number, height: number, radius: number, progress: number) => void }
+export type GlassGeometryHandle = { update: (width: number, height: number, radius: number, progress: number) => void; pause: () => void }
 type Props = { width: number; height: number; radius: number; progress?: number; material?: GlassMaterial; responsive?: boolean; geometryRef?: Ref<GlassGeometryHandle> }
 
 /** A departing panel releases its live background sampling in the same React commit. */
@@ -16,19 +16,26 @@ export function MeasuredGlassSurface({ radius, progress = 0, material, settleRes
   useLayoutEffect(() => {
     const element = host.current
     if (!element || !sampling) return
+    let lastWidth = 0, lastHeight = 0
+    let settleTimer: number | undefined
     const measure = () => {
       // Layout dimensions exclude entry/exit transforms on the panel.
       const width = Math.max(1, element.clientWidth), height = Math.max(1, element.clientHeight)
       if (settleResize && (width < 32 || height < 32)) return
-      // ResizeObserver delivers the current geometry before paint. Updating
-      // only the optical attributes avoids React commits during expansion and
-      // a stretched old texture snapping into place after a debounce timer.
-      geometry.current?.update(width, height, radius, progress)
+      if (width === lastWidth && height === lastHeight) return
+      lastWidth = width; lastHeight = height
+      if (settleResize) {
+        // During a height transition, retain the glass material without
+        // stretching an obsolete map or encoding a PNG on every frame.
+        geometry.current?.pause()
+        window.clearTimeout(settleTimer)
+        settleTimer = window.setTimeout(() => geometry.current?.update(lastWidth, lastHeight, radius, progress), 100)
+      } else geometry.current?.update(width, height, radius, progress)
     }
     const observer = new ResizeObserver(measure)
     observer.observe(element)
     measure()
-    return () => observer.disconnect()
+    return () => { observer.disconnect(); window.clearTimeout(settleTimer) }
   }, [sampling, settleResize, radius, progress])
   return <span ref={host} className="home-glass-measure" style={{ '--glass-shadow': (material?.shadow ?? HOME_GLASS.shadow) / 100 } as CSSProperties} aria-hidden="true">
     <GlassSurface width={1} height={1} radius={radius} progress={progress} material={material} responsive geometryRef={geometry} />
@@ -47,7 +54,13 @@ export function GlassSurface({ width, height, radius, progress = 0, material, re
   const edge = useRef<SVGFEImageElement>(null)
   const surface = useRef<HTMLSpanElement>(null)
   const lastGeometry = useRef('')
-  useImperativeHandle(geometryRef, () => ({ update(nextWidth, nextHeight, nextRadius, nextProgress) {
+  const useBackdrop = (value: string) => {
+    surface.current?.style.setProperty('backdrop-filter', value)
+    surface.current?.style.setProperty('-webkit-backdrop-filter', value)
+  }
+  useImperativeHandle(geometryRef, () => ({ pause() {
+    useBackdrop(`blur(${material?.blur ?? HOME_GLASS.blur}px)`)
+  }, update(nextWidth, nextHeight, nextRadius, nextProgress) {
     // The camera moves only these optical attributes, with the same rounded
     // edge formula as a React render. No stretched corner or lower-quality map.
     const w = Math.max(1, Math.round(nextWidth)), h = Math.max(1, Math.round(nextHeight))
@@ -59,6 +72,7 @@ export function GlassSurface({ width, height, radius, progress = 0, material, re
       }
       if (sampling && svgBackdrop) edge.current?.setAttribute('href', glassDisplacement(w, h, nextRadius))
     }
+    if (sampling) useBackdrop(svgBackdrop && edge.current?.getAttribute('href') ? `url("#${id}")` : `blur(${material?.blur ?? HOME_GLASS.blur}px)`)
     const transmission = material?.transmission ?? HOME_GLASS.pillTransmission + (HOME_GLASS.chatTransmission - HOME_GLASS.pillTransmission) * nextProgress
     surface.current?.style.setProperty('--glass-tint', String(1 - transmission / 100))
   } }), [sampling, svgBackdrop, material])

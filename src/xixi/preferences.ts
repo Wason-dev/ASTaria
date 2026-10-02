@@ -16,7 +16,7 @@ export type Preferences = {
 export const DEFAULT_PREFERENCES: Preferences = {
   version: 1, startupPage: 'home', theme: 'dark', grid: true, glass: 'clear', density: 'compact', cardEdges: 'both',
   effect: normalizeResponseEffect(undefined), render: { profile: 'full' },
-  assistant: { autonomy: 'act', personality: 'high', useMemory: true, useHistory: true },
+  assistant: { autonomy: 'act', personality: 'medium', useMemory: true, useHistory: true },
   notifications: { enabled: true, quietStart: '23:00', quietEnd: '08:00', opportunities: true },
   focus: { focusMin: 35, restMin: 5 }, scheduling: { bufferMin: 10 },
 }

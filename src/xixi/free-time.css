@@ -157,10 +157,9 @@
 .free-time-page[data-active=false] .free-time-container>:not(.free-time-layout) { opacity:0; transition:opacity 200ms ease; pointer-events:none }
 .free-time-page[data-active=false] * { animation:none!important }
 .free-time-page[data-active=true] :is(.free-time-header,.free-time-pane-content,.free-time-feedback) { animation:free-time-page-arrive 480ms cubic-bezier(.2,.7,.2,1) both }
-.free-time-page[data-active=true] .home-glass-surface { animation:free-time-glass-arrive 400ms ease both }
+.free-time-page[data-active=true] .home-glass-surface { animation:free-time-page-arrive 400ms ease both }
 .free-time-page[data-active=true] .home-glass-surface::after { animation:free-time-page-arrive 400ms ease both }
 @keyframes free-time-page-arrive { from { opacity:0 } to { opacity:1 } }
-@keyframes free-time-glass-arrive { from { box-shadow:none } }
 .home-workspace[data-motion=reduced] .free-time-page { transition:none }
 
 /* The same broad horizontal composition as the workbench: goals above,

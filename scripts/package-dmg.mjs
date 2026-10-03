@@ -65,7 +65,7 @@ async function main() {
   const pkg = JSON.parse(await readFile(join(payload, 'package.json'), 'utf8'))
   if (pkg.name !== 'astaria' || typeof pkg.version !== 'string' || !VERSION.test(pkg.version)) fail('The app must contain a valid ASTaria package version.')
   const version = pkg.version, stem = `ASTaria-${version}-mac-arm64-adhoc`
-  const names = [`${stem}.dmg`, `${stem}.dmg.sha256`, `${stem}.manifest.json`]
+  const names = [`${stem}.dmg`, `${stem}.dmg.sha256`, `${stem}.manifest.json`, 'INSTALL.txt']
   for (const name of names) if (await exists(join(args.out, name))) fail(`Version output already exists; use a new version or output directory: ${name}`)
   const instructionsBytes = await readFile(args.instructions)
   if (!instructionsBytes.length || instructionsBytes.length > 2 * 1024 * 1024) fail('Installation instructions must be nonempty UTF-8 text under 2 MiB.')
@@ -118,6 +118,7 @@ async function main() {
     if (args.signingKey) manifest = await signReleaseManifest(manifest, args.signingKey)
     await writeFile(join(staging, names[1]), `${digest}  ${names[0]}\n`)
     await writeFile(join(staging, names[2]), `${JSON.stringify(manifest, null, 2)}\n`)
+    await writeFile(join(staging, names[3]), instructionsBytes)
     for (const name of names) if (await exists(join(out, name))) fail(`Another build created the same version output: ${name}`)
     for (const name of names) await rename(join(staging, name), join(out, name))
     published = true

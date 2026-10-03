@@ -98,17 +98,6 @@ CI 自动执行源码测试、桌面网页构建、许可清单和版本文档�
 
 改动与边界见 [0.1.0-beta.9 发布说明](docs/RELEASE_NOTES_v0.1.0-beta.9.md)；安装包与校验文件见 [Releases](https://github.com/Wason-dev/ASTaria/releases/tag/v0.1.0-beta.9)。
 
-## 0.1.0-beta.8
-
-**0.1.0-beta.8** 聚焦首次使用和弦轨响应速度，适用于 macOS 13+ Apple Silicon（arm64）。视觉与流畅性结论仍以实际设备手测为准：
-
-- **首次引导**：选择个性、玻璃与主题，可导入或跳过 API Key；随后在真实页面试用首页、余时、日程、工作台和只读弦轨预览。
-- **弦轨速度**：智能整理与完成排序始终使用 `low` 思考强度；聊天的档位不受影响。已核验的分组建议随日程快照复用。
-- **弦轨操作**：多组时在可见中轴翻页；等待过程展示实际执行活动，断线重试先核对本机写入。
-- **外观和过渡**：改善浅色玻璃阴影、更新面板及心愿展开时的玻璃取样，延续 GSAP 弦轨控件过渡。
-
-改动与手测清单见 [0.1.0-beta.8 发布说明](docs/RELEASE_NOTES_v0.1.0-beta.8.md)，安装包与校验文件见 [Releases](https://github.com/Wason-dev/ASTaria/releases/tag/v0.1.0-beta.8)。
-
 ## 许可
 
 源码采用 [Apache-2.0](LICENSE)，第三方组件保留各自许可，见 [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt)。许可证不授予 ASTaria 名称与标识的商标使用权，见 [NOTICE](NOTICE)。

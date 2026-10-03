@@ -27,10 +27,11 @@ const searchReply = () => ({
 const searchResponse = value => new Response(JSON.stringify(value), { headers: { 'Content-Type': 'application/json' } })
 const resultBlock = rows => ({ content: [{ type: 'web_search_tool_result', content: rows }] })
 const searchRows = count => Array.from({ length: count }, (_, index) => ({ type: 'web_search_result', title: `来源 ${index}`, url: `https://example.com/${index}` }))
+const pageFetcher = async () => ({ content: '网页正文', fetchedAt: '2026-10-03T00:00:00.000Z', fetchStatus: 'ok' })
 // Every search test injects both the keychain and fetch; no test touches the
 // real keychain and none opens a socket.
 const cloudSearch = (fetcher, { webSearch = { enabled: true, maxUses: 2 }, keychain = { read: async () => 'fake-search-key' } } = {}) =>
-  createWebSearch({ keychain, getSettings: () => local(webSearch), fetcher })
+  createWebSearch({ keychain, getSettings: () => local(webSearch), fetcher, pageFetcher })
 
 test('联网搜索配置默认关闭且旧设置迁移为关闭', () => {
   const saved = validateModelSettings(local())
@@ -45,6 +46,7 @@ test('DeepSeek Anthropic search sends only the query and returns structured sour
   const search = createWebSearch({
     keychain: { read: async () => 'fake-search-key' },
     getSettings: () => local({ enabled: true, maxUses: 2 }),
+    pageFetcher,
     fetcher: async (url, options) => {
       requests.push({ url, options, body: JSON.parse(options.body) })
       return new Response(JSON.stringify(searchReply()), { headers: { 'Content-Type': 'application/json' } })
@@ -60,10 +62,68 @@ test('DeepSeek Anthropic search sends only the query and returns structured sour
   assert.equal(requests[0].options.headers['x-api-key'], 'fake-search-key')
   assert.equal(requests[0].options.headers.Authorization, 'Bearer fake-search-key')
   assert.deepEqual(result.sources, [
-    { title: '来源 A', url: 'https://example.com/a', snippet: '摘要 A', publishedAt: '今天' },
-    { title: '来源 B', url: 'https://example.com/b', snippet: '', publishedAt: null },
+    { title: '来源 A', url: 'https://example.com/a', snippet: '摘要 A', publishedAt: '今天', source: 'example.com', content: '网页正文', fetchedAt: '2026-10-03T00:00:00.000Z', fetchStatus: 'ok' },
+    { title: '来源 B', url: 'https://example.com/b', snippet: '', publishedAt: null, source: 'example.com', content: '网页正文', fetchedAt: '2026-10-03T00:00:00.000Z', fetchStatus: 'ok' },
   ])
   assert.equal(result.truncated, false)
+})
+
+test('search keeps failed and empty page bodies distinct from verified content', async () => {
+  const search = createWebSearch({
+    keychain: { read: async () => 'fake-search-key' },
+    getSettings: () => local({ enabled: true, maxUses: 2 }),
+    fetcher: async () => searchResponse(resultBlock(searchRows(3))),
+    pageFetcher: async url => ({
+      content: url.endsWith('/0') ? '正文中的日期为10月5日' : '',
+      fetchedAt: '2026-10-03T01:00:00.000Z',
+      fetchStatus: url.endsWith('/0') ? 'ok' : url.endsWith('/1') ? 'empty' : 'failed',
+    }),
+  })
+  const result = await search.search('假期日期')
+  assert.deepEqual(result.sources.map(source => source.fetchStatus), ['ok', 'empty', 'failed'])
+  assert.equal(result.sources[0].content, '正文中的日期为10月5日')
+  assert.equal(result.sources[1].content, '')
+  assert.equal(result.sources[2].content, '')
+  assert.ok(result.sources.every(source => source.fetchedAt === '2026-10-03T01:00:00.000Z'))
+})
+
+test('one page fetch failure is reported per source without losing verified pages', async () => {
+  const controller = new AbortController()
+  const seen = []
+  const search = createWebSearch({
+    keychain: { read: async () => 'fake-search-key' },
+    getSettings: () => local({ enabled: true, maxUses: 2 }),
+    fetcher: async () => searchResponse(resultBlock(searchRows(2))),
+    pageFetcher: async (url, options) => {
+      seen.push(options.signal)
+      if (url.endsWith('/1')) throw new Error('page unavailable')
+      return { content: '已核实正文', fetchedAt: '2026-10-03T01:00:00.000Z', fetchStatus: 'ok' }
+    },
+  })
+  const result = await search.search('日期', { signal: controller.signal })
+  assert.deepEqual(result.sources.map(source => source.fetchStatus), ['ok', 'failed'])
+  assert.equal(result.sources[1].content, '')
+  assert.ok(Number.isFinite(Date.parse(result.sources[1].fetchedAt)))
+  assert.deepEqual(seen, [controller.signal, controller.signal])
+})
+
+test('assistant visibly refuses to verify a date when search pages have no body', async t => {
+  const db = createDatabase(':memory:')
+  t.after(() => db.close())
+  saveModelSettings(db, local({ enabled: true, maxUses: 2 }))
+  let calls = 0
+  const xixi = createXixi({ db,
+    webSearch: { search: async () => ({ sources: [{ title: '10月5日开始', url: 'https://example.com/a', content: '', fetchStatus: 'empty', fetchedAt: '2026-10-03T01:00:00.000Z' }], truncated: false, notice: '外部资料' }) },
+    complete: async () => {
+      calls += 1
+      return calls === 1 ? { choices: [{ message: { role: 'assistant', content: '', tool_calls: [{ id: 'search', type: 'function', function: { name: 'web_search', arguments: JSON.stringify({ query: '日期' }) } }] } }] }
+        : reply('日期确定是10月5日')
+    },
+  })
+  const result = await xixi.chat({ requestId: randomUUID(), conversationId: 'main', text: '查日期', context: { page: 'home', timezone: 'Asia/Shanghai' } })
+  assert.match(result.messages.at(-1).content, /无法核实具体日期/u)
+  assert.doesNotMatch(result.messages.at(-1).content, /日期确定/u)
+  assert.match(result.messages.at(-1).content, /正文为空/u)
 })
 
 test('search refuses disabled or unconfigured cloud channels without a request', async () => {
@@ -170,7 +230,7 @@ test('an empty structured result block returns no sources instead of inventing a
   const result = await search.search('一个不存在的主题')
   assert.deepEqual(result.sources, [])
   assert.equal(result.truncated, false)
-  assert.match(result.notice, /外部来源/u)
+  assert.match(result.notice, /外部资料/u)
   assert.equal(requests, 1)
 })
 
@@ -259,8 +319,8 @@ test('sources that are not http(s) never reach the caller', async () => {
   ] }
   const result = await cloudSearch(async () => searchResponse(payload)).search('ASTaria beta7')
   assert.deepEqual(result.sources, [
-    { title: '安全来源', url: 'https://safe.example/a', snippet: '安全摘要', publishedAt: null },
-    { title: 'https://safe.example/b', url: 'https://safe.example/b', snippet: '', publishedAt: null },
+    { title: '安全来源', url: 'https://safe.example/a', snippet: '安全摘要', publishedAt: null, source: 'safe.example', content: '网页正文', fetchedAt: '2026-10-03T00:00:00.000Z', fetchStatus: 'ok' },
+    { title: 'https://safe.example/b', url: 'https://safe.example/b', snippet: '', publishedAt: null, source: 'safe.example', content: '网页正文', fetchedAt: '2026-10-03T00:00:00.000Z', fetchStatus: 'ok' },
   ])
   assert.ok(result.sources.every(source => /^https?:/u.test(source.url)))
 })

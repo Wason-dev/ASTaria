@@ -3,7 +3,7 @@ import { validateModelSettings } from './modelSettings.mjs'
 import { validateRouteJudgment } from './routeAnalysis.mjs'
 import { planWeeksValue } from './freeTimePlan.mjs'
 import { ValidationError, knownKeys, identifier, text, object, choice, dateTime, day, clockTime, taskInput, questionOptions, validateMemory } from './validation.mjs'
-import { dayEventValue, validateDayEvents, horizonGroupValue } from './planner.mjs'
+import { dayEventValue, validateDayEvents, validateDayExceptions, horizonGroupValue } from './planner.mjs'
 import { BACKUP_MAX_BYTES, BACKUP_EXPORT_TOO_LARGE, BACKUP_IMPORT_TOO_LARGE, backupByteLength, serializeBackup } from '../src/xixi/backupLimits.ts'
 
 const columns = {
@@ -207,13 +207,15 @@ function validateDocument(table, document) {
     if (document.requestedChanges !== undefined) array(document.requestedChanges, 50)
     if (document.removedAssignments !== undefined) array(document.removedAssignments, 10000)
     if (document.requestedActions !== undefined) for (const action of array(document.requestedActions, 128)) {
-      choice(action.type, ['save-block', 'delete-block', 'save-details', 'set-day-template', 'remove-day-template', 'edit-weekday', 'save-day-event', 'delete-day-event'], '操作类型')
+      choice(action.type, ['save-block', 'delete-block', 'save-details', 'set-day-template', 'remove-day-template', 'set-day-exception', 'clear-day-exception', 'edit-weekday', 'save-day-event', 'delete-day-event'], '操作类型')
+      if (action.type === 'set-day-exception') { knownKeys(action, ['type', 'date', 'endDate', 'kind', 'sourceWeekday']); day(action.date); if (action.endDate !== undefined) day(action.endDate); choice(action.kind, ['holiday', 'cancelled', 'rescheduled', 'restored']); if (action.kind === 'rescheduled') integer(action.sourceWeekday, 0, 6) }
+      if (action.type === 'clear-day-exception') { knownKeys(action, ['type', 'date']); day(action.date) }
       if (action.type === 'save-day-event') { knownKeys(action, ['type', 'event']); dayEventValue(action.event) }
       if (action.type === 'delete-day-event') { knownKeys(action, ['type', 'id']); identifier(action.id) }
     }
-    if (document.plannerBefore !== undefined) { object(document.plannerBefore); validateDayEvents(document.plannerBefore.dayEvents) }
+    if (document.plannerBefore !== undefined) { object(document.plannerBefore); validateDayEvents(document.plannerBefore.dayEvents); validateDayExceptions(document.plannerBefore.dayExceptions) }
     if (document.plannerAfterRevision !== undefined) integer(document.plannerAfterRevision)
-    if (document.taskPlannerBefore !== undefined) { object(document.taskPlannerBefore); validateDayEvents(document.taskPlannerBefore.dayEvents); integer(document.taskPlannerAfterRevision) }
+    if (document.taskPlannerBefore !== undefined) { object(document.taskPlannerBefore); validateDayEvents(document.taskPlannerBefore.dayEvents); validateDayExceptions(document.taskPlannerBefore.dayExceptions); integer(document.taskPlannerAfterRevision) }
     if (document.planChanges !== undefined) for (const change of array(document.planChanges, 128)) { knownKeys(change, ['id', 'before', 'after']); identifier(change.id); if (change.before !== null) block(change.before); if (change.after !== null) block(change.after) }
   }
 }

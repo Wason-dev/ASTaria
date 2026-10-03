@@ -5,6 +5,7 @@ import { createReadStream } from 'node:fs'
 import { chmod, copyFile, lstat, mkdir, mkdtemp, open, readFile, readdir, realpath, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { generateNotices } from './third-party-notices.mjs'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const NAME = 'ASTaria', BUNDLE_ID = 'dev.wason.ASTaria', ARCH = 'arm64'
@@ -175,6 +176,8 @@ async function main() {
     source: sourceProvenance(), packagerSha256: await sha256(fileURLToPath(import.meta.url)),
     packageLockSha256: await exists(join(ROOT, 'package-lock.json')) ? await sha256(join(ROOT, 'package-lock.json')) : null }
   for (const path of ['desktop/main.cjs', 'desktop/server.mjs', 'server/native/keychain.m', 'dist/index.html', 'public/astaria-icon-1024.png', 'LICENSE', 'NOTICE', 'THIRD_PARTY_NOTICES.txt']) await requirePath(join(ROOT, path), 'file')
+  const notices = await generateNotices(ROOT)
+  if (notices.missing.length || notices.review.length || await readFile(join(ROOT, 'THIRD_PARTY_NOTICES.txt'), 'utf8') !== notices.text) fail('Third-party notices are incomplete or stale; verify and regenerate before packaging.')
   for (const path of ['desktop', 'server', 'src', 'dist']) await requirePath(join(ROOT, path), 'directory')
   for (const path of ['LICENSE', 'LICENSES.chromium.html']) await requirePath(join(dirname(runtime), path), 'file')
   const prompts = await exists(join(ROOT, 'prompts')) ? join(ROOT, 'prompts') : join(ROOT, 'server/prompts')

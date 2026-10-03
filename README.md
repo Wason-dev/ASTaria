@@ -4,7 +4,7 @@
 
 ASTaria 是一款本机优先的个人时间与事项应用。和析熙聊作业、计划或心愿，把任务放进课程和日常活动之间的真实空档，再从工作台开始专注。
 
-当前版本：**0.1.0-beta.8** · macOS 13+ · Apple Silicon（arm64）
+当前版本：**0.1.0-beta.9** · macOS 13+ · Apple Silicon（arm64）
 
 [下载最新版本](https://github.com/Wason-dev/ASTaria/releases) · [安装说明](docs/INSTALL.md) · [更新记录](CHANGELOG.md) · [功能详情](docs/FEATURES.md) · [界面与交互规范](docs/UI_DESIGN_SYSTEM.md)
 
@@ -40,7 +40,7 @@ ASTaria 是一款本机优先的个人时间与事项应用。和析熙聊作业
 
 ## 安装
 
-1. 从 [Releases](https://github.com/Wason-dev/ASTaria/releases) 下载 `ASTaria-0.1.0-beta.8-mac-arm64-adhoc.dmg`，打开后把 **ASTaria** 拖入应用程序。
+1. 从 [Releases](https://github.com/Wason-dev/ASTaria/releases) 下载 `ASTaria-0.1.0-beta.9-mac-arm64-adhoc.dmg`，打开后把 **ASTaria** 拖入应用程序。
 2. 第一次打开若被 macOS 拦截，按[安装说明](docs/INSTALL.md)处理。本版使用 ad-hoc 签名，尚未 Apple 公证。
 3. 首次启动按引导选择外观与个性，可导入 API Key，也可稍后在「设置 → 析熙」连接模型；然后录入课程、事项和可用时间。
 
@@ -85,6 +85,18 @@ CI 自动执行源码测试、桌面网页构建、许可清单和版本文档�
 | `docs/` | 功能、安装与版本说明 |
 
 详细开发与打包说明见[功能与开发文档](docs/FEATURES.md)。遇到问题请提交 [Bug report](https://github.com/Wason-dev/ASTaria/issues/new?template=bug_report.yml)，附版本、系统和复现步骤，避免上传密钥、课表或私密聊天。
+
+## 0.1.0-beta.9
+
+**0.1.0-beta.9** 聚焦联网搜索的来源可核实性、日历例外与文档准确性，适用于 macOS 13+ Apple Silicon（arm64）：
+
+- **搜索来源核验**：开启联网搜索后，每条来源都尝试抓取网页正文，并标记为抓取成功、抓取失败或正文为空。只有成功取得正文的来源可用于核对事实或日期；失败与空正文一律视为无法核实，不能从标题、摘要或时间信息猜测。没有可核实正文时，析熙直接说明无法核实，并逐条列出各来源的核验状态与抓取时间（同一回合已生成写入回执时以回执为准）。
+- **日历例外**：可设置假期、临时停课、临时调课（指定来源课表星期）和恢复原安排，并支持连续日期区间（最多 31 天）；例外独立于每周课表，不删除任务与单日活动。日历与日程会把例外标注在对应日期和当天标题上，单日例外可撤销并恢复每周安排。
+- **析熙快捷选项**：回复下方的快捷选项按钮改用与其他控件一致的 8px 圆角和中性描边，键盘焦点使用金色描边，并补齐按下状态。
+- **第三方许可**：GSAP 3.15.0 的官方许可正文随第三方声明一起打包，并按版本、许可声明与文件校验和固定；打包前会拒绝缺失、被改动或过期的许可清单。
+- **README 截图**：五张截图使用虚构演示数据重新生成，画面来自真实页面状态，不含个人课表、聊天或密钥。
+
+改动与边界见 [0.1.0-beta.9 发布说明](docs/RELEASE_NOTES_v0.1.0-beta.9.md)；安装包与校验文件见 [Releases](https://github.com/Wason-dev/ASTaria/releases/tag/v0.1.0-beta.9)。
 
 ## 0.1.0-beta.8
 

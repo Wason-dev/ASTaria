@@ -866,7 +866,7 @@ export function createDatabase(filename) {
     const limit = scenario ? 128 : 8
     if (!Array.isArray(input.actions) || !input.actions.length || input.actions.length > limit) fail(`单次操作需要 1–${limit} 项安排变更`)
     const requestedActions = jsonValue(input.actions, '安排变更', 100000)
-    for (const action of requestedActions) choice(action?.type, ['save-block', 'delete-block', 'save-details', 'set-day-template', 'remove-day-template', 'edit-weekday', 'save-day-event', 'delete-day-event'], '析熙安排操作')
+    for (const action of requestedActions) choice(action?.type, ['save-block', 'delete-block', 'save-details', 'set-day-template', 'remove-day-template', 'set-day-exception', 'clear-day-exception', 'edit-weekday', 'save-day-event', 'delete-day-event'], '析熙安排操作')
     return transaction(() => {
       assertTurnWritable(requestId)
       const parentOperationId = input.parentOperationId === undefined ? undefined : identifier(input.parentOperationId, '来源操作标识')

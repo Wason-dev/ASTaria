@@ -342,6 +342,7 @@ try {
   await click('.horizon-day-heading nav button:nth-child(2)')
   await wait('!!document.querySelector(".horizon-browse")')
   await wait(`(()=>{const group=document.querySelector('.horizon-studio .orbit-group'),label=group?.querySelector('.orbit-group-caption');return group&&!group.disabled&&Number(getComputedStyle(group).opacity)>=.99&&label&&Number(getComputedStyle(label).opacity)>=.99})()`)
+  await wait(`(()=>{const copy=document.querySelector('.horizon-day-copy');return copy&&Number(getComputedStyle(copy).opacity)>=.99&&copy.getAnimations().every(animation=>animation.playState==='finished')})()`)
   const horizonVisual = await evaluate(`(()=>{const d=document.querySelector('.horizon-studio');return{phase:d.dataset.phase,editing:d.dataset.editing,inert:d.firstElementChild.hasAttribute('inert'),reveal:d.style.getPropertyValue('--orbit-reveal'),uiReveal:d.style.getPropertyValue('--horizon-ui-reveal'),canvasOpacity:getComputedStyle(d.querySelector('.orbit-canvas')).opacity,headingOpacity:getComputedStyle(d.querySelector('.orbit-heading')).opacity,browseOpacity:getComputedStyle(d.querySelector('.horizon-browse')).opacity}})()`)
   assert.equal(horizonVisual.headingOpacity, '1', JSON.stringify(horizonVisual))
   await check('overflow arrows remain on the visible central axis', `(()=>{const d=document.querySelector('.horizon-studio'),n=d.querySelector('.horizon-browse'),r=n.getBoundingClientRect();return r.top>d.getBoundingClientRect().top+100&&r.bottom<d.getBoundingClientRect().bottom-100})()`)

@@ -117,6 +117,12 @@ export const XIXI_TOOLS = [
   tool('restore_day_timetable', '取消单日调课，先read_planner读目标日', {
     date: str('YYYY-MM-DD'), expectedRevision: { type: 'integer', minimum: 0 }, evidence: plannerEvidence,
   }, ['date', 'expectedRevision', 'evidence']),
+  tool('set_calendar_exception', '设置连续假期、整日停课、单日调课或恢复原课表。先read_planner读取每个目标日期；假期和停课不需要来源星期，也不会删除任务或单日活动', {
+    date: str('开始日期 YYYY-MM-DD'), endDate: str('结束日期 YYYY-MM-DD，省略表示单日'),
+    kind: { type: 'string', enum: ['holiday', 'cancelled', 'rescheduled', 'restored'] },
+    sourceWeekday: weekdaySchema,
+    expectedRevision: { type: 'integer', minimum: 0 }, evidence: plannerEvidence,
+  }, ['date', 'kind', 'expectedRevision', 'evidence']),
   tool('save_day_events', '保存单日固定活动、会议或临时课程，支持任意明确钟点，不要求落在可用窗口内。先read_planner；保留周模板与任务，真实重叠返回conflicts。修改传已有id，多项一次保存', {
     expectedRevision: { type: 'integer', minimum: 0 }, evidence: plannerEvidence,
     events: { type: 'array', minItems: 1, maxItems: 8, items: { ...objectSchema({
@@ -560,6 +566,7 @@ export function createXixi({ db, complete, webSearch, now = () => new Date() }) 
       carry: carryItems(state, tasks, date),
     }
     const override = state.dayOverrides?.[date] ? { sourceWeekday: state.dayOverrides[date].sourceWeekday, onlyThisDate: true, templateChanged: snapshotChanged(state, state.dayOverrides[date]), readSource: 'read_weekly_timetable' } : null
+    const dayException = state.dayExceptions?.[date] ? { kind: state.dayExceptions[date].kind, sourceWeekday: state.dayExceptions[date].sourceWeekday ?? null } : null
     if (detail?.section && detail.section !== 'overview') {
       const { section, offset, limit } = detail
       const readMore = { tool: 'read_planner', date, section }
@@ -586,6 +593,7 @@ export function createXixi({ db, complete, webSearch, now = () => new Date() }) 
           ? { capacityReadMore: { tool: 'read_planner', date, section: 'capacity', offset: 0 } } : {}),
         availabilityWindows: { ...availabilityWindows(state, tasks, date, at, 1800), readMore: { tool: 'read_planner', date, section: 'availabilityWindows', offset: 0 } },
         dayOverride: override,
+        dayException,
         routines: page('routines', 32, 2200, ({ items, ...row }) => ({ ...row, items: items.slice(0, 8),
           ...(items.length > 8 ? { itemsTruncated: true, readMore: { tool: 'read_planner', date, section: 'routines', offset: collections.routines.findIndex(item => item.id === row.id), limit: 1 } } : {}) })),
         blocks: page('blocks', 32, 2200), tasks: page('tasks', 24, 1600, ({ notes, preparation, ...row }) => ({ ...row,
@@ -597,6 +605,7 @@ export function createXixi({ db, complete, webSearch, now = () => new Date() }) 
       date, capacity: compactCapacity(cap, 12),
       availabilityWindows: availabilityWindows(state, tasks, date, at, Math.max(360, Math.floor(units * .32))),
       dayOverride: state.dayOverrides?.[date] ? { sourceWeekday: state.dayOverrides[date].sourceWeekday, onlyThisDate: true, templateChanged: snapshotChanged(state, state.dayOverrides[date]), readSource: 'read_weekly_timetable' } : null,
+      dayException,
       routines: boundedRows(routinesForDay(state, date), 20, Math.floor(units * .22), routine => ({ id: routine.id, title: routine.title,
         kind: routine.kind, start: routine.start, end: routine.end, location: routine.location, items: routine.items.slice(0, 8) })),
       blocks: boundedRows(blocks, 20, Math.floor(units * .22), block => ({ ...block, title: byId.get(block.taskId)?.title,
@@ -659,7 +668,7 @@ export function createXixi({ db, complete, webSearch, now = () => new Date() }) 
     const state = db.getPlanner()
     let actions, summary, evidenceSourceIds = []
     if (state.revision !== args.expectedRevision) throw new ValidationError('安排已在其他窗口更新，请先重新读取', 409)
-    if (['plan_tasks', 'remove_plan', 'save_day_events', 'remove_day_event', 'set_day_timetable', 'restore_day_timetable', 'edit_weekly_timetable'].includes(name) && !timezoneMatches(input.context.timezone)) {
+    if (['plan_tasks', 'remove_plan', 'save_day_events', 'remove_day_event', 'set_day_timetable', 'restore_day_timetable', 'set_calendar_exception', 'edit_weekly_timetable'].includes(name) && !timezoneMatches(input.context.timezone)) {
       throw new ValidationError(`日程使用本机时区 ${plannerTimezone()}，与当前页面时区不同；统一时区后我再安排`, 409)
     }
     if (name === 'save_day_events' || name === 'remove_day_event') {
@@ -687,6 +696,25 @@ export function createXixi({ db, complete, webSearch, now = () => new Date() }) 
         actions = [{ type: 'delete-day-event', id: event.id }]
         summary = `移除单日活动：${event.title} ${event.date} ${event.start}–${event.end}`
       }
+    } else if (name === 'set_calendar_exception') {
+      const date = day(args.date), endDate = day(args.endDate ?? date)
+      if (date < localDay(clock()) || endDate < date) throw new ValidationError('请核对例外的起止日期', 409)
+      const dates = [], cursor = new Date(`${date}T12:00:00`)
+      while (true) {
+        const current = localDay(cursor)
+        if (current > endDate) break
+        dates.push(current)
+        if (dates.length > 31) throw new ValidationError('连续例外最多31天')
+        cursor.setDate(cursor.getDate() + 1)
+      }
+      requirePlannerRead(input, args.expectedRevision, dates)
+      evidenceSourceIds = plannerEvidenceSources(input, args.evidence)
+      actions = [{ type: 'set-day-exception', date, endDate, kind: args.kind,
+        ...(args.sourceWeekday === undefined ? {} : { sourceWeekday: args.sourceWeekday }) }]
+      summary = `${date}${date === endDate ? '' : ` 至 ${endDate}`} ${{
+        holiday: '假期，常规课表已清空', cancelled: '停课，常规课表已清空',
+        rescheduled: '临时调课', restored: '已恢复原每周课表',
+      }[args.kind] ?? '日历例外'}`
     } else if (name === 'set_day_timetable' || name === 'restore_day_timetable') {
       const date = day(args.date)
       evidenceSourceIds = plannerEvidenceSources(input, args.evidence)
@@ -1061,7 +1089,7 @@ export function createXixi({ db, complete, webSearch, now = () => new Date() }) 
       .map(event => event.id ? event : { ...event, location: event.location ?? '', items: event.items ?? [] })
       .sort((a, b) => JSON.stringify(canonical(a)).localeCompare(JSON.stringify(canonical(b))))
     if (['update_task', 'save_task_steps'].includes(name)) delete clean.expectedUpdatedAt
-    if (['create_tasks', 'plan_tasks', 'remove_plan', 'save_day_events', 'remove_day_event', 'save_task_preparation', 'set_day_timetable', 'restore_day_timetable', 'edit_weekly_timetable'].includes(name)) delete clean.expectedRevision
+    if (['create_tasks', 'plan_tasks', 'remove_plan', 'save_day_events', 'remove_day_event', 'save_task_preparation', 'set_day_timetable', 'restore_day_timetable', 'set_calendar_exception', 'edit_weekly_timetable'].includes(name)) delete clean.expectedRevision
     return stableId(input.requestId, name, clean)
   }
 
@@ -1081,7 +1109,7 @@ export function createXixi({ db, complete, webSearch, now = () => new Date() }) 
     knownKeys(args, Object.keys(definition.parameters.properties))
     for (const key of definition.parameters.required) if (args[key] === undefined) throw new ValidationError(`缺少工具参数 ${key}`)
     const name = definition.name
-    if (preferences().assistant?.autonomy === 'propose' && ['create_tasks', 'update_task', 'save_task_steps', 'plan_tasks', 'remove_plan', 'save_day_events', 'remove_day_event', 'save_task_preparation', 'set_day_timetable', 'restore_day_timetable', 'edit_weekly_timetable', 'save_free_time_goal', 'schedule_free_time', 'complete_free_time_session'].includes(name)) {
+    if (preferences().assistant?.autonomy === 'propose' && ['create_tasks', 'update_task', 'save_task_steps', 'plan_tasks', 'remove_plan', 'save_day_events', 'remove_day_event', 'save_task_preparation', 'set_day_timetable', 'restore_day_timetable', 'set_calendar_exception', 'edit_weekly_timetable', 'save_free_time_goal', 'schedule_free_time', 'complete_free_time_session'].includes(name)) {
       throw new ValidationError('当前设为先提议：请给出建议或推演草案，用户可手动应用方案，或在设置中开启自动执行', 409)
     }
     if (name === 'read_current_time') return currentTime(input.context.timezone)
@@ -1245,7 +1273,7 @@ export function createXixi({ db, complete, webSearch, now = () => new Date() }) 
           ? taskSchedulingReceipt(tasks) : { changed: false, required: false, notice: '沿用已记录事项和当前日历状态，不重复创建或安排。' } } : {}),
         ...(automatic && !automatic.undoneAt ? { operations: [operationForContext(automatic)] } : {}) }
     }
-    if (['plan_tasks', 'remove_plan', 'save_day_events', 'remove_day_event', 'save_task_preparation', 'set_day_timetable', 'restore_day_timetable', 'edit_weekly_timetable'].includes(name)) return applyPlannerTool(name, args, input, id)
+    if (['plan_tasks', 'remove_plan', 'save_day_events', 'remove_day_event', 'save_task_preparation', 'set_day_timetable', 'restore_day_timetable', 'set_calendar_exception', 'edit_weekly_timetable'].includes(name)) return applyPlannerTool(name, args, input, id)
     const at = timestamp()
     let changes, summary, creationDrafts
     if (name === 'create_tasks') {
@@ -1421,6 +1449,7 @@ export function createXixi({ db, complete, webSearch, now = () => new Date() }) 
     // Search permission is scoped to this request. A previous turn that used
     // the network must never block a later, explicitly confirmed local write.
     let webSearchUsed = false
+    let searchSources = []
     // Execution and reply generation are separate phases. Once a write has
     // committed, a later provider failure must not turn the whole turn back
     // into a retryable mutation.
@@ -1518,6 +1547,7 @@ export function createXixi({ db, complete, webSearch, now = () => new Date() }) 
         const result = await webSearch.search(args.query)
         db.assertTurnWritable(input.requestId, sourceMessageIds)
         webSearchUsed = true
+        searchSources = result.sources ?? []
         return { ok: true, ...result }
       }
       // External search results are untrusted context. Require a fresh user
@@ -1687,7 +1717,13 @@ export function createXixi({ db, complete, webSearch, now = () => new Date() }) 
           const executionStatus = workOrder.verify()
           const incomplete = ['partial', 'failed'].includes(executionStatus)
           const useReceipt = incomplete || cancelledSummaries.length > 0
-          const content = useReceipt ? committedReceiptText([...committed.values()], workOrder.snapshot(), cancelledSummaries) : inputText(message.content, '回复', 12000)
+          let content = useReceipt ? committedReceiptText([...committed.values()], workOrder.snapshot(), cancelledSummaries) : inputText(message.content, '回复', 12000)
+          if (webSearchUsed && !useReceipt) {
+            const verified = searchSources.filter(source => source.fetchStatus === 'ok' && source.content)
+            if (!verified.length) content = '本次搜索没有取得可核实的网页正文，无法核实具体日期或事实。请稍后重试或打开原始链接核对。'
+            const details = searchSources.map(source => `${source.title} · ${source.url}\n${source.fetchStatus === 'ok' && source.content ? `已抓取正文：${source.content.slice(0, 240)}` : '无法核实（' + (source.fetchStatus === 'empty' ? '正文为空' : '抓取失败') + ')'} · ${source.fetchedAt ?? '抓取时间未知'}`)
+            content += `\n\n来源核验：\n${details.length ? details.join('\n') : '没有返回可用来源，无法核实。'}`
+          }
           workOrder.finishReply(useReceipt ? 'fallback' : 'model'); checkpoint()
           db.appendMessage({ conversationId: input.conversationId, requestId: input.requestId, role: 'assistant', content, reasoningContent: message.reasoning_content,
             ...(!useReceipt && message.question ? { question: questionOptions(message.question) } : {}),

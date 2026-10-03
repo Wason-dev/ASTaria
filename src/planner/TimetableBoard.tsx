@@ -3,6 +3,7 @@ import type { CSSProperties, KeyboardEvent } from 'react'
 import type { Task } from '../domain/task'
 import { localDay, shiftDay } from '../home/agenda'
 import { blocksForDay, compactMinutesLabel, dayCapacity, minuteOf, minutesLabel, routinesForDay, timeOf, timetableTimeScale, visibleTimetableRoutines } from './model'
+import { dayExceptionLabel } from './exceptionLabels'
 import type { PlanBlock, PlannerState, Routine } from './types'
 import { usePeriodMotion } from './usePeriodMotion'
 import { planBlockCompleted } from './completion'
@@ -113,8 +114,7 @@ export function TimetableBoard({ state, tasks, selected, anchor, now, direction,
           const known = routines.some(routine => routine.kind === 'available')
           const availableMinutes = day === today ? capacity.remainingMin : capacity.freeMin
           const capacityLabel = known ? `${day === today ? '今天还可安排' : '可支配'} ${minutesLabel(availableMinutes)}` : '空课待补充'
-          const dayOverride = state.dayOverrides?.[day]
-          const overrideLabel = dayOverride ? `临时按周${sourceWeekdays[dayOverride.sourceWeekday]}课表` : ''
+          const overrideLabel = dayExceptionLabel(state, day)
           return <button key={day} type="button" className="pl-timetable-date" data-date={day} data-today={day === today}
             aria-pressed={day === selected} aria-current={day === today ? 'date' : undefined} tabIndex={day === focusDate ? 0 : -1}
             aria-label={`${date.getMonth() + 1}月${date.getDate()}日，周${weekdays[(date.getDay() + 6) % 7]}，${capacityLabel}${overrideLabel ? `，${overrideLabel}` : ''}`}
@@ -122,7 +122,7 @@ export function TimetableBoard({ state, tasks, selected, anchor, now, direction,
             <span className="pl-timetable-date-main"><span>周{weekdays[(date.getDay() + 6) % 7]}</span><strong>{date.getDate()}</strong>{day === today && <small>今天</small>}</span>
             <span className="pl-timetable-date-meta">
               <span className="pl-timetable-capacity" title={state.timetableConfirmed ? capacityLabel : `仅按已知时段 · ${capacityLabel}`}><b>{known ? compactMinutesLabel(availableMinutes) : '待补充'}</b></span>
-              {dayOverride && <small className="pl-timetable-override" title={overrideLabel}>调课 · 周{sourceWeekdays[dayOverride.sourceWeekday]}</small>}
+              {overrideLabel && <small className="pl-timetable-override" title={overrideLabel}>{overrideLabel}</small>}
             </span>
           </button>
         })}</div>

@@ -10,7 +10,7 @@ const activeTask = task => task && !task.deletedAt && ['todo', 'doing'].includes
 // Completion records time already used; only a dropped/deleted task releases it.
 const occupiesTime = task => task && !task.deletedAt && task.status !== 'dropped'
 const overlaps = (a, b) => a.start < b.end && b.start < a.end
-const limits = { routines: 300, blocks: 3000, details: 5000, checked: 3660, dayOverrides: 3660, dayEvents: 3000 }
+const limits = { routines: 300, blocks: 3000, details: 5000, checked: 3660, dayOverrides: 3660, dayExceptions: 3660, dayEvents: 3000 }
 
 export function defaultPlanner() {
   return {
@@ -19,7 +19,7 @@ export function defaultPlanner() {
       { id: 'default-evening-study', title: '晚自习', kind: 'available', weekdays: [1, 2, 3, 4, 5], start: '18:00', end: '20:00', location: '学校', items: [], enabled: true },
       { id: WEEKEND_DEFAULT_ROUTINE_ID, title: '周末可安排时间', kind: 'available', weekdays: [0, 6], start: '09:00', end: '22:00', location: '', items: [], enabled: true },
     ],
-    blocks: [], details: {}, checked: {}, dayOverrides: {}, dayEvents: [],
+    blocks: [], details: {}, checked: {}, dayOverrides: {}, dayExceptions: {}, dayEvents: [],
   }
 }
 
@@ -118,8 +118,29 @@ function validateDayOverrides(overrides) {
     if (routines.some(routine => !routine.enabled || !routine.weekdays.includes(sourceWeekday)) || !routines.some(routine => routine.kind === 'class')) fail('单日调课需要有效的来源课程快照')
   }
 }
+export function validateDayExceptions(exceptions) {
+  if (exceptions === undefined) return
+  if (!exceptions || typeof exceptions !== 'object' || Array.isArray(exceptions) || Object.keys(exceptions).length > limits.dayExceptions) fail('日历例外记录无效或数量过多')
+  for (const [date, exception] of Object.entries(exceptions)) {
+    day(date)
+    knownKeys(exception, ['date', 'kind', 'sourceWeekday', 'routines'], '日历例外')
+    if (day(exception.date) !== date) fail('日历例外日期不一致')
+    choice(exception.kind, ['holiday', 'cancelled', 'rescheduled', 'restored'], '日历例外类型')
+    if (exception.kind === 'rescheduled') {
+      sourceWeekdayValue(exception.sourceWeekday)
+      if (!Array.isArray(exception.routines) || exception.routines.length > limits.routines) fail('调课快照无效')
+      if (new Set(exception.routines.map(item => item?.id)).size !== exception.routines.length) fail('调课快照标识重复')
+      for (const routine of exception.routines) routineValue(routine)
+    } else if (exception.sourceWeekday !== undefined || exception.routines !== undefined) fail('该例外不应包含来源课表')
+  }
+}
+function datedRoutines(state, date) {
+  const exception = state.dayExceptions?.[date]
+  if (exception) return exception.kind === 'rescheduled' ? exception.routines : exception.kind === 'restored' ? state.routines.filter(routine => routineOccursOn(routine, date)) : []
+  return state.dayOverrides?.[date]?.routines ?? state.routines.filter(routine => routineOccursOn(routine, date))
+}
 function routinesOn(state, date) {
-  const routines = state.dayOverrides?.[date]?.routines ?? state.routines.filter(routine => routineOccursOn(routine, date))
+  const routines = datedRoutines(state, date)
   return [...routines, ...(state.dayEvents ?? []).filter(event => event.date === date).map(event => ({ ...event, kind: 'class', enabled: true }))]
 }
 export function horizonGroupValue(input) {
@@ -224,7 +245,7 @@ export function createPlannerStore({ db, transaction, getTask, listTasks, now = 
   }
   function validateRoutineOccupancy(routine, state) {
     if (!routine.enabled || routine.kind === 'available') return
-    if (state.blocks.some(block => !state.dayOverrides?.[block.date] && routineOccursOn(routine, block.date) && occupiesTime(getTask(block.taskId)) && fixedConflicts(routine, block))) fail('固定安排与已有任务时间重叠，请先调整任务安排', 409)
+    if (state.blocks.some(block => !state.dayOverrides?.[block.date] && !state.dayExceptions?.[block.date] && routineOccursOn(routine, block.date) && occupiesTime(getTask(block.taskId)) && fixedConflicts(routine, block))) fail('固定安排与已有任务时间重叠，请先调整任务安排', 409)
   }
   function validateBlock(block, state, { restoring = false } = {}) {
     const task = requireTask(block.taskId, !restoring)
@@ -268,18 +289,20 @@ export function createPlannerStore({ db, transaction, getTask, listTasks, now = 
 
   function applyPlannerAction(action, expectedRevision, deferBlockValidation = false) {
     if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0) fail('安排版本不正确')
-    choice(action?.type, ['save-routine', 'delete-routine', 'import-routines', 'set-first-week-monday', 'edit-weekday', 'set-day-template', 'remove-day-template', 'save-day-event', 'delete-day-event', 'save-block', 'delete-block', 'save-details', 'check-item'], '安排操作')
+    choice(action?.type, ['save-routine', 'delete-routine', 'import-routines', 'set-first-week-monday', 'edit-weekday', 'set-day-template', 'remove-day-template', 'set-day-exception', 'clear-day-exception', 'save-day-event', 'delete-day-event', 'save-block', 'delete-block', 'save-details', 'check-item'], '安排操作')
     knownKeys(action, ['type', ...({
       'save-routine': ['routine'], 'delete-routine': ['id'], 'import-routines': ['routines'],
       'set-first-week-monday': ['date'],
       'edit-weekday': ['weekday', 'replacements', 'syncDates'],
       'set-day-template': ['date', 'sourceWeekday'], 'remove-day-template': ['date'],
+      'set-day-exception': ['date', 'endDate', 'kind', 'sourceWeekday'], 'clear-day-exception': ['date'],
       'save-day-event': ['event'], 'delete-day-event': ['id'],
       'save-block': ['block'], 'delete-block': ['id'], 'save-details': ['taskId', 'details'], 'check-item': ['date', 'key', 'checked'],
     }[action?.type] ?? [])], '安排操作')
     return transaction(() => {
       const state = getPlanner()
       if (state.revision !== expectedRevision) fail('安排已在其他窗口更新，请刷新后重试', 409)
+      const before = JSON.stringify(state)
       switch (action.type) {
         case 'set-first-week-monday': {
           const anchor = firstWeekValue(action.date)
@@ -371,13 +394,50 @@ export function createPlannerStore({ db, transaction, getTask, listTasks, now = 
           if (!routines.some(routine => routine.kind === 'class')) fail('来源星期还没有已启用的课程，请先录入或导入该星期的真实课表，再设置单日调课', 409)
           // Record the actual school day even when an existing task conflicts.
           // The capacity model exposes those conflicts; tasks are never moved.
-          state.dayOverrides = { ...state.dayOverrides, [date]: { date, sourceWeekday, routines } }
+          const override = { date, sourceWeekday, routines }
+          if (JSON.stringify(state.dayOverrides?.[date]) !== JSON.stringify(override)) {
+            state.dayOverrides = { ...state.dayOverrides, [date]: override }
+          }
+          if (state.dayExceptions?.[date]) delete state.dayExceptions[date]
           break
         }
         case 'remove-day-template': {
           const date = day(action.date)
           if (!state.dayOverrides?.[date]) fail('这一天没有单日调课记录', 404)
           delete state.dayOverrides[date]
+          break
+        }
+        case 'set-day-exception': {
+          const start = day(action.date), end = day(action.endDate ?? action.date)
+          const kind = choice(action.kind, ['holiday', 'cancelled', 'rescheduled', 'restored'], '日历例外类型')
+          if (end < start) fail('结束日期不能早于开始日期')
+          if (kind !== 'rescheduled' && action.sourceWeekday !== undefined) fail('只有调课可以指定来源星期')
+          const sourceWeekday = kind === 'rescheduled' ? sourceWeekdayValue(action.sourceWeekday) : undefined
+          const dates = []
+          const cursor = new Date(`${start}T12:00:00`)
+          while (true) {
+            const date = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}-${String(cursor.getDate()).padStart(2, '0')}`
+            if (date > end) break
+            dates.push(date)
+            if (dates.length > 31) fail('连续例外最多31天')
+            cursor.setDate(cursor.getDate() + 1)
+          }
+          state.dayExceptions ??= {}
+          for (const date of dates) {
+            const exception = { date, kind, ...(kind === 'rescheduled' ? {
+              sourceWeekday, routines: state.routines.filter(routine => routineOccursOn(routine, date, sourceWeekday)).map(routineValue),
+            } : {}) }
+            if (JSON.stringify(state.dayExceptions[date]) === JSON.stringify(exception) && !state.dayOverrides?.[date]) continue
+            state.dayExceptions[date] = exception
+            if (state.dayOverrides?.[date]) delete state.dayOverrides[date]
+          }
+          break
+        }
+        case 'clear-day-exception': {
+          const date = day(action.date)
+          if (!state.dayExceptions?.[date] && !state.dayOverrides?.[date]) fail('这一天没有日历例外', 404)
+          if (state.dayExceptions) delete state.dayExceptions[date]
+          if (state.dayOverrides) delete state.dayOverrides[date]
           break
         }
         case 'save-day-event': {
@@ -433,6 +493,7 @@ export function createPlannerStore({ db, transaction, getTask, listTasks, now = 
         }
         default: fail('不支持的安排操作')
       }
+      if (JSON.stringify(state) === before) return state
       if (!Number.isSafeInteger(state.revision + 1)) fail('安排版本超出范围', 409)
       state.revision += 1
       return save(state)
@@ -501,6 +562,7 @@ export function createPlannerStore({ db, transaction, getTask, listTasks, now = 
       const current = getPlanner()
       if (current.revision !== expectedRevision) fail('安排后来有新的修改，无法直接撤销', 409)
       validateDayOverrides(snapshot.dayOverrides)
+      validateDayExceptions(snapshot.dayExceptions)
       validateDayEvents(snapshot.dayEvents)
       for (const taskId of new Set([...snapshot.blocks.map(block => block.taskId), ...Object.keys(snapshot.details)])) requireTask(taskId)
       const currentBlocks = new Map(current.blocks.map(block => [block.id, block]))
@@ -526,7 +588,7 @@ export function createPlannerStore({ db, transaction, getTask, listTasks, now = 
     })
   }
   function validateState(state) {
-    knownKeys(state, ['revision', 'timetableConfirmed', 'routines', 'blocks', 'details', 'checked', 'dayOverrides', 'dayEvents', 'firstWeekMonday'], '备份日程')
+    knownKeys(state, ['revision', 'timetableConfirmed', 'routines', 'blocks', 'details', 'checked', 'dayOverrides', 'dayExceptions', 'dayEvents', 'firstWeekMonday'], '备份日程')
     if (!Number.isSafeInteger(state.revision) || state.revision < 0) fail('备份日程版本无效')
     boolean(state.timetableConfirmed, '课表确认')
     if (state.firstWeekMonday !== undefined) firstWeekValue(state.firstWeekMonday)
@@ -551,6 +613,7 @@ export function createPlannerStore({ db, transaction, getTask, listTasks, now = 
     if (!state.checked || typeof state.checked !== 'object' || Array.isArray(state.checked) || Object.keys(state.checked).length > limits.checked) fail('备份携带记录无效')
     for (const [date, items] of Object.entries(state.checked)) { day(date); strings(items, '携带记录') }
     validateDayOverrides(state.dayOverrides)
+    validateDayExceptions(state.dayExceptions)
     validateDayEvents(state.dayEvents)
     if (JSON.stringify(state).length > 2_000_000) fail('安排内容过多，请先整理历史记录', 413)
   }

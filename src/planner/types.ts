@@ -13,6 +13,7 @@ export type Routine = {
 export type DayEvent = { id: string; title: string; date: string; start: string; end: string; location: string; items: string[] }
 /** A weekday snapshot; manual template saves refresh future dates, assistant edits require explicit synchronization. */
 export type DayTemplateOverride = { date: string; sourceWeekday: number; routines: Routine[] }
+export type DayException = { date: string; kind: 'holiday' | 'cancelled' | 'rescheduled' | 'restored'; sourceWeekday?: number; routines?: Routine[] }
 export type WeekdayRoutineReplacement = {
   routineId: string; title: string; kind: RoutineKind; location?: string; items?: string[]
 }
@@ -25,6 +26,7 @@ export type PlannerState = {
   revision: number; timetableConfirmed: boolean; routines: Routine[]; blocks: PlanBlock[]
   details: Record<string, TaskPreparation>; checked: Record<string, string[]>
   dayOverrides?: Record<string, DayTemplateOverride>
+  dayExceptions?: Record<string, DayException>
   dayEvents?: DayEvent[]
   /** Read-only API projection of the shared per-session completion history. */
   completedFreeTimeSessions?: Record<string, string>
@@ -37,6 +39,8 @@ export type PlannerAction =
   | { type: 'edit-weekday'; weekday: number; replacements: WeekdayRoutineReplacement[]; syncDates: string[] }
   | { type: 'set-day-template'; date: string; sourceWeekday: number }
   | { type: 'remove-day-template'; date: string }
+  | { type: 'set-day-exception'; date: string; endDate?: string; kind: DayException['kind']; sourceWeekday?: number }
+  | { type: 'clear-day-exception'; date: string }
   | { type: 'save-day-event'; event: DayEvent }
   | { type: 'delete-day-event'; id: string }
   | { type: 'save-block'; block: PlanBlock }

@@ -107,9 +107,12 @@ export function routinesForDay(state: PlannerState, date: string): Routine[] {
   const bounds = dayBounds(date)
   if (!bounds) return []
   const override = state.dayOverrides?.[date]
+  const exception = state.dayExceptions?.[date]
   const result: Routine[] = []
-  for (const routine of override?.routines ?? state.routines) {
-    if (!routine.enabled || (!override && !routineOccursOn(routine, date))) continue
+  const source = exception ? exception.kind === 'rescheduled' ? exception.routines ?? []
+    : exception.kind === 'restored' ? state.routines : [] : override?.routines ?? state.routines
+  for (const routine of source) {
+    if (!routine.enabled || ((!override || exception?.kind === 'restored') && exception?.kind !== 'rescheduled' && !routineOccursOn(routine, date))) continue
     const interval = explicitInterval(date, routine.start, routine.end)
     const range = interval && clipRange(interval, date)
     if (range) result.push({ ...routine, weekdays: [...routine.weekdays], items: [...routine.items], start: timeOf(range.start), end: timeOf(range.end) })

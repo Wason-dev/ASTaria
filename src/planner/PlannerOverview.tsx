@@ -1,12 +1,13 @@
-import { useEffect, useState, type CSSProperties } from 'react'
+import { useEffect, useState, type CSSProperties, type FormEvent } from 'react'
 import type { Task } from '../domain/task'
 import { TaskCardStack } from '../ui/TaskCardStack'
 import { agendaDate, localDay } from '../home/agenda'
 import { blocksForDay, carryItems, dayCapacity, minutesLabel, timeOf } from './model'
 import { EMPTY_DETAILS } from './PlannerDialogs'
 import { PlannerIcon as Icon } from './PlannerIcon'
-import type { DayEvent, PlannerAction, PlannerState } from './types'
+import type { DayEvent, DayException, PlannerAction, PlannerState } from './types'
 import { taskDayCompletion } from './completion'
+import { dayExceptionLabel, exceptionLabels } from './exceptionLabels'
 
 type Props = {
   view: 'calendar' | 'timetable'; selected: string; anchor: Date; now: Date
@@ -17,12 +18,12 @@ type Props = {
 }
 const fullDate = new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' })
 const clock = new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+const weekdays = ['日', '一', '二', '三', '四', '五', '六']
 
 /** A horizontal briefing with paged day cards instead of nested scroll areas. */
 export function PlannerOverview({ view, selected, anchor, now, state, tasks, saving, error, onMoveDay, onTask, onDayEvent, onCreate, onAct }: Props) {
   const today = localDay(now)
-  const dayOverride = state.dayOverrides?.[selected]
-  const overrideLabel = dayOverride ? `临时按周${['日', '一', '二', '三', '四', '五', '六'][dayOverride.sourceWeekday]}课表` : ''
+  const exceptionLabel = dayExceptionLabel(state, selected)
   const blocks = blocksForDay(state, tasks, selected)
   const capacity = dayCapacity(state, tasks, selected, now)
   const carry = carryItems(state, tasks, selected)
@@ -48,17 +49,18 @@ export function PlannerOverview({ view, selected, anchor, now, state, tasks, sav
   return <div className="pl-overview-grid" data-view={view}>
     <section className="pl-overview-summary">
       <header className={`pl-day-header ${view === 'calendar' ? 'pl-calendar-summary-header' : ''}`}>
-        <div><span className="pl-eyebrow">{selected === today ? '今天' : '这一天'}</span><h3 key={selected}>{fullDate.format(new Date(`${selected}T12:00:00`))}</h3>{dayOverride && <div className="pl-day-template" data-date={selected} tabIndex={-1} aria-label={`${overrideLabel}，仅这一天生效`}><span title="仅这一天生效，每周课表保持不变">{overrideLabel}</span><button type="button" className="pl-text-button" disabled={saving} onClick={() => void onAct({ type: 'remove-day-template', date: selected }, '已恢复这一天原来的课表')} aria-label="恢复这一天原来的课表"><Icon name="undo" /><span>恢复原课表</span></button></div>}</div>
+        <div><span className="pl-eyebrow">{selected === today ? '今天' : '这一天'}</span><h3 key={selected}>{fullDate.format(new Date(`${selected}T12:00:00`))}</h3>{exceptionLabel && <div className="pl-day-template" data-date={selected} role="status"><span title="仅这一天生效，每周课表保持不变">{exceptionLabel}</span><button type="button" className="pl-text-button" disabled={saving} onClick={() => void onAct({ type: 'clear-day-exception', date: selected }, '已撤销这一天的例外，恢复每周安排')} aria-label="撤销这一天的日历例外"><Icon name="undo" /><span>撤销例外</span></button></div>}</div>
         <div className="pl-day-arrows"><button className="pl-icon-button" aria-label="前一天" onClick={() => onMoveDay(-1)}><Icon name="left" /></button><button className="pl-icon-button" aria-label="后一天" onClick={() => onMoveDay(1)}><Icon name="right" /></button></div>
       </header>
-      {view === 'timetable' ? <section className="pl-capacity pl-overview-date-content" key={selected}>
+      {view === 'timetable' ? <section className="pl-capacity pl-overview-date-content" key={`summary-${selected}`}>
         <div className="pl-capacity-hero"><span>{selected === today ? '从现在起可支配' : '可支配时间'}</span><strong>{minutesLabel(selected === today ? capacity.remainingMin : capacity.freeMin)}</strong><small>{selected === today ? `全天空闲 ${minutesLabel(capacity.freeMin)}` : `最长空档 ${minutesLabel(capacity.longestMin)}`}</small></div>
         <div className="pl-capacity-detail"><span>可用 {minutesLabel(capacity.totalMin)}</span><span>已排 {minutesLabel(capacity.scheduledMin)}</span></div>
         <div className="pl-free-slots">{(selected === today ? capacity.remaining : capacity.free).slice(0, 3).map(slot => <span key={slot.start}>{timeOf(slot.start)}–{timeOf(slot.end)}</span>)}{(selected === today ? capacity.remaining : capacity.free).length > 3 && <span>另 {(selected === today ? capacity.remaining : capacity.free).length - 3} 段</span>}</div>
         {capacity.unestimatedCount > 0 && <p className="pl-warning">{capacity.unestimatedCount} 项未估时，暂未扣除</p>}
         {capacity.conflicts.length > 0 && <p className="pl-warning">{capacity.conflicts.length} 项时间冲突，需核对</p>}
         {!capacity.totalMin && <p className="pl-muted">添加空课后显示可用时间</p>}
-      </section> : <section className="pl-calendar-summary-focus pl-overview-date-content" key={selected}><strong>{entryCount ? `${entryCount} 项事项` : '这天还没有事项'}</strong><small>{tasksForDay.filter(taskDone).length} 项已完成 · {tasksForDay.filter(task => { const due = agendaDate(task.due); return due && localDay(due) === selected }).length} 项当天截止</small></section>}
+      </section> : <section className="pl-calendar-summary-focus pl-overview-date-content" key={`summary-${selected}`}><strong>{entryCount ? `${entryCount} 项事项` : '这天还没有事项'}</strong><small>{tasksForDay.filter(taskDone).length} 项已完成 · {tasksForDay.filter(task => { const due = agendaDate(task.due); return due && localDay(due) === selected }).length} 项当天截止</small></section>}
+      <DayExceptionControls key={`exception-${selected}`} selected={selected} saving={saving} onAct={onAct} />
     </section>
     <section className="pl-overview-tasks">
       <header className="pl-overview-heading"><h4>当天事项 <small>{entryCount}</small></h4><button className="pl-add-inline" onClick={onCreate}><Icon name="plus" />记录事项</button></header>
@@ -80,6 +82,32 @@ export function PlannerOverview({ view, selected, anchor, now, state, tasks, sav
       <TaskCardStack compact label="待安排" items={undated.map(task => ({ id: task.id, title: task.title, meta: task.estimateMin ? `${task.estimateMin} 分钟` : '用时待估' }))} onOpen={onTask} empty="暂无待安排事项" />
     </section>}
   </div>
+}
+
+function DayExceptionControls({ selected, saving, onAct }: { selected: string; saving: boolean; onAct: Props['onAct'] }) {
+  const [kind, setKind] = useState<DayException['kind']>('holiday')
+  const [endDate, setEndDate] = useState(selected)
+  const [sourceWeekday, setSourceWeekday] = useState(1)
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (endDate < selected) return
+    void onAct({ type: 'set-day-exception', date: selected, endDate, kind,
+      ...(kind === 'rescheduled' ? { sourceWeekday } : {}) },
+    `${selected}${endDate === selected ? '' : ` 至 ${endDate}`} ${exceptionLabels[kind]}已保存`)
+  }
+  return <details className="pl-exception-controls">
+    <summary>日期例外</summary>
+    <form onSubmit={submit}>
+      <label>类型<select value={kind} onChange={event => setKind(event.target.value as DayException['kind'])} disabled={saving}>
+        {Object.entries(exceptionLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+      </select></label>
+      <label>结束日期<input type="date" min={selected} value={endDate} onChange={event => setEndDate(event.target.value)} disabled={saving} /></label>
+      {kind === 'rescheduled' && <label>来源课表<select value={sourceWeekday} onChange={event => setSourceWeekday(Number(event.target.value))} disabled={saving}>
+        {weekdays.map((label, index) => <option key={index} value={index}>周{label}</option>)}
+      </select></label>}
+      <button type="submit" className="pl-secondary" disabled={saving || endDate < selected}>保存</button>
+    </form>
+  </details>
 }
 
 function DayEntries({ view, tasks, events, taskMeta, taskDone, onTask, onDayEvent }: {

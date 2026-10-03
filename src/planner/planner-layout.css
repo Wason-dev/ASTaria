@@ -38,7 +38,16 @@
 .planner .pl-day-template { display:flex; align-items:center; flex-wrap:wrap; gap:4px 8px; margin-top:6px; font-size:10px; line-height:1.6; color:var(--pl-gold) }
 .planner .pl-day-template>.pl-text-button { display:inline-flex; align-items:center; gap:4px; padding:2px 0; font-size:10px; line-height:1.6; white-space:nowrap; color:var(--pl-muted) }
 .planner .pl-day-template>.pl-text-button .pl-icon { width:12px; height:12px }
+.planner .pl-exception-controls { grid-column:1/-1; border-top:1px solid var(--pl-line); padding-top:7px; color:var(--pl-muted); font-size:11px }
+.planner .pl-exception-controls>summary { width:max-content; cursor:pointer; color:var(--pl-gold); list-style-position:inside }
+.planner .pl-exception-controls>summary:focus-visible { outline:1px solid var(--pl-gold); outline-offset:3px }
+.planner .pl-exception-controls form { display:flex; flex-wrap:wrap; align-items:end; gap:8px; padding:9px 0 2px }
+.planner .pl-exception-controls label { display:grid; gap:4px; min-width:0 }
+.planner .pl-exception-controls :is(select,input) { min-height:30px; max-width:100%; padding:4px 7px; border:1px solid var(--pl-line); border-radius:6px; background:var(--pl-plate); color:var(--pl-text); font:inherit; color-scheme:inherit }
+.planner .pl-exception-controls :is(select,input):focus-visible { outline:1px solid var(--pl-gold); outline-offset:2px }
+.planner .pl-exception-controls button { min-height:30px }
 .planner .pl-timetable-date .pl-timetable-override { color:var(--pl-gold); font-size:9px; line-height:1.5; font-weight:400; white-space:nowrap }
+.planner .pl-calendar-date .pl-calendar-exception { position:static; margin-left:4px; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--pl-gold); font-size:9px }
 .planner .pl-muted { font-size:11px }
 .planner .pl-calendar-summary-focus strong { font-size:21px }
 .planner .pl-capacity-hero strong { font-size:25px }

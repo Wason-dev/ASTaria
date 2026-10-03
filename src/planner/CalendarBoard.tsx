@@ -6,6 +6,7 @@ import { blocksForDay, compactMinutesLabel, dayCapacity, minuteOf, minutesLabel,
 import type { DayCapacity, PlannerState } from './types'
 import { usePeriodMotion } from './usePeriodMotion'
 import { taskDayCompletion } from './completion'
+import { dayExceptionLabel } from './exceptionLabels'
 
 type Props = {
   state: PlannerState; tasks: Task[]; selected: string; anchor: Date; now: Date
@@ -82,7 +83,8 @@ export function CalendarBoard({ state, tasks, selected, anchor, now, mode, direc
         const day = localDay(date), entries = entriesForDay(state, tasks, day)
         const capacity = dayCapacity(state, tasks, day, now), info = capacityInfo(state, day, today, capacity)
         const isToday = day === today, outside = date.getMonth() !== anchor.getMonth()
-        const ariaLabel = `${dateLabel.format(date)}${isToday ? '，今天' : ''}，${entries.length} 项，${info.title}`
+        const exception = dayExceptionLabel(state, day)
+        const ariaLabel = `${dateLabel.format(date)}${isToday ? '，今天' : ''}${exception ? `，${exception}` : ''}，${entries.length} 项，${info.title}`
         const capacityBar = <span className="pl-calendar-capacity" data-known={info.known} title={info.title}>
           <span className="pl-calendar-capacity-track" aria-hidden="true"><span style={{ width: `${capacity.totalMin ? Math.min(100, info.minutes / capacity.totalMin * 100) : 0}%` }} /></span>
           <small>{info.known ? compactMinutesLabel(info.minutes) : info.label}</small>
@@ -91,7 +93,7 @@ export function CalendarBoard({ state, tasks, selected, anchor, now, mode, direc
         return mode === 'month' ? <button key={day} type="button" className="pl-calendar-day" data-date={day} data-today={isToday}
           data-outside={outside} aria-pressed={day === selected} aria-current={isToday ? 'date' : undefined} aria-label={ariaLabel}
           tabIndex={day === focusDate ? 0 : -1} onClick={() => onSelect(day)} onKeyDown={event => moveDate(event, date)}>
-          <span className="pl-calendar-date"><span>{date.getDate()}</span>{isToday && <small>今天</small>}</span>
+          <span className="pl-calendar-date"><span>{date.getDate()}</span>{exception && <small className="pl-calendar-exception" title={exception}>{exception}</small>}{isToday && <small>今天</small>}</span>
           <span className="pl-calendar-entries">{entries.slice(0, 2).map(entry => <span key={entry.id} className="pl-calendar-entry"
             data-kind={entry.planned ? 'plan' : 'deadline'} data-done={entry.done} title={`${entry.title} · ${entry.label}`}>
             {entry.deadline && <span className="pl-calendar-deadline-mark" aria-hidden="true">◇</span>}<span className="pl-calendar-entry-copy">{entry.event && <small className="pl-calendar-entry-time">{entry.time}</small>}<span>{entry.title}</span></span>
@@ -101,7 +103,7 @@ export function CalendarBoard({ state, tasks, selected, anchor, now, mode, direc
         </button> : <section key={day} className="pl-week-day" data-selected={day === selected} data-today={isToday}>
           <button type="button" className="pl-week-date" data-date={day} aria-pressed={day === selected} aria-current={isToday ? 'date' : undefined}
             aria-label={ariaLabel} tabIndex={day === focusDate ? 0 : -1} onClick={() => onSelect(day)} onKeyDown={event => moveDate(event, date)}>
-            <span>周{weekdays[(date.getDay() + 6) % 7]}</span><strong>{date.getDate()}</strong>{isToday && <small>今天</small>}
+            <span>周{weekdays[(date.getDay() + 6) % 7]}</span><strong>{date.getDate()}</strong>{exception && <small title={exception}>{exception}</small>}{isToday && <small>今天</small>}
           </button>
           <ul className="pl-week-list">{entries.map(entry => <li key={entry.id} className="pl-week-entry" data-kind={entry.planned ? 'plan' : 'deadline'} data-done={entry.done}>
             <button type="button" onClick={() => onSelect(day)} aria-label={`${dateLabel.format(date)}，${entry.title}，${entry.label}`}>

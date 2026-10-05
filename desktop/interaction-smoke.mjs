@@ -7,6 +7,7 @@ import { join } from 'node:path'
 export async function measureDesktopInteractions(window, directory) {
   const evaluate = script => window.webContents.executeJavaScript(script)
   const delay = ms => new Promise(resolve => setTimeout(resolve, ms))
+  const wasAlwaysOnTop = window.isAlwaysOnTop()
   window.show(); window.focus(); window.maximize()
   await delay(1500)
   const devtools = window.webContents.debugger
@@ -65,7 +66,12 @@ export async function measureDesktopInteractions(window, directory) {
     ['dark','clear','auto','full'],['light','soft','auto','full'],['dark','clear','detailed','full'],['dark','clear','auto','smooth120'],
   ]
   try {
+    // Native occlusion intentionally suspends rendering. Keep only this opt-in
+    // diagnostic window visible so another app cannot invalidate its samples;
+    // never disable production background throttling or power-saving policy.
+    window.setAlwaysOnTop(true)
     for(let round=1;round<=rounds;round++) for(const [theme,glass,optics,profile] of configs){
+      window.show();window.moveTop();window.focus()
       await evaluate(`(async()=>{const headers={'Content-Type':'application/json','X-Astaria-Local':'1'},expected=await fetch('/api/preferences',{headers}).then(r=>r.json());const response=await fetch('/api/preferences',{method:'POST',headers,body:JSON.stringify({expected,value:{...expected,theme:${JSON.stringify(theme)},glass:${JSON.stringify(glass)},render:{profile:${JSON.stringify(profile)},quality:'ultra',glass:${JSON.stringify(optics)}},effect:{...expected.effect,motion:'full'}}})});if(!response.ok)throw Error('Preferences failed');window.dispatchEvent(new CustomEvent('astaria-preferences-change',{detail:await response.json()}));})()`)
       await evaluate(navScript('首页'));await delay(3000)
       const cases=[['chat-open',`document.querySelector('.home-launch').click()`],['chat-close',`document.querySelector('.home-collapse').click()`],['home-workbench',navScript('工作台')],['workbench-free-time',navScript('余时')],['free-time-home',navScript('首页')]]
@@ -93,6 +99,7 @@ export async function measureDesktopInteractions(window, directory) {
     await writeFile(join(directory,'interactions.json'),JSON.stringify(report,null,2))
     console.log('ASTARIA_INTERACTION_REPORT',join(directory,'interactions.json'))
   } finally {
+    window.setAlwaysOnTop(wasAlwaysOnTop)
     if (trace) console.log('ASTARIA_INTERACTION_TRACE', await contentTracing.stopRecording(join(directory, 'interactions-trace.json')))
     devtools.detach()
   }

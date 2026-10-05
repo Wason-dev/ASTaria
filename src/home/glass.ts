@@ -11,6 +11,22 @@ export const HOME_GLASS = Object.freeze({
 })
 
 const displacementCache = new Map<string, string>()
+// Spring motion often changes only the radius after pixel dimensions settle.
+// Reuse the encoded image only when every resulting RGBA byte is identical.
+// Keep one bounded comparison buffer, not a full pixel copy of all 48 maps.
+let previousPixels: { w: number; h: number; data: Uint8ClampedArray; map: string } | undefined
+
+function samePixels(a: Uint8ClampedArray, b: Uint8ClampedArray) {
+  if (a.length !== b.length) return false
+  if (((a.byteOffset | b.byteOffset | a.byteLength) & 3) === 0) {
+    const left = new Uint32Array(a.buffer, a.byteOffset, a.length / 4)
+    const right = new Uint32Array(b.buffer, b.byteOffset, b.length / 4)
+    for (let index = 0; index < left.length; index++) if (left[index] !== right[index]) return false
+    return true
+  }
+  for (let index = 0; index < a.length; index++) if (a[index] !== b[index]) return false
+  return true
+}
 
 /** The channels of a displacement pixel that leaves the sampled scene in place. */
 const NEUTRAL_CHANNEL = 128
@@ -104,8 +120,14 @@ export function glassDisplacement(width: number, height: number, radius: number)
     // texture, so that corner keeps the plain per-pixel pass.
     shadeEdgeBand(pixels.data, w, h, r, band, 0, w, 0, h)
   }
-  context.putImageData(pixels, 0, 0)
-  const map = canvas.toDataURL('image/png')
+  let map: string
+  if (previousPixels?.w === w && previousPixels.h === h && samePixels(previousPixels.data, pixels.data)) {
+    map = previousPixels.map
+  } else {
+    context.putImageData(pixels, 0, 0)
+    map = canvas.toDataURL('image/png')
+  }
+  previousPixels = pixels.data.byteLength <= 8 * 1024 * 1024 ? { w, h, data: pixels.data, map } : undefined
   displacementCache.set(key, map)
   if (displacementCache.size > 48) displacementCache.delete(displacementCache.keys().next().value!)
   return map

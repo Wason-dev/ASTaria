@@ -1,7 +1,7 @@
 import { createContext, useContext, useId, useImperativeHandle, useLayoutEffect, useMemo, useRef } from 'react'
 import type { CSSProperties, Ref } from 'react'
 import { glassDisplacement, HOME_GLASS } from './glass'
-import { supportsGlassRefraction } from './glassRendering'
+import { glassBlurFilter, supportsGlassRefraction } from './glassRendering'
 import type { GlassRendering } from './glassRendering'
 
 export type GlassMaterial = { transmission: number; blur: number; rim: number; shadow: number; reflection?: number }
@@ -19,7 +19,9 @@ export function MeasuredGlassSurface({ radius, progress = 0, material, settleRes
   const geometry = useRef<GlassGeometryHandle>(null)
   useLayoutEffect(() => {
     const element = host.current
-    if (!element || !sampling) return
+    // Native CSS blur follows its own box. Only the SVG texture needs measured
+    // dimensions; observing CSS-only glass needlessly forces layout on entry.
+    if (!element || !sampling || !supportsGlassRefraction(navigator.userAgent, rendering)) return
     let lastWidth = 0, lastHeight = 0
     let settleTimer: number | undefined
     const measure = () => {
@@ -62,20 +64,22 @@ export function GlassSurface({ width, height, radius, progress = 0, material, re
     surface.current?.style.setProperty('-webkit-backdrop-filter', value)
   }
   useImperativeHandle(geometryRef, () => ({ pause() {
-    useBackdrop(`blur(${material?.blur ?? HOME_GLASS.blur}px)`)
+    useBackdrop(glassBlurFilter(material?.blur ?? HOME_GLASS.blur))
   }, update(nextWidth, nextHeight, nextRadius, nextProgress) {
     // The camera moves only these optical attributes, with the same rounded
     // edge formula as a React render. No stretched corner or lower-quality map.
     const w = Math.max(1, Math.round(nextWidth)), h = Math.max(1, Math.round(nextHeight))
     const key = `${w}:${h}:${nextRadius}`
-    if (lastGeometry.current !== key) {
+    if (sampling && svgBackdrop && lastGeometry.current !== key) {
       lastGeometry.current = key
       for (const element of [svg.current, filter.current, edge.current]) {
-        element?.setAttribute('width', String(w)); element?.setAttribute('height', String(h))
+        if (element?.getAttribute('width') !== String(w)) element?.setAttribute('width', String(w))
+        if (element?.getAttribute('height') !== String(h)) element?.setAttribute('height', String(h))
       }
-      if (sampling && svgBackdrop) edge.current?.setAttribute('href', glassDisplacement(w, h, nextRadius))
+      const map = glassDisplacement(w, h, nextRadius)
+      if (edge.current?.getAttribute('href') !== map) edge.current?.setAttribute('href', map)
     }
-    if (sampling) useBackdrop(svgBackdrop && edge.current?.getAttribute('href') ? `url("#${id}")` : `blur(${material?.blur ?? HOME_GLASS.blur}px)`)
+    if (sampling) useBackdrop(svgBackdrop && edge.current?.getAttribute('href') ? `url("#${id}")` : glassBlurFilter(material?.blur ?? HOME_GLASS.blur))
     const transmission = material?.transmission ?? HOME_GLASS.pillTransmission + (HOME_GLASS.chatTransmission - HOME_GLASS.pillTransmission) * nextProgress
     surface.current?.style.setProperty('--glass-tint', String(1 - transmission / 100))
   } }), [sampling, svgBackdrop, material])
@@ -91,11 +95,11 @@ export function GlassSurface({ width, height, radius, progress = 0, material, re
     '--glass-rim': (material?.rim ?? HOME_GLASS.rim) / 100,
     '--glass-reflection': (material?.reflection ?? HOME_GLASS.reflection) / 100,
     '--glass-shadow': (material?.shadow ?? HOME_GLASS.shadow) / 100,
-    backdropFilter: sampling ? ready ? `url("#${id}")` : `blur(${blur}px)` : 'none',
-    WebkitBackdropFilter: sampling ? ready ? `url("#${id}")` : `blur(${blur}px)` : 'none',
+    backdropFilter: sampling ? ready ? `url("#${id}")` : glassBlurFilter(blur) : 'none',
+    WebkitBackdropFilter: sampling ? ready ? `url("#${id}")` : glassBlurFilter(blur) : 'none',
   } as CSSProperties
   return <>
-    {sampling && <svg ref={svg} className="home-glass-definitions" aria-hidden="true" width={responsive ? '100%' : width} height={responsive ? '100%' : height}>
+    {sampling && svgBackdrop && <svg ref={svg} className="home-glass-definitions" aria-hidden="true" width={responsive ? '100%' : width} height={responsive ? '100%' : height}>
       <defs><filter ref={filter} id={id} x="0" y="0" width={responsive ? '100%' : width} height={responsive ? '100%' : height} filterUnits="userSpaceOnUse" primitiveUnits="userSpaceOnUse" colorInterpolationFilters="sRGB">
         <feGaussianBlur in="SourceGraphic" stdDeviation={blur} result="soft" />
         <feImage ref={edge} href={map} x="0" y="0" width={responsive ? '100%' : width} height={responsive ? '100%' : height} preserveAspectRatio="none" result="edge" />

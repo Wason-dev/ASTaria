@@ -114,7 +114,7 @@ try {
   await check('home chat keeps 120 FPS target',"window.__ASTARIA_P0__.getSnapshot().targetFps===120")
   for (const destination of ['工作台','日程','平行宇宙','首页']) {
     await click('.home-brand');await textClick('#home-menu button',destination)
-    await wait(`window.__ASTARIA_P0__.getSnapshot().targetFps===${destination==='首页'?120:60}`)
+    await wait('window.__ASTARIA_P0__.getSnapshot().targetFps===120')
     await check(`${destination}: page-aware FPS switches without changing selected tier`,"window.__ASTARIA_P0__.getSnapshot().renderProfile==='smooth120'")
     await wait('document.querySelector("#home-menu").dataset.open==="false"&&!window.__ASTARIA_P0__.getSnapshot().cameraTransition');await delay(400)
   }

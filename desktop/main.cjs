@@ -252,6 +252,18 @@ async function start() {
       const { measureDesktopPerformance } = await import(pathToFileURL(path.join(resourceRoot, 'desktop/performance-smoke.mjs')).href)
       await measureDesktopPerformance(window, smokeDirectory)
     }
+    if (process.argv.includes('--measure-interactions')) {
+      const { measureDesktopInteractions } = await import(pathToFileURL(path.join(resourceRoot, 'desktop/interaction-smoke.mjs')).href)
+      await measureDesktopInteractions(window, smokeDirectory)
+    }
+    if (process.argv.includes('--verify-render-equivalence')) {
+      const { verifyRenderEquivalence } = await import(pathToFileURL(path.join(resourceRoot, 'desktop/render-equivalence.mjs')).href)
+      await verifyRenderEquivalence(window, smokeDirectory)
+    }
+    if (process.argv.includes('--verify-interaction-visuals')) {
+      const { verifyInteractionVisuals } = await import(pathToFileURL(path.join(resourceRoot, 'desktop/interaction-visuals.mjs')).href)
+      await verifyInteractionVisuals(window, smokeDirectory)
+    }
     app.quit()
   }
 }

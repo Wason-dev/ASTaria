@@ -1,0 +1,21 @@
+/* Retain editors and scroll positions without laying out inactive workspaces.
+   A discrete transition keeps the outgoing page painted through its existing
+   200 ms fade; the incoming page becomes visible immediately. No containment
+   applies while visible, so live glass keeps the same backdrop and clipping. */
+@supports (content-visibility: hidden) and (transition-behavior: allow-discrete) {
+  .home-workspace > :is(.workbench,.planner,.free-time-page) {
+    content-visibility: hidden;
+    transition-property: visibility, content-visibility;
+    transition-duration: 0s, 200ms;
+    transition-delay: 200ms, 0s;
+    transition-behavior: normal, allow-discrete;
+  }
+  .home-workspace > :is(.workbench,.planner,.free-time-page)[data-active=true] {
+    content-visibility: visible;
+    transition-delay: 0s;
+  }
+  .home-workspace[data-motion=reduced] > :is(.workbench,.planner,.free-time-page) { transition-duration: 0s; transition-delay: 0s }
+  @media (prefers-reduced-motion: reduce) {
+    .home-workspace > :is(.workbench,.planner,.free-time-page) { transition-duration: 0s; transition-delay: 0s }
+  }
+}

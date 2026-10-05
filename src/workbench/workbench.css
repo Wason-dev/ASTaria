@@ -8,7 +8,7 @@
 .home-clock,.home-notification { z-index: 4 }
 .workbench { position: absolute; inset: 0; z-index: 1; font-size: var(--wb-font); color: #30343a; pointer-events: none; visibility: hidden; transition: visibility 0s 200ms; --wb-muted: #626b75; --wb-line: #4146501c; --wb-gold: #a58752 }
 .workbench[data-active=true] { visibility: visible; transition-delay: 0s }
-.wb-background { position: absolute; inset: 0; background: rgb(248 246 242 / var(--wb-background)); -webkit-backdrop-filter: blur(var(--wb-backdrop-blur)); backdrop-filter: blur(var(--wb-backdrop-blur)); opacity: 0; transition: opacity 520ms cubic-bezier(.2,.7,.2,1), background 200ms, backdrop-filter 240ms }
+.wb-background { position: absolute; inset: 0; background: rgb(248 246 242 / var(--wb-background)); -webkit-backdrop-filter: var(--wb-backdrop-filter, none); backdrop-filter: var(--wb-backdrop-filter, none); opacity: 0; transition: opacity 520ms cubic-bezier(.2,.7,.2,1), background 200ms, backdrop-filter 240ms }
 .workbench[data-active=false] .wb-background { transition: opacity 200ms ease; -webkit-backdrop-filter: none; backdrop-filter: none }
 .p0[data-night=false] .workbench .home-glass-surface { background: rgb(222 232 242 / var(--glass-tint)) }
 .workbench[data-active=true] .wb-background { opacity: 1 }

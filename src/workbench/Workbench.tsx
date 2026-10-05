@@ -4,6 +4,7 @@ import type { Task, TaskStatus } from '../domain/task'
 import type { useSpatialTasks } from '../spatial/useSpatialTasks'
 import { agendaDate, deadlineLabel } from '../home/agenda'
 import { GlassSamplingContext, MeasuredGlassSurface } from '../home/GlassSurface'
+import { glassBlurFilter } from '../home/glassRendering'
 import { WorkspaceHeading } from '../ui/WorkspaceHeading'
 import type { Appearance, useAppearance } from './appearance'
 import { recommendationReason, scheduleDisplay, scheduleStatusLabel, taskArea, taskGroups, taskSchedule } from './tasks'
@@ -52,7 +53,7 @@ export function Workbench(props: Props & { appearance: ReturnType<typeof useAppe
     '--wb-top': `${appearance.value.top}px`, '--wb-radius': `${appearance.value.radius}px`,
     '--wb-shadow': appearance.value.shadow / 100, '--wb-background': 1 - appearance.value.background / 100,
     '--wb-columns': appearance.value.columns,
-    '--wb-backdrop-blur': `${appearance.value.backgroundBlur}px`,
+    '--wb-backdrop-filter': glassBlurFilter(appearance.value.backgroundBlur),
   } as CSSProperties
   return <GlassSamplingContext.Provider value={props.active}><section className="workbench" {...hover} data-theme={appearance.value.theme} data-active={props.active} aria-label="工作台" inert={!props.active} aria-hidden={!props.active} style={style}>
     <div className="wb-background" aria-hidden="true" />

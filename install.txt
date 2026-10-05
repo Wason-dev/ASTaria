@@ -1,18 +1,20 @@
-# ASTaria beta 安装
+# ASTaria Beta11 本地测试包安装
 
-当前版本 `0.1.0-beta.10`（tag `v0.1.0-beta.10`），GitHub 展示名称 **BetaX**。macOS 13+ Apple Silicon（arm64）的 ad-hoc 签名包是主发布，未经 Apple 公证；同一 GitHub Release 另提供 Windows x64 试验版 `setup.exe` 与 `portable.zip`。
+本地技术版本 `0.1.0-beta.11`（展示名称 **Beta11**），本轮以本地测试包交付：macOS 13+ Apple Silicon（arm64）的 ad-hoc 签名包，未经 Apple 公证。下面的文件名与步骤对应当前本地 Beta11 交付。
+
+GitHub 上仍没有 Beta11，公开下载的最新版仍是 BetaX · `0.1.0-beta.10`；需要公开版请用 [Releases](https://github.com/Wason-dev/ASTaria/releases)。
 
 ## macOS 13+ · Apple Silicon
 
 ```text
-ASTaria 0.1.0-beta.10 · BetaX 内测发布
+ASTaria 0.1.0-beta.11 · Beta11 本地测试包
 
 系统要求：macOS 13 或更新版本，Apple Silicon（M 系列芯片）。不支持 Intel Mac。
 此包采用 ad-hoc 签名，未经 Apple 公证；不是正式公开发行版。
 
 安装
 1. 退出正在运行的旧版 ASTaria。
-2. 打开 DMG（ASTaria-0.1.0-beta.10-mac-arm64-adhoc.dmg）。DMG 根目录只有 ASTaria.app、
+2. 打开 DMG（ASTaria-0.1.0-beta.11-mac-arm64-adhoc.dmg）。DMG 根目录只有 ASTaria.app、
    指向 /Applications 的 Applications 快捷方式和这份安装说明；把 ASTaria.app 拖到
    Applications 快捷方式上。DMG 打包脚本不会替你复制进 /Applications，首次手动安装由你完成拖拽。
 3. 从「应用程序」打开 ASTaria，安装完成后可以推出磁盘映像。
@@ -60,25 +62,21 @@ App 须位于可写目录，不能直接在 DMG 内更新。
 请避免网页和桌面版同时修改同一份数据。首次使用需在设置里配置自己的模型连接。
 ```
 
-## Windows 10/11 · x64（试验版，随 GitHub Release 提供）
+## Windows 10/11 · x64（Beta11 本地测试包）
 
-BetaX 的 GitHub Release 提供两个 Windows x64 资产：`ASTaria-0.1.0-beta.10-win-x64-setup.exe`（NSIS
-安装程序，默认装到当前用户目录，不需要管理员权限）与 `ASTaria-0.1.0-beta.10-win-x64-portable.zip`。
-两者都是试验版，不是正式 Windows 发行版，也不承诺 Windows 11。
+本地 Beta11 交付包含两个 Windows x64 资产：`ASTaria-0.1.0-beta.11-win-x64-setup.exe`（NSIS
+安装程序，默认装到当前用户目录，不需要管理员权限）与 `ASTaria-0.1.0-beta.11-win-x64-portable.zip`。
+两者都是本地测试包，不是正式 Windows 发行版，也不承诺 Windows 11。
 
-已核对：Windows 10 x64（19044）真实交互会话中的 Electron 启动、React 界面、本机 API、SQLite、
-WebGL2 和 DPAPI 凭据保护；本版合并定向测试共 123 项通过，其中包含 30 项本地模型协议测试
-（两者是同一批测试，不重复计算）；Mac → Windows 10 → Mac 的中文任务、假期与完成状态加密
-操作往返通过。
-
-本版已在 Windows 10 的隔离中文路径中测试安装、启动与卸载；程序文件被占用时会要求先退出，
-卸载保留用户数据及安装目录中的无关文件。具体测试记录见本版发布说明。
+Windows 10 x64（19044）已用于本轮原生交互测试，涵盖 Electron、React、本机 API、SQLite、
+WebGL2 和 DPAPI 凭据保护。最终包的安装与运行结果以 [Beta11 说明](RELEASE_NOTES_v0.1.0-beta.11.md)
+为准；不把历史版本的 123 项测试记录当成本版结果。
 
 未验收：Windows 11、原地升级、睡眠恢复、更多 DPI/多屏配置（目前仅覆盖 DPR 1.5）、长期功耗
 与 Windows 原生通知。更新前请导出备份并退出旧版。
 
 ```text
-ASTaria 0.1.0-beta.10 · Windows x64
+ASTaria 0.1.0-beta.11 · Beta11 本地测试包 · Windows x64
 
 1. setup.exe：双击运行，按提示完成后从开始菜单或安装目录启动 ASTaria。
    portable.zip：解压整个 ZIP，不要只移动单个 EXE，运行解压目录里的 ASTaria.exe。

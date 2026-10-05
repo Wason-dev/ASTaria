@@ -26,9 +26,11 @@ export function normalizeRenderProfile(value: unknown): RenderProfile {
   return typeof value === 'string' && Object.hasOwn(RENDER_PROFILES, value) ? value as RenderProfile : 'full'
 }
 
-export function resolveRenderProfile(profile: RenderProfile, scene: RenderScene): RenderProfileConfig {
+export function resolveRenderProfile(profile: RenderProfile, _scene: RenderScene): RenderProfileConfig {
   const config = RENDER_PROFILES[normalizeRenderProfile(profile)]
-  return { ...config, frameRate: scene === 'home' ? config.frameRate : Math.min(config.frameRate, 60) }
+  // An explicit 90/120 FPS choice applies to the entire continuous scene.
+  // Crossing into a workspace must not silently halve its animation cadence.
+  return { ...config }
 }
 
 /** Keep a stable cadence across display refresh rates instead of waiting a full
@@ -40,6 +42,9 @@ export function nextRenderDeadline(previous: number, now: number, frameRate: num
 }
 
 export function renderFrameIsDue(deadline: number, now: number): boolean {
-  // RAF timestamps can differ by a fraction of a millisecond at the same vsync.
-  return deadline <= 0 || now + .25 >= deadline
+  // Native RAF timestamps can arrive 1–2 ms ahead of the nominal cadence
+  // (measured on ProMotion). A .25 ms gate needlessly skipped those refreshes.
+  // The absolute deadline still advances by one full interval, so accepting
+  // that refresh does not raise the selected average FPS or replay late frames.
+  return deadline <= 0 || now + 2 >= deadline
 }

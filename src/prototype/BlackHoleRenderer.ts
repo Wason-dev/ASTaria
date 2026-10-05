@@ -386,16 +386,21 @@ export class BlackHoleRenderer {
     const config = resolveRenderProfile(next, scene)
     const requested = quality ?? config.quality
     if (this.profileInitialized && this.renderProfile === next && this.renderScene === scene && this.requestedQuality === requested) return
+    const initialize = !this.profileInitialized
     const keepAdaptive = this.profileInitialized && this.requestedQuality === 'auto' && requested === 'auto'
+    const cadenceChanged = this.targetFps !== config.frameRate
+    const qualityChanged = this.requestedQuality !== requested
     this.profileInitialized = true
     this.renderProfile = next
     this.renderScene = scene
     this.targetFps = config.frameRate
     this.requestedQuality = requested
-    if (keepAdaptive) this.adaptiveQuality.resetWindow()
-    else this.adaptiveQuality.reset()
-    this.applyQuality(requested === 'auto' ? keepAdaptive ? this.quality : 'ultra' : requested)
-    this.cancelFrame()
+    if (initialize || cadenceChanged || qualityChanged) {
+      if (keepAdaptive) this.adaptiveQuality.resetWindow()
+      else this.adaptiveQuality.reset()
+      this.applyQuality(requested === 'auto' ? keepAdaptive ? this.quality : 'ultra' : requested)
+      this.cancelFrame()
+    }
     this.requestFrame()
     this.publishStats()
   }

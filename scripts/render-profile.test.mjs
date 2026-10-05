@@ -21,10 +21,10 @@ test('render profiles keep the full visual stack while reducing the render budge
   }
 })
 
-test('secondary pages cap every profile at 60 without upgrading lower profiles or reducing full quality', () => {
+test('every page preserves the selected frame rate and quality', () => {
   for (const [profile, config] of Object.entries(RENDER_PROFILES)) {
     assert.deepEqual(resolveRenderProfile(profile, 'home'), config)
-    assert.deepEqual(resolveRenderProfile(profile, 'workspace'), { ...config, frameRate: Math.min(config.frameRate, 60) })
+    assert.deepEqual(resolveRenderProfile(profile, 'workspace'), config)
   }
   assert.equal(resolveRenderProfile('smooth120', 'home').frameRate, 120)
   assert.equal(resolveRenderProfile('smooth90', 'home').frameRate, 90)
@@ -71,6 +71,24 @@ test('minor RAF timestamp jitter does not systematically halve the frame rate', 
   for (const [displayHz, targetFps] of [[60, 60], [90, 90], [120, 120], [120, 90], [120, 45], [60, 30]]) {
     const renders = simulate(displayHz, targetFps, 10, true)
     assert.ok(Math.abs(renders.length - targetFps * 10) <= 1, `${targetFps} FPS at ${displayHz} Hz: ${renders.length}`)
+  }
+})
+
+test('native refresh timestamp variation keeps the selected cadence without extra average frames', () => {
+  for (const displayHz of [60,90,120,144,160,165]) for (const target of [30,45,60,90,120]) {
+    let deadline=0
+    const frames=[]
+    for(let tick=0;tick<displayHz*10;tick++) {
+      const time=(tick+1)*1000/displayHz+Math.sin(tick*.37)*.85
+      if(renderFrameIsDue(deadline,time)) {
+        frames.push(time);deadline=nextRenderDeadline(deadline,time,target)
+      }
+    }
+    assert.ok(Math.abs(frames.length-Math.min(target,displayHz)*10)<=1,`${target} FPS/${displayHz} Hz: ${frames.length}`)
+    if(target===displayHz) {
+      const largest=Math.max(...frames.slice(1).map((time,index)=>time-frames[index]))
+      assert.ok(largest<1000/displayHz+2,'timestamp variation must not create a skipped refresh')
+    }
   }
 })
 

@@ -255,6 +255,87 @@ test('the cache keeps 48 entries and evicts the oldest first', () => {
   assert.equal(host.canvases, canvases + SIZE + 2, 'retained entries stay cached')
 })
 
+test('byte-identical RGBA at a new radius reuses the PNG without re-encoding', () => {
+  // A size no other spec touches, so the bounded reuse buffer starts empty.
+  const w = 72, h = 40
+  // r = 0 and r = 0.5 are both below the band clamp min(edgeWidth, h / 2) = 16 at
+  // h = 40, and land on the same r-independent arm of `distance`, so the reference
+  // kernels are byte-identical even though the cache keys differ.
+  assertMatchesReference(w, h, 0)
+  assert.equal(describeMismatch(referencePixels(w, h, 0), referencePixels(w, h, .5), w), '',
+    'the two reference kernels really are byte-identical before the call under test')
+  const before = host.puts, urlsBefore = host.urls, canvasesBefore = host.canvases
+  const map = glassDisplacement(w, h, .5)
+  assert.equal(host.canvases, canvasesBefore + 1, 'the new radius still builds its own texture')
+  assert.equal(host.puts, before, 'identical pixels skip putImageData')
+  assert.equal(host.urls, urlsBefore, 'identical pixels skip PNG encoding')
+  // Asserting only on the returned URL would pass even when every pixel differs:
+  // the fake PNG payload is a fixed 48-byte prefix, so two different textures can
+  // share one URL. Compare the captured RGBA against an independent reference.
+  const captured = Uint8ClampedArray.from(host.last.data)
+  const expected = referencePixels(w, h, .5)
+  assert.equal(captured.length, expected.length, 'captured texture length')
+  assert.equal(describeMismatch(captured, expected, w), '', 'captured texture matches the reference kernel')
+  assert.deepEqual(Array.from(captured), Array.from(referencePixels(w, h, 0)),
+    'the reused texture is the byte-identical one an encode would have shipped')
+  assert.ok(map, 'the reused texture still returns a data URL')
+})
+
+test('pixels that genuinely differ are re-encoded, not reused', () => {
+  const w = 96, h = 48
+  assertMatchesReference(w, h, 8)
+  const first = Uint8ClampedArray.from(host.last.data)
+  const puts = host.puts, urls = host.urls
+
+  const same = glassDisplacement(w, h, 8)
+  assert.equal(host.puts, puts, 'an identical radius is answered by the exact-size cache')
+  assert.equal(host.urls, urls, 'an identical radius never encodes again')
+  assert.ok(same, 'the exact-size cache still returns a data URL')
+
+  // r = 16 shades strictly more of this 96x48 texture than r = 8 (measured: the
+  // two references differ), so the RGBA cannot be equal and the PNG must be redone.
+  const second = glassDisplacement(w, h, 16)
+  assert.equal(host.puts, puts + 1, 'changed pixels are uploaded')
+  assert.equal(host.urls, urls + 1, 'changed pixels are encoded again')
+  const updated = Uint8ClampedArray.from(host.last.data)
+  assert.equal(describeMismatch(updated, referencePixels(w, h, 16), w), '', 'the re-encoded texture matches its r=16 reference')
+  assert.equal(describeMismatch(first, referencePixels(w, h, 8), w), '', 'the first texture matches its own r=8 reference')
+  assert.notEqual(describeMismatch(referencePixels(w, h, 8), referencePixels(w, h, 16), w), '',
+    'the two references describe different textures, so reuse would have been wrong')
+  let changed = 0
+  for (let index = 0; index < updated.length; index += 4) if (updated[index] !== first[index]) changed++
+  assert.ok(changed > 0, `r=16 shades ${changed} pixels differently from r=8`)
+  assert.ok(second, 'the re-encoded texture returns a data URL')
+})
+
+test('the full chat-panel texture at 679x680 r=15 reuses its PNG across a 1e-9 radius nudge', () => {
+  // Real chat panel size; band = min(edgeWidth 16, h / 2 = 340) = 16, so the shaded
+  // frame is max(15, 16) = 16 and the sampled pixels sit close enough to the
+  // rounded outline that a 1e-9 radius change rounds to the very same RGBA bytes.
+  const w = 679, h = 680, radius = 15, nudged = 15 + 1e-9
+  assertMatchesReference(w, h, radius)
+  const shot = host.last
+  const first = Uint8ClampedArray.from(shot.data)
+  const expectedFirst = referencePixels(w, h, radius)
+  const expectedNudged = referencePixels(w, h, nudged)
+  assert.equal(describeMismatch(expectedFirst, expectedNudged, w), '',
+    'the two references are byte-identical before the call under test')
+  // Guard the spec's own premise: this radius really does sit on a sensitive edge.
+  assert.notEqual(describeMismatch(expectedFirst, referencePixels(w, h, radius + .01), w), '',
+    'a 0.01 radius change does move pixels, so equality above is not vacuous')
+
+  const puts = host.puts, urls = host.urls
+  const map = glassDisplacement(w, h, nudged)
+  assert.equal(host.puts, puts, 'byte-identical pixels skip putImageData at chat-panel size')
+  assert.equal(host.urls, urls, 'byte-identical pixels skip PNG encoding at chat-panel size')
+  // The fake PNG payload is a 48-byte prefix, so URL equality alone cannot prove
+  // the whole texture matched; compare every captured RGBA byte instead.
+  assert.equal(shot.data.length, expectedFirst.length, 'the captured texture keeps its full size')
+  assert.equal(describeMismatch(shot.data, expectedFirst, w), '', 'the reused texture is the byte-identical reference')
+  assert.deepEqual(Array.from(shot.data), Array.from(expectedNudged), 'the reuse decision compared all pixels')
+  assert.ok(map, 'the reused texture still returns a data URL')
+})
+
 test('a pixel view without a 32-bit aligned buffer still fills neutral bytes', () => {
   host.viewOffset = 1
   try {

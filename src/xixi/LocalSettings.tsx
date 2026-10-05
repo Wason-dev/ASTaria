@@ -183,7 +183,7 @@ export function LocalSettings({ onClose, onSaved, onEffectChange, onPreviewEffec
         <div className="xixi-effect-options xixi-render-options" role="group" aria-label="黑洞渲染档位">
           {([['smooth120', '120 FPS', '高刷新率'], ['smooth90', '90 FPS', '高刷新率'], ['full', '60 FPS', '标准流畅'], ['balanced', '45 FPS', '较低频率'], ['economy', '30 FPS', '更低频率']] as const).map(([profile, title, description]) => <button key={profile} type="button" aria-pressed={(preferences.render?.profile ?? 'full') === profile} disabled={!ready || busy || preferences.render.quality === 'auto'} onClick={() => renderProfile(profile)}><strong>{title}</strong><small>{description}</small></button>)}
         </div>
-        <p className="xixi-render-note">选择手动画质后可独立调整帧率。首页与聊天按所选帧率运行，其他页面最高 60 FPS。高刷受屏幕刷新率与设备性能限制。</p>
+        <p className="xixi-render-note">选择手动画质后可独立调整帧率，各页面均沿用所选帧率。高刷受屏幕刷新率与设备性能限制。</p>
       </section>
       <div className="xixi-appearance-columns">
         <div className="xixi-appearance-space">

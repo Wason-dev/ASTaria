@@ -104,12 +104,20 @@ export class SelectiveBloom {
       uniform float uAspect;
       uniform float uCssHeight;
       void main() {
+        float strength = clamp(uPointerStrength, 0.0, 1.0);
+        // At exactly zero the lens, ring and halo contribute nothing. Keep
+        // the same base/bloom samples without evaluating their spatial math.
+        if (strength == 0.0) {
+          vec3 color = texture2D(uBase, vUv).rgb;
+          if (uNight > 0.0) color += texture2D(uBloom, vUv).rgb * vec3(1.0, 0.91, 0.78) * 0.36 * uNight;
+          gl_FragColor = vec4(color, 1.0);
+          return;
+        }
         vec2 screenScale = vec2(uAspect, 1.0);
         vec2 impact = (vUv - uPointer) * screenScale * uCssHeight;
         float radius2 = dot(impact, impact);
         float radius = sqrt(radius2);
         float footprint = max(fwidth(radius), 0.25);
-        float strength = clamp(uPointerStrength, 0.0, 1.0);
         vec2 radial = impact / max(radius, 0.0001);
         vec2 clockwise = vec2(radial.y, -radial.x);
         // Thin-lens beta = theta - alpha(theta), softened inside the shadow.
@@ -123,7 +131,7 @@ export class SelectiveBloom {
         vec2 displacement = (radial + clockwise * 0.08) * deflection;
         vec2 sceneUv = vUv - displacement / (screenScale * uCssHeight);
         vec3 base = texture2D(uBase, sceneUv).rgb;
-        vec3 bloom = texture2D(uBloom, sceneUv).rgb;
+        vec3 bloom = uNight > 0.0 ? texture2D(uBloom, sceneUv).rgb : vec3(0.0);
         vec3 color = base + bloom * vec3(1.0, 0.91, 0.78) * 0.36 * uNight;
 
         float shadowRadius = 4.0 * strength;
@@ -167,14 +175,18 @@ export class SelectiveBloom {
   }
 
   render(input: THREE.Texture, night: number, pointer: THREE.Vector2, pointerStrength: number) {
-    this.prefilter.uniforms.uInput.value = input
-    this.pass(this.prefilter, this.ping)
-    this.blur.uniforms.uInput.value = this.ping.texture
-    this.blur.uniforms.uDirection.value.set(3 / this.width, 0)
-    this.pass(this.blur, this.pong)
-    this.blur.uniforms.uInput.value = this.pong.texture
-    this.blur.uniforms.uDirection.value.set(0, 3 / this.height)
-    this.pass(this.blur, this.ping)
+    // The light-theme endpoint multiplies bloom by zero. Resume all three
+    // passes on the very first nonzero transition frame, with no threshold.
+    if (night > 0) {
+      this.prefilter.uniforms.uInput.value = input
+      this.pass(this.prefilter, this.ping)
+      this.blur.uniforms.uInput.value = this.ping.texture
+      this.blur.uniforms.uDirection.value.set(3 / this.width, 0)
+      this.pass(this.blur, this.pong)
+      this.blur.uniforms.uInput.value = this.pong.texture
+      this.blur.uniforms.uDirection.value.set(0, 3 / this.height)
+      this.pass(this.blur, this.ping)
+    }
     this.composite.uniforms.uBase.value = input
     this.composite.uniforms.uNight.value = night
     this.composite.uniforms.uPointer.value = pointer

@@ -6,6 +6,7 @@ import { lstat, mkdir, mkdtemp, readFile, realpath, rename, rm, stat, symlink, w
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { signReleaseManifest } from './sign-release-manifest.mjs'
+import { copyMacBundle } from './copy-mac-bundle.mjs'
 
 const USAGE = 'node scripts/package-dmg.mjs --app /path/to/ASTaria.app --out /path/to/output --instructions docs/INSTALL.md [--sign-manifest /private/update-ed25519.pem]'
 const VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/u
@@ -99,7 +100,7 @@ async function main() {
     const imageRoot = join(staging, 'image')
     await mkdir(imageRoot)
     const copiedApp = join(imageRoot, 'ASTaria.app')
-    run('/usr/bin/ditto', [app, copiedApp])
+    await copyMacBundle(app, copiedApp)
     await symlink('/Applications', join(imageRoot, 'Applications'))
     await writeFile(join(imageRoot, '安装与打开说明.txt'), instructionsBytes)
     run('/usr/bin/codesign', ['--verify', '--deep', '--strict', '--verbose=2', copiedApp])

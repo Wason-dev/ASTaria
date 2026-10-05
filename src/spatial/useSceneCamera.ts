@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { SceneCamera } from './scene'
+import { sameCameraSample } from './cameraSample'
 
 const INITIAL_CAMERA: SceneCamera = {
   zoom: .7, roll: 18, inclination: 83, centerX: .65, centerY: .51,
@@ -14,17 +15,21 @@ export function useSceneCamera(readCamera: () => SceneCamera | undefined, revisi
   useEffect(() => {
     let frame = 0
     let published: SceneCamera | undefined
+    let sampled: SceneCamera | undefined
     const sample = () => {
       frame = 0
       if (document.hidden) return
       const next = readCamera()
       if (!next) return
-      frameCallback.current?.(next)
+      // A 160 Hz display can sample the same 60 FPS scene more than twice.
+      // Never rewrite geometry/filter attributes until the camera advances.
+      if (!sameCameraSample(sampled, next)) frameCallback.current?.(next)
+      sampled = next
       // Imperative motion consumers need React only at transition boundaries.
       // The simulation clock belongs to WebGL, not to the application tree.
       if (!(frameCallback.current && next.cameraTransition && published?.cameraTransition)) {
         published = next
-        setCamera(current => (Object.keys(INITIAL_CAMERA) as (keyof SceneCamera)[]).every(key => key === 'simulationTime' || current[key] === next[key]) ? current : next)
+        setCamera(current => sameCameraSample(current, next) ? current : next)
       }
       if (next.cameraTransition) frame = requestAnimationFrame(sample)
     }

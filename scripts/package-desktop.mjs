@@ -7,6 +7,7 @@ import { dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node
 import { fileURLToPath } from 'node:url'
 import { generateNotices } from './third-party-notices.mjs'
 import { copyServerDependencies } from './desktop-dependencies.mjs'
+import { copyMacBundle } from './copy-mac-bundle.mjs'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const NAME = 'ASTaria', BUNDLE_ID = 'dev.wason.ASTaria', ARCH = 'arm64'
@@ -193,7 +194,7 @@ async function main() {
     const app = join(staging, `${NAME}.app`), contents = join(app, 'Contents'), resources = join(contents, 'Resources')
     const payload = join(resources, 'app'), scratch = join(staging, '.build')
     console.log(`Packaging ${NAME} ${version} with Electron ${electronVersion} (${ARCH})`)
-    run('/usr/bin/ditto', [runtime, app])
+    await copyMacBundle(runtime, app)
     await mkdir(scratch)
     if (await exists(payload) || await exists(join(resources, 'app.asar'))) fail('The supplied Electron runtime already contains Resources/app or app.asar; use a clean runtime.')
     await mkdir(payload)

@@ -15,6 +15,7 @@ const directory = await mkdtemp(join(tmpdir(), 'astaria-updates-ui-'))
 const artifacts = resolve('artifacts/verification/app-updates-ui')
 await mkdir(artifacts, { recursive: true })
 const db = createDatabase(join(directory, 'test.sqlite'))
+db.setPreference('onboarding-completed', true)
 const calls = []
 let updateState = {
   supported: true,

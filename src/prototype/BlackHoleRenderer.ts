@@ -381,17 +381,20 @@ export class BlackHoleRenderer {
     this.publishStats()
   }
 
-  setRenderProfile(profile: RenderProfile, scene: RenderScene = 'home') {
+  setRenderProfile(profile: RenderProfile, scene: RenderScene = 'home', quality?: QualityMode) {
     const next = normalizeRenderProfile(profile)
-    if (this.profileInitialized && this.renderProfile === next && this.renderScene === scene) return
+    const config = resolveRenderProfile(next, scene)
+    const requested = quality ?? config.quality
+    if (this.profileInitialized && this.renderProfile === next && this.renderScene === scene && this.requestedQuality === requested) return
+    const keepAdaptive = this.profileInitialized && this.requestedQuality === 'auto' && requested === 'auto'
     this.profileInitialized = true
     this.renderProfile = next
     this.renderScene = scene
-    const config = resolveRenderProfile(next, scene)
     this.targetFps = config.frameRate
-    this.requestedQuality = config.quality
-    this.adaptiveQuality.reset()
-    this.applyQuality(config.quality)
+    this.requestedQuality = requested
+    if (keepAdaptive) this.adaptiveQuality.resetWindow()
+    else this.adaptiveQuality.reset()
+    this.applyQuality(requested === 'auto' ? keepAdaptive ? this.quality : 'ultra' : requested)
     this.cancelFrame()
     this.requestFrame()
     this.publishStats()
@@ -862,7 +865,7 @@ export class BlackHoleRenderer {
 
   private adaptQuality(elapsed: number) {
     if (this.requestedQuality !== 'auto') return
-    const next = this.adaptiveQuality.sample(elapsed, this.quality, this.cameraIsRunning() || this.springIsRunning())
+    const next = this.adaptiveQuality.sample(elapsed, this.quality, this.cameraIsRunning() || this.springIsRunning(), this.targetFps)
     if (next) {
       this.applyQuality(next)
       this.publishStats()

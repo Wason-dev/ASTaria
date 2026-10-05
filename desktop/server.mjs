@@ -1,4 +1,5 @@
 import { handleReminderRequest } from './reminders.mjs'
+import { handleSyncRequest } from './folderSync.mjs'
 import { createServer } from 'node:http'
 import { readFile, stat, realpath } from 'node:fs/promises'
 import { resolve, sep } from 'node:path'
@@ -46,7 +47,7 @@ export function authorizedRequest(req, token) {
     && timingSafeEqual(Buffer.from(supplied), Buffer.from(token))
 }
 
-export function createDesktopHandler({ root, service, token, updates, reminders }) {
+export function createDesktopHandler({ root, service, token, updates, reminders, sync }) {
   if (typeof token !== 'string' || token.length < 32) throw new Error('Desktop session token required')
   const base = resolve(root)
   return async (req, res) => {
@@ -59,6 +60,7 @@ export function createDesktopHandler({ root, service, token, updates, reminders 
     res.setHeader('Referrer-Policy', 'no-referrer')
     if (updates && await handleUpdateRequest(updates, req, res)) return
     if (reminders && await handleReminderRequest(reminders, req, res)) return
+    if (sync && await handleSyncRequest(sync, req, res)) return
     if (req.url === '/api' || req.url?.startsWith('/api/')) {
       service.middleware(req, res, () => send(res, 404, 'Not found'))
       return
@@ -85,8 +87,8 @@ export function createDesktopHandler({ root, service, token, updates, reminders 
   }
 }
 
-export function createDesktopServer({ root, service, token, updates, reminders, port = 5199 }) {
-  const server = createServer(createDesktopHandler({ root, service, token, updates, reminders }))
+export function createDesktopServer({ root, service, token, updates, reminders, sync, port = 5199 }) {
+  const server = createServer(createDesktopHandler({ root, service, token, updates, reminders, sync }))
   server.headersTimeout = 10_000
   server.requestTimeout = 120_000
   let closing
@@ -107,6 +109,7 @@ export function createDesktopServer({ root, service, token, updates, reminders, 
       server.closeAllConnections()
       await stopped
       await service.whenIdle?.()
+      await sync?.close()
       await reminders?.flush()
       reminders?.close()
       service.close()

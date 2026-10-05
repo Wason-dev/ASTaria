@@ -1,3 +1,4 @@
+export type RenderQuality = 'auto' | 'ultra' | 'high' | 'low' | 'safe'
 export type RenderProfile = 'full' | 'smooth90' | 'smooth120' | 'balanced' | 'economy'
 export type RenderScene = 'home' | 'workspace'
 

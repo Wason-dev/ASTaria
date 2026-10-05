@@ -6,7 +6,7 @@ import type { SceneCamera } from '../spatial/scene'
 import { readableDate, STATUS_LABELS } from '../spatial/scene'
 import { useSceneCamera } from '../spatial/useSceneCamera'
 import { useSpatialTasks } from '../spatial/useSpatialTasks'
-import { GlassSamplingContext, GlassSurface, MeasuredGlassSurface } from './GlassSurface'
+import { GlassRenderingContext, GlassSamplingContext, GlassSurface, MeasuredGlassSurface } from './GlassSurface'
 import type { GlassGeometryHandle } from './GlassSurface'
 import { HomeStatus } from './HomeStatus'
 import { HomeAgenda } from './HomeAgenda'
@@ -27,7 +27,7 @@ import { localDay } from './agenda'
 import { PlannerWorkspace } from '../planner/PlannerWorkspace'
 import type { PlannerPage } from '../planner/PlannerWorkspace'
 import type { ResponseEffectSettings, ResponsePhase } from '../prototype/responseEffects'
-import type { RenderProfile, RenderScene } from '../prototype/renderProfile'
+import type { RenderProfile, RenderScene, RenderQuality } from '../prototype/renderProfile'
 import { usePreferences, notificationsAllowed } from '../xixi/preferences'
 import { OrbitStudio } from '../xixi/OrbitStudio'
 import { FreeTimePanel } from '../xixi/FreeTimePanel'
@@ -48,7 +48,7 @@ type Props = {
   sceneUnavailable: boolean
   onResponseEffect: (settings: ResponseEffectSettings) => void
   onResponsePhase: (phase: ResponsePhase) => void
-  onRenderProfile: (profile: RenderProfile, scene: RenderScene) => void
+  onRenderProfile: (profile: RenderProfile, scene: RenderScene, quality?: RenderQuality) => void
 }
 const DRAFT_KEY = 'astaria-home-draft'
 type WorkspacePage = 'home' | 'workbench' | 'settings' | 'companion' | 'free-time' | PlannerPage
@@ -96,7 +96,7 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
   useEffect(() => { if (!notification) return; const timer = setTimeout(() => setNotification(''), 12000); return () => clearTimeout(timer) }, [notification])
   const chat = useXixiConversation(() => { data.retry(); notifyLocalDataChange() }, setNotification)
   useEffect(() => { onResponseEffect(preferences.value.effect) }, [preferences.value.effect, onResponseEffect])
-  useEffect(() => { onRenderProfile(preferences.value.render?.profile ?? 'full', page === 'home' ? 'home' : 'workspace') }, [preferences.value.render?.profile, page, onRenderProfile])
+  useEffect(() => { onRenderProfile(preferences.value.render?.profile ?? 'full', page === 'home' ? 'home' : 'workspace', preferences.value.render?.quality) }, [preferences.value.render?.profile, preferences.value.render?.quality, page, onRenderProfile])
   useEffect(() => { onResponsePhase(page === 'settings' ? previewPhase ?? chat.responsePhase : chat.responsePhase) }, [page, previewPhase, chat.responsePhase, onResponsePhase])
   useEffect(() => () => onResponsePhase('idle'), [onResponsePhase])
   useEffect(() => { if (page !== 'settings') setPreviewPhase(null) }, [page])
@@ -422,7 +422,7 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
   const radius = 19 + (15 - 19) * progress
   const chatVisible = progress > .35
 
-  return <div ref={root} className="home-workspace" data-spatial-ui data-string-covered={stringCovered} data-theme={visibleTheme} data-chat-open={chatOpen} data-page={page} data-grid={preferences.value.grid} data-card-edges={preferences.value.cardEdges ?? 'both'} data-motion={preferences.value.effect.motion} data-effect-preview={previewPhase !== null}>
+  return <GlassRenderingContext.Provider value={preferences.value.render?.glass ?? 'auto'}><div ref={root} className="home-workspace" data-spatial-ui data-string-covered={stringCovered} data-theme={visibleTheme} data-chat-open={chatOpen} data-page={page} data-grid={preferences.value.grid} data-card-edges={preferences.value.cardEdges ?? 'both'} data-motion={preferences.value.effect.motion} data-effect-preview={previewPhase !== null}>
     <nav ref={nav} className="home-nav" aria-label="ASTaria 导航" data-menu-open={menuOpen} inert={previewPhase !== null} aria-hidden={previewPhase !== null}
       onPointerEnter={event => { if (event.pointerType !== 'touch') { clearTimeout(menuTimer.current); menuOpenedByHover.current = !menuOpen; setMenuOpen(true) } }}
       onPointerLeave={() => { menuTimer.current = setTimeout(() => { if (!nav.current?.contains(document.activeElement)) setMenuOpen(false) }, 180) }}
@@ -554,7 +554,7 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
     {showFirstRun && preferences.loaded && <FirstRunGuide preferences={preferences.value} previewOpen={stringsPreview} previewComplete={previewReturned && previewDayChanged} onStartHorizon={() => { setPreviewReturned(false); setPreviewDayChanged(false); openStrings(true) }} onPreviewThemeChange={setFirstRunTheme} onTourPageChange={next => changePage(next)} onDone={() => { setShowFirstRun(false); void chat.refreshStatus() }} />}
     {selectedId && <TaskDialog task={selectedTask} saving={data.saving} onClose={closeTask} onStatus={data.setStatus} />}
     {receiptScenarioId && <ScenarioReceiptDialog scenarioId={receiptScenarioId} tasks={data.tasks} tasksLoading={data.loading} tasksError={data.loadError} onChanged={freeTimeChanged} onClose={() => setReceiptScenarioId(null)} onNotice={setNotification} />}
-  </div>
+  </div></GlassRenderingContext.Provider>
 }
 
 function TaskDialog({ task, saving, onClose, onStatus }: {

@@ -6,6 +6,7 @@ import { chmod, copyFile, lstat, mkdir, mkdtemp, open, readFile, readdir, realpa
 import { dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { generateNotices } from './third-party-notices.mjs'
+import { copyServerDependencies } from './desktop-dependencies.mjs'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const NAME = 'ASTaria', BUNDLE_ID = 'dev.wason.ASTaria', ARCH = 'arm64'
@@ -54,7 +55,7 @@ async function requirePath(path, kind) {
   const stat = await lstat(path).catch(error => { if (error.code === 'ENOENT') fail(`Required ${kind} missing: ${path}`); throw error })
   if (stat.isSymbolicLink() || (kind === 'directory' ? !stat.isDirectory() : !stat.isFile())) fail(`Expected a regular ${kind}, not a symlink: ${path}`)
 }
-async function copyPayload(source, destination, extensions) {
+export async function copyPayload(source, destination, extensions = SOURCE_EXTENSIONS) {
   const stat = await lstat(source)
   if (stat.isSymbolicLink()) fail(`Source symlinks are not allowed in the application payload: ${source}`)
   if (stat.isDirectory()) {
@@ -197,6 +198,7 @@ async function main() {
     if (await exists(payload) || await exists(join(resources, 'app.asar'))) fail('The supplied Electron runtime already contains Resources/app or app.asar; use a clean runtime.')
     await mkdir(payload)
     for (const path of ['desktop', 'server', 'src']) await copyPayload(join(ROOT, path), join(payload, path), SOURCE_EXTENSIONS)
+    buildInfo.serverDependencies = await copyServerDependencies(ROOT, payload)
     await copyPayload(join(ROOT, 'dist'), join(payload, 'dist'), ASSET_EXTENSIONS)
     await copyPayload(prompts, join(payload, 'prompts'), SOURCE_EXTENSIONS)
     await writeFile(join(payload, 'package.json'), `${JSON.stringify({ name: 'astaria', productName: NAME, version, license: 'Apache-2.0', private: true, type: 'module', main: 'desktop/main.cjs' }, null, 2)}\n`)
@@ -205,6 +207,8 @@ async function main() {
     await copyFile(join(ROOT, 'LICENSE'), join(resources, 'ASTARIA-LICENSE.txt'))
     await copyFile(join(ROOT, 'NOTICE'), join(resources, 'ASTARIA-NOTICE.txt'))
     await copyFile(join(ROOT, 'THIRD_PARTY_NOTICES.txt'), join(resources, 'THIRD_PARTY_NOTICES.txt'))
+    await copyFile(join(ROOT, 'third-party/gsap-3.15.0-LICENSE.txt'), join(resources, 'GSAP-LICENSE.txt'))
+    buildInfo.gsapLicenseSha256 = await sha256(join(resources, 'GSAP-LICENSE.txt'))
     const defaultApp = join(resources, 'default_app.asar')
     if (await exists(defaultApp)) await rm(defaultApp) // Only this copied runtime fixture, never an input path.
 
@@ -258,12 +262,14 @@ async function main() {
 
     // scratch is a fresh directory owned solely by this invocation.
     await rm(scratch, { recursive: true })
+    await copyFile(join(ROOT, 'docs', 'INSTALL.md'), join(staging, 'install.txt'))
     const archiveName = `${stem}.zip`, archive = join(staging, archiveName)
     run('/usr/bin/ditto', ['-c', '-k', '--sequesterRsrc', '--keepParent', app, archive])
     const digest = await sha256(archive)
     await writeFile(join(staging, `${stem}.sha256`), `${digest}  ${archiveName}\n`)
     await writeFile(join(staging, `${stem}.manifest.json`), `${JSON.stringify({ ...buildInfo, signing: 'ad-hoc', notarized: false,
-      app: `${NAME}.app`, archive: archiveName, sha256: digest, includesUserData: false }, null, 2)}\n`)
+      app: `${NAME}.app`, archive: archiveName, sha256: digest, instructions: 'install.txt',
+      instructionsSha256: await sha256(join(staging, 'install.txt')), includesUserData: false }, null, 2)}\n`)
     if (await exists(release)) fail(`Another build created the same version output: ${release}`)
     await rename(staging, release); published = true
     console.log(`Built: ${join(release, `${NAME}.app`)}\nArchive: ${join(release, archiveName)}\nSHA-256: ${digest}`)

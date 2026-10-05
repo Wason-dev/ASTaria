@@ -2,6 +2,17 @@
 
 [返回首页](../README.md)
 
+## BetaX 范围与当前限制
+
+`0.1.0-beta.10`（tag `v0.1.0-beta.10`）在 GitHub 的展示名称为 **BetaX**。主发布为 macOS 13+ Apple Silicon（arm64）的 ad-hoc 包；同一 Release 另提供 Windows x64 试验版（`-setup.exe` 与 `-portable.zip`）。下面列出本版已实现的能力与仍未验收的边界。
+
+- **Windows x64**：复用本机服务与 SQLite，数据保存在 `%APPDATA%\ASTaria`，API Key 使用系统凭据保护（DPAPI）；Release 提供 `setup.exe`（NSIS）与便携 ZIP 两个试验版资产。已在 Windows 10 x64（19044）真实交互会话核对 Electron、React、API、SQLite、WebGL2 与 DPAPI，本版合并定向测试共 123 项通过（其中 30 项是本地模型协议测试，同一批测试不重复计算），并有 Mac → Windows 10 → Mac 加密操作往返通过。candidate `setup.exe` 已在隔离中文路径目录真实安装，安装后交互桌面 smoke、DPAPI、原生窗口与 8 组滚动条检查通过；被占用 EXE 上的安装与卸载均以退出码 2 失败且不改动文件；卸载删除程序、快捷方式与卸载注册项并保留无关用户文件，安装测试同时证明真实 AppData 未被改动。仍未验收：Windows 11、原地升级、睡眠恢复、更广 DPI 与多屏（只测过 DPR 1.5 的一种配置）、长期功耗与 Windows 原生通知。
+- **共享文件夹**：用户选择普通目录、云盘本地同步目录或 NAS 挂载目录；每台设备只写自己的加密操作文件，保留自己的本机 SQLite。界面显示目录不可用、只读、暂停、未落地、冲突和待处理原因；服务提供者只能搬运密文文件，不能把活跃 SQLite 直接共享。
+- **Syncthing**：用户先自行安装并共享目录（需要 `.stfolder` 标记），再在 ASTaria 选择该目录。它与共享文件夹使用同一套操作格式、校验、解密、幂等和冲突流程；检测到 Syncthing 或目录存在不代表操作已经应用。ASTaria 不自动安装 Syncthing，也不修改防火墙或配对设置；实际跨机传送尚未验收。
+- **加密操作日志**：AES-256-GCM、每设备递增序号、原子文件、事务 outbox、重复操作幂等、缺序等待和删除 tombstone。同字段离线冲突需用户确认；安排须在接收设备最新日程上重新校验，锁定安排不可静默覆盖。聊天、记忆、思考、API Key 和本地模型路径不属于同步内容。
+
+上述能力已在源码中实现并在 macOS 与 Windows 10 x64（19044）之间做过双机往返验证；错误密钥、篡改、乱序与中断恢复的定向测试已通过。
+
 ## 技术栈
 
 | 关注点 | 方案 |
@@ -28,7 +39,7 @@ npm test        # 领域模型、本地数据库、AI 上下文和本机 API 的
 
 ## 析熙与本机数据
 
-从源码开发需要 Node.js 24.19 或更新的 Node 24 版本（使用内置 `node:sqlite`），以及 macOS Command Line Tools。开发和本地预览服务都提供同源 `/api`，请保持服务运行；单独打开 `dist/index.html` 或把静态文件托管到远程并不包含本机服务。桌面包需要同时包含页面、本机服务和预编译的钥匙串助手，不能只把网页套进窗口。
+从源码开发需要 Node.js 24.19 或更新的 Node 24 版本（使用内置 `node:sqlite`）；macOS 还需要 Command Line Tools。开发和本地预览服务都提供同源 `/api`，请保持服务运行；单独打开 `dist/index.html` 或把静态文件托管到远程并不包含本机服务。桌面包需要同时包含页面、本机服务和预编译的凭据助手，不能只把网页套进窗口。在浏览器里运行源码不提供 DPAPI 和文件夹同步，这两项需要运行 Electron 桌面包。
 
 ```bash
 npm run dev -- --host 127.0.0.1 --port 5177
@@ -37,7 +48,7 @@ npm run build:preview
 npm run preview -- --host 127.0.0.1 --port 5188
 ```
 
-在左上角 ASTaria → 设置中输入 DeepSeek API Key，选择「保存到钥匙串」，再「测试连接」。密钥通过本机私有管道写入 macOS 钥匙串，账号为 `dev.wason.ASTaria.deepseek / api-key`；不写入 `.env`、Git、SQLite、浏览器存储，也不向前端回显。服务固定请求 DeepSeek 官方 HTTPS 地址。源码开发时每次启动首次使用会在临时私有目录编译本机钥匙串助手，执行前校验完整性，桌面包已包含预编译助手；系统可能请求钥匙串访问授权。测试连接会产生少量 API 用量。
+在左上角 ASTaria → 设置中输入 DeepSeek API Key，选择「保存密钥」，再「测试连接」。密钥通过本机私有管道写入系统凭据存储：macOS 为钥匙串，条目为 `dev.wason.ASTaria.deepseek / api-key`；Windows 为系统凭据保护（DPAPI）。不写入 `.env`、Git、SQLite、浏览器存储，也不向前端回显。服务固定请求 DeepSeek 官方 HTTPS 地址。macOS 源码开发时每次启动首次使用会在临时私有目录编译本机凭据助手，执行前校验完整性，桌面包已包含预编译助手；系统可能请求凭据访问授权。测试连接会产生少量 API 用量。
 
 也可以在「设置 → 析熙 → 连接模型」切换到本地模型。支持本机 Ollama、LM Studio 和 OpenAI 兼容服务；地址只接受 `127.0.0.1`、`localhost` 或 `[::1]`，可读取已加载模型，也可手写模型名。连接地址与设备详细信息默认收起。保存后用「测试连接与工具」执行一次工具调用往返检查；没有通过工具调用的模型只适合普通问答，不应承担修改任务或日程。设备建议按系统内存估算，不测推理速度，也不会在本地失败时偷偷切回云端。首次切换本地会按设备内存预选 Qwen3 4B / 8B / 14B / 32B，已保存的自定义模型不被替换；未确认安装的推荐型号不会自动变成可用连接。本地建议至少 32K 上下文，仍可选择其他支持工具调用的模型。
 
@@ -45,17 +56,19 @@ Ollama 用户可展开「还没有模型？帮我安装」，从 Qwen3 4B / 8B /
 
 设置中的默认模型可选择 DeepSeek Flash 或 DeepSeek V4 Pro，初始为 Flash，选择保存在本机数据库并跨浏览器共享。思考深度默认 Low，可选 High、Max 或关闭；析熙个性默认「中」，已有用户设置不会被覆盖。思考设置直接传给 DeepSeek，工具调用轮次会原样保留模型返回的 reasoning_content。聊天按 Enter 发送、Shift+Enter 换行，中文输入法确认候选字不会误发；自己的消息即时显示，失败后可重试。析熙可以提出带快捷选项的问题，也支持自由输入回答。消息可复制，自己的消息可撤回；撤回后停止该轮后续处理并排除相关上下文，已执行的事项变更仍可从回执单独撤销。
 
-联网搜索位于同一连接设置中，默认关闭，且本地模型模式不会默认打开。用户明确开启后，析熙才会收到 `web_search` 工具；搜索请求固定使用 DeepSeek Anthropic 原生 `web_search_20250305`，只发送查询词，不附带本机课表、任务、聊天、记忆或 API Key。返回结果只保留标题、链接、摘要和发布时间，网页内容视为不可信资料，网页里的指令不会改变 ASTaria 权限，也不会自动写入事项、日历或记忆。搜索失败、限流、无结果和取消会以真实错误结束，不伪造来源。网页抓取和其他搜索 provider 尚未接入。
+联网搜索位于同一连接设置中，默认关闭，且本地模型模式不会默认打开。用户明确开启后，析熙才会收到 `web_search` 工具；搜索请求固定使用 DeepSeek Anthropic 原生 `web_search_20250305`，只发送查询词，不附带本机课表、任务、聊天、记忆或 API Key。返回结果只保留标题、链接、摘要和发布时间，网页内容视为不可信资料，网页里的指令不会改变 ASTaria 权限，也不会自动写入事项、日历或记忆。搜索失败、限流、无结果和取消会以真实错误结束，不伪造来源。开启联网搜索后，每条来源都会抓取网页正文并标记为抓取成功、抓取失败或正文为空；只有成功取得正文的来源可用于核对事实或日期，没有可核实正文时逐条列出核验状态与抓取时间。其他搜索 provider 尚未接入。
 
 「流式输出」默认开启，可在同一连接设置中关闭。思考过程与回复逐步显示，思考区可折叠；这些是模型实际返回的内容，本地模型是否返回思考字段取决于服务。生成中的文字不代替执行回执，最终以已保存状态为准。网络中断保留原请求 ID 和已保存进度，重试不会重复执行已完成的操作。开关从下一条消息生效，不改变正在执行的请求。
 
 黑洞渲染档位位于「设置 → 外观与动画」：满特效 120、满特效 90、满特效 60、轻特效 45、低特效 30。满特效档保持完整折射与 Bloom，低档保留整体视觉语言并降低渲染预算。首页与首页聊天按所选帧率运行；工作台及其他子页面自动将目标限制为 60 FPS。实际帧率受显示器刷新率与设备性能限制，页面隐藏时渲染会自动暂停；测试浏览器应在验证结束后退出，避免后台残留持续消耗 GPU。
 
-数据存放于 `~/Library/Application Support/ASTaria/astaria.sqlite`，目录权限 0700、数据库 0600。同一 macOS 用户下的浏览器共用此文件。SQLite 保存任务、分类、日历、安排、对话、记忆、摘要、变更回执、推演、接力和正式设置；默认专注与休息时长保存在本机设置中，并随备份导出与恢复；正在进行的倒计时进度与开发调参仍保存在浏览器中。旧浏览器业务数据首次打开后幂等迁移，源数据保留，旧 API 设置不会导入。若曾在旧界面保存过 API Key，请在迁入钥匙串后清理旧的 `astaria-settings` 浏览器数据库，并按需在 DeepSeek 控制台轮换旧密钥。
+「帧率与画质」把帧率和黑洞画质拆成两项独立设置：帧率可选 30 / 45 / 60 / 90 / 120 FPS，画质可选最高、高、轻量、兼容（以及默认的「ASTaria 推荐 · 自动」）。选择手动画质后帧率才可独立调整；手动画质保持固定，不再随负载变化。默认推荐档以 60 FPS 为目标，从最高画质开始，持续卡顿时自动下调，流畅后逐步恢复。玻璃渲染另有独立选项：默认「自动」（Windows 优先流畅玻璃），可手动切到「精细折射」。
+
+数据存放于系统数据目录下的 `astaria.sqlite`：macOS 为 `~/Library/Application Support/ASTaria/`（目录权限 0700、数据库 0600），Windows 为 `%APPDATA%\ASTaria`。同一系统用户下的浏览器共用此文件。SQLite 保存任务、分类、日历、安排、对话、记忆、摘要、变更回执、推演、接力和正式设置；默认专注与休息时长保存在本机设置中，并随备份导出与恢复；正在进行的倒计时进度与开发调参仍保存在浏览器中。旧浏览器业务数据首次打开后幂等迁移，源数据保留，旧 API 设置不会导入。若曾在旧界面保存过 API Key，请在迁入钥匙串后清理旧的 `astaria-settings` 浏览器数据库，并按需在 DeepSeek 控制台轮换旧密钥。
 
 析熙可读取和拆分事项、设置截止与计划时间、修改状态、记住有原话来源的偏好。每次修改有回执，可以撤销；之后被手动改过的记录会保护性拒绝覆盖。临时记忆带有效期，任务记忆只用于相关任务。设置中可查看来源或忘记；相关来源及衍生上下文会被排除，原始聊天仍供回看。长期聊天使用有来源的摘要加最近完整轮次，并按需检索旧对话。
 
-「设置 → 析熙」可调整个性强度：低（简洁温和）、中（自然俏皮）、高（有主见，嘴硬一点，做事认真），默认高。高档只在轻松语境里偶尔顶一句，关心落在具体回应和行动上；用户难过、着急或纠错时收起打趣。保存后从下一条回复开始生效，不必新开对话；各档只调整表达，与主动权限、提醒频率、记忆开关独立。设置随本机数据持久化并进入备份。
+「设置 → 析熙」可调整个性强度：低（简洁温和）、中（自然俏皮）、高（有主见，嘴硬一点，做事认真），默认「中」。高档只在轻松语境里偶尔顶一句，关心落在具体回应和行动上；用户难过、着急或纠错时收起打趣。保存后从下一条回复开始生效，不必新开对话；各档只调整表达，与主动权限、提醒频率、记忆开关独立。设置随本机数据持久化并进入备份。
 
 人格底色位于 `server/prompts/persona.md`，三档表达由 `server/personality.mjs` 按当前设置选取，工作与工具协议位于 `server/prompts/working.md`。请求时按需选取对话、记忆、任务与日程资料交给 DeepSeek。测试使用虚拟 provider 和临时数据库，不需要真实密钥或付费请求。
 
@@ -158,50 +171,60 @@ public/               静态资源与 ASTaria 图标
 
 网页生产构建会在 `dist/` 生成 `manifest.webmanifest` 与 `sw.js`（generateSW 产物）；桌面构建不注册这套 PWA 离线缓存。
 
-## macOS 内测与发布范围
+## 当前版本：0.1.0-beta.10（BetaX）
 
-本轮面向 macOS 13+ Apple Silicon（arm64）Mac 制作 beta 包。桌面运行时采用 Electron 44.1.0，内含 Node 本机服务、预编译的钥匙串助手和系统提醒助手。构建机需要 Apple Silicon Mac、arm64 Node.js 24.19+（Node 24 系列）、Command Line Tools 和独立取得的干净 Electron.app 及其 LICENSE、LICENSES.chromium.html；应用运行时不应依赖开发服务器或系统 Node。测试范围见[发布说明](./RELEASE_NOTES_v0.1.0-beta.7.md)。
+`0.1.0-beta.10`（tag `v0.1.0-beta.10`）在 GitHub 的展示名称为 **BetaX**。主发布面向 macOS 13+ Apple Silicon（arm64），使用 ad-hoc 签名，未做 Apple 公证。桌面运行时采用 Electron 44.1.0，内含 Node 本机服务、预编译的凭据助手和系统提醒助手。构建机需要 Apple Silicon Mac、arm64 Node.js 24.19+（Node 24 系列）、Command Line Tools 和独立取得的干净 Electron.app 及其 LICENSE、LICENSES.chromium.html；应用运行时不应依赖开发服务器或系统 Node。安装步骤以[安装说明](./INSTALL.md)为准。
+
+### macOS 打包与产物路径
 
 ```bash
 npm ci
 npm run build:desktop
 node scripts/third-party-notices.mjs
-npm run package:desktop -- --runtime /path/to/Electron.app --out desktop-builds
+npm run package:desktop -- --runtime /path/to/Electron.app --out desktop-builds/0.1.0-beta.10
+node scripts/package-dmg.mjs --app desktop-builds/0.1.0-beta.10/ASTaria-0.1.0-beta.10-mac-arm64/ASTaria.app --out desktop-builds/0.1.0-beta.10/release --instructions docs/INSTALL.md --sign-manifest /private/path/update-ed25519.pem
 ```
 
-打包器拒绝覆盖同版本产物，只复制指定源码和构建文件，编译并随包放入钥匙串及提醒助手、Electron/Chromium 许可和 [第三方依赖许可清单](../THIRD_PARTY_NOTICES.txt)，然后完成 ad-hoc 签名、压缩和 SHA-256 清单。`--runtime` 必须指向 arm64 Electron.app，Electron 的两份许可文件须与它同目录。打包不包含个人数据库、密钥、环境文件或测试日志。包与校验文件已上传到 [v0.1.0-beta.7 Release](https://github.com/Wason-dev/ASTaria/releases/tag/v0.1.0-beta.7)。
+两条命令沿用统一命名格式：`--out` 指向版本子目录后，打包器写入 `desktop-builds/0.1.0-beta.10/ASTaria-0.1.0-beta.10-mac-arm64/`（App、ZIP、SHA-256、构建清单），DMG 命令写入同版本 `desktop-builds/0.1.0-beta.10/release/`（`ASTaria-0.1.0-beta.10-mac-arm64-adhoc.dmg`、`.dmg.sha256`、`.manifest.json`、小写 `install.txt`）。打包器拒绝覆盖同版本产物，只复制指定源码和构建文件，编译并随包放入凭据及提醒助手、Electron/Chromium 许可、GSAP 许可和[第三方依赖许可清单](../THIRD_PARTY_NOTICES.txt)，然后完成 ad-hoc 签名、压缩和 SHA-256 清单。`--runtime` 必须指向 arm64 Electron.app，Electron 的两份许可文件须与它同目录。打包不包含个人数据库、密钥、环境文件或测试日志。本机开发产物留在被 Git 忽略的 `desktop-builds/`。
 
-以上命令默认将新产物写入 `desktop-builds/ASTaria-0.1.0-beta.7-mac-arm64/`。版本 Release 提供 DMG、SHA-256、安装说明和记录源码提交的构建清单；本机开发产物留在被 Git 忽略的 `desktop-builds/`。应用使用层叠三瓣 SVG 图标及透明顶部拖动区；图标生成方法见 [图标说明](../design/icon-vector/README.md)。
-
-小范围测试 DMG 包含 App、Applications 快捷方式及中文安装说明；不含开发者的课表、事项、析熙聊天、记忆、数据库或备份。先退出旧版，再将 App 拖到「应用程序」。App 和 DMG 均为 ad-hoc 签名、未公证；若被 macOS 拦截，先核对来源和校验值，优先使用「系统设置 → 隐私与安全性 → 仍要打开」。[安装说明](./INSTALL.md) 另附只针对此 App 的终端命令。
-
-2026-09-29 分两版交付：beta.3 增加可校验的下载与重启安装、工作台余时单次安排入口，并继续减少后台轮询和绘制分配；beta.4 增加隔周课表、macOS 预约提醒和心愿澄清。工作台、日程、余时的单次完成／撤回以及跨日隔离已通过真实页面验收；清透／磨砂设置、更新失败重试与取消、安装失败回退均已验证。完整范围见[发布说明](./RELEASE_NOTES_v0.1.0-beta.7.md)，性能测量见[性能说明](./PERFORMANCE.md)。干净机器、休眠恢复和长期功耗仍需继续测试。
-
-备份导出与恢复已统一为格式化 JSON 的 32 MiB UTF-8 字节上限，超限明确拒绝且不改动本机数据，不再导出无法恢复的超限文件。中文字节、精确上限、超限拒绝与失败原子性测试已通过。恢复会更新状态，之后的新备份仍会重新核验大小。
-
-桌面端沿用 `~/Library/Application Support/ASTaria/` 的本机业务数据。首次运行前应从「设置 → 数据」导出备份，并保留原备份文件；浏览器保存的专注计时、外观调参等状态不等同于 SQLite 数据，不应假定会自动复制进桌面容器。DeepSeek 密钥继续由 macOS 钥匙串管理；若使用本地模型，Ollama 或 LM Studio 仍需在本机运行。
+DMG 根目录只有 App、指向 `/Applications` 的 Applications 快捷方式和安装说明；用户自己把 App 拖入 Applications，打包脚本不会复制进 `/Applications`。版本 Release 的说明书资产名为小写 `install.txt`，内容就是 `--instructions` 指定的 `docs/INSTALL.md`（仓库内 `INSTALL.md` 与 `install.txt` 是同一份正文的副本）。DMG 不含开发者的课表、事项、析熙聊天、记忆、数据库或备份。App 和 DMG 均为 ad-hoc 签名、未公证；若被 macOS 拦截，先核对来源和校验值，优先使用「系统设置 → 隐私与安全性 → 仍要打开」。[安装说明](./INSTALL.md) 另附只针对此 App 的终端命令。应用使用层叠三瓣 SVG 图标及透明顶部拖动区；图标生成方法见 [图标说明](../design/icon-vector/README.md)。
 
 「设置 → 通用 → App 更新」支持检查 GitHub 发布、查看更新说明及下载匹配芯片架构的 DMG。自动检查默认开启，App 可见时最多每六小时检查一次，也可关闭或手动检查；遇到 GitHub 限流会退避，不反复请求。检查仅读取公开版本信息，不发送课表、聊天或模型密钥。Beta 安装可接收后续 beta 和正式版，正式版只接收正式发布。同版本替换包通过更晚的 App 构建时间和不同源码提交识别，编辑 Release 说明不会触发更新。
 
-从 beta.3 起，可在设置中「下载并校验」后选择「安装并重启」。下载支持取消；安装前核对 SHA-256、包大小、App 身份、架构、构建记录和代码签名，原应用在新版本启动成功前保留，失败会尝试回退。本机数据不随 App 替换。旧版尚无安装更新功能，需要先手动安装 beta.3 一次。App 必须位于可写目录；直接从 DMG 或受系统隔离的临时路径运行时，请先复制安装。发布须同时上传匹配的 DMG 和构建清单。
+「下载并校验」完成后可选择「安装并重启」；下载支持取消，安装前核对 SHA-256、包大小、App 身份、架构、构建记录、代码签名和发布清单的 Ed25519 签名，原应用在新版本启动成功前保留，失败会尝试回退。本机数据不随 App 替换。App 必须位于可写目录；直接从 DMG 或受系统隔离的临时路径运行时，请先复制安装。发布须同时上传匹配的 DMG 和构建清单。
 
-当前不承诺 Intel Mac、Windows、iOS 或 Android 原生包。macOS 可提前预约系统提醒，关闭窗口或退出 App 后仍可触发已预约的提醒；送达受通知权限、系统预览和专注模式影响。长期不打开 App 时，后续预约不会持续补充。当前测试包使用 ad-hoc 签名，尚未完成 Developer ID 签名、公证和干净机器验证，不能把关闭系统安全保护作为安装步骤。实际帧率、休眠恢复与长期功耗需要在目标设备测量。
+备份导出与恢复使用格式化 JSON 的 32 MiB UTF-8 字节上限，超限明确拒绝且不改动本机数据，不导出无法恢复的超限文件。中文字节、精确上限、超限拒绝与失败原子性测试已通过。恢复会更新状态，之后的新备份仍会重新核验大小。macOS 桌面端数据位于 `~/Library/Application Support/ASTaria/`：首次运行前应从「设置 → 数据」导出备份并保留原备份文件；浏览器保存的专注计时、外观调参等状态不等同于 SQLite 数据，不应假定会自动复制进桌面容器。若使用本地模型，Ollama 或 LM Studio 仍需在本机运行。性能数字见[性能说明](./PERFORMANCE.md)；干净机器、休眠恢复与长期功耗仍需继续测试。
+
+### Windows x64 试验版（随 GitHub Release 提供）
+
+`scripts/package-windows.mjs` 产出 `ASTaria-0.1.0-beta.10-win-x64/`，Release 上传 `ASTaria-0.1.0-beta.10-win-x64-setup.exe`（NSIS 安装程序）与 `ASTaria-0.1.0-beta.10-win-x64-portable.zip`：需要自行准备解压好的 Electron win32-x64 运行时；NSIS 需要额外提供 `makensis` 才编译，未提供时只生成 `.nsi` 与便携 ZIP。已核对：Windows 10 x64（19044）真实交互会话中的 Electron 启动、React 界面、本机 API、SQLite、WebGL2 与 DPAPI 凭据保护；本版合并定向测试共 123 项通过，其中包含 30 项本地模型协议测试（同批测试，不重复计算）；Mac → Windows 10 → Mac 的中文任务、假期与完成状态加密操作往返通过。安装与卸载已用 candidate `setup.exe` 在隔离中文路径目录实测：安装成功，安装后交互桌面 smoke、DPAPI、原生窗口与 8 组滚动条检查通过；被占用 EXE 上的安装与卸载均退出码 2 且未修改文件；卸载删除程序、快捷方式与卸载注册项，保留无关用户文件，且安装测试证明真实 AppData 未变。仍未验收：Windows 11、原地升级、睡眠恢复、更广 DPI 与多屏（仅 DPR 1.5 的一种配置）、长期功耗与 Windows 原生通知；这些结论不等同最终发布包验证。两个资产都是试验版，不作为正式 Windows 发行版。
+
+Windows 本地模型复用回环 HTTP 协议：需用户先安装并打开 Ollama，ASTaria 才能请求下载受支持模型；也可连接已有兼容服务。上述 30 项本地模型协议测试已计入本版 123 项合并定向测试，不另外累加；本次按用户要求未下载模型，真实下载、GPU/CPU 推理与工具调用未验收。
+
+Windows 数据保存在 `%APPDATA%\ASTaria`。ZIP 需要整体解压后运行 `ASTaria.exe`，数据不随 EXE 移动；更新时退出 App、导出备份，再把新包解压到新目录。Windows 没有自动更新，也没有退出 App 后的提醒。在浏览器里运行源码不提供 DPAPI 和文件夹同步，这两项需要运行 Electron 包。
+
+#### Windows 窗口外壳与滚动条
+
+Windows 版不使用独立的应用菜单，也不使用系统原生标题条：窗口保留原生三按钮（最小化、最大化、关闭），并用透明可拖动区域承载顶部拖动与双击最大化，外观与 macOS 的隐藏标题条统一（`desktop/main.cjs` 中菜单与标题条按平台分支）。工作台与余时的滚动容器使用 8px 主题滚动条：透明轨道、中性圆角 thumb、悬停少量金色、无上下箭头，浅色与深色主题各自可见。
+
+#### Windows 玻璃材质（明确的取舍，不是无损优化）
+
+Windows 默认走 CSS 通透/磨砂玻璃：保留 rim、tint、通透与磨砂的差别和状态边界，但**不做 SVG 精细边缘位移**（`src/home/glassRendering.ts` 的 `supportsGlassRefraction` 在 Windows 上返回 false）。设置 → 外观与动画 → 玻璃渲染可改为「精细折射」换回 SVG 边缘位移，代价是帧率明显下降——详见[渲染与后台性能](./PERFORMANCE.md)的 BetaX 表。**黑洞的最高画质、渲染分辨率、采样与辉光不因这一取舍降低**；该取舍只影响玻璃合成路径，不计入同画质性能提升。
+
+### 跨设备同步（共享文件夹 / Syncthing 现有目录）
+
+入口是「设置 → 数据 → 跨设备同步」。选择普通共享文件夹，或选择用户已经用 Syncthing 共享的本地目录（需要 `.stfolder` 标记）。每台设备保留自己的 SQLite，所选目录只传 AES-256-GCM 加密的不可变操作文件；新建组选择新目录，原设备把恢复密钥导出到共享目录之外，新设备选择加入并输入 64 位密钥。
+
+暂停停止目录读写，本机变更继续排队；恢复后按 30 秒周期扫描，支持手动检查并在系统唤醒时检查，最近检查时间会持久化。界面显示待处理原因和最近 20 项事务回执；**回执只表示本机已记录事务，不是远端送达证明**。不同字段的改动自动合并，同字段冲突可保留本机或重新核验传入内容；删除 tombstone 不会复活旧记录，锁定、时间重叠与 DDL 冲突进入待处理。日程仍按整文档内的数组级合并，可能需要人工处理。同步内容为任务、分类、课程日程、安排、目标和完成记录；不传 API Key、模型路径、聊天、记忆、思考、原始对话回执与跨设备撤销，只有业务事务摘要回执。退出组保留本机数据和共享文件；撤销设备必须使用新目录、新密钥和新组，全部可信设备和恢复副本都丢失密钥时，旧密文无法恢复。传输软件由用户自备：ASTaria 不安装、不配置 Syncthing，也不修改防火墙或配对设置；Syncthing 实际跨机传送尚未验收，目前只验证了目录协议与标记。限制与未验收：单次操作 16 MB、单轮 20000 个文件、日志不压缩；超过限制或多设备大量数据未验收。不得共享 SQLite、WAL 或 SHM 文件。
 
 ## 公开与反馈
 
-当前 Release 是预发布 beta，面向 macOS 13+ Apple Silicon。当前使用 ad-hoc 签名，尚未完成 Developer ID 签名和 Apple 公证。
+当前 Release 是预发布 beta，主发布面向 macOS 13+ Apple Silicon，使用 ad-hoc 签名，尚未完成 Developer ID 签名和 Apple 公证；Windows x64 试验版（`setup.exe` 与 `portable.zip`）随同一 Release 提供，未做 Windows 代码签名。不支持 Intel Mac、iOS 或 Android。
 
 主项目采用 Apache-2.0；资源来源见 [资源说明](../ASSET_PROVENANCE.md)。第三方依赖许可正文见 [THIRD_PARTY_NOTICES.txt](../THIRD_PARTY_NOTICES.txt)。
 
-内测问题请在 [Issues](https://github.com/Wason-dev/ASTaria/issues) 中说明版本、macOS/芯片、复现步骤和期望结果。截图及日志请先移除课表、聊天、API Key 等个人信息。安全问题按 [SECURITY.md](../SECURITY.md) 私下报告。
-
+内测问题请在 [Issues](https://github.com/Wason-dev/ASTaria/issues) 中说明版本、macOS/芯片或 Windows 版本、复现步骤和期望结果。截图及日志请先移除课表、聊天、API Key 等个人信息。安全问题按 [SECURITY.md](../SECURITY.md) 私下报告。
 
 ## 发布清单签名（维护者）
 
-从 beta.5 起，自动更新要求发布清单使用与 `desktop/releaseTrust.mjs` 内置公钥配对的 Ed25519 私钥签名。私钥保存在仓库外，不提交、不上传、不随 App 分发。保管并备份同一密钥；丢失或更换密钥需要先设计旧客户端可信的迁移。
-
-```bash
-node scripts/package-dmg.mjs --app /path/ASTaria.app --out /path/release --instructions docs/INSTALL.md --sign-manifest /private/path/update-ed25519.pem
-```
-
-不传签名参数只适用于手动分发测试包，无法通过 beta.5 自动安装校验。公开 Release 上传前须对实际清单执行 `verifyReleaseManifest`，并核对 DMG SHA-256、App CDHash、源码提交和干净状态。签名清单同时兼容旧客户端；beta.4 客户端首次升级仍只有旧版的校验能力。
+自动更新要求发布清单使用与 `desktop/releaseTrust.mjs` 内置公钥配对的 Ed25519 私钥签名。私钥保存在仓库外，不提交、不上传、不随 App 分发。保管并备份同一密钥；丢失或更换密钥需要先设计旧客户端可信的迁移。不传 `--sign-manifest` 的清单只适用于手动分发测试包，无法通过自动安装校验。公开 Release 上传前须对实际清单执行 `verifyReleaseManifest`，并核对 DMG SHA-256、App CDHash、源码提交和干净状态。

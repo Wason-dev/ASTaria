@@ -26,3 +26,14 @@ jobs:
       - run: npm run build:desktop
       - run: node scripts/third-party-notices.mjs
       - run: git diff --exit-code -- THIRD_PARTY_NOTICES.txt
+
+  windows-core:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.19.0
+          cache: npm
+      - run: npm ci
+      - run: node --test scripts/sync-protocol.test.mjs scripts/folder-sync.test.mjs scripts/secret-store.test.mjs scripts/local-database.test.mjs scripts/update-download.test.mjs scripts/backup-safety.test.mjs scripts/backup-size.test.mjs scripts/settings-backup.test.mjs scripts/local-model.test.mjs scripts/local-model-install.test.mjs scripts/glass-rendering.test.mjs scripts/adaptive-quality.test.mjs scripts/render-profile.test.mjs

@@ -117,7 +117,7 @@ export const XIXI_TOOLS = [
   tool('restore_day_timetable', '取消单日调课，先read_planner读目标日', {
     date: str('YYYY-MM-DD'), expectedRevision: { type: 'integer', minimum: 0 }, evidence: plannerEvidence,
   }, ['date', 'expectedRevision', 'evidence']),
-  tool('set_calendar_exception', '设置连续假期、整日停课、单日调课或恢复原课表。先read_planner读取每个目标日期；假期和停课不需要来源星期，也不会删除任务或单日活动', {
+  tool('set_calendar_exception', '设置连续假期、整日停课、单日调课或恢复原课表。先read_planner读取每个目标日期；假期移除课程，优先采用已配置休息日的可安排窗口，若没有则保留目标日已有空档；停课清空课表。二者都不需要来源星期，也不会删除任务或单日活动', {
     date: str('开始日期 YYYY-MM-DD'), endDate: str('结束日期 YYYY-MM-DD，省略表示单日'),
     kind: { type: 'string', enum: ['holiday', 'cancelled', 'rescheduled', 'restored'] },
     sourceWeekday: weekdaySchema,
@@ -386,13 +386,20 @@ function safeToolError(error) {
 }
 
 function chatActivityForTool(name) {
-  if (name === 'web_search') return { stage: 'searching', title: '正在搜索公开资料', detail: '只发送本次明确的查询词，外部网页不会直接写入本机' }
-  if (name === 'ask_user') return { stage: 'asking', title: '正在等待你的选择', detail: '已有事实先保留，只有需要你决定的取舍才会停下来询问' }
-  if (name.startsWith('read_') || name === 'search_history' || name === 'read_current_time') return { stage: 'reading', title: '正在读取本机资料', detail: name === 'search_history' ? '核对原话出处与历史上下文' : '使用最新的事项、课表和安排快照' }
-  if (name === 'preview_route' || name === 'preview_scenario') return { stage: 'planning', title: '正在核对候选安排', detail: '先比较影响和约束，尚未修改真实日历' }
-  if (name.includes('schedule') || name.includes('plan') || name.includes('timetable')) return { stage: 'planning', title: '正在排程并核对冲突', detail: '按真实空档、连续时长、截止时间和固定占用检查' }
-  if (name === 'save_handoff' || name === 'remember' || name === 'remember_wish' || name === 'update_wish') return { stage: 'saving', title: '正在保存接力与记忆', detail: '只写入本轮得到授权的内容' }
-  return { stage: 'saving', title: '正在保存变更', detail: '写入完成后会用本机回执核对结果' }
+  if (name === 'read_planner') return { stage: 'reading', title: '正在核对课程与空档', detail: '读取日程' }
+  if (name === 'read_weekly_timetable') return { stage: 'reading', title: '正在核对每周课表', detail: '读取课表' }
+  if (name === 'set_calendar_exception') return { stage: 'saving', title: '正在保存日期安排', detail: '日期例外' }
+  if (name === 'set_day_timetable' || name === 'edit_weekly_timetable') return { stage: 'planning', title: '正在核对课表变更', detail: '调整课表' }
+  if (name === 'plan_tasks' || name === 'remove_plan') return { stage: 'planning', title: '正在核对任务时段', detail: '安排日程' }
+  if (name === 'save_day_events' || name === 'remove_day_event') return { stage: 'saving', title: '正在保存单日活动', detail: '日程记录' }
+  if (name === 'web_search') return { stage: 'searching', title: '正在搜索公开资料', detail: '网页搜索' }
+  if (name === 'ask_user') return { stage: 'asking', title: '正在等待你的选择', detail: '询问' }
+  if (name.startsWith('read_') || name === 'search_history') return { stage: 'reading', title: '正在核对本机资料', detail: name === 'search_history' ? '查找对话' : '读取资料' }
+  if (name === 'read_current_time') return { stage: 'reading', title: '正在核对当前时间', detail: '读取时钟' }
+  if (name === 'preview_route' || name === 'preview_scenario') return { stage: 'planning', title: '正在核对候选安排', detail: '预览方案' }
+  if (name.includes('schedule') || name.includes('plan') || name.includes('timetable')) return { stage: 'planning', title: '正在核对安排', detail: '安排日程' }
+  if (name === 'save_handoff' || name === 'remember' || name === 'remember_wish' || name === 'update_wish') return { stage: 'saving', title: '正在保存接力与记忆', detail: '保存记录' }
+  return { stage: 'saving', title: '正在保存变更', detail: '保存记录' }
 }
 function compactOperation(operation) {
   return { id: operation.id, summary: operation.summary, ...(operation.undoneAt ? { undoneAt: operation.undoneAt } : {}),
@@ -712,7 +719,7 @@ export function createXixi({ db, complete, webSearch, now = () => new Date() }) 
       actions = [{ type: 'set-day-exception', date, endDate, kind: args.kind,
         ...(args.sourceWeekday === undefined ? {} : { sourceWeekday: args.sourceWeekday }) }]
       summary = `${date}${date === endDate ? '' : ` 至 ${endDate}`} ${{
-        holiday: '假期，常规课表已清空', cancelled: '停课，常规课表已清空',
+        holiday: '假期，常规课程已移除', cancelled: '停课，常规课表已清空',
         rescheduled: '临时调课', restored: '已恢复原每周课表',
       }[args.kind] ?? '日历例外'}`
     } else if (name === 'set_day_timetable' || name === 'restore_day_timetable') {

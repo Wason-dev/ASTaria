@@ -1,7 +1,7 @@
 {
   "name": "astaria",
   "private": true,
-  "version": "0.1.0-beta.9",
+  "version": "0.1.0-beta.10",
   "license": "Apache-2.0",
   "type": "module",
   "engines": {
@@ -15,7 +15,8 @@
     "package:desktop": "node scripts/package-desktop.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "test": "node --test scripts/*.test.mjs"
+    "test": "node --test scripts/*.test.mjs",
+    "package:windows": "node scripts/package-windows.mjs"
   },
   "dependencies": {
     "@types/three": "^0.186.0",

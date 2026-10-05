@@ -13,11 +13,11 @@ if (!container) {
 
 // P0 is the default entry; the existing application remains at #/app.
 const Root = window.location.hash === '#/app' ? App : BlackHolePrototype
-const macDesktop = import.meta.env.MODE === 'desktop' && navigator.userAgent.includes('Macintosh')
+const nativeDesktop = import.meta.env.MODE === 'desktop' && /Macintosh|Windows/.test(navigator.userAgent)
 
 createRoot(container).render(
   <StrictMode>
     <RenderErrorBoundary><Root /></RenderErrorBoundary>
-    {macDesktop && <div className="desktop-drag-region" aria-hidden="true" />}
+    {nativeDesktop && <div className="desktop-drag-region" data-platform={navigator.userAgent.includes('Windows') ? 'windows' : 'mac'} aria-hidden="true" />}
   </StrictMode>,
 )

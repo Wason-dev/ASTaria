@@ -49,7 +49,7 @@ function source(value) {
   if (value.evidence !== undefined) text(value.evidence, '原话', 2000)
   if (value.actionId !== undefined) identifier(value.actionId)
 }
-function companion(value) {
+export function validateCompanionState(value) {
   knownKeys(value, ['handoffs', 'wishes', 'freeTimeGoals', 'freeTimeHistory', 'scenarios'])
   const unique = (rows, key) => { if (new Set(rows.map(item => item[key])).size !== rows.length) fail('备份记录标识重复') }
   for (const item of array(value.handoffs, 2000)) {
@@ -263,7 +263,7 @@ export function createBackupStore({ db, transaction, validate }) {
           if (row.key.startsWith('deleted-')) { identifier(row.key.split(':').slice(1).join(':')); if (row.value.startsWith('{')) object(parse(row.value)); else stamp(row.value) }
           else if (!['activeConversation', 'deepseekModel'].includes(row.key)) {
             const value = parse(row.value, '备份设置'); object(value)
-            if (row.key === 'companion-v1') companion(value)
+            if (row.key === 'companion-v1') validateCompanionState(value)
             if (row.key === 'preferences:model-connection') validateModelSettings(value)
             if (row.key === 'preferences:free-time-daily') {
               knownKeys(value, ['date', 'completedAt', 'policyVersion'], '余时每日安排记录')

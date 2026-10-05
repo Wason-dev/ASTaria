@@ -8,14 +8,14 @@ import { createPreferencesStore } from './preferencesStore.ts'
 export type Preferences = {
   version: 1; startupPage: 'home' | 'workbench' | 'schedule' | 'companion'; theme: 'dark' | 'light'; grid: boolean
   glass: 'clear' | 'soft'; density: 'compact' | 'comfortable'; cardEdges: 'both' | 'left' | 'none'; effect: ResponseEffectSettings
-  render: { profile: RenderProfile }
+  render: { profile: RenderProfile; quality: 'auto' | 'ultra' | 'high' | 'low' | 'safe'; glass: 'auto' | 'detailed' }
   assistant: { autonomy: 'act' | 'propose'; personality: 'low' | 'medium' | 'high'; useMemory: boolean; useHistory: boolean }
   notifications: { enabled: boolean; quietStart: string; quietEnd: string; opportunities: boolean }
   focus: { focusMin: number; restMin: number }; scheduling: { bufferMin: number }
 }
 export const DEFAULT_PREFERENCES: Preferences = {
   version: 1, startupPage: 'home', theme: 'dark', grid: true, glass: 'clear', density: 'compact', cardEdges: 'both',
-  effect: normalizeResponseEffect(undefined), render: { profile: 'full' },
+  effect: normalizeResponseEffect(undefined), render: { profile: 'full', quality: 'auto', glass: 'auto' },
   assistant: { autonomy: 'act', personality: 'medium', useMemory: true, useHistory: true },
   notifications: { enabled: true, quietStart: '23:00', quietEnd: '08:00', opportunities: true },
   focus: { focusMin: 35, restMin: 5 }, scheduling: { bufferMin: 10 },

@@ -1,9 +1,9 @@
-const { app, BrowserWindow, dialog, shell, session, Menu, screen, powerMonitor, net } = require('electron')
+const { app, BrowserWindow, dialog, shell, session, Menu, screen, powerMonitor, net, safeStorage } = require('electron')
 const path = require('node:path')
 const { pathToFileURL } = require('node:url')
 const { randomBytes } = require('node:crypto')
 const { mkdtempSync, mkdirSync } = require('node:fs')
-const { readFile } = require('node:fs/promises')
+const { readFile, writeFile, realpath } = require('node:fs/promises')
 const { watchWindowButtons } = require('./window-buttons.cjs')
 const { createNetFetch } = require('./net-fetch.cjs')
 
@@ -16,7 +16,13 @@ let appOrigin
 let updateTimer
 let updates
 let reminders
+let sync
 const smokeTest = process.argv.includes('--smoke-test')
+function updateWindowTheme() {
+  if (process.platform === 'win32' && window && !window.isDestroyed()) {
+    window.setTitleBarOverlay({ color: '#00000000', symbolColor: service.windowTheme() === 'light' ? '#30343a' : '#eeeae3', height: 28 })
+  }
+}
 // The acceptance run must never open the user's SQLite file or Keychain.
 const smokeDirectory = smokeTest ? mkdtempSync(path.join(app.getPath('temp'), 'astaria-smoke-')) : null
 const smokeProfile = smokeDirectory ? path.join(smokeDirectory, 'profile') : null
@@ -62,17 +68,50 @@ async function start() {
   const pkg = JSON.parse(await readFile(path.join(resourceRoot, 'package.json'), 'utf8'))
   let build = {}
   try { build = JSON.parse(await readFile(path.join(resourceRoot, 'build-info.json'), 'utf8')) } catch { /* Older bundles still expose their full package version. */ }
+  const { createSecretStore } = await import(pathToFileURL(path.join(resourceRoot, 'desktop/secretStore.mjs')).href)
+  const secrets = createSecretStore({ safeStorage, directory: path.join(smokeDirectory ?? DATA_DIRECTORY, 'secrets') })
+  if (smokeTest && process.platform === 'win32') {
+    const fixture = randomBytes(32).toString('hex')
+    secrets.write('sync-key', fixture)
+    if (secrets.read('sync-key') !== fixture) throw new Error('Windows system encryption roundtrip failed')
+    secrets.remove('sync-key')
+    console.log('ASTARIA_WINDOWS_SECRET_STORE_PASSED')
+  }
   if (smokeTest) {
     const { createDatabase } = await import(pathToFileURL(path.join(resourceRoot, 'server/database.mjs')).href)
-    service = createLocalService({ db: createDatabase(path.join(smokeDirectory, 'test.sqlite')),
+    const smokeDb = createDatabase(path.join(smokeDirectory, 'test.sqlite'))
+    smokeDb.setPreference('onboarding-completed', true)
+    service = createLocalService({ db: smokeDb,
       dataDirectory: smokeDirectory, vault: { status: async () => false },
       complete: async () => { throw new Error('Smoke tests must not call a model') },
+      onMutation: updateWindowTheme,
     })
   } else {
     service = createLocalService({
-      vault: createKeychain(DATA_DIRECTORY, { binaryPath: path.join(resourceRoot, 'bin/astaria-keychain'), binarySha256: build.nativeHelpers?.keychainSha256 }),
-      onMutation: () => reminders?.schedule(),
+      vault: process.platform === 'win32' ? secrets.apiVault : createKeychain(DATA_DIRECTORY, { binaryPath: path.join(resourceRoot, 'bin/astaria-keychain'), binarySha256: build.nativeHelpers?.keychainSha256 }),
+      onMutation: () => { reminders?.schedule(); updateWindowTheme() },
     })
+  }
+  if (!smokeTest) {
+    const { createFolderSync } = await import(pathToFileURL(path.join(resourceRoot, 'desktop/folderSync.mjs')).href)
+    sync = createFolderSync({ store: service.syncStore, secrets, dataDirectory: DATA_DIRECTORY,
+      selectDirectory: async () => {
+        const result = await dialog.showOpenDialog(window, { title: '选择已共享的同步目录', properties: ['openDirectory', 'createDirectory'] })
+        return result.canceled ? null : result.filePaths[0]
+      },
+      saveKey: async (value, allowed) => {
+        const result = await dialog.showSaveDialog(window, { title: '保存同步恢复密钥，请存到共享目录以外的安全位置', defaultPath: 'ASTaria-sync-recovery-key.txt' })
+        if (result.canceled || !result.filePath) return
+        const destination = path.join(await realpath(path.dirname(result.filePath)), path.basename(result.filePath))
+        if (!allowed(destination)) throw new Error('恢复密钥不能保存在同步目录中')
+        await writeFile(destination, `${value}\n`, { mode: 0o600, flag: 'wx' })
+      }, onApplied: () => {
+        reminders?.schedule()
+        if (window && !window.isDestroyed()) void window.webContents.executeJavaScript("window.dispatchEvent(new Event('astaria-local-data-change'))").catch(() => {})
+      },
+    })
+    sync.start()
+    powerMonitor.on('resume', () => { void sync.run() })
   }
   const updateStateFile = path.join(app.getPath('userData'), 'update-check.json')
   const scheduleInstall = async candidate => {
@@ -97,7 +136,7 @@ async function start() {
     powerMonitor.on('resume', () => reminders.schedule())
   }
   const token = randomBytes(32).toString('hex')
-  desktopServer = createDesktopServer({ root: path.join(resourceRoot, 'dist'), service, token, updates, reminders, port: smokeTest ? 0 : undefined })
+  desktopServer = createDesktopServer({ root: path.join(resourceRoot, 'dist'), service, token, updates, reminders, sync, port: smokeTest ? 0 : undefined })
   const url = await desktopServer.listen()
   appOrigin = new URL(url).origin
   const clipboardWrite = (contents, permission) => {
@@ -106,7 +145,7 @@ async function start() {
   }
   session.defaultSession.setPermissionRequestHandler((contents, permission, callback) => callback(clipboardWrite(contents, permission)))
   session.defaultSession.setPermissionCheckHandler((contents, permission) => clipboardWrite(contents, permission))
-  Menu.setApplicationMenu(Menu.buildFromTemplate([
+  Menu.setApplicationMenu(process.platform === 'win32' ? null : Menu.buildFromTemplate([
     { role: 'appMenu', label: 'ASTaria' },
     { role: 'editMenu', label: '编辑' },
     { label: '显示', submenu: [{ role: 'reload', label: '刷新页面' }, { role: 'togglefullscreen', label: '切换全屏' }] },
@@ -128,6 +167,10 @@ async function start() {
       titleBarStyle: 'hidden',
       trafficLightPosition: { x: 12, y: 8 },
     } : {}),
+    ...(process.platform === 'win32' ? {
+      titleBarStyle: 'hidden',
+      titleBarOverlay: { color: '#00000000', symbolColor: service.windowTheme() === 'light' ? '#30343a' : '#eeeae3', height: 28 },
+    } : {}),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -136,6 +179,13 @@ async function start() {
       allowRunningInsecureContent: false,
     },
   })
+  if (process.platform === 'win32') {
+    window.webContents.on('before-input-event', (event, input) => {
+      if (input.type !== 'keyDown') return
+      if (input.key === 'F11') { event.preventDefault(); window.setFullScreen(!window.isFullScreen()) }
+      if (input.control && !input.alt && input.key.toLowerCase() === 'r') { event.preventDefault(); window.reload() }
+    })
+  }
   if (process.platform === 'darwin') {
     const nativeButtons = watchWindowButtons(window, screen)
     // Expose only a smoke-test probe; this is never enabled in normal builds.
@@ -198,6 +248,10 @@ async function start() {
   if (smokeTest) {
     const { runDesktopSmoke } = await import(pathToFileURL(path.join(resourceRoot, 'desktop/smoke.mjs')).href)
     await runDesktopSmoke(window, smokeDirectory)
+    if (process.argv.includes('--measure-performance')) {
+      const { measureDesktopPerformance } = await import(pathToFileURL(path.join(resourceRoot, 'desktop/performance-smoke.mjs')).href)
+      await measureDesktopPerformance(window, smokeDirectory)
+    }
     app.quit()
   }
 }

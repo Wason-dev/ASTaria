@@ -114,12 +114,12 @@ export function ModelConnection({ status, busy, onAction }: Props) {
     }
   }, '')
   const keySettings = <>
-    <form onSubmit={event => { event.preventDefault(); void run('key', async () => { await localApi('/settings/key', { key: key.trim() }); setKey(''); setTest(null) }, '已存入本机钥匙串') }} autoComplete="off">
+    <form onSubmit={event => { event.preventDefault(); void run('key', async () => { await localApi('/settings/key', { key: key.trim() }); setKey(''); setTest(null) }, '已安全保存到系统凭据存储') }} autoComplete="off">
       <label htmlFor="deepseek-local-key">{cloudConfigured ? '替换 API Key' : 'API Key'}</label>
-      <div className="xixi-model-input-action"><input id="deepseek-local-key" name="astaria-connection-secret" type="password" autoComplete="new-password" autoCapitalize="none" spellCheck={false} value={key} onChange={event => setKey(event.target.value)} placeholder="保存到本机钥匙串，不回显" disabled={disabled} /><button type="submit" disabled={disabled || !key.trim()}>保存密钥</button></div>
+      <div className="xixi-model-input-action"><input id="deepseek-local-key" name="astaria-connection-secret" type="password" autoComplete="new-password" autoCapitalize="none" spellCheck={false} value={key} onChange={event => setKey(event.target.value)} placeholder="安全保存到系统凭据存储，不回显" disabled={disabled} /><button type="submit" disabled={disabled || !key.trim()}>保存密钥</button></div>
     </form>
-    <p className="xixi-settings-note">密钥存本机钥匙串。{local ? '联网搜索只发送你明确输入的查询词到 DeepSeek，模型正文仍留在本机。' : '相关对话与事项交给 DeepSeek，测试会产生少量用量。'}</p>
-    {cloudConfigured && <button type="button" disabled={disabled} onClick={() => void run('key', async () => { await localApi('/settings/key/remove', {}); setTest(null) }, '已从钥匙串移除密钥')}>移除密钥</button>}
+    <p className="xixi-settings-note">密钥存系统凭据存储。{local ? '联网搜索只发送你明确输入的查询词到 DeepSeek，模型正文仍留在本机。' : '相关对话与事项交给 DeepSeek，测试会产生少量用量。'}</p>
+    {cloudConfigured && <button type="button" disabled={disabled} onClick={() => void run('key', async () => { await localApi('/settings/key/remove', {}); setTest(null) }, '已从系统凭据存储移除密钥')}>移除密钥</button>}
   </>
 
   return <section className="xixi-model-connection" aria-label="模型连接">

@@ -1,6 +1,8 @@
 import { createContext, useContext, useId, useImperativeHandle, useLayoutEffect, useMemo, useRef } from 'react'
 import type { CSSProperties, Ref } from 'react'
 import { glassDisplacement, HOME_GLASS } from './glass'
+import { supportsGlassRefraction } from './glassRendering'
+import type { GlassRendering } from './glassRendering'
 
 export type GlassMaterial = { transmission: number; blur: number; rim: number; shadow: number; reflection?: number }
 export type GlassGeometryHandle = { update: (width: number, height: number, radius: number, progress: number) => void; pause: () => void }
@@ -8,9 +10,11 @@ type Props = { width: number; height: number; radius: number; progress?: number;
 
 /** A departing panel releases its live background sampling in the same React commit. */
 export const GlassSamplingContext = createContext(true)
+export const GlassRenderingContext = createContext<GlassRendering>('auto')
 
 export function MeasuredGlassSurface({ radius, progress = 0, material, settleResize = false }: Pick<Props, 'radius' | 'progress' | 'material'> & { settleResize?: boolean }) {
   const sampling = useContext(GlassSamplingContext)
+  const rendering = useContext(GlassRenderingContext)
   const host = useRef<HTMLSpanElement>(null)
   const geometry = useRef<GlassGeometryHandle>(null)
   useLayoutEffect(() => {
@@ -36,7 +40,7 @@ export function MeasuredGlassSurface({ radius, progress = 0, material, settleRes
     observer.observe(element)
     measure()
     return () => { observer.disconnect(); window.clearTimeout(settleTimer) }
-  }, [sampling, settleResize, radius, progress])
+  }, [sampling, settleResize, radius, progress, rendering])
   return <span ref={host} className="home-glass-measure" style={{ '--glass-shadow': (material?.shadow ?? HOME_GLASS.shadow) / 100 } as CSSProperties} aria-hidden="true">
     <GlassSurface width={1} height={1} radius={radius} progress={progress} material={material} responsive geometryRef={geometry} />
   </span>
@@ -46,9 +50,8 @@ export function MeasuredGlassSurface({ radius, progress = 0, material, settleRes
 export function GlassSurface({ width, height, radius, progress = 0, material, responsive = false, geometryRef }: Props) {
   const sampling = useContext(GlassSamplingContext)
   const id = `home-glass-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`
-  // Chromium composites SVG backdrop filters over the existing WebGL canvas.
-  // Other engines keep the same transparent material with a 2px blur fallback.
-  const svgBackdrop = /Chrome|Chromium|Edg\//.test(navigator.userAgent)
+  const rendering = useContext(GlassRenderingContext)
+  const svgBackdrop = supportsGlassRefraction(navigator.userAgent, rendering)
   const svg = useRef<SVGSVGElement>(null)
   const filter = useRef<SVGFilterElement>(null)
   const edge = useRef<SVGFEImageElement>(null)
@@ -76,7 +79,7 @@ export function GlassSurface({ width, height, radius, progress = 0, material, re
     const transmission = material?.transmission ?? HOME_GLASS.pillTransmission + (HOME_GLASS.chatTransmission - HOME_GLASS.pillTransmission) * nextProgress
     surface.current?.style.setProperty('--glass-tint', String(1 - transmission / 100))
   } }), [sampling, svgBackdrop, material])
-  useLayoutEffect(() => { lastGeometry.current = '' }, [sampling, width, height, radius])
+  useLayoutEffect(() => { lastGeometry.current = '' }, [sampling, svgBackdrop, width, height, radius])
   // Hidden retained pages can change size with the window or their data. They
   // must not allocate/encode a displacement canvas until sampling resumes.
   const map = useMemo(() => sampling && svgBackdrop ? glassDisplacement(width, height, radius) : '', [width, height, radius, sampling, svgBackdrop])

@@ -31,7 +31,7 @@ export class AdaptiveQualityController {
     this.retryAfter = {}
   }
 
-  sample(elapsed: number, quality: AdaptiveQuality, transitioning = false): AdaptiveQuality | null {
+  sample(elapsed: number, quality: AdaptiveQuality, transitioning = false, targetFps = 60): AdaptiveQuality | null {
     if (!Number.isFinite(elapsed) || elapsed <= 0) return null
     // A debugger pause or a single blocked main-thread frame must not count as
     // seconds of sustained load. Repeated slow frames still accumulate normally.
@@ -46,8 +46,9 @@ export class AdaptiveQualityController {
       return null
     }
 
-    this.samples.push(duration)
-    this.sampleSum += duration
+    const normalized = duration * Math.max(1, targetFps) / 60
+    this.samples.push(normalized)
+    this.sampleSum += normalized
     if (this.samples.length > 30) this.sampleSum -= this.samples.shift()!
     if (this.samples.length < 12) return null
     const mean = this.sampleSum / this.samples.length

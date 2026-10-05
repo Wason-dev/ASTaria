@@ -1,4 +1,4 @@
-import { homedir } from 'node:os'
+import { dataDirectory } from './platform.mjs'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { join } from 'node:path'
 import { createDatabase } from './database.mjs'
@@ -21,7 +21,7 @@ import { publicOperation, publicOperations } from './operationReceipts.mjs'
 import { ValidationError, object, identifier, knownKeys } from './validation.mjs'
 import { BACKUP_IMPORT_REQUEST_MAX_BYTES, BACKUP_IMPORT_TOO_LARGE } from '../src/xixi/backupLimits.ts'
 
-export const DATA_DIRECTORY = join(homedir(), 'Library', 'Application Support', 'ASTaria')
+export const DATA_DIRECTORY = dataDirectory()
 const localAddresses = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
 const hosts = new Set(['127.0.0.1', 'localhost', '[::1]'])
 const publicMessage = (raw) => {
@@ -144,7 +144,8 @@ export function createLocalService({ db = createDatabase(join(DATA_DIRECTORY, 'a
     }
     return { service: 'astaria-local', provider: providerSettings.provider, providerSettings, cloudConfigured,
       configured: providerSettings.provider === 'local' ? Boolean(providerSettings.local.model) : cloudConfigured,
-      model: providerSettings.provider === 'local' ? providerSettings.local.model : providerSettings.cloudModel, models: MODELS, storage: 'SQLite', dataDirectory }
+      model: providerSettings.provider === 'local' ? providerSettings.local.model : providerSettings.cloudModel, models: MODELS, storage: 'SQLite', dataDirectory,
+      secretStorage: process.platform === 'win32' ? 'Windows 系统凭据保护' : 'macOS 钥匙串' }
   }
 
   async function dispatch(req, startStream) {
@@ -179,6 +180,7 @@ export function createLocalService({ db = createDatabase(join(DATA_DIRECTORY, 'a
       }
       if (path === '/operations') return publicOperations(db.listOperations(), db)
       if (path === '/data/export') return db.exportData()
+      if (path === '/sync/status') return { available: false, configured: false, message: '同步需要 macOS 或 Windows 桌面版的系统凭据保护', conflicts: [] }
       if (path === '/companion') return companion.listState({ ...(url.searchParams.get('date') ? { date: url.searchParams.get('date') } : {}), ...(url.searchParams.get('days') ? { days: Number(url.searchParams.get('days')) } : {}) })
       if (path === '/companion/string-order') return stringOrder.list({ date: url.searchParams.get('date') || undefined })
       if (path === '/companion/horizon-order') return horizonOrder.list({ date: url.searchParams.get('date') || undefined })
@@ -379,6 +381,8 @@ export function createLocalService({ db = createDatabase(join(DATA_DIRECTORY, 'a
   }
   return {
     middleware,
+    syncStore: db.sync,
+    windowTheme: () => getPreferences(db).theme,
     whenIdle: () => Promise.allSettled([...pendingRequests]),
     reminderSnapshot: () => ({ tasks: db.listTasks(), planner: freeTime.plannerState(), preferences: getPreferences(db) }),
     close: () => { localModelInstaller.close(); db.close() },

@@ -311,8 +311,11 @@ test('independent database connections share data and recover interrupted turns 
     second = createDatabase(filename)
     assert.equal(second.getTask(task.id).title, task.title)
     assert.equal(second.getTurn('interrupted').status, 'failed')
-    assert.equal(statSync(filename).mode & 0o777, 0o600)
-    assert.equal(statSync(directory).mode & 0o777, 0o700)
+    // Windows uses inherited user-profile ACLs; POSIX mode bits do not describe those ACLs.
+    if (process.platform !== 'win32') {
+      assert.equal(statSync(filename).mode & 0o777, 0o600)
+      assert.equal(statSync(directory).mode & 0o777, 0o700)
+    }
     first = createDatabase(filename)
     second.updateTask(task.id, { title: '跨浏览器同一份数据' })
     assert.equal(first.getTask(task.id).title, '跨浏览器同一份数据')

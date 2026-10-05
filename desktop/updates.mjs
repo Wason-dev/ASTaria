@@ -109,7 +109,7 @@ export function createUpdateService({ current, stateFile, fetcher = fetch, now =
   const installer = typeof installHandler === 'function' ? installHandler : null
   const network = new AbortController()
   let diskWrite = Promise.resolve()
-  const snapshot = () => ({ supported: allowNetwork, current: { version: current.version, builtAt: current.builtAt ?? null,
+  const snapshot = () => ({ supported: allowNetwork && current.platform !== 'win32', unsupportedReason: current.platform === 'win32' ? 'Windows 首版请从官方发布页下载新版并手动更新；自动安装尚未提供。' : null, current: { version: current.version, builtAt: current.builtAt ?? null,
     commit: current.source?.commit?.slice(0, 7) ?? null }, automatic, status, error, lastCheckedAt,
     nextCheckAt: nextCheckAt ? new Date(nextCheckAt).toISOString() : null, latest, releasesUrl: RELEASES_URL,
     download: download ? { version: download.version, sizeBytes: download.sizeBytes, downloadedBytes: download.downloadedBytes ?? 0, path: null } : null,

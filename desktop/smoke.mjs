@@ -28,8 +28,62 @@ export async function runDesktopSmoke(window, directory) {
     if (!gl) throw new Error('WebGL2 unavailable');
     return { react: true, api: true, sqlite: true, webgl2: true,
       nodeIntegration: typeof window.require === 'undefined', url: location.origin };
-  })()`)
+  })().catch(error => ({ smokeFailure: error.message }))`)
+  if (check.smokeFailure) throw new Error(`Desktop core smoke: ${check.smokeFailure}`)
   if (!check.nodeIntegration) throw new Error('Renderer Node integration must be disabled')
+  if (process.platform === 'win32') {
+    if (window.isMenuBarVisible() || !window.isMinimizable() || !window.isMaximizable() || !window.isClosable()) throw new Error('Windows controls or menu visibility are incorrect')
+    const inspect = () => window.webContents.executeJavaScript(`(() => {
+      const strip = document.querySelector('.desktop-drag-region'), nav = document.querySelector('.home-brand');
+      if (!strip || !nav) return false;
+      const r = strip.getBoundingClientRect(), n = nav.getBoundingClientRect();
+      return r.top === 0 && r.height === 28 && r.bottom <= n.top && getComputedStyle(strip).getPropertyValue('-webkit-app-region') === 'drag'
+        && nav.contains(document.elementFromPoint(n.x + n.width/2, n.y + n.height/2));
+    })()`)
+    if (!await inspect()) throw new Error('Windows drag region overlaps navigation')
+    for (const theme of ['dark', 'light']) for (const glass of ['clear', 'soft']) {
+      await window.webContents.executeJavaScript(`(async () => {
+        const headers={'Content-Type':'application/json','X-Astaria-Local':'1'};
+        const expected=await fetch('/api/preferences',{headers}).then(r=>r.json());
+        const response=await fetch('/api/preferences',{method:'POST',headers,body:JSON.stringify({expected,value:{...expected,theme:${JSON.stringify(theme)},glass:${JSON.stringify(glass)}}})});
+        if(!response.ok)throw Error('Theme update failed');
+        const detail=await response.json();window.dispatchEvent(new CustomEvent('astaria-preferences-change',{detail}));
+      })()`)
+      await new Promise(resolve => setTimeout(resolve, 400))
+      await writeFile(join(directory, `window-${theme}-${glass}.png`), (await window.webContents.capturePage()).toPNG())
+    }
+    window.maximize()
+    for (let i = 0; i < 30 && !window.isMaximized(); i++) await new Promise(resolve => setTimeout(resolve, 100))
+    if (!window.isMaximized() || !await inspect()) throw new Error('Windows maximized navigation failed')
+    window.unmaximize()
+    for (let i = 0; i < 30 && window.isMaximized(); i++) await new Promise(resolve => setTimeout(resolve, 100))
+    if (window.isMaximized()) throw new Error('Windows restore failed')
+    const scrollbars = []
+    for (const theme of ['dark', 'light']) for (const glass of ['clear', 'soft']) {
+      for (const [page, selector] of [['工作台', '.wb-scroll'], ['余时', '.free-time-viewport']]) {
+        const result = await window.webContents.executeJavaScript(`(async () => {
+          const headers={'Content-Type':'application/json','X-Astaria-Local':'1'};
+          const expected=await fetch('/api/preferences',{headers}).then(r=>r.json());
+          const response=await fetch('/api/preferences',{method:'POST',headers,body:JSON.stringify({expected,value:{...expected,theme:${JSON.stringify(theme)},glass:${JSON.stringify(glass)}}})});
+          if(!response.ok)throw Error('Theme update failed');
+          window.dispatchEvent(new CustomEvent('astaria-preferences-change',{detail:await response.json()}));
+          if(document.querySelector('#home-menu').inert)document.querySelector('.home-brand').click();
+          [...document.querySelectorAll('#home-menu button')].find(e=>e.textContent.trim()===${JSON.stringify(page)}).click();
+          await new Promise(r=>setTimeout(r,600));
+          const e=document.querySelector(${JSON.stringify(selector)}),style=getComputedStyle(e);
+          const bar=getComputedStyle(e,'::-webkit-scrollbar'),buttons=getComputedStyle(e,'::-webkit-scrollbar-button');
+          e.scrollTop=e.scrollHeight;
+          await new Promise(r=>requestAnimationFrame(r));
+          return {width:bar.width,buttons:buttons.display,color:style.scrollbarColor,scrollTop:e.scrollTop,scrollable:e.scrollHeight>e.clientHeight,overflow:e.scrollWidth>e.clientWidth+1};
+        })()`)
+        if (result.width !== '8px' || result.buttons !== 'none' || result.color !== 'auto' || result.overflow || (result.scrollable && result.scrollTop === 0)) throw new Error(`Windows scrollbar failed: ${JSON.stringify(result)}`)
+        scrollbars.push({ page, theme, glass, ...result })
+        await writeFile(join(directory, `scroll-${page}-${theme}-${glass}.png`), (await window.webContents.capturePage()).toPNG())
+      }
+    }
+    check.scrollbars = scrollbars
+    check.windowChrome = { menuHidden: true, dragRegion: true, nativeActions: true, maximizeRestore: true, themeMaterialStates: 4 }
+  }
   if (process.platform === 'darwin') {
     // The main process owns this probe; production only uses AppKit's native
     // traffic-light controls and never exposes it to the renderer.
@@ -41,7 +95,8 @@ export async function runDesktopSmoke(window, directory) {
     const bounds = window.getBounds(), content = window.getContentBounds()
     if (bounds.width !== content.width || bounds.height !== content.height)
       throw new Error('Scene must fill the native window without a title bar')
-    const inspectChrome = () => window.webContents.executeJavaScript(`(() => {
+    const inspectChrome = async () => {
+      const result = await window.webContents.executeJavaScript(`(() => { try {
       const drag = document.querySelector('.desktop-drag-region');
       const nav = document.querySelector('.home-brand');
       const scene = document.querySelector('.p0');
@@ -54,7 +109,11 @@ export async function runDesktopSmoke(window, directory) {
         || background.top !== 0 || background.height !== innerHeight || !nav.contains(target))
         throw new Error('Window drag strip covers navigation or leaves a scene gap');
       return { width: innerWidth, height: innerHeight, dragHeight: strip.height, navigationClickable: true };
+      } catch (error) { return { smokeFailure: error.message } }
     })()`)
+      if (result.smokeFailure) throw new Error(`Desktop chrome smoke: ${result.smokeFailure}`)
+      return result
+    }
     const initial = await inspectChrome()
     const [minWidth, minHeight] = window.getMinimumSize()
     window.setSize(minWidth, minHeight)

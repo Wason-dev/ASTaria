@@ -53,15 +53,27 @@ test('tool execution keeps all thoughts accessible without calling them active t
   assert.match(html, /工具之后的思考/)
   assert.equal(html.match(/段 · 已结束/g)?.length, 2)
   assert.match(html, /正在处理安排/)
-  assert.match(html, /class="xixi-reasoning" data-expanded="true"/)
+  assert.match(html, /class="xixi-reasoning" data-expanded="false"/)
 })
 
-test('opening the focus conversation during reply keeps the preceding tool thoughts visible', () => {
+test('opening the focus conversation during reply keeps preceding thoughts available but collapsed', () => {
   const html = render({ stream: { ...draft, phase: 'replying', content: '安排已核对' }, sending: true })
-  assert.match(html, /class="xixi-reasoning" data-expanded="true"/)
+  assert.match(html, /class="xixi-reasoning" data-expanded="false"/)
   assert.match(html, /工具之前的思考/)
   assert.match(html, /工具之后的思考/)
   assert.match(html, /安排已核对/)
+})
+
+test('live status names only the current tool and fits in one compact row', () => {
+  const activities = [
+    { id: 'tool:old', stage: 'reading', state: 'done', title: '上一步已完成', detail: '这段长说明不应显示' },
+    { id: 'tool:current', stage: 'reading', state: 'running', title: '正在核对课程与空档', detail: '读取日程' },
+  ]
+  const html = render({ stream: { ...draft, activities }, sending: true })
+  assert.match(html, /正在核对课程与空档/)
+  assert.match(html, /读取日程/)
+  assert.doesNotMatch(html, /上一步已完成|这段长说明不应显示|xixi-stream-activities/)
+  assert.match(html, /class="xixi-reasoning" data-expanded="false"/)
 })
 
 test('failed live turns retain received thoughts and refresh offers expansion of saved thoughts', () => {

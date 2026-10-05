@@ -3,8 +3,9 @@ import { chmodSync, mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { isDeepStrictEqual } from 'node:util'
-import { createPlannerStore } from './planner.mjs'
-import { createBackupStore } from './backup.mjs'
+import { createPlannerStore, defaultPlanner } from './planner.mjs'
+import { createSyncStore } from './syncStore.mjs'
+import { createBackupStore, validateCompanionState } from './backup.mjs'
 import { validatePreferences } from './preferences.mjs'
 import {
   ValidationError, object, knownKeys, text, identifier, choice, number, day, dateTime, clockTime,
@@ -81,6 +82,7 @@ export function createDatabase(filename) {
   `)
 
   let depth = 0
+  let syncStore
   function transaction(fn) {
     if (typeof fn !== 'function' || fn.constructor.name === 'AsyncFunction') fail('数据库事务需要同步函数')
     const outermost = depth === 0
@@ -90,8 +92,10 @@ export function createDatabase(filename) {
     db.exec(outermost ? 'BEGIN IMMEDIATE' : `SAVEPOINT ${savepoint}`)
     depth++
     try {
+      const syncBefore = outermost ? syncStore?.begin() : null
       const result = fn()
       if (result && typeof result.then === 'function') fail('数据库事务不能跨越异步操作')
+      if (outermost && syncBefore !== undefined) syncStore?.capture(syncBefore)
       db.exec(outermost ? 'COMMIT' : `RELEASE SAVEPOINT ${savepoint}`)
       return result
     } catch (error) {
@@ -140,6 +144,7 @@ export function createDatabase(filename) {
     return putDocument(table, id, document, ignore)
   }
   function putDocument(table, id, document, ignore) {
+    if (depth === 0) return transaction(() => putDocument(table, id, document, ignore))
     if (table === 'tasks') assertOccurrenceUnique(document)
     const result = db.prepare(ignore
       ? `INSERT OR IGNORE INTO ${table} (id, document) VALUES (?, ?)`
@@ -157,6 +162,7 @@ export function createDatabase(filename) {
     if (duplicate) fail(`这个重复系列在${task.occurrence.date}已有实例，请修改原实例，不要在同一天重复生成`, 409)
   }
   function remove(table, id) {
+    if (depth === 0) return transaction(() => remove(table, id))
     assertTable(table)
     if (table === 'tasks') return transaction(() => {
       const previous = get('tasks', id)
@@ -1042,14 +1048,102 @@ export function createDatabase(filename) {
     return row ? JSON.parse(row.value) : null
   }
   const writeState = (key, value, limit) => {
+    if (depth === 0) return transaction(() => writeState(key, value, limit))
     const checked = jsonValue(value, '本地设置', limit)
     db.prepare('INSERT INTO state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(key, JSON.stringify(checked))
     return checked
   }
 
+  function syncSnapshot() {
+    const result = {}
+    for (const table of BUSINESS_TABLES) for (const row of db.prepare(`SELECT id,document FROM ${table}`).all()) {
+      const value = JSON.parse(row.document)
+      if (value.deletedAt) { result[`${table}/${row.id}`] = null; continue }
+      delete value.updatedAt
+      if (table === 'areas') delete value.createdAt
+      result[`${table}/${row.id}`] = value
+    }
+    const value = readState('planner-v1') ?? defaultPlanner()
+    delete value.revision
+    result['planner/calendar'] = value
+    const companion = readState('companion-v1')
+    for (const goal of companion?.freeTimeGoals ?? []) {
+      const source = goal.source?.kind === 'conversation' ? getMessage(goal.source.messageId) : null
+      if (goal.status === 'deleted' || goal.source?.kind === 'conversation' && (!source || source.retractedAt || source.excludeFromContext)) {
+        result[`goals/${goal.id}`] = null
+        continue
+      }
+      const record = { ...goal }
+      for (const key of ['source', 'evidence', 'fromWishId', 'lastActionId', 'version', 'updatedAt']) delete record[key]
+      result[`goals/${goal.id}`] = record
+    }
+    for (const history of companion?.freeTimeHistory ?? []) {
+      if (result[`goals/${history.goalId}`]) result[`completions/${history.sessionId}`] = { ...history }
+    }
+    return result
+  }
+  function applySyncChanges(changes) {
+    const previousPlanner = planner.getPlanner()
+    for (const table of BUSINESS_TABLES) for (const change of changes.filter(item => item.entity === table)) {
+      const previous = get(table, change.entityId)
+      if (same(change.before, change.after)) continue
+      let next = change.after
+      if (table === 'tasks' && previousPlanner.blocks.some(block => block.taskId === change.entityId && block.locked)
+        && (next === null || ['due', 'startAt', 'estimateMin', 'occurrence'].some(key => !same(previous?.[key] ?? null, next?.[key] ?? null)))) fail('同步不能删除或改期本机已锁定的安排', 409)
+      if (next !== null) {
+        next = { ...next, updatedAt: nextTimestamp(previous?.updatedAt) }
+        if (table === 'areas') next.createdAt = previous?.createdAt ?? now()
+        if ((table === 'availability' ? next.date : next.id) !== change.entityId) fail('同步实体标识不匹配')
+      } else if (previous && ['tasks', 'areas', 'events'].includes(table)) next = { ...previous, deletedAt: now(), updatedAt: nextTimestamp(previous.updatedAt) }
+      if (next) putDocument(table, change.entityId, next)
+      else db.prepare(`DELETE FROM ${table} WHERE id=?`).run(change.entityId)
+      if (table === 'tasks') { recordTaskCompletion(previous, next); db.prepare('DELETE FROM state WHERE key=?').run(`task-undo-version:${change.entityId}`) }
+    }
+    for (const change of changes.filter(item => item.entity === 'planner')) {
+      if (change.entityId !== 'calendar' || !change.after) fail('同步日程标识无效')
+      for (const block of previousPlanner.blocks.filter(item => item.locked)) {
+        if (!same(block, change.after.blocks?.find(item => item.id === block.id))) fail('本机已锁定安排不能被同步覆盖', 409)
+      }
+      writeState('planner-v1', { ...change.after, revision: previousPlanner.revision + 1 }, 2_000_000)
+      writeState('planner-v1-weekend-defaults-v1', { version: 1, migratedAt: now() }, 1000)
+    }
+    for (const task of all('tasks')) { const checked = fullTask(task); if (!same(task, checked)) fail('同步事项包含不支持的字段'); assertOccurrenceUnique(task) }
+    for (const area of all('areas')) if (!same(area, fullArea(area))) fail('同步分类格式无效')
+    for (const event of all('events')) if (!same(event, fullEvent(event))) fail('同步日历格式无效')
+    for (const entry of all('availability')) if (!same(entry, fullAvailability(entry))) fail('同步空档格式无效')
+    for (const assignment of all('assignments')) fullAssignment(assignment)
+    const companionChanges = changes.filter(change => ['goals', 'completions'].includes(change.entity))
+    if (companionChanges.length) {
+      const companion = readState('companion-v1') ?? { handoffs: [], wishes: [], scenarios: [] }
+      for (const change of companionChanges) {
+        const key = change.entity === 'goals' ? 'freeTimeGoals' : 'freeTimeHistory'
+        const idKey = change.entity === 'goals' ? 'id' : 'sessionId'
+        const previous = (companion[key] ?? []).find(item => item[idKey] === change.entityId)
+        companion[key] = (companion[key] ?? []).filter(item => item[idKey] !== change.entityId)
+        if (change.after) {
+          if (change.after[idKey] !== change.entityId) fail('同步目标或完成记录标识不匹配')
+          if (change.entity === 'goals') {
+            if (['source', 'evidence', 'fromWishId', 'lastActionId', 'version', 'updatedAt'].some(key => Object.hasOwn(change.after, key))) fail('同步目标不能包含对话来源')
+            companion[key].push({ ...change.after, source: previous?.source ?? { kind: 'user' }, evidence: previous?.evidence ?? '从同步设备接收的已确认目标',
+              version: (previous?.version ?? 0) + 1, updatedAt: now() })
+          } else companion[key].push(change.after)
+        } else if (previous && change.entity === 'goals') companion[key].push({ ...previous, status: 'deleted', version: previous.version + 1, updatedAt: now() })
+      }
+      validateCompanionState(companion)
+      for (const goal of companion.freeTimeGoals ?? []) if (goal.taskId && !get('tasks', goal.taskId)) fail('同步目标关联事项缺失')
+      for (const completion of companion.freeTimeHistory ?? []) if (!(companion.freeTimeGoals ?? []).some(goal => goal.id === completion.goalId)) fail('同步完成记录关联目标缺失')
+      writeState('companion-v1', companion, 2_000_000)
+    }
+    planner.validateSyncState()
+  }
+  syncStore = createSyncStore({ db, transaction, snapshot: syncSnapshot, apply: applySyncChanges,
+    baseline: () => { const value = defaultPlanner(); delete value.revision; return { 'planner/calendar': value } },
+  })
+
   return {
+    sync: syncStore,
     close, transaction, getModel, setModel, correctMemory, retireFreeTimeTask,
-    exportData: backup.exportData, importData: backup.importData,
+    exportData: backup.exportData, importData: value => { if (syncStore.config()) fail('请先断开同步并备份，再恢复本机数据库', 409); return backup.importData(value) },
     getPreference: key => readState(`preferences:${identifier(key)}`),
     setPreference: (key, value) => writeState(`preferences:${identifier(key)}`, value, 64000),
     getCompanionState: () => readState('companion-v1') ?? { handoffs: [], wishes: [], freeTimeGoals: [], scenarios: [] },

@@ -1,4 +1,5 @@
 import { routineOccursOn, weekStart } from '../src/planner/weekCycle.ts'
+import { holidayRoutinesForDay } from '../src/planner/model.ts'
 import { createHash } from 'node:crypto'
 import { ValidationError, knownKeys, text, identifier, choice, day, dateTime, clockTime } from './validation.mjs'
 
@@ -131,12 +132,23 @@ export function validateDayExceptions(exceptions) {
       if (!Array.isArray(exception.routines) || exception.routines.length > limits.routines) fail('调课快照无效')
       if (new Set(exception.routines.map(item => item?.id)).size !== exception.routines.length) fail('调课快照标识重复')
       for (const routine of exception.routines) routineValue(routine)
+    } else if (exception.kind === 'holiday') {
+      if (exception.sourceWeekday !== undefined) fail('假期不应包含来源课表')
+      if (exception.routines !== undefined) {
+        if (!Array.isArray(exception.routines) || exception.routines.length > limits.routines) fail('假期空档快照无效')
+        if (new Set(exception.routines.map(item => item?.id)).size !== exception.routines.length) fail('假期空档标识重复')
+        for (const routine of exception.routines) {
+          if (routineValue(routine).kind === 'class') fail('假期空档不能包含课程')
+        }
+      }
     } else if (exception.sourceWeekday !== undefined || exception.routines !== undefined) fail('该例外不应包含来源课表')
   }
 }
 function datedRoutines(state, date) {
   const exception = state.dayExceptions?.[date]
-  if (exception) return exception.kind === 'rescheduled' ? exception.routines : exception.kind === 'restored' ? state.routines.filter(routine => routineOccursOn(routine, date)) : []
+  if (exception) return exception.kind === 'rescheduled' ? exception.routines
+    : exception.kind === 'holiday' ? exception.routines ?? holidayRoutinesForDay(state, date)
+      : exception.kind === 'restored' ? state.routines.filter(routine => routineOccursOn(routine, date)) : []
   return state.dayOverrides?.[date]?.routines ?? state.routines.filter(routine => routineOccursOn(routine, date))
 }
 function routinesOn(state, date) {
@@ -426,7 +438,7 @@ export function createPlannerStore({ db, transaction, getTask, listTasks, now = 
           for (const date of dates) {
             const exception = { date, kind, ...(kind === 'rescheduled' ? {
               sourceWeekday, routines: state.routines.filter(routine => routineOccursOn(routine, date, sourceWeekday)).map(routineValue),
-            } : {}) }
+            } : kind === 'holiday' ? { routines: holidayRoutinesForDay(state, date).map(routineValue) } : {}) }
             if (JSON.stringify(state.dayExceptions[date]) === JSON.stringify(exception) && !state.dayOverrides?.[date]) continue
             state.dayExceptions[date] = exception
             if (state.dayOverrides?.[date]) delete state.dayOverrides[date]
@@ -621,5 +633,27 @@ export function createPlannerStore({ db, transaction, getTask, listTasks, now = 
     const stored = read.get(STATE_KEY)
     if (stored) validateState(JSON.parse(stored.value))
   }
-  return { getPlanner, updatePlanner, updatePlannerBatch, removeTask, syncRecurringTaskPlan, restorePlanner, validateStoredState }
+  function validateSyncState() {
+    const state = getPlanner()
+    validateState(state)
+    for (const block of state.blocks) validateBlock(block, state, { restoring: true })
+    // A task's explicit startAt also occupies time when it has no planner block.
+    const planned = new Set(state.blocks.map(block => block.taskId))
+    const implicit = listTasks().filter(task => !planned.has(task.id)).map(task => ({ task, range: taskRange(task) }))
+      .filter(item => item.range).sort((a, b) => a.range.start - b.range.start)
+    for (let index = 0; index < implicit.length; index++) {
+      const { task, range } = implicit[index], deadline = dueLimit(task.due)
+      if (deadline !== null && Number.isFinite(deadline) && range.end > deadline) fail('事项结束时间超过了截止时间', 409)
+      if (index && overlaps(implicit[index - 1].range, range)) fail('事项的开始时间和预计用时与其他事项冲突', 409)
+      const cursor = new Date(range.start)
+      cursor.setHours(0, 0, 0, 0)
+      while (cursor.getTime() < range.end) {
+        const date = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}-${String(cursor.getDate()).padStart(2, '0')}`
+        if (routinesOn(state, date).some(routine => routine.enabled && routine.kind !== 'available'
+          && overlaps(range, { start: localInstant(date, routine.start), end: localInstant(date, routine.end) }))) fail('事项的开始时间与课程、休息或固定活动冲突', 409)
+        cursor.setDate(cursor.getDate() + 1)
+      }
+    }
+  }
+  return { getPlanner, updatePlanner, updatePlannerBatch, removeTask, syncRecurringTaskPlan, restorePlanner, validateStoredState, validateSyncState }
 }

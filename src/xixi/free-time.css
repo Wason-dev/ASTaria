@@ -191,6 +191,23 @@
 @media (forced-colors:active) {
   .p0 .free-time-page :is(.free-time-primary,.free-time-secondary) { background:ButtonFace; color:ButtonText; border-color:ButtonText }
 }
+/* 余时页面滚动条。其它引擎保留标准 thin 配色；WebKit 路径用 scrollbar-width/color:auto 让出
+   标准属性，再交给 ::-webkit-scrollbar 绘制：8px、透明 track、圆角中性 thumb、悬停金色、
+   button 归零以去掉上下箭头。 */
+.p0 .free-time-viewport.free-time-viewport { --ft-scroll-thumb:var(--ft-muted); scrollbar-width:thin; scrollbar-color:color-mix(in srgb,var(--ft-scroll-thumb) 55%,transparent) transparent }
+@media (forced-colors:active) {
+  .p0 .free-time-viewport.free-time-viewport { scrollbar-width:auto; scrollbar-color:auto }
+}
+@supports selector(::-webkit-scrollbar) {
+  @media not (forced-colors:active) {
+    .p0 .free-time-viewport.free-time-viewport { scrollbar-width:auto; scrollbar-color:auto }
+    .p0 .free-time-viewport.free-time-viewport::-webkit-scrollbar { width:8px; height:8px; background:transparent }
+    .p0 .free-time-viewport.free-time-viewport::-webkit-scrollbar-track { background:transparent }
+    .p0 .free-time-viewport.free-time-viewport::-webkit-scrollbar-button { display:none; width:0; height:0 }
+    .p0 .free-time-viewport.free-time-viewport::-webkit-scrollbar-thumb { border:1px solid transparent; background-clip:padding-box; background-color:color-mix(in srgb,var(--ft-scroll-thumb) 55%,transparent); border-radius:999px }
+    .p0 .free-time-viewport.free-time-viewport::-webkit-scrollbar-thumb:hover { background-color:color-mix(in srgb,var(--ft-gold) 72%,transparent) }
+  }
+}
 .free-time-wish-entry>.free-time-pane-content { display:block; padding:20px 22px }
 .free-time-wish-heading { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:20px; min-height:32px }
 .free-time-wish-copy { display:flex; align-items:baseline; flex-wrap:wrap; gap:6px 20px; min-width:0 }

@@ -4,6 +4,7 @@ import './AppUpdates.css'
 
 type UpdateState = {
   supported: boolean
+  unsupportedReason?: string | null
   current: { version: string; builtAt: string | null; commit: string | null }
   automatic: boolean
   status: 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'installing' | 'up-to-date' | 'unavailable' | 'error'
@@ -126,7 +127,7 @@ export function AppUpdates({ visible = true }: { visible?: boolean }) {
   const downloadPercent = downloadSizeBytes > 0
     ? Math.min(100, Math.max(0, (downloadBytes / downloadSizeBytes) * 100))
     : 0
-  const statusText = unavailable ? '请在 ASTaria 桌面 App 内检测更新，浏览器预览不支持。'
+  const statusText = unavailable ? state?.unsupportedReason ?? '请在 ASTaria 桌面 App 内检测更新，浏览器预览不支持。'
     : issue || (pending === 'automatic' ? '正在保存自动检查设置…'
       : pending === 'download' || state?.status === 'downloading' ? '正在下载并校验安装包…'
         : pending === 'install' || state?.status === 'installing' ? '正在验证并准备安装，完成后自动重启…'

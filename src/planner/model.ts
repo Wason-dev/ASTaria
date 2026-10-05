@@ -102,6 +102,17 @@ export function weeklyRoutineSource(state: PlannerState, routine: Routine, sourc
   return state.routines.find(item => item.id === routine.id && (sourceWeekday === undefined || item.weekdays.includes(sourceWeekday)))
 }
 
+/** A holiday uses a known free-day timetable, without copying its classes. */
+export function holidayRoutinesForDay(state: PlannerState, date: string): Routine[] {
+  const weekday = new Date(`${date}T12:00:00Z`).getUTCDay()
+  const sourceWeekdays = weekday === 0 ? [0, 6] : weekday === 6 ? [6, 0] : [6, 0, weekday]
+  for (const sourceWeekday of sourceWeekdays) {
+    const rows = state.routines.filter(routine => routine.kind !== 'class' && routineOccursOn(routine, date, sourceWeekday))
+    if (rows.some(routine => routine.kind === 'available')) return rows
+  }
+  return []
+}
+
 /** Weekdays follow Date.getDay(): Sunday is 0. Explicit routines stay within a day. */
 export function routinesForDay(state: PlannerState, date: string): Routine[] {
   const bounds = dayBounds(date)
@@ -110,9 +121,11 @@ export function routinesForDay(state: PlannerState, date: string): Routine[] {
   const exception = state.dayExceptions?.[date]
   const result: Routine[] = []
   const source = exception ? exception.kind === 'rescheduled' ? exception.routines ?? []
-    : exception.kind === 'restored' ? state.routines : [] : override?.routines ?? state.routines
+    : exception.kind === 'holiday' ? exception.routines ?? holidayRoutinesForDay(state, date)
+      : exception.kind === 'restored' ? state.routines : [] : override?.routines ?? state.routines
+  const needsWeekday = exception ? exception.kind === 'restored' : !override
   for (const routine of source) {
-    if (!routine.enabled || ((!override || exception?.kind === 'restored') && exception?.kind !== 'rescheduled' && !routineOccursOn(routine, date))) continue
+    if (!routine.enabled || (needsWeekday && !routineOccursOn(routine, date))) continue
     const interval = explicitInterval(date, routine.start, routine.end)
     const range = interval && clipRange(interval, date)
     if (range) result.push({ ...routine, weekdays: [...routine.weekdays], items: [...routine.items], start: timeOf(range.start), end: timeOf(range.end) })

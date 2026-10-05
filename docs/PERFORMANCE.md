@@ -20,3 +20,39 @@ beta.3 的优化不降低原有分辨率、辉光、采样质量或特效强度�
 前台仍保留必要的数据刷新。以上对比涵盖两阶段优化的累计效果；不等于第二阶段单独收益。减少动态效果条件用于隔离后台工作量，并不代表动画开启时的 GPU 成本。软件渲染测试不能推出真实 Mac 功耗、温度或续航百分比。
 
 复现：桌面构建后运行 `node scripts/verify-idle-performance.mjs`，通过 `IDLE_QA_BASELINE` 指向原基线构建。测试只操作临时数据库和浏览器，不操作现有数据。弦轨几何、辉光连续性和动态边界由 `scripts/horizon-renderer.test.mjs` 验证。长期硬件功耗与不同屏幕刷新率仍需实机测量。
+
+## BetaX：Windows 玻璃材质取舍与实测
+
+BetaX 对 Windows 上玻璃边缘折射的处理是一次**明确的材质取舍，不是无损画质优化**：默认走 CSS 通透/磨砂路径，保留 rim、tint、通透与磨砂差别，但不做 SVG 精细边缘位移（`src/home/glassRendering.ts` 的 `supportsGlassRefraction` 在 Windows 上返回 false）。设置里可以单独选「精细折射」换回 SVG 位移，代价是可见的帧率下降（见下表）。**黑洞本身的最高画质、渲染分辨率、采样与辉光没有被降低**；Windows 与 macOS 都不因这一取舍改变黑洞画质档位的定义。
+
+### 2026-10-05 · Windows 10 19044 · RTX 4090 Laptop · D3D11
+
+环境：Windows 10 x64（19044）真实交互会话，RTX 4090 Laptop，D3D11，GPU 合成、栅格与 WebGL 均已启用；2560×1400 CSS、DPR 1.5，实际黑洞渲染 3824×2091 ultra。每个样本 8 秒，`desktop/performance-smoke.mjs` 采集。表中数字是采样的 `renderFps`（真实渲染帧），不是 `requestAnimationFrame` 回调频率。
+
+| 场景 | 旧实现 | 默认新实现（CSS 玻璃） | 同构建 · 精细折射 |
+| --- | ---: | ---: | ---: |
+| 工作台 | 37.30 | **59.99** | 40.91 |
+| 余时 | 21.48 | **59.98** | 23.24 |
+| 首页 | — | 59.97 | 59.99 |
+| 余时（浅色 · 磨砂） | — | 58.61 | — |
+
+- 「旧实现」指同机同参数的 Windows 早期构建；「默认新实现」固定黑洞最高画质，并使用 BetaX 默认玻璃路径；「同构建 · 精细折射」是同一份 BetaX 构建把设置切到「精细折射」后的对照，用来证明上表差额来自玻璃路径而不是其它改动。
+- 首页在两种玻璃路径下都接近 60 FPS：黑洞渲染本身没有减速，差异集中在工作台与余时的玻璃合成。
+- 余时浅色·磨砂 58.61 是最低的默认配置样本，仍接近 60 FPS 目标。
+
+### 复现方式
+
+```bash
+# 桌面构建后，用一次性 profile 与数据库跑性能采样（不会打开真实数据）
+ASTaria.exe --smoke-test --measure-performance      # Windows
+/Applications/ASTaria.app/Contents/MacOS/Electron --smoke-test --measure-performance   # macOS
+```
+
+`--smoke-test` 建立一次性临时目录与临时 SQLite 数据库，`--measure-performance` 在其中依次切换「深色·通透」「浅色·磨砂」「深色·通透·精细折射」，对首页、工作台、余时各取样 8 秒，输出 `ASTARIA_PERFORMANCE_SAMPLE` 行、`performance.json` 与逐场景 PNG（含 `app.getGPUInfo` 与 GPU feature 状态）。
+
+### 限制
+
+- 只有一个 GPU 与一种分辨率/DPR 的结果；不同 GPU、驱动、屏幕刷新率与电源模式可能差异很大，不作为所有设备的承诺。
+- 8 秒样本只反映短时前台负载，不构成长时间功耗、温度、风扇或续航结论。
+- 不把 `requestAnimationFrame` 回调频率（如 160 Hz 显示下的回调计数）当作黑洞帧率；判断标准始终是渲染帧。
+- 精细折射在 Windows 上属于高开销选项，默认关闭；macOS 不受该默认影响。

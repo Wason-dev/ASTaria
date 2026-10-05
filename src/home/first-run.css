@@ -103,3 +103,13 @@
 @media (prefers-reduced-motion: reduce) {
   .first-run-progress i,.p0 .first-run button { transition: none }
 }
+
+.first-run-render-fields { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:12px }
+.first-run-render-fields label { margin:0; min-width:0 }
+.first-run-render-fields select { display:block; width:100%; min-height:36px; margin-top:7px; padding:6px 8px; border:1px solid var(--guide-line); border-radius:9px; background:var(--guide-control); color:var(--guide-ink); font:inherit; font-size:12px }
+.first-run .first-run-render-note { grid-column:1/-1; margin:10px 0 0; font-size:11px; line-height:1.6 }
+.first-run-render-fields .first-run-render-note { margin:0 }
+.first-run select:focus-visible { outline:2px solid var(--guide-accent); outline-offset:3px }
+
+.first-run[data-step="0"] main { justify-content:flex-start }
+.first-run[data-step="0"] main > * { flex-shrink:0 }

@@ -343,7 +343,7 @@ function WorkbenchContent({ active, data, now, onCapture, onNotice, appearance, 
     </span>
   </button> }
 
-  return <div className="wb-scroll workspace-page-viewport" data-focus={Boolean(selected && session)} ref={scroll}>
+  return <div className="wb-scroll workspace-page-viewport" data-guide-state={workspaceError ? 'error' : workspaceLoading ? 'loading' : groups.available.length ? 'ready' : 'empty'} data-focus={Boolean(selected && session)} ref={scroll}>
     <div className="wb-container workspace-page-container">
       {selected && session && <div className="wb-toolbar"><div className="wb-location"><button className="wb-back wb-icon-button" aria-label={selectedDone ? '选择下一项' : '重新选择'} onClick={() => switchTo(null)} disabled={busy || transitioning}><Icon name="back" /></button><span className="wb-eyebrow">工作台</span></div></div>}
       <div className="wb-stage" data-leaving={transitioning} inert={transitioning}>

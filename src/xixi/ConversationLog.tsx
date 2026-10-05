@@ -38,6 +38,8 @@ export function ConversationLog({ chat, active, onSettings, context, onSent, onR
   const operations = chat.conversation?.operations ?? []
   const signature = `${chat.conversation?.conversationId}:${messages.at(-1)?.requestId ?? messages.at(-1)?.id}:${messages.at(-1)?.delivery}:${operations.map(item => `${item.id}:${item.undoneAt}`).join(',')}:${chat.sending}`
   const stream = chat.stream?.conversationId === chat.conversation?.conversationId ? chat.stream : null
+  const currentActivity = stream?.activities?.at(-1)
+  const currentTool = currentActivity?.id.startsWith('tool:') && currentActivity.state !== 'done' ? currentActivity : null
   const streamSignature = `${stream?.requestId}:${stream?.round}:${stream?.reasoningContent.length}:${stream?.content.length}:${stream?.phase}:${stream?.activities?.map(item => `${item.id}:${item.state}`).join(',')}`
   const currentQuestion = messages.at(-1)?.role === 'assistant' && messages.at(-1)?.question ? messages.at(-1)?.id : null
   const setReasoningExpanded = (id: string, expanded: boolean) => setExpandedReasoning(current => ({ ...current, [id]: expanded }))
@@ -46,7 +48,7 @@ export function ConversationLog({ chat, active, onSettings, context, onSent, onR
     if (!chat.sending || !stream) return
     // The same request moves from the live bubble to a saved reply (or a
     // failed user bubble). Keep its expansion choice across those remounts.
-    setExpandedReasoning(current => current[stream.requestId] === undefined ? { ...current, [stream.requestId]: true } : current)
+    setExpandedReasoning(current => current[stream.requestId] === undefined ? { ...current, [stream.requestId]: false } : current)
   }, [chat.sending, stream?.requestId])
   const copyMessage = async (id: string, content: string) => {
     clearTimeout(copyTimer.current)
@@ -145,13 +147,13 @@ export function ConversationLog({ chat, active, onSettings, context, onSent, onR
     {!chat.loading && !chat.status?.configured && <p className="xixi-status"><button className="xixi-text-button" type="button" onClick={onSettings}>连接模型</button><span>在设置里选择 API 或本地模型</span></p>}
       {chat.sending && stream && <article className="xixi-message xixi-stream" data-role="assistant" aria-live="off" data-round={stream.round}>
       <span>析熙 <small>生成中</small></span>
-      {stream?.reasoningContent && <Reasoning key={stream.requestId} expanded={expandedReasoning[stream.requestId] ?? true} onExpandedChange={expanded => setReasoningExpanded(stream.requestId, expanded)} content={stream.reasoningContent} rounds={stream.reasoningRounds} currentRound={stream.round} streaming={stream.phase === 'thinking'} live />}
+      {stream?.reasoningContent && <Reasoning key={stream.requestId} expanded={expandedReasoning[stream.requestId] ?? false} onExpandedChange={expanded => setReasoningExpanded(stream.requestId, expanded)} content={stream.reasoningContent} rounds={stream.reasoningRounds} currentRound={stream.round} streaming={stream.phase === 'thinking'} live />}
       {stream?.content && <MessageMarkdown content={stream.content} />}
-      <div className="xixi-stream-status" role="status" aria-live={active ? 'polite' : 'off'}>
+      <div className="xixi-stream-status" role="status" aria-live={active ? 'polite' : 'off'} data-state={currentTool?.state ?? stream.phase}>
         <div className="xixi-thinking" aria-hidden="true"><span /><span /><span /></div>
-        <span>{stream.activities?.at(-1)?.title ?? (stream?.phase === 'executing' ? '正在处理安排' : stream?.phase === 'replying' ? '正在回复' : '正在思考')}</span>
+        <span className="xixi-stream-status-copy"><strong>{currentTool?.state === 'failed' ? '正在核对未完成的操作' : currentTool?.title ?? (stream.phase === 'executing' ? '正在处理安排' : stream.phase === 'replying' ? '正在回复' : '正在思考')}</strong>
+          {currentTool?.state === 'running' && <small>{currentTool.detail}</small>}</span>
       </div>
-      {stream.activities && stream.activities.length > 1 && <ol className="xixi-stream-activities" aria-label="实际执行阶段">{stream.activities.slice(-4).map(activity => <li key={activity.id} data-state={activity.state}><span aria-hidden="true">{activity.state === 'done' ? '✓' : activity.state === 'failed' ? '!' : '·'}</span><span>{activity.title}</span>{activity.detail && <small>{activity.detail}</small>}</li>)}</ol>}
     </article>}
   </div>
 }

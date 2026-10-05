@@ -52,7 +52,7 @@ function fixture(t, { persistent = false } = {}) {
   return { db, filename, edit, state, tasks, seed, block, operation, open, close }
 }
 
-test('a consecutive holiday clears its whole span in the real database and survives a reopen', t => {
+test('a consecutive holiday replaces classes with free-day availability and survives a reopen', t => {
   const f = fixture(t, { persistent: true })
   f.seed()
   // A task already planned inside the span keeps its block and its task record.
@@ -75,11 +75,12 @@ test('a consecutive holiday clears its whole span in the real database and survi
   assert.deepEqual(blocksForDay(state, f.tasks(), holidayStart), [planned])
   assert.deepEqual(Object.keys(state.dayExceptions).sort(), holidayDates)
   for (const date of holidayDates) {
-    assert.deepEqual(state.dayExceptions[date], { date, kind: 'holiday' })
-    // A single-day event is a fact on that date and is not erased by the holiday.
-    assert.deepEqual(ids(routinesForDay(state, date)), date === '2026-10-03' ? ['ceremony'] : [])
-    assert.equal(dayCapacity(state, f.tasks(), date, now).totalMin, 0)
-    assert.equal(dayCapacity(state, f.tasks(), date, now).freeMin, 0)
+    assert.equal(state.dayExceptions[date].kind, 'holiday')
+    assert.deepEqual(ids(state.dayExceptions[date].routines), ['default-weekend-availability'])
+    // A single-day event remains a fixed fact inside the holiday window.
+    assert.deepEqual(ids(routinesForDay(state, date)), date === '2026-10-03' ? ['default-weekend-availability', 'ceremony'] : ['default-weekend-availability'])
+    assert.equal(dayCapacity(state, f.tasks(), date, now).totalMin, date === '2026-10-03' ? 720 : 780)
+    assert.equal(dayCapacity(state, f.tasks(), date, now).freeMin, date === '2026-10-03' ? 720 : date === holidayStart ? 750 : 780)
   }
   assert.deepEqual(carryItems(state, f.tasks(), holidayStart), [])
   assert.deepEqual(labels(carryItems(state, f.tasks(), '2026-10-03')), ['活动手册'])
@@ -96,12 +97,54 @@ test('a consecutive holiday clears its whole span in the real database and survi
   try {
     const stored = JSON.parse(raw.prepare("SELECT value FROM state WHERE key = 'planner-v1'").get().value)
     assert.deepEqual(Object.keys(stored.dayExceptions).sort(), holidayDates)
-    assert.deepEqual(stored.dayExceptions[holidayEnd], { date: holidayEnd, kind: 'holiday' })
+    assert.equal(stored.dayExceptions[holidayEnd].kind, 'holiday')
+    assert.deepEqual(ids(stored.dayExceptions[holidayEnd].routines), ['default-weekend-availability'])
     assert.deepEqual(ids(stored.dayEvents), ['ceremony'])
   } finally { raw.close() }
   const reopened = f.open()
   assert.deepEqual(reopened.getPlanner(), state)
   f.close(reopened)
+})
+
+test('holiday windows are saved snapshots; old records and missing windows stay honest', t => {
+  const f = fixture(t)
+  f.seed()
+  const monday = '2026-10-05', tuesday = '2026-10-06'
+  f.edit(exception(monday, 'holiday'))
+  const saved = f.state().dayExceptions[monday]
+  assert.deepEqual(saved.routines.map(row => [row.start, row.end]), [['09:00', '22:00']])
+
+  const weekend = f.state().routines.find(row => row.id === 'default-weekend-availability')
+  f.edit({ type: 'save-routine', routine: { ...weekend, start: '08:00', end: '22:30' } })
+  assert.deepEqual(f.state().dayExceptions[monday], saved)
+  assert.equal(dayCapacity(f.state(), f.tasks(), monday, now).totalMin, 780)
+  f.edit(exception(tuesday, 'holiday'))
+  assert.deepEqual(f.state().dayExceptions[tuesday].routines.map(row => [row.start, row.end]), [['08:00', '22:30']])
+
+  // A pre-upgrade holiday has no snapshot and resolves from the current free-day template.
+  const legacy = f.state()
+  legacy.dayExceptions[monday] = { date: monday, kind: 'holiday' }
+  assert.equal(dayCapacity(legacy, f.tasks(), monday, now).totalMin, 870)
+
+  f.edit({ type: 'delete-routine', id: 'default-weekend-availability' })
+  f.edit({ type: 'delete-routine', id: 'default-evening-study' })
+  f.edit(exception('2026-10-08', 'holiday'))
+  assert.deepEqual(f.state().dayExceptions['2026-10-08'].routines.filter(row => row.kind === 'available').map(row => [row.start, row.end]), [['09:00', '12:00']])
+  f.edit(exception('2026-10-07', 'holiday'))
+  assert.deepEqual(f.state().dayExceptions['2026-10-07'].routines, [])
+  assert.equal(dayCapacity(f.state(), f.tasks(), '2026-10-07', now).totalMin, 0)
+})
+
+test('a Sunday holiday can use Saturday availability when Sunday has none', t => {
+  const f = fixture(t)
+  f.seed()
+  const weekend = f.state().routines.find(row => row.id === 'default-weekend-availability')
+  f.edit({ type: 'save-routine', routine: { ...weekend, weekdays: [6] } })
+  f.edit(exception('2026-10-04', 'holiday'))
+  const state = f.state()
+  assert.equal(state.dayExceptions['2026-10-04'].kind, 'holiday')
+  assert.deepEqual(ids(routinesForDay(state, '2026-10-04')), ['default-weekend-availability'])
+  assert.equal(dayCapacity(state, f.tasks(), '2026-10-04', now).totalMin, 780)
 })
 
 test('a cancelled day works where the legacy weekday template refuses a week without classes', t => {
@@ -188,7 +231,7 @@ test('a restored day returns to the weekly timetable and re-arms placement confl
   const before = f.state()
   const task = f.db.createTask({ title: '周日任务' })
   f.edit(exception(sunday, 'holiday'))
-  assert.deepEqual(routinesForDay(f.state(), sunday), [])
+  assert.deepEqual(ids(routinesForDay(f.state(), sunday)), ['default-weekend-availability'])
   const placed = f.block(task.id, { start: '11:00', end: '11:30' })
   f.edit({ type: 'save-block', block: placed })
   assert.deepEqual(dayCapacity(f.state(), f.tasks(), sunday, now).conflicts, [])
@@ -229,8 +272,8 @@ test('legacy day templates and new exceptions switch in both directions', t => {
   const holiday = f.state()
   assert.equal(holiday.revision, templated.revision + 1)
   assert.equal(Object.hasOwn(holiday.dayOverrides, sunday), false)
-  assert.deepEqual(holiday.dayExceptions[sunday], { date: sunday, kind: 'holiday' })
-  assert.deepEqual(routinesForDay(holiday, sunday), [])
+  assert.equal(holiday.dayExceptions[sunday].kind, 'holiday')
+  assert.deepEqual(ids(routinesForDay(holiday, sunday)), ['default-weekend-availability'])
   // Weekly corrections still only synchronize legacy templates, never exceptions.
   const weeklyEdit = { type: 'edit-weekday', weekday: 4, replacements: [{ routineId: 'thursday-class', title: '物理实验', kind: 'class' }], syncDates: [sunday] }
   assert.throws(() => f.edit(weeklyEdit), conflict)
@@ -394,7 +437,8 @@ test('backups round-trip exceptions and legacy backups without the field still w
   assert.deepEqual(ids(routinesForDay(f.state(), nextSunday)), ['default-weekend-availability', 'sunday-class'])
   // The first real exception upgrades the legacy record in place.
   f.edit(exception(sunday, 'holiday'))
-  assert.deepEqual(f.state().dayExceptions[sunday], { date: sunday, kind: 'holiday' })
+  assert.equal(f.state().dayExceptions[sunday].kind, 'holiday')
+  assert.deepEqual(ids(f.state().dayExceptions[sunday].routines), ['default-weekend-availability'])
   assert.deepEqual(Object.keys(f.state().dayExceptions), [sunday])
   // A crafted but valid backup can hold both mechanisms on one date. The
   // exception wins for reads, and repeating it replaces the stale legacy layer.
@@ -405,13 +449,14 @@ test('backups round-trip exceptions and legacy backups without the field still w
   mixedRow.value = JSON.stringify(mixedState)
   f.db.importData(sign(mixed))
   const both = f.state()
-  assert.deepEqual(routinesForDay(both, nextSunday), [])
-  assert.equal(dayCapacity(both, f.tasks(), nextSunday, now).totalMin, 0)
+  assert.deepEqual(ids(routinesForDay(both, nextSunday)), ['default-weekend-availability'])
+  assert.equal(dayCapacity(both, f.tasks(), nextSunday, now).totalMin, 780)
   f.edit(exception(nextSunday, 'holiday'))
   const pruned = f.state()
   assert.equal(pruned.revision, both.revision + 1)
   assert.equal(Object.hasOwn(pruned.dayOverrides, nextSunday), false)
-  assert.deepEqual(pruned.dayExceptions[nextSunday], { date: nextSunday, kind: 'holiday' })
+  assert.equal(pruned.dayExceptions[nextSunday].kind, 'holiday')
+  assert.deepEqual(ids(pruned.dayExceptions[nextSunday].routines), ['default-weekend-availability'])
   f.edit(exception(nextSunday, 'holiday'))
   assert.deepEqual(f.state(), pruned)
 })
@@ -491,8 +536,8 @@ test('undo restores the exception snapshot and refuses to overwrite later except
   const restored = f.state()
   assert.deepEqual(restored, { ...before, revision: before.revision + 2 })
   assert.deepEqual(restored.dayOverrides, {})
-  assert.deepEqual(restored.dayExceptions[sunday], { date: sunday, kind: 'holiday' })
-  assert.deepEqual(routinesForDay(restored, sunday), [])
+  assert.equal(restored.dayExceptions[sunday].kind, 'holiday')
+  assert.deepEqual(ids(routinesForDay(restored, sunday)), ['default-weekend-availability'])
   // A second undo is idempotent: the durable row and revision both stay put.
   const rowsBefore = f.db.listOperations()
   const again = f.db.undoOperation(receipt.id)

@@ -121,3 +121,10 @@ test('invalid timing is ignored and an explicit policy reset clears prior backof
   assert.equal(retry.quality, 'ultra')
   assert.ok(retry.time - resetAt < 27_000)
 })
+
+test('automatic quality treats a stable 30/45/60 FPS budget as intentional pacing', () => {
+  for (const target of [30, 45, 60]) {
+    const controller = new AdaptiveQualityController()
+    for (let i = 0; i < target * 30; i++) assert.equal(controller.sample(1000 / target, 'ultra', false, target), null)
+  }
+})

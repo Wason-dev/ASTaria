@@ -75,14 +75,17 @@ test('分块下载完成后 SHA-256 与体积匹配、进度单调到齐，且�
   await verifyAsset(destination, manifest)
 })
 
-test('缺失的下载目录会被创建为仅所有者可访问，安装包也按 0600 落盘', async t => {
+test('下载目录创建成功，并在 POSIX 上以私有权限落盘', async t => {
   const dir = await workspace(t), nested = join(dir, 'updates', 'v1')
   const payload = payloadOf(2048), manifest = manifestFor(payload)
   const { fetcher } = recorder(() => bodyResponse(bytes(payload)))
   const destination = await downloadVerifiedAsset({ url: DMG_URL, manifest, directory: nested, fetcher })
   assert.equal((await lstat(nested)).isDirectory(), true)
-  assert.equal((await lstat(nested)).mode & 0o077, 0, '更新目录不对同组或其他用户开放')
-  assert.equal((await lstat(destination)).mode & 0o077, 0, '安装包只对所有者可读')
+  assert.equal((await lstat(destination)).isFile(), true)
+  if (process.platform !== 'win32') {
+    assert.equal((await lstat(nested)).mode & 0o077, 0, '更新目录不对同组或其他用户开放')
+    assert.equal((await lstat(destination)).mode & 0o077, 0, '安装包只对所有者可读')
+  }
 })
 
 test('哈希不匹配时拒绝下载且不留任何可用文件', async t => {

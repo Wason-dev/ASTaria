@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { BlackHoleRenderer } from './BlackHoleRenderer'
 import { HomeWorkspace } from '../home/HomeWorkspace'
 import type { ResponseEffectSettings, ResponsePhase } from './responseEffects'
-import type { RenderProfile, RenderScene } from './renderProfile'
+import type { RenderProfile, RenderScene, RenderQuality } from './renderProfile'
 import './prototype.css'
 
 declare global {
@@ -26,6 +26,7 @@ export default function BlackHolePrototype() {
   const responseSettings = useRef<ResponseEffectSettings | null>(null)
   const responsePhase = useRef<ResponsePhase>('idle')
   const renderProfile = useRef<RenderProfile>('full')
+  const renderQuality = useRef<RenderQuality | undefined>(undefined)
   const renderScene = useRef<RenderScene>('home')
   const changeResponseEffect = useCallback((settings: ResponseEffectSettings) => {
     responseSettings.current = settings
@@ -35,10 +36,11 @@ export default function BlackHolePrototype() {
     responsePhase.current = phase
     renderer.current?.setResponsePhase(phase)
   }, [])
-  const changeRenderProfile = useCallback((profile: RenderProfile, scene: RenderScene) => {
+  const changeRenderProfile = useCallback((profile: RenderProfile, scene: RenderScene, quality?: RenderQuality) => {
     renderProfile.current = profile
     renderScene.current = scene
-    renderer.current?.setRenderProfile(profile, scene)
+    renderQuality.current = quality
+    renderer.current?.setRenderProfile(profile, scene, quality)
   }, [])
 
   useEffect(() => {
@@ -50,7 +52,7 @@ export default function BlackHolePrototype() {
       renderer.current = engine
       if (responseSettings.current) engine.setResponseEffect(responseSettings.current)
       engine.setResponsePhase(responsePhase.current)
-      engine.setRenderProfile(renderProfile.current, renderScene.current)
+      engine.setRenderProfile(renderProfile.current, renderScene.current, renderQuality.current)
       window.__ASTARIA_P0__ = engine
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '无法初始化 WebGL')

@@ -4,3 +4,5 @@
 - 黑洞与弦轨由项目现有 React、Canvas、Three.js 渲染；历史查阅 React Bits、Aceternity、Anime.js 作为动效参考，没有引入这些组件依赖。相关依赖的实际许可证正文见 `THIRD_PARTY_NOTICES.txt`。
 - 应用二进制另附 ASTaria 的 Apache-2.0 LICENSE、NOTICE、Electron 的 LICENSE 与 Chromium notices；生产依赖许可收集无缺失条目。该清单不等于所有列出的包都进入应用二进制。
 - 分发资源不包含开发机器的路径或环境信息。
+
+Windows 的 `public/astaria.ico` 由现有 `public/astaria-icon-1024.png` 生成 16–256 像素图层，沿用同一 ASTaria 图标来源与许可；用于 EXE 与 NSIS 安装/卸载图标。

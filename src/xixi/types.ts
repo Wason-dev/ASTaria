@@ -5,7 +5,7 @@ export type WebSearchSettings = { enabled: boolean; maxUses: number }
 export type ProviderSettings = { provider: 'deepseek' | 'local'; cloudModel: string; reasoningEffort: ReasoningEffort; streamResponses: boolean; contextBudget: ContextBudgetSettings; webSearch: WebSearchSettings; local: { engine: LocalModelEngine; baseUrl: string; model: string } }
 export type LocalStatus = {
   configured: boolean; service: 'astaria-local'; model: string; storage: 'SQLite'; dataDirectory: string
-  provider?: ProviderSettings['provider']; cloudConfigured?: boolean | null; providerSettings?: ProviderSettings
+  provider?: ProviderSettings['provider']; cloudConfigured?: boolean | null; providerSettings?: ProviderSettings; secretStorage?: string
 }
 export type LocalModel = { id: string; label: string }
 export type ModelConnectionTest = { ok: boolean; toolCalling: boolean | null; message: string }

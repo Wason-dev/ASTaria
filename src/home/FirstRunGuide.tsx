@@ -10,7 +10,7 @@ const TOUR = [
   { title: '首页', page: 'home', target: '.home-launch', detail: '左侧显示当前任务，析熙的对话与今天的安排在同一处。', action: '试着点「交给析熙」展开对话和今日安排，再收起。正式记录后，请核对变更回执；需要时可撤销。' },
   { title: '余时', page: 'free-time', target: '.free-time-tabs[aria-label="余时目标分类"]', detail: '长期目标、还没决定的心愿，以及已经安排的时间都在这里。', action: '试着切换「目标」与「待考虑」。心愿先聊清楚，选择加入自动安排后才会占用日程。' },
   { title: '日程', page: 'schedule', target: '.pl-segment', detail: '课程、任务和可用时段在同一条时间线上。', action: '试着切换月、周、日视图，核对今天的空档；隔周课程可在「每周安排」维护。' },
-  { title: '工作台', page: 'workbench', target: '.wb-available .wb-task:first-child', detail: '正在做和即将截止的事项集中在这里。', action: '有事项时，在「现在可以开始」打开一项查看步骤，再返回；这里暂时为空的话，先从首页记录事项。' },
+  { title: '工作台', page: 'workbench', target: '.wb-available .wb-task:first-child', detail: '正在做和即将截止的事项集中在这里。', action: '在「现在可以开始」打开一项查看步骤，再返回。' },
   { title: '弦轨', page: 'home', target: undefined, detail: '首页的黑洞通向弦轨，在这里按日期审视安排。', action: '打开弦轨，切换一次日期，再返回。预览只读取本机安排；正式使用时可以整理、调整顺序，按「完成」才会写入。' },
 ] as const
 
@@ -21,11 +21,15 @@ export function FirstRunGuide({ preferences, previewOpen, previewComplete, onSta
   const [personality, setPersonality] = useState(preferences.assistant.personality)
   const [glass, setGlass] = useState(preferences.glass)
   const [theme, setTheme] = useState(preferences.theme)
+  const [recommended, setRecommended] = useState(preferences.render.quality === 'auto')
+  const [frameProfile, setFrameProfile] = useState(preferences.render.profile)
+  const [quality, setQuality] = useState<Exclude<Preferences['render']['quality'], 'auto'>>(preferences.render.quality === 'auto' ? 'ultra' : preferences.render.quality)
   const [key, setKey] = useState('')
   const [keySaved, setKeySaved] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [tourActions, setTourActions] = useState<Record<number, number>>({})
+  const [workbenchState, setWorkbenchState] = useState('loading')
   const actionStage = tourActions[step] ?? 0
   const glassMaterial = useMemo(() => ({ transmission: HOME_GLASS.chatTransmission, blur: glass === 'soft' ? 6 : 0, rim: HOME_GLASS.rim, reflection: HOME_GLASS.reflection, shadow: HOME_GLASS.shadow }), [glass])
   useEffect(() => {
@@ -75,6 +79,7 @@ export function FirstRunGuide({ preferences, previewOpen, previewComplete, onSta
         if (mode && !initialPlannerMode) initialPlannerMode = mode
         if (current === 0 && mode && mode !== initialPlannerMode) reached = 1
       } else if (step === 5) {
+        setWorkbenchState(document.querySelector<HTMLElement>('.wb-scroll')?.dataset.guideState ?? 'loading')
         const detailsOpen = Boolean(document.querySelector('.wb-back'))
         if (current === 0 && detailsOpen) reached = 1
         if (current === 1 && !detailsOpen) reached = 2
@@ -93,7 +98,7 @@ export function FirstRunGuide({ preferences, previewOpen, previewComplete, onSta
     try {
       if (step === 0) {
         const current = await localApi<Preferences>('/preferences')
-        const value: Preferences = { ...current, theme, glass, assistant: { ...current.assistant, personality } }
+        const value: Preferences = { ...current, theme, glass, render: { ...current.render, profile: recommended ? 'full' : frameProfile, quality: recommended ? 'auto' : quality }, assistant: { ...current.assistant, personality } }
         if (JSON.stringify(value) !== JSON.stringify(current)) publishPreferences(await localApi<Preferences>('/preferences', { expected: current, value }))
       } else if (step === 1 && key.trim()) {
         await localApi('/settings/key', { key: key.trim() })
@@ -111,6 +116,11 @@ export function FirstRunGuide({ preferences, previewOpen, previewComplete, onSta
     finally { setBusy(false) }
   }
   const tour = step >= 2 ? TOUR[step - 2] : null
+  const workbenchOptional = step === 5 && workbenchState !== 'ready' && actionStage === 0
+  const tourAction = step !== 5 || !workbenchOptional ? tour?.action
+    : workbenchState === 'empty' ? '现在没有可开始的事项，可以直接继续。以后在首页记录事项，临近安排时就会出现在这里。'
+    : workbenchState === 'error' ? '事项暂时未能读取，可在工作台重新读取，也可以先继续了解其他区域。'
+    : '正在读取事项与安排，也可以先继续了解其他区域。'
   return <dialog ref={dialog} className="first-run" aria-labelledby="first-run-title" aria-describedby={tour ? 'first-run-action' : undefined} onCancel={event => event.preventDefault()} data-theme={theme} data-glass={glass} data-tour={Boolean(tour)} data-step={step}>
     <MeasuredGlassSurface radius={20} material={glassMaterial} />
     <div className="first-run-content">
@@ -121,14 +131,22 @@ export function FirstRunGuide({ preferences, previewOpen, previewComplete, onSta
           <fieldset><legend>析熙的个性</legend><div className="first-run-options">{([['low', '低'], ['medium', '中'], ['high', '高']] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={personality === value} onClick={() => setPersonality(value)}>{label}</button>)}</div></fieldset>
           <fieldset><legend>玻璃质感</legend><div className="first-run-options">{([['soft', '磨砂玻璃'], ['clear', theme === 'dark' ? '黑色玻璃' : '通透玻璃']] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={glass === value} onClick={() => setGlass(value)}>{label}</button>)}</div></fieldset>
           <fieldset><legend>背景</legend><div className="first-run-options">{([['dark', '深色'], ['light', '浅色']] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={theme === value} onClick={() => setTheme(value)}>{label}</button>)}</div></fieldset>
+          <fieldset className="first-run-render"><legend>帧率与画质</legend>
+            <div className="first-run-options"><button type="button" aria-pressed={recommended} onClick={() => setRecommended(true)}>ASTaria 推荐</button><button type="button" aria-pressed={!recommended} onClick={() => setRecommended(false)}>手动调整</button></div>
+            {recommended ? <p className="first-run-render-note">目标 60 FPS，从最高画质开始，持续卡顿时自动调整，流畅后逐步恢复。Windows 默认使用流畅玻璃。</p> : <div className="first-run-render-fields">
+              <label>目标帧率<select aria-label="初始帧率" value={frameProfile} onChange={event => setFrameProfile(event.target.value as Preferences['render']['profile'])}>{([['economy', '30 FPS'], ['balanced', '45 FPS'], ['full', '60 FPS'], ['smooth90', '90 FPS'], ['smooth120', '120 FPS']] as const).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+              <label>黑洞画质<select aria-label="初始画质" value={quality} onChange={event => setQuality(event.target.value as typeof quality)}>{([['ultra','最高'],['high','高'],['low','轻量'],['safe','兼容']] as const).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+              <p className="first-run-render-note">手动画质保持固定；工作区最高 60 FPS，高刷受屏幕限制。稍后可在外观与动画中修改。</p>
+            </div>}
+          </fieldset>
         </>}
         {step === 1 && <><span className="first-run-eyebrow">02 / 模型连接</span><h2 id="first-run-title">连接析熙</h2><p>已有 DeepSeek API Key 可以现在导入；也可以稍后在设置中配置本地模型或密钥。</p>
-          <label htmlFor="first-run-key">API Key</label><input id="first-run-key" type="password" autoComplete="new-password" autoCapitalize="none" spellCheck={false} value={key} onChange={event => setKey(event.target.value)} placeholder="输入后保存到本机钥匙串" />
-          {keySaved && <p role="status">密钥已存入本机钥匙串。</p>}
+          <label htmlFor="first-run-key">API Key</label><input id="first-run-key" type="password" autoComplete="new-password" autoCapitalize="none" spellCheck={false} value={key} onChange={event => setKey(event.target.value)} placeholder="输入后安全保存" />
+          {keySaved && <p role="status">密钥已安全保存到系统凭据存储。</p>}
         </>}
-        {tour && <><span className="first-run-eyebrow">{String(step + 1).padStart(2, '0')} / 认识 ASTaria</span><h2 id="first-run-title">{tour.title}</h2><p>{tour.detail}</p><p id="first-run-action" className="first-run-action">{tour.action}</p>{step === 6 && <button type="button" className="first-run-preview" onClick={() => { dialog.current?.close(); onStartHorizon() }}>进入弦轨预览</button>}{step < 6 && actionStage > 0 && <p className="first-run-feedback" role="status">{actionStage === 2 || step === 4 ? '已完成这一步' : '再试一次：回到刚才的视图'}</p>}{step === 6 && previewComplete && <p className="first-run-feedback" role="status">已完成这一步</p>}</>}
+        {tour && <><span className="first-run-eyebrow">{String(step + 1).padStart(2, '0')} / 认识 ASTaria</span><h2 id="first-run-title">{tour.title}</h2><p>{tour.detail}</p><p id="first-run-action" className="first-run-action">{tourAction}</p>{step === 6 && <button type="button" className="first-run-preview" onClick={() => { dialog.current?.close(); onStartHorizon() }}>进入弦轨预览</button>}{step < 6 && actionStage > 0 && <p className="first-run-feedback" role="status">{actionStage === 2 || step === 4 ? '已完成这一步' : '再试一次：回到刚才的视图'}</p>}{step === 6 && previewComplete && <p className="first-run-feedback" role="status">已完成这一步</p>}</>}
       </main>
-      <footer><span role="alert">{error}</span><div>{step > 0 && <button type="button" disabled={busy} onClick={() => { setError(''); if (step - 1 >= 2) onTourPageChange(TOUR[step - 3].page); else onTourPageChange('home'); setStep(value => value - 1) }}>上一步</button>}<button type="button" className="first-run-next" disabled={busy} onClick={() => void next()}>{busy ? '正在保存…' : step === TOUR.length + 1 ? previewComplete ? '开始使用' : '跳过并开始' : step === 1 && !key.trim() ? '稍后配置' : step >= 2 && step <= 5 && actionStage < (step === 4 ? 1 : 2) ? '跳过此步' : '继续'}</button></div></footer>
+      <footer><span role="alert">{error}</span><div>{step > 0 && <button type="button" disabled={busy} onClick={() => { setError(''); if (step - 1 >= 2) onTourPageChange(TOUR[step - 3].page); else onTourPageChange('home'); setStep(value => value - 1) }}>上一步</button>}<button type="button" className="first-run-next" disabled={busy} onClick={() => void next()}>{busy ? '正在保存…' : step === TOUR.length + 1 ? previewComplete ? '开始使用' : '跳过并开始' : step === 1 && !key.trim() ? '稍后配置' : step >= 2 && step <= 5 && !workbenchOptional && actionStage < (step === 4 ? 1 : 2) ? '跳过此步' : '继续'}</button></div></footer>
     </div>
   </dialog>
 }

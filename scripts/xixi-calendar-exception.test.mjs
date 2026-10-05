@@ -19,7 +19,7 @@ const START = '2026-10-01' // a Thursday, so the weekly class is visible again a
 const END = '2026-10-07'
 const SPAN = ['2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04', '2026-10-05', '2026-10-06', '2026-10-07']
 const OUTSIDE = '2026-10-08'
-const HOLIDAY_TEXT = '国庆放假，10月1日到10月7日都停课，课表清空'
+const HOLIDAY_TEXT = '国庆放假，10月1日到10月7日不上课，保留可安排时段'
 const RESTORE_TEXT = '假期结束，10月1日到10月7日恢复原课表'
 const THURSDAY = { id: 'thursday-class', title: '物理实验', kind: 'class', weekdays: [4], start: '09:00', end: '10:00', location: '实验室', items: ['实验手册'], enabled: true }
 const EVENT = { id: 'ceremony', title: '校庆典礼', date: '2026-10-03', start: '15:00', end: '16:00', location: '礼堂', items: ['活动手册'] }
@@ -65,20 +65,20 @@ function fixture(t) {
 test('a holiday span is applied through the assistant chat and reported in its execution receipt', async t => {
   const f = fixture(t), before = f.db.getPlanner()
   f.script.push(readSpan(), request => exceptionCall('holiday', contextReceipt(request).revision, HOLIDAY_TEXT),
-    answer('10月1日到10月7日已按假期处理，课表清空；任务和校庆典礼都保留'))
+    answer('10月1日到10月7日已按假期处理，课程移除，空档可安排；任务和校庆典礼都保留'))
   const result = await f.chat(input(HOLIDAY_TEXT))
 
   assert.equal(result.status, 'completed')
   assert.equal(result.execution.status, 'verified')
   assert.equal(result.execution.reply.mode, 'model')
-  assert.equal(finalReply(result), '10月1日到10月7日已按假期处理，课表清空；任务和校庆典礼都保留')
+  assert.equal(finalReply(result), '10月1日到10月7日已按假期处理，课程移除，空档可安排；任务和校庆典礼都保留')
   assert.deepEqual(result.execution.failures, [])
   assert.deepEqual(result.execution.steps.map(step => [step.name, step.status]),
     [['read_planner', 'completed'], ['set_calendar_exception', 'committed']])
   assert.equal(result.operations.length, 1)
   const receipt = result.operations[0]
   assert.equal(receipt.kind, 'planner')
-  assert.equal(receipt.summary, '2026-10-01 至 2026-10-07 假期，常规课表已清空')
+  assert.equal(receipt.summary, '2026-10-01 至 2026-10-07 假期，常规课程已移除')
   assert.deepEqual(receipt.requestedActions, [{ type: 'set-day-exception', date: START, endDate: END, kind: 'holiday' }])
   assert.equal(receipt.undoable, true)
   assert.equal(receipt.undoneAt, null)
@@ -100,11 +100,14 @@ test('a holiday span is applied through the assistant chat and reported in its e
   assert.equal(state.revision, before.revision + 1)
   assert.deepEqual(Object.keys(state.dayExceptions).sort(), SPAN)
   for (const date of SPAN) {
-    assert.deepEqual(state.dayExceptions[date], { date, kind: 'holiday' })
-    // A cancelled timetable never erases a single-day event, which still shows.
-    assert.deepEqual(slots(routinesForDay(state, date)), date === '2026-10-03' ? [['15:00', '16:00', '校庆典礼']] : [])
+    assert.equal(state.dayExceptions[date].kind, 'holiday')
+    assert.deepEqual(state.dayExceptions[date].routines.map(row => row.kind), ['available'])
+    assert.deepEqual(slots(routinesForDay(state, date)), date === '2026-10-03'
+      ? [['09:00', '22:00', '周末可安排时间'], ['15:00', '16:00', '校庆典礼']]
+      : [['09:00', '22:00', '周末可安排时间']])
   }
-  assert.equal(dayCapacity(state, f.db.listTasks(), START, NOW).totalMin, 0)
+  assert.equal(dayCapacity(state, f.db.listTasks(), START, NOW).totalMin, 780)
+  assert.equal(dayCapacity(state, f.db.listTasks(), '2026-10-03', NOW).freeMin, 690)
   // The holiday clears the timetable, not the user's own facts.
   assert.deepEqual(state.blocks, before.blocks)
   assert.deepEqual(state.routines, before.routines)
@@ -118,7 +121,7 @@ test('a restored span brings the weekly timetable back and blocks replaying the 
   const f = fixture(t), weekly = f.db.getPlanner()
   f.script.push(readSpan(), request => exceptionCall('holiday', contextReceipt(request).revision, HOLIDAY_TEXT), answer('假期已记下'))
   const holiday = await f.chat(input(HOLIDAY_TEXT))
-  assert.deepEqual(routinesForDay(f.db.getPlanner(), START), [])
+  assert.deepEqual(slots(routinesForDay(f.db.getPlanner(), START)), [['09:00', '22:00', '周末可安排时间']])
   f.script.push(readSpan(), request => exceptionCall('restored', contextReceipt(request).revision, RESTORE_TEXT),
     answer('10月1日到10月7日已恢复原课表'))
   const restored = await f.chat(input(RESTORE_TEXT))
@@ -142,8 +145,8 @@ test('a restored span brings the weekly timetable back and blocks replaying the 
   f.db.undoOperation(receipt.id)
   const undone = f.db.getPlanner()
   assert.equal(undone.revision, state.revision + 1)
-  for (const date of SPAN) assert.deepEqual(undone.dayExceptions[date], { date, kind: 'holiday' })
-  assert.deepEqual(routinesForDay(undone, START), [])
+  for (const date of SPAN) assert.equal(undone.dayExceptions[date].kind, 'holiday')
+  assert.deepEqual(slots(routinesForDay(undone, START)), [['09:00', '22:00', '周末可安排时间']])
 })
 
 test('replaying a completed request or resuming an interrupted one never writes the calendar twice', async t => {
@@ -241,7 +244,7 @@ test('exporting and re-importing a backup keeps the exception receipt auditable 
   assert.equal(f.db.importData(backup).restored, true)
   const state = f.db.getPlanner()
   assert.deepEqual(Object.keys(state.dayExceptions).sort(), SPAN)
-  assert.deepEqual(routinesForDay(state, START), [])
+  assert.deepEqual(slots(routinesForDay(state, START)), [['09:00', '22:00', '周末可安排时间']])
   assert.deepEqual(state.dayEvents, [EVENT])
 
   // The receipt survives as read-only history that still matches what was written.

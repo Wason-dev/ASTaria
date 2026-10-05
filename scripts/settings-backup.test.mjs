@@ -12,7 +12,7 @@ test('preferences persist on the local database, validate values and reject stal
     assert.deepEqual(savePreferences(db, { expected: initial, value: next }), next)
     assert.deepEqual(getPreferences(db), next)
     next.render.profile = 'economy'
-    assert.deepEqual(savePreferences(db, { expected: getPreferences(db), value: next }).render, { profile: 'economy' })
+    assert.deepEqual(savePreferences(db, { expected: getPreferences(db), value: next }).render, { profile: 'economy', quality: 'auto', glass: 'auto' })
     assert.equal(getPreferences(db).render.profile, 'economy')
     assert.throws(() => savePreferences(db, { expected: initial, value: initial }), /其他窗口/)
     for (const mutate of [p => { p.focus.focusMin = 0 }, p => { p.effect.style = 'unknown' }, p => { p.grid = 'false' }, p => { p.notifications.quietStart = '25:00' }, p => { p.assistant.unrecognized = true }]) {
@@ -29,7 +29,7 @@ test('preferences written before render profiles gain the full visual default', 
     const legacy = structuredClone(getPreferences(db))
     delete legacy.render
     db.setPreference('app', legacy)
-    assert.deepEqual(getPreferences(db).render, { profile: 'full' })
+    assert.deepEqual(getPreferences(db).render, { profile: 'full', quality: 'auto', glass: 'auto' })
   } finally { db.close() }
 })
 
@@ -78,7 +78,7 @@ test('legacy rest profile migrates to economy and remains editable using either 
         const legacy = { ...getPreferences(db), render: { profile: 'rest' } }
         db.setPreference('app', legacy)
         const migrated = getPreferences(db)
-        assert.deepEqual(migrated.render, { profile: 'economy' })
+        assert.deepEqual(migrated.render, { profile: 'economy', quality: 'low', glass: 'auto' })
         const expected = useLegacyExpected ? legacy : migrated
         const saved = savePreferences(db, { expected, value: { ...migrated, render: { profile } } })
         assert.equal(saved.render.profile, profile)

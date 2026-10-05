@@ -6,7 +6,7 @@
 
 `0.1.0-beta.10`（tag `v0.1.0-beta.10`）在 GitHub 的展示名称为 **BetaX**。主发布为 macOS 13+ Apple Silicon（arm64）的 ad-hoc 包；同一 Release 另提供 Windows x64 试验版（`-setup.exe` 与 `-portable.zip`）。下面列出本版已实现的能力与仍未验收的边界。
 
-- **Windows x64**：复用本机服务与 SQLite，数据保存在 `%APPDATA%\ASTaria`，API Key 使用系统凭据保护（DPAPI）；Release 提供 `setup.exe`（NSIS）与便携 ZIP 两个试验版资产。已在 Windows 10 x64（19044）真实交互会话核对 Electron、React、API、SQLite、WebGL2 与 DPAPI，本版合并定向测试共 123 项通过（其中 30 项是本地模型协议测试，同一批测试不重复计算），并有 Mac → Windows 10 → Mac 加密操作往返通过。candidate `setup.exe` 已在隔离中文路径目录真实安装，安装后交互桌面 smoke、DPAPI、原生窗口与 8 组滚动条检查通过；被占用 EXE 上的安装与卸载均以退出码 2 失败且不改动文件；卸载删除程序、快捷方式与卸载注册项并保留无关用户文件，安装测试同时证明真实 AppData 未被改动。仍未验收：Windows 11、原地升级、睡眠恢复、更广 DPI 与多屏（只测过 DPR 1.5 的一种配置）、长期功耗与 Windows 原生通知。
+- **Windows x64**：复用本机服务与 SQLite，数据保存在 `%APPDATA%\ASTaria`，API Key 使用系统凭据保护（DPAPI）；Release 提供 `setup.exe`（NSIS）与便携 ZIP 两个试验版资产。已在 Windows 10 x64（19044）真实交互会话核对 Electron、React、API、SQLite、WebGL2 与 DPAPI，本版合并定向测试共 123 项通过（其中 30 项是本地模型协议测试，同一批测试不重复计算），并有 Mac → Windows 10 → Mac 加密操作往返通过。最终发布 `setup.exe` 已在隔离中文路径目录真实安装，安装后交互桌面 smoke、DPAPI、原生窗口与 8 组滚动条检查通过；被占用 EXE 上的安装与卸载均以退出码 2 失败且不改动文件；卸载删除程序、快捷方式与卸载注册项并保留无关用户文件，安装测试同时证明真实 AppData 未被改动。仍未验收：Windows 11、原地升级、睡眠恢复、更广 DPI 与多屏（只测过 DPR 1.5 的一种配置）、长期功耗与 Windows 原生通知。
 - **共享文件夹**：用户选择普通目录、云盘本地同步目录或 NAS 挂载目录；每台设备只写自己的加密操作文件，保留自己的本机 SQLite。界面显示目录不可用、只读、暂停、未落地、冲突和待处理原因；服务提供者只能搬运密文文件，不能把活跃 SQLite 直接共享。
 - **Syncthing**：用户先自行安装并共享目录（需要 `.stfolder` 标记），再在 ASTaria 选择该目录。它与共享文件夹使用同一套操作格式、校验、解密、幂等和冲突流程；检测到 Syncthing 或目录存在不代表操作已经应用。ASTaria 不自动安装 Syncthing，也不修改防火墙或配对设置；实际跨机传送尚未验收。
 - **加密操作日志**：AES-256-GCM、每设备递增序号、原子文件、事务 outbox、重复操作幂等、缺序等待和删除 tombstone。同字段离线冲突需用户确认；安排须在接收设备最新日程上重新校验，锁定安排不可静默覆盖。聊天、记忆、思考、API Key 和本地模型路径不属于同步内容。
@@ -197,7 +197,7 @@ DMG 根目录只有 App、指向 `/Applications` 的 Applications 快捷方式�
 
 ### Windows x64 试验版（随 GitHub Release 提供）
 
-`scripts/package-windows.mjs` 产出 `ASTaria-0.1.0-beta.10-win-x64/`，Release 上传 `ASTaria-0.1.0-beta.10-win-x64-setup.exe`（NSIS 安装程序）与 `ASTaria-0.1.0-beta.10-win-x64-portable.zip`：需要自行准备解压好的 Electron win32-x64 运行时；NSIS 需要额外提供 `makensis` 才编译，未提供时只生成 `.nsi` 与便携 ZIP。已核对：Windows 10 x64（19044）真实交互会话中的 Electron 启动、React 界面、本机 API、SQLite、WebGL2 与 DPAPI 凭据保护；本版合并定向测试共 123 项通过，其中包含 30 项本地模型协议测试（同批测试，不重复计算）；Mac → Windows 10 → Mac 的中文任务、假期与完成状态加密操作往返通过。安装与卸载已用 candidate `setup.exe` 在隔离中文路径目录实测：安装成功，安装后交互桌面 smoke、DPAPI、原生窗口与 8 组滚动条检查通过；被占用 EXE 上的安装与卸载均退出码 2 且未修改文件；卸载删除程序、快捷方式与卸载注册项，保留无关用户文件，且安装测试证明真实 AppData 未变。仍未验收：Windows 11、原地升级、睡眠恢复、更广 DPI 与多屏（仅 DPR 1.5 的一种配置）、长期功耗与 Windows 原生通知；这些结论不等同最终发布包验证。两个资产都是试验版，不作为正式 Windows 发行版。
+`scripts/package-windows.mjs` 产出 `ASTaria-0.1.0-beta.10-win-x64/`，Release 上传 `ASTaria-0.1.0-beta.10-win-x64-setup.exe`（NSIS 安装程序）与 `ASTaria-0.1.0-beta.10-win-x64-portable.zip`：需要自行准备解压好的 Electron win32-x64 运行时；NSIS 需要额外提供 `makensis` 才编译，未提供时只生成 `.nsi` 与便携 ZIP。已核对：Windows 10 x64（19044）真实交互会话中的 Electron 启动、React 界面、本机 API、SQLite、WebGL2 与 DPAPI 凭据保护；本版合并定向测试共 123 项通过，其中包含 30 项本地模型协议测试（同批测试，不重复计算）；Mac → Windows 10 → Mac 的中文任务、假期与完成状态加密操作往返通过。安装与卸载已用最终发布 `setup.exe` 在隔离中文路径目录实测：安装成功，安装后交互桌面 smoke、DPAPI、原生窗口与 8 组滚动条检查通过；被占用 EXE 上的安装与卸载均退出码 2 且未修改文件；卸载删除程序、快捷方式与卸载注册项，保留无关用户文件，且安装测试证明真实 AppData 未变。仍未验收：Windows 11、原地升级、睡眠恢复、更广 DPI 与多屏（仅 DPR 1.5 的一种配置）、长期功耗与 Windows 原生通知。两个资产都是试验版，不作为正式 Windows 发行版。
 
 Windows 本地模型复用回环 HTTP 协议：需用户先安装并打开 Ollama，ASTaria 才能请求下载受支持模型；也可连接已有兼容服务。上述 30 项本地模型协议测试已计入本版 123 项合并定向测试，不另外累加；本次按用户要求未下载模型，真实下载、GPU/CPU 推理与工具调用未验收。
 

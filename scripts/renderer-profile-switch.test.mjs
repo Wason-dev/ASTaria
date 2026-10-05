@@ -36,11 +36,27 @@ test('a real frame budget or quality change still resets scheduling and applies 
   assert.equal(e.state.targetFps,120)
   e.calls.length=0;e.set('smooth120','workspace','ultra')
   assert.deepEqual(e.calls,['reset','ultra','cancel','request','publish'])
-  assert.equal(e.state.targetFps,120)
+  assert.equal(e.state.targetFps,60)
 })
 
 test('initial setup applies its profile even when defaults already match',()=>{
   const e=engine();e.state.profileInitialized=false
   e.set('full','home','auto')
   assert.deepEqual(e.calls,['reset','ultra','cancel','request','publish'])
+})
+
+test('round trips preserve the chosen FPS tier and manual quality while applying the workspace power cap',()=>{
+  for (const [profile,fps] of [['economy',30],['balanced',45],['full',60],['smooth90',90],['smooth120',120]]) {
+    const e=engine()
+    e.set(profile,'home','ultra')
+    assert.equal(e.state.targetFps,fps)
+    e.set(profile,'workspace','ultra')
+    assert.equal(e.state.targetFps,Math.min(fps,60))
+    assert.equal(e.state.renderProfile,profile)
+    assert.equal(e.state.requestedQuality,'ultra')
+    e.set(profile,'home','ultra')
+    assert.equal(e.state.targetFps,fps)
+    assert.equal(e.state.renderProfile,profile)
+    assert.equal(e.state.requestedQuality,'ultra')
+  }
 })

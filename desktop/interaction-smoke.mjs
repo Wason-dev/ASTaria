@@ -78,8 +78,11 @@ export async function measureDesktopInteractions(window, directory) {
         const raw=await evaluate(`(()=>{const p=window.__interactionProbe;p.active=false;return {frames:p.frames,raf:p.raf,longTasks:p.longTasks,encodes:p.encodes,gpu:p.gpu,errors:p.errors,elapsed:performance.now()-p.start,stats:window.__ASTARIA_P0__.getSnapshot(),camera:window.__ASTARIA_P0__.getCameraSnapshot(),morph:document.querySelector('.home-morph').getAttribute('style')}})()`)
         if(cpuProfile){const result=await devtools.sendCommand('Profiler.stop');await writeFile(join(directory,`${round}-${theme}-${glass}-${optics}-${profile}-${name}.cpuprofile`),JSON.stringify(result.profile))}
         const after=await metrics()
+        const expectedTarget = profile === 'smooth120' && !['home-workbench','workbench-free-time'].includes(name) ? 120 : 60
+        if(raw.stats.targetFps!==expectedTarget||raw.stats.renderProfile!==profile)throw Error(`Power policy regression: ${name}, selected ${profile}, target ${raw.stats.targetFps}, expected ${expectedTarget}`)
         const row={round,name,theme,glass,optics,profile,elapsed:raw.elapsed,firstFrameMs:Math.max(0,raw.frames[0]?.at??raw.elapsed),render:distribution(gaps(raw.frames.map(v=>v.at))),firstSecond:distribution(gaps(raw.frames.filter(v=>v.at<=1000).map(v=>v.at))),raf:distribution(gaps(raw.raf)),cpu:distribution(raw.frames.map(v=>v.cpu)),gpu:distribution(raw.gpu.map(v=>v.ms)),longTasks:raw.longTasks,encodeCount:raw.encodes.length,encodeMs:raw.encodes.reduce((a,b)=>a+b.ms,0),metrics:Object.fromEntries(['LayoutDuration','RecalcStyleDuration','ScriptDuration','TaskDuration','LayoutCount','RecalcStyleCount'].map(key=>[key,after[key]-before[key]])),quality:raw.stats.quality,width:raw.stats.width,height:raw.stats.height,errors:raw.errors}
         if(raw.stats.quality!=='ultra'||raw.errors.length||raw.frames.length<2)throw Error(`Interaction acceptance failed: ${JSON.stringify(row)}`)
+        row.targetFps=raw.stats.targetFps
         measurements.push(row)
         await writeFile(join(directory,`${round}-${theme}-${glass}-${optics}-${profile}-${name}.json`),JSON.stringify(raw))
         console.log('ASTARIA_INTERACTION_SAMPLE',JSON.stringify(row))

@@ -26,11 +26,12 @@ export function normalizeRenderProfile(value: unknown): RenderProfile {
   return typeof value === 'string' && Object.hasOwn(RENDER_PROFILES, value) ? value as RenderProfile : 'full'
 }
 
-export function resolveRenderProfile(profile: RenderProfile, _scene: RenderScene): RenderProfileConfig {
+export function resolveRenderProfile(profile: RenderProfile, scene: RenderScene): RenderProfileConfig {
   const config = RENDER_PROFILES[normalizeRenderProfile(profile)]
-  // An explicit 90/120 FPS choice applies to the entire continuous scene.
-  // Crossing into a workspace must not silently halve its animation cadence.
-  return { ...config }
+  // Workspaces intentionally cap the ambient scene at 60 FPS to save power.
+  // Homepage/chat keep the selected rate; lower profiles are never upgraded.
+  // Product contract and rationale: docs/POWER_AND_RENDERING_DECISIONS.md P01.
+  return { ...config, frameRate: scene === 'home' ? config.frameRate : Math.min(config.frameRate, 60) }
 }
 
 /** Keep a stable cadence across display refresh rates instead of waiting a full

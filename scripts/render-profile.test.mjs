@@ -21,10 +21,10 @@ test('render profiles keep the full visual stack while reducing the render budge
   }
 })
 
-test('every page preserves the selected frame rate and quality', () => {
+test('workspaces intentionally cap ambient rendering at 60 for power saving without raising lower profiles or reducing quality', () => {
   for (const [profile, config] of Object.entries(RENDER_PROFILES)) {
     assert.deepEqual(resolveRenderProfile(profile, 'home'), config)
-    assert.deepEqual(resolveRenderProfile(profile, 'workspace'), config)
+    assert.deepEqual(resolveRenderProfile(profile, 'workspace'), { ...config, frameRate: Math.min(config.frameRate, 60) })
   }
   assert.equal(resolveRenderProfile('smooth120', 'home').frameRate, 120)
   assert.equal(resolveRenderProfile('smooth90', 'home').frameRate, 90)

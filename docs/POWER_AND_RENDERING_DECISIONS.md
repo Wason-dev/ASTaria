@@ -20,7 +20,7 @@
 - 依据当前页面选择预算，不检测电池余量或是否插电；接电时也保留工作区上限。不能擅自改成仅电池模式生效。
 - 切页不改写保存的帧率选择，不将 30/45 提高到 60，不因此降低独立选定的手动画质。
 - 当前页面映射在 `src/home/HomeWorkspace.tsx` 的 `onRenderProfile` effect；上限在 `src/prototype/renderProfile.ts::resolveRenderProfile`；切换在 `BlackHoleRenderer.ts::setRenderProfile`。
-- 验证：`scripts/render-profile.test.mjs`、`scripts/renderer-profile-switch.test.mjs`、`scripts/verify-response-settings.mjs`；原生交互诊断同时核对选定档位和有效 `targetFps`。
+- 验证：`scripts/render-profile.test.mjs`、`scripts/renderer-profile-switch.test.mjs`、`scripts/verify-response-settings.mjs --render-policy-only`；原生交互诊断同时核对选定档位和有效 `targetFps`。
 
 Beta11 本地提交 `ba3ec80` 曾误将取消上限写作优化；已按用户说明撤销这一改动。该中间构建不能作为最终安装包，工作区解除上限取得的数字不得写入性能收益。真正需要修复的是目标预算内的误跳帧、长帧、无用工作与切页停顿。
 

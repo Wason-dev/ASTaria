@@ -11,6 +11,7 @@ const output = process.env.RESPONSE_QA_OUTPUT ?? '/tmp/astaria-response-settings
 const base = process.env.RESPONSE_QA_URL ?? 'http://127.0.0.1:5179/'
 const port = Number(process.env.RESPONSE_QA_PORT ?? 9250)
 const debug = `http://127.0.0.1:${port}`
+const renderPolicyOnly = process.argv.includes('--render-policy-only')
 const db = createDatabase(':memory:')
 db.createTask({title:'独立测试物理报告',due:'2026-09-22',estimateMin:45,inbox:false})
 let providerMode='reply', releaseProvider, providerCalls=0, chrome, ws, failure
@@ -87,16 +88,28 @@ try {
     await send('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false})
     for (const section of ['通用','析熙','时间安排','通知','外观与动画','数据']) {
       await tab(section)
-      await check(`${width}×${height} ${section}: all settings fit without scrolling`, `(()=>{const s=document.querySelector('.xixi-settings-scroll'),f=document.querySelector('.xixi-settings-feedback').getBoundingClientRect();return s.scrollHeight<=s.clientHeight+1&&f.bottom<=innerHeight&&s.scrollWidth<=s.clientWidth+1})()`)
+      // Quality and glass controls added in BetaX can require outer-page
+      // scrolling. Verify reachability and horizontal fit, not the old height.
+      await check(`${width}×${height} ${section}: settings and feedback remain reachable in the outer scroller`, `(()=>{
+        const s=document.querySelector('.xixi-settings-scroll'),c=document.querySelector('.xixi-settings-content');
+        const previous=s.scrollTop;s.scrollTop=s.scrollHeight;
+        const f=document.querySelector('.xixi-settings-feedback').getBoundingClientRect(),r=s.getBoundingClientRect();
+        const pass=f.top>=r.top&&f.bottom<=r.bottom+1&&s.scrollWidth<=s.clientWidth+1&&c.scrollWidth<=c.clientWidth+1&&getComputedStyle(c).overflowY==='visible';
+        s.scrollTop=previous;return pass;
+      })()`)
     }
     await tab('外观与动画');await shot(`fit-${width}x${height}`)
   }
   await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false})
-  await check('exactly five render tiers in requested order',`JSON.stringify([...document.querySelectorAll('.xixi-render-options strong')].map(e=>e.textContent))===JSON.stringify(['满特效 120','满特效 90','满特效 60','轻特效 45','低特效 30'])`)
+  await check('exactly five FPS choices in requested order',`JSON.stringify([...document.querySelectorAll('.xixi-render-options strong')].map(e=>e.textContent))===JSON.stringify(['120 FPS','90 FPS','60 FPS','45 FPS','30 FPS'])`)
+  await check('recommended quality starts at 60 and owns the FPS choice',"document.querySelector('select[aria-label=黑洞画质]').value==='auto'&&[...document.querySelectorAll('.xixi-render-options button')].every(e=>e.disabled)&&window.__ASTARIA_P0__.getSnapshot().targetFps===60")
+  await field('select[aria-label="黑洞画质"]','ultra')
+  await wait("!document.querySelector('.xixi-render-options button').disabled&&window.__ASTARIA_P0__.getSnapshot().quality==='ultra'")
   for (const [index,profile,rate] of [[1,'smooth120',60],[2,'smooth90',60],[3,'full',60],[4,'balanced',45],[5,'economy',30]]) {
     await click(`.xixi-render-options button:nth-child(${index})`)
     await wait(`window.__ASTARIA_P0__.getSnapshot().targetFps===${rate}&&window.__ASTARIA_P0__.getSnapshot().renderProfile==='${profile}'`)
     await check(`${profile}: setting persists and one choice stays selected`,getPreferences(db).render.profile===profile&&await ev(`document.querySelectorAll('.xixi-render-options button[aria-pressed=true]').length===1`))
+    await check(`${profile}: FPS choice preserves manual ultra quality`,getPreferences(db).render.quality==='ultra'&&await ev("window.__ASTARIA_P0__.getSnapshot().quality==='ultra'"))
     if(rate<60) {
       await delay(500)
       const before=await ev('({frames:window.__ASTARIA_P0__.getSnapshot().renderedFrames,time:performance.now()})')
@@ -112,7 +125,7 @@ try {
   await check('120 profile gives homepage a 120 FPS target',"window.__ASTARIA_P0__.getSnapshot().renderScene==='home'")
   await click('.home-launch');await wait('!window.__ASTARIA_P0__.getSnapshot().cameraTransition')
   await check('home chat keeps 120 FPS target',"window.__ASTARIA_P0__.getSnapshot().targetFps===120")
-  for (const destination of ['工作台','日程','平行宇宙','首页']) {
+  for (const destination of ['工作台','日程','余时','首页']) {
     await click('.home-brand');await textClick('#home-menu button',destination)
     await wait(`window.__ASTARIA_P0__.getSnapshot().targetFps===${destination==='首页'?120:60}`)
     await check(`${destination}: page-aware FPS switches without changing selected tier`,"window.__ASTARIA_P0__.getSnapshot().renderProfile==='smooth120'")
@@ -120,6 +133,9 @@ try {
   }
   await openSettings();await tab('外观与动画')
   await check('render selection survives leaving and reopening settings',"document.querySelector('.xixi-render-options button:first-child').getAttribute('aria-pressed')==='true'")
+  if (renderPolicyOnly) {
+    await close()
+  } else {
   await click('.xixi-render-options button:nth-child(3)')
   for(const name of ['通用','析熙','时间安排','通知','外观与动画','数据']){
     await tab(name)
@@ -138,7 +154,7 @@ try {
     await check(`${style} persists to local service`,getPreferences(db).effect.style===style)
   }
   await click('[aria-label="黑洞回应特效"] button:nth-child(2)')
-  await field('select[aria-label="光效强度"]','vivid');await field('select[aria-label="动态偏好"]','full')
+  await field('select[aria-label="特效强度"]','vivid');await field('select[aria-label="动态偏好"]','full')
   await check('intensity and motion persist',getPreferences(db).effect.intensity==='vivid'&&getPreferences(db).effect.motion==='full')
   await field('select[aria-label="动态偏好"]','reduced');await textClick('.xixi-settings-actions button','预览思考与回复')
   await check('manual reduced motion preview has a static response clock',"window.__ASTARIA_P0__.getSnapshot().responseEffect.reducedMotion&&window.__ASTARIA_P0__.getSnapshot().responseEffect.time===0")
@@ -160,8 +176,8 @@ try {
   await probe('remote preference refresh updates renderer while settings is open',"window.__ASTARIA_P0__.getSnapshot().responseEffect.settings.style==='stardust'")
   await probe('remote preference refresh updates open settings selected style',"document.querySelector('[aria-label=\"黑洞回应特效\"] button:nth-child(3)').getAttribute('aria-pressed')==='true'")
   const polled=getPreferences(db);polled.effect.intensity='standard';db.setPreference('app',polled)
-  await wait("window.__ASTARIA_P0__.getSnapshot().responseEffect.settings.intensity==='standard'&&document.querySelector('select[aria-label=光效强度]').value==='standard'")
-  await check('periodic polling updates renderer and settings without visibility events',"document.querySelector('select[aria-label=光效强度]').value==='standard'")
+  await wait("window.__ASTARIA_P0__.getSnapshot().responseEffect.settings.intensity==='standard'&&document.querySelector('select[aria-label=特效强度]').value==='standard'")
+  await check('periodic polling updates renderer and settings without visibility events',"document.querySelector('select[aria-label=特效强度]').value==='standard'")
   await close();await check('closing settings uses refreshed stored effect',"window.__ASTARIA_P0__.getSnapshot().responseEffect.settings.style==='stardust'")
   await check('return restores homepage navigation',"document.querySelector('.home-workspace').dataset.page==='home'")
   await click('.home-brand');await textClick('#home-menu button','工作台');await wait("document.querySelector('.home-workspace').dataset.page==='workbench'")
@@ -218,6 +234,7 @@ try {
   await textClick('.xixi-settings-actions button','预览思考与回复')
   await key('Escape');await delay(300);await check('Escape first returns from preview to its settings page',"!!document.querySelector('.xixi-settings')&&document.querySelector('.xixi-settings').dataset.previewing==='false'");await key('Escape');await wait('!document.querySelector(".xixi-settings")');await delay(3400)
   await check('Escape on mobile releases preview and restores focus',"window.__ASTARIA_P0__.getSnapshot().responseEffect.phase==='idle'&&document.activeElement!==document.body")
+  }
   await check('no browser runtime errors',errors.length===0)
 }catch(error){failure=String(error);console.error(error);process.exitCode=1}
 finally{releaseProvider?.();await writeFile(`${output}/results.json`,JSON.stringify({checks,errors,requests,providerCalls,failure},null,2));ws?.close();chrome?.kill('SIGTERM');db.close();if(checks.some(c=>!c.pass))process.exitCode=1;console.log(JSON.stringify({passed:checks.filter(c=>c.pass).length,failed:checks.filter(c=>!c.pass),failure}))}

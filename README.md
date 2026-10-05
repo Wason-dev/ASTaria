@@ -4,7 +4,7 @@
 
 ASTaria 是一款本机优先的个人时间与事项应用。和析熙聊作业、计划或心愿，把任务放进课程和日常活动之间的真实空档，再从工作台开始专注。
 
-当前本地技术版本：**Beta11 · 0.1.0-beta.11**（本地候选，尚未推送 GitHub、未上传 Release，验证进行中）。公开可下载的最新版仍是 **BetaX · 0.1.0-beta.10**：macOS 13+ Apple Silicon（arm64）内测版，含 Windows x64 试验版和两种无需自建服务器的加密目录同步。Windows 10 已实测，Windows 11 尚未验收。
+当前本地技术版本：**Beta11 · 0.1.0-beta.11**（本地包验收已完成，等待用户体验反馈；未推送 GitHub、未上传 Release）。公开可下载的最新版仍是 **BetaX · 0.1.0-beta.10**：macOS 13+ Apple Silicon（arm64）内测版，含 Windows x64 试验版和两种无需自建服务器的加密目录同步。Windows 10 已实测，Windows 11 尚未验收；这不代表所有功能或所有平台已完成。
 
 [下载最新版本](https://github.com/Wason-dev/ASTaria/releases) · [安装说明](docs/INSTALL.md) · [更新记录](CHANGELOG.md) · [功能详情](docs/FEATURES.md) · [界面与交互规范](docs/UI_DESIGN_SYSTEM.md)
 
@@ -98,8 +98,9 @@ CI 自动执行源码测试、桌面网页构建、许可清单和版本文档�
 - 聊天展开减少重复几何更新和相同位移贴图的 PNG 编码。
 - 移除无效玻璃合成与不产生可见效果的 GPU 工作；退出后的隐藏工作区跳过样式和布局，返回时保留状态。
 - 两端分别记录动态帧间隔，并核对实际 GPU 像素和深浅主题/玻璃截图；不再仅用静置后的平均 FPS 判断流畅度。
+- 两端本地包已通过本轮安装/启动与内容校验；源码测试 1,494 项、Windows 专项 63 项、浏览器帧率设置专项 52 项通过。构建来源和逐项验收见 Beta11 说明。
 
-具体改动、验证和未完成项见 [Beta11 说明](docs/RELEASE_NOTES_v0.1.0-beta.11.md)与[性能记录](docs/PERFORMANCE.md)。必须保留的取舍见[省电与渲染决策记录](docs/POWER_AND_RENDERING_DECISIONS.md)，后续接手前请读 [Beta11 交接](docs/BETA11_HANDOFF.md)。本轮只提供本地测试包，尚未推送 GitHub 或上传 Release。
+具体改动、验证和未完成项见 [Beta11 说明](docs/RELEASE_NOTES_v0.1.0-beta.11.md)与[性能记录](docs/PERFORMANCE.md)。必须保留的取舍见[省电与渲染决策记录](docs/POWER_AND_RENDERING_DECISIONS.md)，后续接手前请读 [Beta11 交接](docs/BETA11_HANDOFF.md)。本地包验收完成不等于所有功能与平台完成：Windows 首次展开聊天的偶发长帧、手动精细折射的高开销、Windows 11、更多 GPU/DPI/多屏、休眠恢复、长期功耗、真实模型下载与 Syncthing 实际跨机传送仍未解决或未验收。本轮只提供本地测试包，尚未推送 GitHub 或上传 Release。
 
 ## 许可
 

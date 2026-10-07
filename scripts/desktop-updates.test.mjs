@@ -228,6 +228,57 @@ test('selectRelease 只接受与设备架构、tag、状态和大小完全匹配
   assert.equal(selectRelease([good.release], { ...stable, platform: 'win32' }).downloadUrl, null)
 })
 
+test('Windows x64 只选择同版本 setup.exe 与配套发布清单', () => {
+  const version = '0.1.0-beta.12', tag = `v${version}`, stem = `ASTaria-${version}-win-x64`
+  const setup = `${stem}-setup.exe`, manifest = `${stem}.manifest.json`
+  const release = { tag_name: tag, prerelease: true, assets: [setup, manifest].map(name => ({
+    name, state: 'uploaded', size: name === setup ? 8192 : 900, browser_download_url: downloadUrl(tag, name),
+  })) }
+  const current = { version: '0.1.0-beta.11', arch: 'x64', platform: 'win32' }
+  const picked = selectRelease([release], current)
+  assert.equal(picked.downloadUrl, downloadUrl(tag, setup))
+  assert.equal(picked.manifestUrl, downloadUrl(tag, manifest))
+  assert.equal(picked.assetName, setup)
+  assert.equal(selectRelease([release], { ...current, arch: 'arm64' }).downloadUrl, null)
+  const signed = signTestManifest({ schemaVersion: 1, name: 'ASTaria', bundleId: 'dev.wason.ASTaria',
+    version, platform: 'win32', arch: 'x64', setup, sizeBytes: 8192, sha256: 'd'.repeat(64),
+    buildInfo: { version, builtAt: '2026-10-05T00:00:00Z', source: { commit: RELEASE_COMMIT, dirty: false } } })
+  assert.equal(validateManifest(signed, picked, current, testReleaseKeys).version, version)
+  assert.throws(() => validateManifest(signTestManifest({ ...signed, setup: 'other.exe' }), picked, current, testReleaseKeys), /Invalid build manifest/)
+})
+
+test('Windows 更新只把验签且哈希匹配的 EXE 交给安装器；便携版不可自动安装', async t => {
+  const dir = await mkdtemp(join(tmpdir(), 'astaria-windows-updates-'))
+  t.after(() => rm(dir, { recursive: true, force: true }))
+  const version = '0.1.0-beta.12', tag = `v${version}`, stem = `ASTaria-${version}-win-x64`
+  const setup = `${stem}-setup.exe`, manifestName = `${stem}.manifest.json`, bytes = Buffer.from('windows setup fixture')
+  const sha256 = createHash('sha256').update(bytes).digest('hex')
+  const manifest = signTestManifest({ schemaVersion: 1, name: 'ASTaria', bundleId: 'dev.wason.ASTaria',
+    version, platform: 'win32', arch: 'x64', setup, sizeBytes: bytes.length, sha256,
+    buildInfo: { version, builtAt: '2026-10-05T00:00:00Z', source: { commit: RELEASE_COMMIT, dirty: false } } })
+  const releases = [{ tag_name: tag, prerelease: true, assets: [setup, manifestName].map(name => ({
+    name, state: 'uploaded', size: name === setup ? bytes.length : 900, browser_download_url: downloadUrl(tag, name),
+  })) }]
+  const fetcher = async url => url === RELEASE_API ? jsonResponse(200, releases)
+    : url === downloadUrl(tag, manifestName) ? jsonResponse(200, manifest)
+      : url === downloadUrl(tag, setup) ? new Response(bytes, { headers: { 'content-length': String(bytes.length) } })
+        : Promise.reject(new Error('Unexpected URL'))
+  const current = { version: '0.1.0-beta.11', platform: 'win32', arch: 'x64', builtAt: '2026-10-01T00:00:00Z', source: { commit: INSTALLED_COMMIT } }
+  const installed = []
+  const options = { current, fetcher, trustedKeys: testReleaseKeys, downloadDirectory: dir,
+    installer: async candidate => installed.push(candidate) }
+  const updates = createUpdateService(options)
+  assert.equal((await updates.check()).status, 'available')
+  await updates.download(); await updates.whenIdle()
+  assert.equal((await updates.getStatus()).canInstall, true)
+  await updates.install(); await updates.whenIdle()
+  assert.equal(installed.length, 1)
+  assert.equal(installed[0].path, join(dir, `${sha256}.exe`))
+  const portable = createUpdateService({ ...options, installable: false })
+  assert.equal((await portable.getStatus()).installable, false)
+  await assert.rejects(portable.install(), /便携版/u)
+})
+
 test('selectRelease 取满足条件的最高版本并裁剪发布说明', () => {
   const stable = { version: '1.0.0', arch: 'arm64', platform: 'darwin' }
   const older = buildRelease({ version: '1.0.1' })

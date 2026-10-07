@@ -60,8 +60,10 @@ export function GlassSurface({ width, height, radius, progress = 0, material, re
   const surface = useRef<HTMLSpanElement>(null)
   const lastGeometry = useRef('')
   const useBackdrop = (value: string) => {
-    surface.current?.style.setProperty('backdrop-filter', value)
-    surface.current?.style.setProperty('-webkit-backdrop-filter', value)
+    const style = surface.current?.style
+    if (!style) return
+    if (style.getPropertyValue('backdrop-filter') !== value) style.setProperty('backdrop-filter', value)
+    if (style.getPropertyValue('-webkit-backdrop-filter') !== value) style.setProperty('-webkit-backdrop-filter', value)
   }
   useImperativeHandle(geometryRef, () => ({ pause() {
     useBackdrop(glassBlurFilter(material?.blur ?? HOME_GLASS.blur))
@@ -81,7 +83,8 @@ export function GlassSurface({ width, height, radius, progress = 0, material, re
     }
     if (sampling) useBackdrop(svgBackdrop && edge.current?.getAttribute('href') ? `url("#${id}")` : glassBlurFilter(material?.blur ?? HOME_GLASS.blur))
     const transmission = material?.transmission ?? HOME_GLASS.pillTransmission + (HOME_GLASS.chatTransmission - HOME_GLASS.pillTransmission) * nextProgress
-    surface.current?.style.setProperty('--glass-tint', String(1 - transmission / 100))
+    const tint = String(1 - transmission / 100)
+    if (surface.current?.style.getPropertyValue('--glass-tint') !== tint) surface.current?.style.setProperty('--glass-tint', tint)
   } }), [sampling, svgBackdrop, material])
   useLayoutEffect(() => { lastGeometry.current = '' }, [sampling, svgBackdrop, width, height, radius])
   // Hidden retained pages can change size with the window or their data. They

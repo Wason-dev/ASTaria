@@ -36,6 +36,7 @@ import { BlackHoleEntry } from './BlackHoleEntry'
 import { FirstRunGuide } from './FirstRunGuide'
 import { ScenarioReceiptDialog } from '../xixi/ScenarioReceiptDialog'
 import { HOME_GLASS } from './glass'
+import { chatCameraProgress, chatInteractionPhase, CHAT_COLLAPSED_PROGRESS, CHAT_READY_PROGRESS } from './chatMotion'
 import './home.css'
 import './retained-pages.css'
 import './scrollbars.css'
@@ -166,7 +167,7 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
   const taskFromAgenda = useRef(false)
   const compact = layout.width < 748
   const animateSceneUI = useCallback((next: SceneCamera) => {
-    const amount = sceneUnavailable || cameraMissing ? Number(chatOpen) : Math.max(0, Math.min(1, (next.zoom - .7) / (2.05 - .7)))
+    const amount = sceneUnavailable || cameraMissing ? Number(chatOpen) : chatCameraProgress(next)
     const endWidth = Math.min(340, layout.width - (layout.width <= 600 ? 44 : 68))
     const endHeight = Math.max(180, Math.min(680, layout.height - 149))
     const startTop = layout.taskBottom + 12
@@ -186,8 +187,8 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
     if (launch.current) { launch.current.style.opacity = String(Math.max(0, 1 - amount * 4)); launch.current.style.visibility = amount > .35 ? 'hidden' : 'visible' }
     if (deck.current) { deck.current.style.opacity = String(Math.max(0, Math.min(1, (amount - .45) / .55))); deck.current.style.visibility = amount > .35 ? 'visible' : 'hidden' }
   }, [sceneUnavailable, cameraMissing, chatOpen, layout, compact])
-  const camera = useSceneCamera(readCamera, `${page}:${chatOpen}:${stringsOpen}`, animateSceneUI)
-  const progress = sceneUnavailable || cameraMissing ? Number(chatOpen) : Math.max(0, Math.min(1, (camera.zoom - .7) / (2.05 - .7)))
+  const camera = useSceneCamera(readCamera, `${page}:${chatOpen}:${stringsOpen}`, animateSceneUI, chatInteractionPhase)
+  const progress = sceneUnavailable || cameraMissing ? Number(chatOpen) : chatCameraProgress(camera)
 
   useEffect(() => {
     if (compact && document.activeElement?.closest('.home-agenda')) setInformationActive(true)
@@ -238,7 +239,7 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
     catch { setDraftWarning(draft ? '草稿暂未保存，离开页面前请复制' : '') }
   }, [draft, draftKey])
   useEffect(() => {
-    if (page !== 'home' || !focusAfterTransition.current || (!(sceneUnavailable || cameraMissing) && camera.cameraTransition) || (chatOpen ? progress < .99 : progress > .01)) return
+    if (page !== 'home' || !focusAfterTransition.current || (chatOpen ? progress < CHAT_READY_PROGRESS : progress > CHAT_COLLAPSED_PROGRESS)) return
     let frame = 0
     let attempts = 0
     const focus = () => {
@@ -251,7 +252,7 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
     }
     frame = requestAnimationFrame(focus)
     return () => cancelAnimationFrame(frame)
-  }, [page, chatOpen, camera.cameraTransition, progress, sceneUnavailable, cameraMissing])
+  }, [page, chatOpen, progress])
 
   const changeChat = (open: boolean) => {
     clearTimeout(menuTimer.current)
@@ -500,14 +501,14 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
       <div className="home-pane-track" style={{ width: endWidth * 2, transform: `translateX(${compact && informationActive ? -endWidth : 0}px)` }}>
       <HomeDeadlinePicker active={page === 'home' && chatOpen} conversationId={chat.conversation?.conversationId}
         onOpen={() => { if (compact) setInformationActive(true) }} onClose={() => setInformationActive(false)}>
-      <section id="home-xixi" className="home-xixi" aria-label="析熙" inert={!chatOpen || progress < .99 || (compact && informationActive)} aria-hidden={!chatOpen || (compact && informationActive)}>
+      <section id="home-xixi" className="home-xixi" aria-label="析熙" inert={!chatOpen || progress < CHAT_READY_PROGRESS || (compact && informationActive)} aria-hidden={!chatOpen || (compact && informationActive)}>
         <header><div className="home-chat-title">
           <button className="home-collapse" onClick={() => changeChat(false)} aria-label="收起析熙" title="收起析熙">
             <svg viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="6" /><path d="m5 5 4 4m0-4-4 4" /></svg>
           </button>
           <strong>析熙</strong>
         </div><div className="xixi-header-actions"><ConversationMenu chat={chat} />{compact && <button ref={informationToggle} className="home-information-toggle" onClick={() => setInformationActive(true)} aria-controls="home-agenda">日程 →</button>}</div></header>
-        <ConversationLog chat={chat} active={page === 'home' && chatOpen && progress >= .99 && (!compact || !informationActive)} onSettings={openSettings}
+        <ConversationLog chat={chat} active={page === 'home' && chatOpen && progress >= CHAT_READY_PROGRESS && (!compact || !informationActive)} onSettings={openSettings}
           context={{ page: 'home', ...(clarifyingWish ? { wishId: clarifyingWish.id } : {}), ...(refiningPlan ? { freeTimeGoalId: refiningPlan.id } : {}), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }} onSent={sent => setDraft(value => value.trim() === sent ? '' : value)} onRetracted={restoreDraft}>
           {receipts.map(task => <div className="home-receipt" key={task.id}><span>已记为事项</span><button onClick={() => openTask(task.id)}>{task.title}</button></div>)}
         </ConversationLog>
@@ -536,7 +537,7 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
         </form>
       </section>
       <HomeAgenda tasks={data.tasks} now={now} loading={data.loading} error={data.loadError}
-        active={page === 'home' && chatOpen && progress >= .99 && (!compact || informationActive)} compact={compact}
+        active={page === 'home' && chatOpen && progress >= CHAT_READY_PROGRESS && (!compact || informationActive)} compact={compact}
         onRetry={data.retry} onTask={openTask} onChat={() => {
           setInformationActive(false)
           requestAnimationFrame(() => informationToggle.current?.focus({ preventScroll: true }))

@@ -2,7 +2,7 @@
 
 本地技术版本 `0.1.0-beta.11`（展示名称 **Beta11**），本轮以本地测试包交付：macOS 13+ Apple Silicon（arm64）的 ad-hoc 签名包，未经 Apple 公证。下面的文件名与步骤对应当前本地 Beta11 交付。
 
-GitHub 上仍没有 Beta11，公开下载的最新版仍是 BetaX · `0.1.0-beta.10`；需要公开版请用 [Releases](https://github.com/Wason-dev/ASTaria/releases)。
+Beta11 源码已在 GitHub 开发分支，但尚无公开安装包；公开下载的最新版仍是 BetaX · `0.1.0-beta.10`；需要公开版请用 [Releases](https://github.com/Wason-dev/ASTaria/releases)。
 
 ## macOS 13+ · Apple Silicon
 
@@ -72,8 +72,16 @@ Windows 10 x64（19044）已用于本轮原生交互测试，涵盖 Electron、R
 WebGL2 和 DPAPI 凭据保护。最终包的安装与运行结果以 [Beta11 说明](RELEASE_NOTES_v0.1.0-beta.11.md)
 为准；不把历史版本的 123 项测试记录当成本版结果。
 
-未验收：Windows 11、原地升级、睡眠恢复、更多 DPI/多屏配置（目前仅覆盖 DPR 1.5）、长期功耗
-与 Windows 原生通知。更新前请导出备份并退出旧版。
+应用内更新（标准安装版）：安装在 `%LOCALAPPDATA%\Programs\ASTaria` 的标准安装版从 Beta11 起可在
+「设置 → 通用 → App 更新」检查、下载并校验（发布清单 Ed25519 签名与 SHA-256），然后退出 App、
+静默安装并重启；安装后会确认新版本启动成功，失败会尝试回退旧版本。自动检查默认开启，App 可见时
+最多每 6 小时一次，也可手动检查或关闭。便携版（portable.zip）与其它安装位置不会被应用内更新
+替换，只能手动更新：下载新包、解压到新目录后再运行。更新只替换安装目录，不覆盖
+`%APPDATA%\ASTaria` 用户数据。
+
+未验收：Windows 11、Windows 10 上真实的应用内自动升级与失败回退、睡眠恢复、更多 DPI/多屏配置
+（目前仅覆盖 DPR 1.5）、长期功耗与 Windows 原生通知。Windows 自动更新已在源码中实现并有自动化
+测试，但尚未在真实 Windows 上跑完整升级与回退，请勿当作已验收结果。更新前请导出备份并退出旧版。
 
 ```text
 ASTaria 0.1.0-beta.11 · Beta11 本地测试包 · Windows x64
@@ -82,14 +90,29 @@ ASTaria 0.1.0-beta.11 · Beta11 本地测试包 · Windows x64
    portable.zip：解压整个 ZIP，不要只移动单个 EXE，运行解压目录里的 ASTaria.exe。
 2. 数据保存在 %APPDATA%\ASTaria，不随 EXE 移动，安装与便携两种方式共用这份数据。
    安装写入 %LOCALAPPDATA%\Programs\ASTaria；卸载保留用户数据。
-3. 更新：先导出备份、退出 App，再运行新版本的 setup.exe，或把新包解压到新目录后再启动。
-4. 没有 Windows 自动更新，也没有退出 App 后的提醒。
-5. 在浏览器里运行源码不提供 DPAPI 和文件夹同步；这两项需要运行 Electron 包。
+3. 更新（标准安装版）：装在 %LOCALAPPDATA%\Programs\ASTaria 的版本从 Beta11 起可在
+   「设置 → 通用 → App 更新」检查、下载并校验（发布清单 Ed25519 签名与 SHA-256），
+   然后退出 App、静默安装并重启；安装后会确认新版本启动成功，失败会尝试回退旧版本。
+4. 更新（便携版）：portable.zip 只支持手动更新，把新包解压到新目录后再运行，不会被
+   应用内更新替换。
+5. 首次升级：从 BetaX（0.1.0-beta.10）升到 Beta11 必须手动运行新的 setup.exe，或解压
+   新的 portable ZIP——BetaX 的 Windows 试验版从未提供应用内更新。
+   本轮 Beta11 本地测试包不含 Windows 应用内更新，也请按上面的手动方式安装。
+6. 未实机验收：Windows 10 的真实应用内升级与失败回退、Windows 11。
+7. 提醒：Windows 上没有退出 App 后的提醒。
+8. 在浏览器里运行源码不提供 DPAPI 和文件夹同步；这两项需要运行 Electron 包。
 ```
 
 打包脚本 `scripts/package-windows.mjs` 需要自行准备解压好的 Electron win32-x64 运行时；NSIS
 安装程序需要额外提供 `makensis` 才会编译，Release 上的 `setup.exe` 由这一步产出，未提供时
 只产出便携 ZIP 和 `.nsi`。不要共享或直接复制运行中的 SQLite 及其 `-wal` / `-shm` 文件。
+
+发布 Windows 应用内更新前，发布清单必须签名：`scripts/package-windows.mjs` 产出清单后，用现有脚本
+`scripts/sign-release-manifest.mjs <manifest.json> <private-key.pem>` 与固定私钥 `wason-2026-01`
+签名；私钥保存在仓库外，不提交、不随包分发，须与内置公钥配对。未签名的清单（本机测试包就是这样）
+只能手动分发安装，无法通过应用内更新的验签，不能作为应用内更新的来源；本轮 Beta11 本地包
+（源码 `da3a1c1`）未签名，且不含 Windows 应用内更新。Windows 包目前仍未做代码签名，
+这与发布清单的 Ed25519 验签是两件事。
 
 ## 跨设备同步（共享文件夹 / Syncthing 现有目录）
 

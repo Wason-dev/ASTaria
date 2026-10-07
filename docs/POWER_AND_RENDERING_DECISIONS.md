@@ -2,7 +2,7 @@
 
 本文记录需要在后续版本和交接中保留的产品约束。性能数字、测试环境与历代优化记录见 [PERFORMANCE.md](./PERFORMANCE.md)，视觉要求见 [UI_DESIGN_SYSTEM.md](./UI_DESIGN_SYSTEM.md)。修复卡顿前应先核对这里的策略，不能只看到帧率较低就判定为 bug。
 
-核对日期：2026-10-05，Beta11 本地开发阶段。证据分为用户明确确认、历史提交/文档和当前源码；源码能证明当前行为，不能单独证明最初设计动机或实际节省了多少电量。
+核对日期：2026-10-06，Beta11 本地体验完善阶段。证据分为用户明确确认、历史提交/文档和当前源码；源码能证明当前行为，不能单独证明最初设计动机或实际节省了多少电量。
 
 ## P01 · 工作区的环境渲染最高 60 FPS
 
@@ -69,6 +69,14 @@ Windows 默认 CSS 玻璃省去 SVG 精细边缘位移，保留通透/磨砂差�
 浅色准确端点的 bloom 贡献为零才跳过中间 pass；首次非零贡献立刻恢复。指针强度精确为零才跳过无贡献的指针效果计算。不能扩大阈值来偷减可见细节。
 
 依据：`src/home/{GlassSurface,glass,glassRendering,retained-pages.css}`、`src/spatial/useSceneCamera.ts`、`src/prototype/postprocessing.ts`；`scripts/{beta11-motion,glass-displacement,bloom-passes,renderer-profile-switch}.test.mjs` 和 `desktop/{render-equivalence,interaction-visuals}.mjs`。原生像素/动态验收结果见性能记录；CSS 合成边缘存在取整差异，不能把整套 UI 宣称为逐像素相同。
+
+## P08 · 交互就绪不等待相机弹簧完全停稳
+
+**状态：Beta11 修复；共享于 macOS 与 Windows，原生验证按平台分别记录。** 首页聊天保留原有展开进度 `0.99` 的可输入阈值和收拢进度 `0.01` 的入口焦点阈值。相机弹簧可以继续完成原轨迹，输入与焦点不再额外等待 `cameraTransition=false`。此前 imperative 相机消费者只在转场开始/结束发布 React 状态，导致 DOM 的 inert 比真实几何滞后；焦点 effect 还独立等待完全停稳。2026-10-06 的 Mac 对照确认约 1.1 秒额外等待，详见性能记录。
+
+`useSceneCamera` 只在收拢、转场、可输入三个阶段边界补充发布，保持逐帧几何更新与重复快照去重；没有阶段 key 的旧消费者行为不变。动画轨迹、弹簧时长、画质、材质与帧率预算均不修改。提前恢复的控件仍受页面、展开状态和窄屏面板的 inert 限制，切页后不能把焦点抢回隐藏聊天。
+
+依据：`src/home/chatMotion.ts`、`src/home/HomeWorkspace.tsx`、`src/spatial/useSceneCamera.ts`；`scripts/chat-camera-publication.test.mjs` 覆盖阶段发布、反向、去重、隐藏恢复和旧消费者。Mac 原生 20 项动态矩阵与独立六组输入检查覆盖真实 inert/焦点、反转、草稿、切页及系统减少动态；摘要见 [beta11-chat-readiness-mac.json](./performance/beta11-chat-readiness-mac.json)。系统偏好通过 CDP 模拟并核对 renderer 的 `reducedMotion=true`、无相机转场，不能只用应用内「析熙的回应」动态偏好代替。该修复处理响应延迟，不证明 Windows 渲染长帧已解决，也不产生已量测的功耗收益。
 
 ## 修改与交接要求
 

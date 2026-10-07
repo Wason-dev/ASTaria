@@ -114,20 +114,30 @@ async function start() {
     powerMonitor.on('resume', () => { void sync.run() })
   }
   const updateStateFile = path.join(app.getPath('userData'), 'update-check.json')
+  const windowsInstall = process.platform === 'win32' && path.win32.normalize(process.execPath).toLowerCase()
+    === path.win32.join(process.env.LOCALAPPDATA ?? '', 'Programs', 'ASTaria', 'ASTaria.exe').toLowerCase()
   const scheduleInstall = async candidate => {
-    if (smokeTest || process.platform !== 'darwin' || quitting) throw new Error('当前暂不支持自动安装')
-    const { prepareMacUpdate, launchMacUpdate } = await import(pathToFileURL(path.join(resourceRoot, 'desktop/updateInstaller.mjs')).href)
-    const prepared = await prepareMacUpdate({ ...candidate,
-      appBundle: path.resolve(path.dirname(process.execPath), '..', '..'),
-      resultFile: path.join(app.getPath('userData'), 'update-install-result'),
-    })
-    await service.whenIdle()
-    await launchMacUpdate(prepared)
+    if (smokeTest || quitting) throw new Error('当前暂不支持自动安装')
+    if (process.platform === 'darwin') {
+      const { prepareMacUpdate, launchMacUpdate } = await import(pathToFileURL(path.join(resourceRoot, 'desktop/updateInstaller.mjs')).href)
+      const prepared = await prepareMacUpdate({ ...candidate,
+        appBundle: path.resolve(path.dirname(process.execPath), '..', '..'),
+        resultFile: path.join(app.getPath('userData'), 'update-install-result'),
+      })
+      await service.whenIdle()
+      await launchMacUpdate(prepared)
+    } else if (windowsInstall) {
+      const { prepareWindowsUpdate, launchWindowsUpdate } = await import(pathToFileURL(path.join(resourceRoot, 'desktop/windowsUpdateInstaller.mjs')).href)
+      const prepared = await prepareWindowsUpdate({ ...candidate, executable: process.execPath,
+        localAppData: process.env.LOCALAPPDATA, resultFile: path.join(app.getPath('userData'), 'update-install-result') })
+      await service.whenIdle()
+      await launchWindowsUpdate(prepared)
+    } else throw new Error('便携版请从发布页手动下载安装包')
     setTimeout(() => app.quit(), 250)
   }
 
   updates = createUpdateService({ current: { ...build, version: pkg.version, platform: process.platform, arch: process.arch },
-    fetcher: createNetFetch(net), stateFile: updateStateFile, installResultFile: path.join(app.getPath('userData'), 'update-install-result'), downloadDirectory: path.join(app.getPath('userData'), 'updates'), installer: scheduleInstall, allowNetwork: !smokeTest })
+    fetcher: createNetFetch(net), stateFile: updateStateFile, installResultFile: path.join(app.getPath('userData'), 'update-install-result'), downloadDirectory: path.join(app.getPath('userData'), 'updates'), installer: scheduleInstall, installable: process.platform !== 'win32' || windowsInstall, allowNetwork: !smokeTest })
   if (!smokeTest && process.platform === 'darwin') {
     const { createReminderService, nativeReminderRunner } = await import(pathToFileURL(path.join(resourceRoot, 'desktop/reminders.mjs')).href)
     reminders = createReminderService({ stateFile: path.join(app.getPath('userData'), 'system-reminders.json'),
@@ -222,8 +232,13 @@ async function start() {
     // The local service and renderer must both be ready before replacement succeeds.
     const rendered = await window.webContents.executeJavaScript("new Promise(resolve => { let attempts = 0; const check = () => { if (document.querySelector('#root')?.children.length) resolve(true); else if (++attempts < 100) setTimeout(check, 100); else resolve(false); }; check(); })")
     if (!rendered) throw new Error('Updated renderer did not start')
-    const { acknowledgeMacUpdate } = await import(pathToFileURL(path.join(resourceRoot, 'desktop/updateInstaller.mjs')).href)
-    await acknowledgeMacUpdate(path.resolve(path.dirname(process.execPath), '..', '..'), process.argv[healthIndex + 1])
+    if (process.platform === 'darwin') {
+      const { acknowledgeMacUpdate } = await import(pathToFileURL(path.join(resourceRoot, 'desktop/updateInstaller.mjs')).href)
+      await acknowledgeMacUpdate(path.resolve(path.dirname(process.execPath), '..', '..'), process.argv[healthIndex + 1])
+    } else if (process.platform === 'win32') {
+      const { acknowledgeWindowsUpdate } = await import(pathToFileURL(path.join(resourceRoot, 'desktop/windowsUpdateInstaller.mjs')).href)
+      await acknowledgeWindowsUpdate(process.env.LOCALAPPDATA, process.argv[healthIndex + 1])
+    }
   }
   if (!smokeTest) {
     // One delayed startup check, then at most once every six hours while visible.

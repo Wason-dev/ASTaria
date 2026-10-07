@@ -26,7 +26,7 @@ export async function downloadVerifiedAsset({ url, manifest, directory, fetcher 
   await mkdir(directory, { recursive: true, mode: 0o700 })
   const directoryInfo = await lstat(directory)
   if (!directoryInfo.isDirectory() || directoryInfo.isSymbolicLink()) throw new Error('更新目录不可用')
-  const temporary = join(directory, `${randomUUID()}.part`), destination = join(directory, `${manifest.sha256}.dmg`)
+  const temporary = join(directory, `${randomUUID()}.part`), destination = join(directory, `${manifest.sha256}.${manifest.platform === 'win32' ? 'exe' : 'dmg'}`)
   const stall = new AbortController()
   let timer, file
   const wake = () => { clearTimeout(timer); timer = setTimeout(() => stall.abort(), 30_000); timer.unref?.() }

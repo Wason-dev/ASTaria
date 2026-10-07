@@ -54,8 +54,9 @@ export function selectRelease(releases, current) {
   const release = candidates[0]
   if (!release) return null
   const version = versionParts(release.tag_name).version
-  const stem = `ASTaria-${version}-mac-${current.arch}-adhoc`
-  const asset = current.platform === 'darwin' ? assetFor(release, `${stem}.dmg`) : null
+  const stem = current.platform === 'darwin' ? `ASTaria-${version}-mac-${current.arch}-adhoc` : `ASTaria-${version}-win-${current.arch}`
+  const asset = current.platform === 'darwin' ? assetFor(release, `${stem}.dmg`)
+    : current.platform === 'win32' && current.arch === 'x64' ? assetFor(release, `${stem}-setup.exe`) : null
   const manifest = asset ? assetFor(release, `${stem}.manifest.json`) : null
   return {
     version, tag: release.tag_name, prerelease: Boolean(release.prerelease || versionParts(version).pre.length),
@@ -71,7 +72,7 @@ export function validateManifest(manifest, release, current, trustedKeys = RELEA
   verifyReleaseManifest(manifest, trustedKeys)
   if (manifest?.schemaVersion !== 1 || manifest.name !== 'ASTaria' || manifest.bundleId !== 'dev.wason.ASTaria'
     || manifest.version !== release.version || manifest.platform !== current.platform || manifest.arch !== current.arch
-    || manifest.dmg !== release.assetName || manifest.sizeBytes !== release.size
+    || (current.platform === 'darwin' ? manifest.dmg : manifest.setup) !== release.assetName || manifest.sizeBytes !== release.size
     || !/^[a-f0-9]{64}$/u.test(manifest.sha256 ?? '')) throw new Error('Invalid build manifest')
   const build = manifest.buildInfo
   if (!build || build.version !== release.version || typeof build.builtAt !== 'string' || !Number.isFinite(Date.parse(build.builtAt))) throw new Error('Invalid build information')
@@ -100,7 +101,7 @@ async function limitedJson(response, limit) {
 }
 
 /** Public release metadata only. No model keys, local tasks or machine identity are sent. */
-export function createUpdateService({ current, stateFile, fetcher = fetch, now = Date.now, allowNetwork = true, downloadDirectory, installer: installHandler, trustedKeys = RELEASE_KEYS, installResultFile }) {
+export function createUpdateService({ current, stateFile, fetcher = fetch, now = Date.now, allowNetwork = true, downloadDirectory, installer: installHandler, installable = true, trustedKeys = RELEASE_KEYS, installResultFile }) {
   let automatic = true, lastCheckedAt = null, nextCheckAt = 0, lastAttempt = -Infinity, retryAfter = 0
   let releases = null, etag = null, latest = null, manifest = null, status = 'idle', error = null, pending = null, closed = false
   let lastInstall = null
@@ -109,11 +110,20 @@ export function createUpdateService({ current, stateFile, fetcher = fetch, now =
   const installer = typeof installHandler === 'function' ? installHandler : null
   const network = new AbortController()
   let diskWrite = Promise.resolve()
-  const snapshot = () => ({ supported: allowNetwork && current.platform !== 'win32', unsupportedReason: current.platform === 'win32' ? 'Windows 首版请从官方发布页下载新版并手动更新；自动安装尚未提供。' : null, current: { version: current.version, builtAt: current.builtAt ?? null,
+  const readInstallResult = async () => {
+    if (!installResultFile) return
+    try {
+      const result = (await readFile(installResultFile, 'utf8')).trim()
+      const messages = { installed: '上次更新已安装并成功启动', failed: '上次更新未完成，原版本已保留或恢复；可重试或手动安装',
+        'recovery-required': '更新回退未完成。请检查 %LOCALAPPDATA%\Programs\.astaria-win-update-* 中的 previous 恢复目录，暂勿再次安装。', prepared: '正在确认上次更新的安装结果' }
+      if (Object.hasOwn(messages, result)) lastInstall = { status: result, message: messages[result] }
+    } catch { /* No previous installation result. */ }
+  }
+  const snapshot = () => ({ supported: allowNetwork && ['darwin', 'win32'].includes(current.platform), unsupportedReason: !['darwin', 'win32'].includes(current.platform) ? '当前平台暂不支持应用内更新。' : null, installable, current: { version: current.version, platform: current.platform, builtAt: current.builtAt ?? null,
     commit: current.source?.commit?.slice(0, 7) ?? null }, automatic, status, error, lastCheckedAt,
     nextCheckAt: nextCheckAt ? new Date(nextCheckAt).toISOString() : null, latest, releasesUrl: RELEASES_URL,
     download: download ? { version: download.version, sizeBytes: download.sizeBytes, downloadedBytes: download.downloadedBytes ?? 0, path: null } : null,
-    canInstall: Boolean(download?.path && installer), lastInstall })
+    canInstall: Boolean(download?.path && installer && installable), lastInstall })
   const persist = () => {
     if (!stateFile) return Promise.resolve()
     const value = JSON.stringify({ schema: 1, automatic, lastCheckedAt, nextCheckAt, retryAfter, etag, releases, manifest, status, error, downloaded: download?.path ? { sha256: manifest?.sha256 } : null })
@@ -145,13 +155,7 @@ export function createUpdateService({ current, stateFile, fetcher = fetch, now =
     }
   }
   const ready = (async () => {
-    if (installResultFile) {
-      try {
-        const result = (await readFile(installResultFile, 'utf8')).trim()
-        const messages = { installed: '上次更新已安装并成功启动', failed: '上次更新未能启动，已恢复原版本；可重试或手动安装', prepared: '上次更新尚未完成，当前仍在使用原版本' }
-        if (Object.hasOwn(messages, result)) lastInstall = { status: result, message: messages[result] }
-      } catch { /* No previous installation result. */ }
-    }
+    await readInstallResult()
     if (!stateFile) return
     try {
       const raw = await readFile(stateFile, 'utf8')
@@ -166,7 +170,7 @@ export function createUpdateService({ current, stateFile, fetcher = fetch, now =
       if (Array.isArray(saved.releases)) { releases = saved.releases; manifest = saved.manifest; resolveStatus() }
       else { etag = null; nextCheckAt = 0; lastCheckedAt = null }
       if (saved.downloaded?.sha256 === manifest?.sha256 && status === 'available' && downloadRoot) {
-        const path = join(downloadRoot, `${manifest.sha256}.dmg`)
+        const path = join(downloadRoot, `${manifest.sha256}.${current.platform === 'win32' ? 'exe' : 'dmg'}`)
         try {
           await verifyAsset(path, manifest)
           download = { version: latest.version, sizeBytes: manifest.sizeBytes, downloadedBytes: manifest.sizeBytes, path }
@@ -295,7 +299,7 @@ export function createUpdateService({ current, stateFile, fetcher = fetch, now =
   const installUpdate = async () => {
     await ready
     if (closed || downloadPending || installPending) return snapshot()
-    if (!download?.path || !installer) throw new Error('请先下载适合此设备的更新')
+    if (!download?.path || !installer || !installable) throw new Error('请先下载适合此设备的更新；便携版请手动安装')
     status = 'installing'; error = null
     const candidate = { path: download.path, version: download.version, manifest: structuredClone(manifest) }
     installPending = (async () => {
@@ -318,7 +322,7 @@ export function createUpdateService({ current, stateFile, fetcher = fetch, now =
 
   return {
     ready,
-    getStatus: async () => { await ready; return snapshot() }, whenIdle: () => Promise.all([pending, downloadPending, installPending]), check, download: downloadUpdate, cancelDownload, install: installUpdate,
+    getStatus: async () => { await ready; await readInstallResult(); return snapshot() }, whenIdle: () => Promise.all([pending, downloadPending, installPending]), check, download: downloadUpdate, cancelDownload, install: installUpdate,
     setAutomatic: async enabled => {
       await ready
       if (typeof enabled !== 'boolean') throw new Error('自动检查选项无效')

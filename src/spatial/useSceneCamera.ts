@@ -8,13 +8,16 @@ const INITIAL_CAMERA: SceneCamera = {
 }
 
 /** Sample only during camera changes. Business changes never drive the renderer. */
-export function useSceneCamera(readCamera: () => SceneCamera | undefined, revision: string, onFrame?: (camera: SceneCamera) => void) {
+export function useSceneCamera(readCamera: () => SceneCamera | undefined, revision: string, onFrame?: (camera: SceneCamera) => void, publicationKey?: (camera: SceneCamera) => unknown) {
   const [camera, setCamera] = useState(INITIAL_CAMERA)
   const frameCallback = useRef(onFrame)
   frameCallback.current = onFrame
+  const keyCallback = useRef(publicationKey)
+  keyCallback.current = publicationKey
   useEffect(() => {
     let frame = 0
     let published: SceneCamera | undefined
+    let publishedKey: unknown
     let sampled: SceneCamera | undefined
     const sample = () => {
       frame = 0
@@ -25,10 +28,12 @@ export function useSceneCamera(readCamera: () => SceneCamera | undefined, revisi
       // Never rewrite geometry/filter attributes until the camera advances.
       if (!sameCameraSample(sampled, next)) frameCallback.current?.(next)
       sampled = next
-      // Imperative motion consumers need React only at transition boundaries.
+      // Keep interaction state current before a spring's final settling tail.
       // The simulation clock belongs to WebGL, not to the application tree.
-      if (!(frameCallback.current && next.cameraTransition && published?.cameraTransition)) {
+      const key = keyCallback.current?.(next)
+      if (!(frameCallback.current && next.cameraTransition && published?.cameraTransition && Object.is(key, publishedKey))) {
         published = next
+        publishedKey = key
         setCamera(current => sameCameraSample(current, next) ? current : next)
       }
       if (next.cameraTransition) frame = requestAnimationFrame(sample)

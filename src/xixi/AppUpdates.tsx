@@ -4,8 +4,9 @@ import './AppUpdates.css'
 
 type UpdateState = {
   supported: boolean
+  installable?: boolean
   unsupportedReason?: string | null
-  current: { version: string; builtAt: string | null; commit: string | null }
+  current: { version: string; platform?: string; builtAt: string | null; commit: string | null }
   automatic: boolean
   status: 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'installing' | 'up-to-date' | 'unavailable' | 'error'
   error: string | null
@@ -19,7 +20,7 @@ type UpdateState = {
   download: { version: string; sizeBytes: number; downloadedBytes: number } | null
   canInstall: boolean
   releasesUrl: string
-  lastInstall?: { status: 'installed' | 'failed' | 'prepared'; message: string } | null
+  lastInstall?: { status: 'installed' | 'failed' | 'recovery-required' | 'prepared'; message: string } | null
 }
 type UpdateAction = 'load' | 'poll' | 'check' | 'automatic' | 'download' | 'install' | 'cancel'
 const POLL_LIMIT = 60
@@ -134,7 +135,7 @@ export function AppUpdates({ visible = true }: { visible?: boolean }) {
       : pending === 'check' || checking ? '正在检查 GitHub 更新…'
         : pending === 'load' ? '正在读取更新状态…'
           : state?.status === 'available' && latest ? latest.sameVersion ? `发现 ${latest.version} 的新构建` : `发现新版本 ${latest.version}`
-            : state?.status === 'ready' ? state.error || '安装包已下载并通过校验，可以安装并重启'
+            : state?.status === 'ready' ? state.error || (state.canInstall ? '安装包已下载并通过校验，可以安装并重启' : '安装包已下载并通过校验，请退出 App 后手动安装')
             : state?.status === 'up-to-date' ? '当前已是最新可用版本'
               : state?.status === 'error' || state?.status === 'unavailable' ? state.error || '暂时无法确认可用更新，请稍后重试。'
                 : state?.automatic ? '自动检查已开启，也可以手动检查更新。' : '自动检查已关闭，可随时手动检查更新。')
@@ -153,7 +154,7 @@ export function AppUpdates({ visible = true }: { visible?: boolean }) {
       <p>{statusText}</p>
       {!unavailable && checkedAt && <small>上次检查 {checkedAt}</small>}
     </div>
-    {state?.lastInstall && <div className="xixi-app-update-feedback xixi-app-update-last-install" data-error={state.lastInstall.status === 'failed'} role="status"><p>{state.lastInstall.message}</p></div>}
+    {state?.lastInstall && <div className="xixi-app-update-feedback xixi-app-update-last-install" data-error={state.lastInstall.status === 'failed' || state.lastInstall.status === 'recovery-required'} role="status"><p>{state.lastInstall.message}</p></div>}
     {!unavailable && <div className="xixi-settings-actions xixi-app-update-actions">
       <button type="button" disabled={busy || state?.status === 'ready'} onClick={() => void request(!state || state.status === 'checking' ? 'load' : 'check')}>{checking || pending === 'check' ? '检查中…' : !state || state.status === 'checking' ? '重新读取' : '检查更新'}</button>
       {latest?.downloadUrl && (state?.status === 'available' || state?.status === 'error') && <button type="button" className="xixi-app-update-download" disabled={busy} onClick={() => void request('download')}>下载并校验{latest.size ? ` · ${(latest.size / 1024 / 1024).toFixed(1)} MB` : ''}</button>}
@@ -169,7 +170,9 @@ export function AppUpdates({ visible = true }: { visible?: boolean }) {
     </div>}
     {latest && <>
       {latest.notes && <details className="xixi-app-update-notes"><summary>更新说明{releaseDate && <small>{releaseDate}</small>}</summary><p>{latest.notes}</p></details>}
-      {latest.downloadUrl && <p className="xixi-settings-note xixi-app-update-install">安装包会先校验 SHA-256；安装时退出并重启 App，本机事项、日程和对话数据会保留。自动安装需要 App 位于当前账户可替换的位置，通常是「应用程序」文件夹；若从 DMG 直接运行，请先拖入该文件夹。</p>}
+      {latest.downloadUrl && <p className="xixi-settings-note xixi-app-update-install">安装包会先验证发布签名与 SHA-256。{state?.current.platform === 'win32'
+        ? state.installable ? '标准安装版可在退出后安装并重启；本机数据会保留。' : '便携版或非标准安装位置请退出 App 后手动运行安装包；本机数据会保留。'
+        : '安装时退出并重启 App，本机数据会保留。自动安装需要 App 位于当前账户可替换的位置，通常是「应用程序」文件夹；若从 DMG 直接运行，请先拖入该文件夹。'}</p>}
     </>}
   </section>
 }

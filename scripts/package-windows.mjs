@@ -90,7 +90,11 @@ astaria_closed:
     assets.push({ name, sha256, sizeBytes })
     await writeFile(join(stage, `${name}.sha256`), `${sha256}  ${name}\n`)
   }
-  await writeFile(join(stage, `${stem}.manifest.json`), JSON.stringify({ ...build, assets, instructions: 'install.txt', instructionsSha256: await hash(join(stage, 'install.txt')), nsisBuilt: Boolean(makensis), includesUserData: false }, null, 2))
+  const setupAsset = assets.find(asset => asset.name === installer)
+  await writeFile(join(stage, `${stem}.manifest.json`), JSON.stringify({ ...build, bundleId: 'dev.wason.ASTaria',
+    ...(setupAsset ? { setup: installer, sha256: setupAsset.sha256, sizeBytes: setupAsset.sizeBytes } : {}),
+    buildInfo: build, assets, instructions: 'install.txt', instructionsSha256: await hash(join(stage, 'install.txt')),
+    nsisBuilt: Boolean(makensis), includesUserData: false }, null, 2))
   await rename(stage, release)
   return release
 }

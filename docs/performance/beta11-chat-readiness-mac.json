@@ -1,0 +1,940 @@
+{
+  "version": 1,
+  "technicalVersion": "0.1.0-beta.11",
+  "localDate": "2026-10-06",
+  "timeZone": "Asia/Shanghai",
+  "status": "Local evidence; Windows experience acceptance remains incomplete; no release.",
+  "scope": "Same-quality chat input readiness fix. Camera trajectory, spring parameters, optics, render quality and power budgets unchanged.",
+  "source": {
+    "baseCommit": "01bd247a6bdc857128a6b90b66b22abeacf3bc60",
+    "dirty": true,
+    "testedFingerprints": {
+      "src/home/chatMotion.ts": "b2fd28c6cdcd4a883c729ab16e3afa094ae5aae708e0f12df1232bf6d406ac97",
+      "src/home/HomeWorkspace.tsx": "c07984562b9d410394fbf6d52e3cc68a58ba32c8ab4131d7a5cd579211d165f2",
+      "src/spatial/useSceneCamera.ts": "1d49ca08bd2e4b14a53f27b46a64da4774ad33c3ca0af9765bc3fa4440a853ad",
+      "src/home/GlassSurface.tsx": "c9bf19e67342cc9a17e832b8497f7ff0bdc00b412983fe8e3d1964f5c3f090a1",
+      "dist/assets/index-BMUzcr0J.css": "61bfd725d3b9528cd6f5882276ad5985e9dc6642e833fa856bf4694a6da8ecea",
+      "dist/assets/index-DDehSQo7.js": "0bb66d3de30e80c1940855ef7405d2ad024a1be05a692c80877d317f0052cab6"
+    },
+    "baselineFingerprintsAvailable": false,
+    "packagedRelease": false
+  },
+  "reports": {
+    "baseline": {
+      "file": "astaria-smoke-mG3WEU/interactions.json",
+      "sha256": "1ce57ac646ab40e774e077b1a260b8aabe5894748817f783ff3fa4096a626a9b"
+    },
+    "quick": {
+      "file": "astaria-smoke-iPI7fd/interactions.json",
+      "sha256": "dc0bd34dc22c92e8698a8a39e3b46d310c23d938b746df1df941bb98c0e5157a"
+    },
+    "matrix": {
+      "file": "astaria-smoke-FMD01w/interactions.json",
+      "sha256": "7cd09b2412adb3f569bd98111925f99726a222c3381743bb3ae32f5f1bd33b44"
+    },
+    "input": {
+      "file": "astaria-smoke-JBuvJV/chat-readiness.json",
+      "sha256": "78397d8df30e5db9227fc7d362c410ac25fe16dddb746ec6f13dd6cf6b385060"
+    }
+  },
+  "environment": {
+    "width": 1473,
+    "height": 944,
+    "dpr": 2,
+    "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)"
+  },
+  "baseline": {
+    "description": "Beta11 before chat interaction publication fix; not BetaX.",
+    "checkedAt": "2026-10-05T19:02:13.101Z",
+    "measurements": [
+      {
+        "name": "chat-open",
+        "theme": "dark",
+        "glass": "clear",
+        "optics": "auto",
+        "profile": "full",
+        "quality": "ultra",
+        "width": 2946,
+        "height": 1888,
+        "targetFps": 60,
+        "render": {
+          "count": 215,
+          "p50": 16.69999999999891,
+          "p95": 17.899999999999636,
+          "p99": 18.299999999999272,
+          "max": 18.600000000000364,
+          "over25": 0,
+          "over50": 0
+        },
+        "chatReadiness": {
+          "geometryReadyMs": 1905.0000000238415,
+          "interactiveMs": 3020.3000000238426,
+          "settledMs": 3020.3000000238426,
+          "focusMs": 3029.900000023841,
+          "extraWaitMs": 1115.300000000001
+        },
+        "errors": []
+      },
+      {
+        "name": "chat-close",
+        "theme": "dark",
+        "glass": "clear",
+        "optics": "auto",
+        "profile": "full",
+        "quality": "ultra",
+        "width": 2946,
+        "height": 1888,
+        "targetFps": 60,
+        "render": {
+          "count": 216,
+          "p50": 16.69999999999891,
+          "p95": 18.299999999999272,
+          "p99": 18.600000000000364,
+          "max": 18.700000000000728,
+          "over25": 0,
+          "over50": 0
+        },
+        "errors": []
+      },
+      {
+        "name": "home-workbench",
+        "theme": "dark",
+        "glass": "clear",
+        "optics": "auto",
+        "profile": "full",
+        "quality": "ultra",
+        "width": 2946,
+        "height": 1888,
+        "targetFps": 60,
+        "render": {
+          "count": 96,
+          "p50": 16.700000000000728,
+          "p95": 18.099999999998545,
+          "p99": 18.299999999999272,
+          "max": 18.299999999999272,
+          "over25": 0,
+          "over50": 0
+        },
+        "errors": []
+      },
+      {
+        "name": "workbench-free-time",
+        "theme": "dark",
+        "glass": "clear",
+        "optics": "auto",
+        "profile": "full",
+        "quality": "ultra",
+        "width": 2946,
+        "height": 1888,
+        "targetFps": 60,
+        "render": {
+          "count": 96,
+          "p50": 16.700000000000728,
+          "p95": 18,
+          "p99": 24.899999999997817,
+          "max": 24.899999999997817,
+          "over25": 0,
+          "over50": 0
+        },
+        "errors": []
+      },
+      {
+        "name": "free-time-home",
+        "theme": "dark",
+        "glass": "clear",
+        "optics": "auto",
+        "profile": "full",
+        "quality": "ultra",
+        "width": 2946,
+        "height": 1888,
+        "targetFps": 60,
+        "render": {
+          "count": 95,
+          "p50": 16.700000000000728,
+          "p95": 18,
+          "p99": 18.299999999999272,
+          "max": 18.299999999999272,
+          "over25": 0,
+          "over50": 0
+        },
+        "errors": []
+      }
+    ]
+  },
+  "quick": {
+    "checkedAt": "2026-10-05T19:07:42.849Z",
+    "measurements": [
+      {
+        "name": "chat-open",
+        "theme": "dark",
+        "glass": "clear",
+        "optics": "auto",
+        "profile": "full",
+        "quality": "ultra",
+        "width": 2946,
+        "height": 1888,
+        "targetFps": 60,
+        "render": {
+          "count": 215,
+          "p50": 16.69999999999891,
+          "p95": 17.899999999999636,
+          "p99": 18.19999999999891,
+          "max": 18.399999999999636,
+          "over25": 0,
+          "over50": 0
+        },
+        "chatReadiness": {
+          "geometryReadyMs": 1905.0999999523156,
+          "interactiveMs": 1905.0999999523156,
+          "focusMs": 1913.3999999523166,
+          "settledMs": 3021.7999999523163,
+          "extraWaitMs": 0
+        },
+        "errors": []
+      },
+      {
+        "name": "chat-close",
+        "theme": "dark",
+        "glass": "clear",
+        "optics": "auto",
+        "profile": "full",
+        "quality": "ultra",
+        "width": 2946,
+        "height": 1888,
+        "targetFps": 60,
+        "render": {
+          "count": 216,
+          "p50": 16.69999999999891,
+          "p95": 17.900000000001455,
+          "p99": 18.19999999999891,
+          "max": 18.299999999999272,
+          "over25": 0,
+          "over50": 0
+        },
+        "errors": []
+      },
+      {
+        "name": "home-workbench",
+        "theme": "dark",
+        "glass": "clear",
+        "optics": "auto",
+        "profile": "full",
+        "quality": "ultra",
+        "width": 2946,
+        "height": 1888,
+        "targetFps": 60,
+        "render": {
+          "count": 97,
+          "p50": 16.700000000000728,
+          "p95": 18.099999999998545,
+          "p99": 18.299999999999272,
+          "max": 18.299999999999272,
+          "over25": 0,
+          "over50": 0
+        },
+        "errors": []
+      },
+      {
+        "name": "workbench-free-time",
+        "theme": "dark",
+        "glass": "clear",
+        "optics": "auto",
+        "profile": "full",
+        "quality": "ultra",
+        "width": 2946,
+        "height": 1888,
+        "targetFps": 60,
+        "render": {
+          "count": 96,
+          "p50": 16.700000000000728,
+          "p95": 18.099999999998545,
+          "p99": 23.899999999997817,
+          "max": 23.899999999997817,
+          "over25": 0,
+          "over50": 0
+        },
+        "errors": []
+      },
+      {
+        "name": "free-time-home",
+        "theme": "dark",
+        "glass": "clear",
+        "optics": "auto",
+        "profile": "full",
+        "quality": "ultra",
+        "width": 2946,
+        "height": 1888,
+        "targetFps": 60,
+        "render": {
+          "count": 95,
+          "p50": 16.69999999999709,
+          "p95": 18.19999999999709,
+          "p99": 18.600000000002183,
+          "max": 18.600000000002183,
+          "over25": 0,
+          "over50": 0
+        },
+        "errors": []
+      }
+    ]
+  },
+  "matrix": {
+    "checkedAt": "2026-10-05T19:10:42.776Z",
+    "measurements": [
+      {
+        "name": "chat-open",
+        "theme": "dark",
+        "glass": "clear",
+        "optics": "auto",
+        "profile": "full",
+        "quality": "ultra",
+        "width": 2946,
+        "height": 1888,
+        "targetFps": 60,
+        "render": {
+          "count": 215,
+          "p50": 16.69999999999891,
+          "p95": 18,
+          "p99": 18.299999999999272,
+          "max": 18.5,
+          "over25": 0,
+          "over50": 0
+        },
+        "chatReadiness": {
+          "geometryReadyMs": 1902.3999999999996,
+          "interactiveMs": 1902.3999999999996,
+          "focusMs": 1910.7999999999993,
+          "settledMs": 3019,
+          "extraWaitMs": 0
+        },
+        "errors": []
+      },
+      {
+        "name": "chat-close",
+        "theme": "dark",
+        "glass": "clear",
+        "optics": "auto",
+        "profile": "full",
+        "quality": "ultra",
+        "width": 2946,
+        "height": 1888,
+        "targetFps": 60,
+        "render": {
+          "count": 216,
+          "p50": 16.69999999999891,
+          "p95": 17.80000000000109,
+          "p99": 18.200000000000728,
+          "max": 18.200000000000728,
+          "over25": 0,
+          "over50": 0
+        },
+        "errors": []
+      },
+      {
+        "name": "home-workbench",
+        "theme": "dark",
+        "glass": "clear",
+        "optics": "auto",
+        "profile": "full",
+        "quality": "ultra",
+        "width": 2946,
+        "height": 1888,
+        "targetFps": 60,
+        "render": {
+          "count": 96,
+          "p50": 16.69999999999891,
+          "p95": 17.700000000000728,
+          "p99": 17.900000000001455,
+          "max": 17.900000000001455,
+          "over25": 0,
+          "over50": 0
+        },
+        "errors": []
+      },
+      {
+        "name": "workbench-free-time",
+        "theme": "dark",
+        "glass": "clear",
+        "optics": "auto",
+        "profile": "full",
+        "quality": "ultra",
+        "width": 2946,
+        "height": 1888,
+        "targetFps": 60,
+        "render": {
+          "count": 96,
+          "p50": 16.69999999999709,
+          "p95": 17.700000000000728,
+          "p99": 18.099999999998545,
+          "max": 18.099999999998545,
+          "over25": 0,
+          "over50": 0
+        },
+        "errors": []
+      },
+      {
+        "name": "free-time-home",
+        "theme": "dark",
+        "glass": "clear",
+        "optics": "auto",
+        "profile": "full",
+        "quality": "ultra",
+        "width": 2946,
+        "height": 1888,
+        "targetFps": 60,
+        "render": {
+          "count": 95,
+          "p50": 16.600000000002183,
+          "p95": 18.100000000002183,
+          "p99": 18.600000000002183,
+          "max": 18.600000000002183,
+          "over25": 0,
+          "over50": 0
+        },
+        "errors": []
+      },
+      {
+        "name": "chat-open",
+        "theme": "light",
+        "glass": "soft",
+        "optics": "auto",
+        "profile": "full",
+        "quality": "ultra",
+        "width": 2946,
+        "height": 1888,
+        "targetFps": 60,
+        "render": {
+          "count": 215,
+          "p50": 16.700000000000728,
+          "p95": 17.900000000001455,
+          "p99": 18.299999999999272,
+          "max": 18.30000000000291,
+          "over25": 0,
+          "over50": 0
+        },
+        "chatReadiness": {
+          "geometryReadyMs": 1898.8999999761581,
+          "interactiveMs": 1898.8999999761581,
+          "focusMs": 1907.1999999761574,
+          "settledMs": 3014.399999976158,
+          "extraWaitMs": 0
+        },
+        "errors": []
+      },
+      {
+        "name": "chat-close",
+        "theme": "light",
+        "glass": "soft",
+        "optics": "auto",
+        "profile": "full",
+        "quality": "ultra",
+        "width": 2946,
+        "height": 1888,
+        "targetFps": 60,
+        "render": {
+          "count": 215,
+          "p50": 16.700000000000728,
+          "p95": 17.899999999997817,
+          "p99": 18.099999999998545,
+          "max": 18.299999999999272,
+          "over25": 0,
+          "over50": 0
+        },
+        "errors": []
+      },
+      {
+        "name": "home-workbench",
+        "theme": "light",
+        "glass": "soft",
+        "optics": "auto",
+        "profile": "full",
+        "quality": "ultra",
+        "width": 2946,
+        "height": 1888,
+        "targetFps": 60,
+        "render": {
+          "count": 97,
+          "p50": 16.69999999999709,
+          "p95": 18.099999999998545,
+          "p99": 18.69999999999709,
+          "max": 18.69999999999709,
+          "over25": 0,
+          "over50": 0
+        },
+        "errors": []
+      },
+      {
+        "name": "workbench-free-time",
+        "theme": "light",
+        "glass": "soft",
+        "optics": "auto",
+        "profile": "full",
+        "quality": "ultra",
+        "width": 2946,
+        "height": 1888,
+        "targetFps": 60,
+        "render": {
+          "count": 96,
+          "p50": 16.69999999999709,
+          "p95": 17.80000000000291,
+          "p99": 18.099999999998545,
+          "max": 18.099999999998545,
+          "over25": 0,
+          "over50": 0
+        },
+        "errors": []
+      },
+      {
+        "name": "free-time-home",
+        "theme": "light",
+        "glass": "soft",
+        "optics": "auto",
+        "profile": "full",
+        "quality": "ultra",
+        "width": 2946,
+        "height": 1888,
+        "targetFps": 60,
+        "render": {
+          "count": 96,
+          "p50": 16.69999999999709,
+          "p95": 18,
+          "p99": 18.5,
+          "max": 18.5,
+          "over25": 0,
+          "over50": 0
+        },
+        "errors": []
+      },
+      {
+        "name": "chat-open",
+        "theme": "dark",
+        "glass": "clear",
+        "optics": "detailed",
+        "profile": "full",
+        "quality": "ultra",
+        "width": 2946,
+        "height": 1888,
+        "targetFps": 60,
+        "render": {
+          "count": 215,
+          "p50": 16.69999999999709,
+          "p95": 17.700000000004366,
+          "p99": 18.19999999999709,
+          "max": 18.30000000000291,
+          "over25": 0,
+          "over50": 0
+        },
+        "chatReadiness": {
+          "geometryReadyMs": 1905.8999999523148,
+          "interactiveMs": 1905.8999999523148,
+          "focusMs": 1914.1999999523177,
+          "settledMs": 3022.4999999523134,
+          "extraWaitMs": 0
+        },
+        "errors": []
+      },
+      {
+        "name": "chat-close",
+        "theme": "dark",
+        "glass": "clear",
+        "optics": "detailed",
+        "profile": "full",
+        "quality": "ultra",
+        "width": 2946,
+        "height": 1888,
+        "targetFps": 60,
+        "render": {
+          "count": 216,
+          "p50": 16.69999999999709,
+          "p95": 18,
+          "p99": 18.19999999999709,
+          "max": 18.200000000004366,
+          "over25": 0,
+          "over50": 0
+        },
+        "errors": []
+      },
+      {
+        "name": "home-workbench",
+        "theme": "dark",
+        "glass": "clear",
+        "optics": "detailed",
+        "profile": "full",
+        "quality": "ultra",
+        "width": 2946,
+        "height": 1888,
+        "targetFps": 60,
+        "render": {
+          "count": 96,
+          "p50": 16.69999999999709,
+          "p95": 17.80000000000291,
+          "p99": 18.400000000001455,
+          "max": 18.400000000001455,
+          "over25": 0,
+          "over50": 0
+        },
+        "errors": []
+      },
+      {
+        "name": "workbench-free-time",
+        "theme": "dark",
+        "glass": "clear",
+        "optics": "detailed",
+        "profile": "full",
+        "quality": "ultra",
+        "width": 2946,
+        "height": 1888,
+        "targetFps": 60,
+        "render": {
+          "count": 97,
+          "p50": 16.69999999999709,
+          "p95": 18,
+          "p99": 18.5,
+          "max": 18.5,
+          "over25": 0,
+          "over50": 0
+        },
+        "errors": []
+      },
+      {
+        "name": "free-time-home",
+        "theme": "dark",
+        "glass": "clear",
+        "optics": "detailed",
+        "profile": "full",
+        "quality": "ultra",
+        "width": 2946,
+        "height": 1888,
+        "targetFps": 60,
+        "render": {
+          "count": 95,
+          "p50": 16.69999999999709,
+          "p95": 18.200000000004366,
+          "p99": 18.30000000000291,
+          "max": 18.30000000000291,
+          "over25": 0,
+          "over50": 0
+        },
+        "errors": []
+      },
+      {
+        "name": "chat-open",
+        "theme": "dark",
+        "glass": "clear",
+        "optics": "auto",
+        "profile": "smooth120",
+        "quality": "ultra",
+        "width": 2946,
+        "height": 1888,
+        "targetFps": 120,
+        "render": {
+          "count": 429,
+          "p50": 8.30000000000291,
+          "p95": 10,
+          "p99": 10.39999999999418,
+          "max": 16.69999999999709,
+          "over25": 0,
+          "over50": 0
+        },
+        "chatReadiness": {
+          "geometryReadyMs": 1900.0999999999985,
+          "interactiveMs": 1900.0999999999985,
+          "focusMs": 1910.300000000003,
+          "settledMs": 3018.300000000003,
+          "extraWaitMs": 0
+        },
+        "errors": []
+      },
+      {
+        "name": "chat-close",
+        "theme": "dark",
+        "glass": "clear",
+        "optics": "auto",
+        "profile": "smooth120",
+        "quality": "ultra",
+        "width": 2946,
+        "height": 1888,
+        "targetFps": 120,
+        "render": {
+          "count": 430,
+          "p50": 8.30000000000291,
+          "p95": 9.69999999999709,
+          "p99": 10.10000000000582,
+          "max": 16.70000000001164,
+          "over25": 0,
+          "over50": 0
+        },
+        "errors": []
+      },
+      {
+        "name": "home-workbench",
+        "theme": "dark",
+        "glass": "clear",
+        "optics": "auto",
+        "profile": "smooth120",
+        "quality": "ultra",
+        "width": 2946,
+        "height": 1888,
+        "targetFps": 60,
+        "render": {
+          "count": 96,
+          "p50": 16.69999999999709,
+          "p95": 17.79999999998836,
+          "p99": 18.30000000000291,
+          "max": 18.30000000000291,
+          "over25": 0,
+          "over50": 0
+        },
+        "errors": []
+      },
+      {
+        "name": "workbench-free-time",
+        "theme": "dark",
+        "glass": "clear",
+        "optics": "auto",
+        "profile": "smooth120",
+        "quality": "ultra",
+        "width": 2946,
+        "height": 1888,
+        "targetFps": 60,
+        "render": {
+          "count": 96,
+          "p50": 16.69999999999709,
+          "p95": 17.89999999999418,
+          "p99": 18.29999999998836,
+          "max": 18.29999999998836,
+          "over25": 0,
+          "over50": 0
+        },
+        "errors": []
+      },
+      {
+        "name": "free-time-home",
+        "theme": "dark",
+        "glass": "clear",
+        "optics": "auto",
+        "profile": "smooth120",
+        "quality": "ultra",
+        "width": 2946,
+        "height": 1888,
+        "targetFps": 120,
+        "render": {
+          "count": 192,
+          "p50": 8.30000000000291,
+          "p95": 9.69999999999709,
+          "p99": 10.30000000000291,
+          "max": 10.39999999999418,
+          "over25": 0,
+          "over50": 0
+        },
+        "errors": []
+      }
+    ]
+  },
+  "inputAcceptance": {
+    "diagnosticSha256": "698017038258bde5e6da301106abe9dec1b399b63303603436ee0d79871795ec",
+    "configurations": [
+      {
+        "theme": "dark",
+        "glass": "clear",
+        "motion": "full",
+        "systemReducedMotion": false,
+        "ready": {
+          "elapsed": 1924.0999999046326,
+          "transition": true,
+          "reducedMotion": false
+        },
+        "typed": {
+          "elapsed": 0,
+          "transition": true,
+          "reducedMotion": false
+        },
+        "collapsed": {
+          "elapsed": 1903.5,
+          "transition": true,
+          "reducedMotion": false
+        },
+        "typedBeforeSettling": true,
+        "reversal": true,
+        "page": "workbench",
+        "inputInert": true,
+        "focusInChat": false,
+        "quality": "ultra",
+        "targetFps": 60,
+        "width": 1200,
+        "height": 820,
+        "draftRetained": true
+      },
+      {
+        "theme": "dark",
+        "glass": "soft",
+        "motion": "full",
+        "systemReducedMotion": false,
+        "ready": {
+          "elapsed": 1896.8999999761581,
+          "transition": true,
+          "reducedMotion": false
+        },
+        "typed": {
+          "elapsed": 0,
+          "transition": true,
+          "reducedMotion": false
+        },
+        "collapsed": {
+          "elapsed": 1896.0999999046326,
+          "transition": true,
+          "reducedMotion": false
+        },
+        "typedBeforeSettling": true,
+        "reversal": true,
+        "page": "workbench",
+        "inputInert": true,
+        "focusInChat": false,
+        "quality": "ultra",
+        "targetFps": 60,
+        "width": 1200,
+        "height": 820,
+        "draftRetained": true
+      },
+      {
+        "theme": "light",
+        "glass": "clear",
+        "motion": "full",
+        "systemReducedMotion": false,
+        "ready": {
+          "elapsed": 1904.5,
+          "transition": true,
+          "reducedMotion": false
+        },
+        "typed": {
+          "elapsed": 0,
+          "transition": true,
+          "reducedMotion": false
+        },
+        "collapsed": {
+          "elapsed": 1900.7000000476837,
+          "transition": true,
+          "reducedMotion": false
+        },
+        "typedBeforeSettling": true,
+        "reversal": true,
+        "page": "workbench",
+        "inputInert": true,
+        "focusInChat": false,
+        "quality": "ultra",
+        "targetFps": 60,
+        "width": 1200,
+        "height": 820,
+        "draftRetained": true
+      },
+      {
+        "theme": "light",
+        "glass": "soft",
+        "motion": "full",
+        "systemReducedMotion": false,
+        "ready": {
+          "elapsed": 1912.8000000715256,
+          "transition": true,
+          "reducedMotion": false
+        },
+        "typed": {
+          "elapsed": 0,
+          "transition": true,
+          "reducedMotion": false
+        },
+        "collapsed": {
+          "elapsed": 1899.3999999761581,
+          "transition": true,
+          "reducedMotion": false
+        },
+        "typedBeforeSettling": true,
+        "reversal": true,
+        "page": "workbench",
+        "inputInert": true,
+        "focusInChat": false,
+        "quality": "ultra",
+        "targetFps": 60,
+        "width": 1200,
+        "height": 820,
+        "draftRetained": true
+      },
+      {
+        "theme": "dark",
+        "glass": "clear",
+        "motion": "reduced",
+        "systemReducedMotion": false,
+        "ready": {
+          "elapsed": 1920.7999999523163,
+          "transition": true,
+          "reducedMotion": false
+        },
+        "typed": {
+          "elapsed": 0,
+          "transition": true,
+          "reducedMotion": false
+        },
+        "collapsed": {
+          "elapsed": 1908.0999999046326,
+          "transition": true,
+          "reducedMotion": false
+        },
+        "typedBeforeSettling": true,
+        "reversal": true,
+        "page": "workbench",
+        "inputInert": true,
+        "focusInChat": false,
+        "quality": "ultra",
+        "targetFps": 60,
+        "width": 1024,
+        "height": 720,
+        "draftRetained": true
+      },
+      {
+        "theme": "dark",
+        "glass": "clear",
+        "motion": "system",
+        "systemReducedMotion": true,
+        "ready": {
+          "elapsed": 78.29999995231628,
+          "transition": false,
+          "reducedMotion": true
+        },
+        "typed": {
+          "elapsed": 0,
+          "transition": false,
+          "reducedMotion": true
+        },
+        "collapsed": {
+          "elapsed": 48.800000071525574,
+          "transition": false,
+          "reducedMotion": true
+        },
+        "typedBeforeSettling": false,
+        "reversal": true,
+        "page": "workbench",
+        "inputInert": true,
+        "focusInChat": false,
+        "quality": "ultra",
+        "targetFps": 60,
+        "width": 1024,
+        "height": 720,
+        "draftRetained": true
+      }
+    ],
+    "actualInput": "Electron webContents.sendInputEvent mouse and character events; no online model call.",
+    "reducedMotion": "System preference emulated with CDP and confirmed in renderer snapshot. App response motion preference alone does not stop the camera."
+  },
+  "sourceTests": {
+    "total": 1508,
+    "passed": 1508,
+    "failed": 0
+  },
+  "limits": [
+    "One M4 Pro and short native samples; no final display presentation or hardware input-to-photon measurement.",
+    "Extra wait is sampled at RAF frequency; 0 does not prove zero physical latency.",
+    "Full 20-case matrix completed before an initial input-check predicate failure; independent corrected six-case input acceptance subsequently passed.",
+    "Baseline source fingerprints were not retained. Current fingerprints identify tested sources and desktop assets, not an immutable release build.",
+    "Windows fix not yet independently verified; idle retest awaits user preparation. Read-only GPU check without ASTaria: 99%, 84 C, 930 MHz, 39.46 W.",
+    "No power, temperature reduction or battery-life benefit established. Other computers and Windows 11 remain unverified."
+  ]
+}

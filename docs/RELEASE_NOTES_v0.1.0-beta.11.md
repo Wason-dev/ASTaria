@@ -2,6 +2,26 @@
 
 本轮是 macOS arm64 与 Windows x64 的体验完善预发布版本，重点处理切换页面、展开与收拢聊天。源码已合并到 `main`；用户在 Windows 实测仍感到卡顿，**体验验收未通过**，Windows 包仍为试验版。多设备同步后续继续。发布构建的源码提交和 SHA-256 以 Release 附件清单为准，下文 `da3a1c1` 包的验收只记录历史测试，不代表当前发布包已完成同等实机验收。
 
+## 当前发布验收（2026-10-08）
+
+[Beta11 Release](https://github.com/Wason-dev/ASTaria/releases/tag/v0.1.0-beta.11) 已公开为预发布。标签 `v0.1.0-beta.11` 与两端构建均对应干净提交 `23c801050f94dc452b1206a76ac0022186d09d16`，源码树 `8dd726ed62b40d2ee5760fdd9873a586a3df4102`。发布后的文档维护提交不改变包内代码或移动标签。结构化记录见 [本次发布验收](./releases/beta11-acceptance.json)。
+
+| 项目 | 本次结果 | 验收边界 |
+| --- | --- | --- |
+| 源码 CI | [Source Checks](https://github.com/Wason-dev/ASTaria/actions/runs/37719119709) 的 macOS 全量测试 1,508 项、Windows 核心测试 124 项通过；桌面构建、文档版本与第三方声明一致性检查通过 | 测试集重叠，不累加；自动化不代替真实体验 |
+| Windows 打包 | [Windows 工作流](https://github.com/Wason-dev/ASTaria/actions/runs/37719149809) 的更新、验签与桌面服务测试 70 项通过；生成 NSIS 3.11 安装 EXE 与完整便携 ZIP | 仅 CI 构建与包内容核验；未在用户电脑重做安装、交互、真实升级或失败回退 |
+| macOS 成品 | 干净源码重新构建 App/DMG；隔离数据库的 Electron、React、本机 API、SQLite、WebGL2、窗口 smoke 通过；App/DMG ad-hoc 签名、DMG 校验与只读挂载内容通过 | DMG 仅包含 App、Applications 快捷方式及安装说明；未 Apple 公证，单台机器检查不代表所有 Mac |
+| Windows 内容 | 核对 EXE/ZIP 的大小、SHA-256、x64 可执行文件、包内构建记录及更新器/聊天修复源码；GSAP 许可完整、无用户数据库或密钥，安装说明与 Mac 逐字节一致 | Windows EXE 未代码签名；Windows 11 和用户体验仍未验收 |
+| Release 与更新 | 9 个附件均上传完成，GitHub 返回的大小与 SHA-256 全部匹配；两端清单 Ed25519 验签、实际 Release 的更新器选择与校验通过，标签回读匹配构建提交；BetaX 人工整理的正文保留 | Windows 真实下载后的安装、启动确认与失败回退仍待实测；BetaX → Beta11 首次升级手动安装 |
+
+| 安装包 | SHA-256 |
+| --- | --- |
+| `ASTaria-0.1.0-beta.11-mac-arm64-adhoc.dmg` | `71de0aa018bcdb92501809b11cf558058a5b87e43a97ca557a660ae2f587e133` |
+| `ASTaria-0.1.0-beta.11-win-x64-setup.exe` | `05feb1e9ab7721f34cd687dffc603ba4b9a3f54e5aa944350a6969f6c2801e2b` |
+| `ASTaria-0.1.0-beta.11-win-x64-portable.zip` | `2cffd6b30ce0e56d8efc8747999393f6fad1226eecfe001292b568a5fe712858` |
+
+本次增加手动 Windows 打包工作流，修正 macOS 更新器测试在输出文件尚未写完时读取的偶发失败，以及 Windows 测试路径和平台假设；固定许可与安装正文的 LF 换行，保留固定哈希检查。以上 CI 修复不改变运行时更新器行为，也不是额外的性能收益。当前 Windows 测试机不可达，安装/体验及另一台电脑的复测继续保留为未完成项。
+
 ## 已实现的优化
 
 - 帧率分区保持原有有意的省电设计：首页与聊天沿用所选 90/120 FPS，工作区的黑洞与环境渲染最高 60 FPS；30/45 档不升档，画质不随帧率上限下调，返回首页恢复所选帧率。有效帧率预算与画质未变的页面切换保留渲染调度和自适应历史；推荐设置仍以 60 FPS 为目标。

@@ -1,0 +1,150 @@
+{
+  "schemaVersion": 1,
+  "version": "0.1.0-beta.11",
+  "verifiedAt": "2026-10-08T02:58:24.976Z",
+  "release": {
+    "id": 406350647,
+    "url": "https://github.com/Wason-dev/ASTaria/releases/tag/v0.1.0-beta.11",
+    "tag": "v0.1.0-beta.11",
+    "prerelease": true,
+    "publishedAt": "2026-10-08T02:58:04Z"
+  },
+  "source": {
+    "commit": "23c801050f94dc452b1206a76ac0022186d09d16",
+    "tree": "8dd726ed62b40d2ee5760fdd9873a586a3df4102",
+    "dirty": false
+  },
+  "assets": [
+    {
+      "name": "ASTaria-0.1.0-beta.11-mac-arm64-adhoc.dmg",
+      "sha256": "71de0aa018bcdb92501809b11cf558058a5b87e43a97ca557a660ae2f587e133",
+      "sizeBytes": 151554443,
+      "assetId": 620517076,
+      "url": "https://github.com/Wason-dev/ASTaria/releases/download/v0.1.0-beta.11/ASTaria-0.1.0-beta.11-mac-arm64-adhoc.dmg"
+    },
+    {
+      "name": "ASTaria-0.1.0-beta.11-mac-arm64-adhoc.dmg.sha256",
+      "sha256": "fd57cd1d3447c91678111d942469294ae3d66e19100b6c04795df324f8081a54",
+      "sizeBytes": 108,
+      "assetId": 620518384,
+      "url": "https://github.com/Wason-dev/ASTaria/releases/download/v0.1.0-beta.11/ASTaria-0.1.0-beta.11-mac-arm64-adhoc.dmg.sha256"
+    },
+    {
+      "name": "ASTaria-0.1.0-beta.11-mac-arm64-adhoc.manifest.json",
+      "sha256": "c3817260497163960ccb7b5b42b3c72257ba6aa2a6f74e0eaa75b65f9c7bcfe7",
+      "sizeBytes": 1505,
+      "assetId": 620518410,
+      "url": "https://github.com/Wason-dev/ASTaria/releases/download/v0.1.0-beta.11/ASTaria-0.1.0-beta.11-mac-arm64-adhoc.manifest.json"
+    },
+    {
+      "name": "install.txt",
+      "sha256": "712dfa526e422483d60f86ba1793671c43de96536404f639d989e4bfba5c0fed",
+      "sizeBytes": 10549,
+      "assetId": 620518428,
+      "url": "https://github.com/Wason-dev/ASTaria/releases/download/v0.1.0-beta.11/install.txt"
+    },
+    {
+      "name": "ASTaria-0.1.0-beta.11-win-x64-setup.exe",
+      "sha256": "05feb1e9ab7721f34cd687dffc603ba4b9a3f54e5aa944350a6969f6c2801e2b",
+      "sizeBytes": 115977453,
+      "assetId": 620538737,
+      "url": "https://github.com/Wason-dev/ASTaria/releases/download/v0.1.0-beta.11/ASTaria-0.1.0-beta.11-win-x64-setup.exe"
+    },
+    {
+      "name": "ASTaria-0.1.0-beta.11-win-x64-setup.exe.sha256",
+      "sha256": "b3454904565a125f3e015e742e339af2bceaf70838265e0a3efd3a0d5c4e6b6d",
+      "sizeBytes": 106,
+      "assetId": 620539394,
+      "url": "https://github.com/Wason-dev/ASTaria/releases/download/v0.1.0-beta.11/ASTaria-0.1.0-beta.11-win-x64-setup.exe.sha256"
+    },
+    {
+      "name": "ASTaria-0.1.0-beta.11-win-x64-portable.zip",
+      "sha256": "2cffd6b30ce0e56d8efc8747999393f6fad1226eecfe001292b568a5fe712858",
+      "sizeBytes": 159847203,
+      "assetId": 620539423,
+      "url": "https://github.com/Wason-dev/ASTaria/releases/download/v0.1.0-beta.11/ASTaria-0.1.0-beta.11-win-x64-portable.zip"
+    },
+    {
+      "name": "ASTaria-0.1.0-beta.11-win-x64-portable.zip.sha256",
+      "sha256": "3ce08c835aec0195d671345fc2a586329564cbce048bbb038e0123056b36d9a4",
+      "sizeBytes": 109,
+      "assetId": 620540543,
+      "url": "https://github.com/Wason-dev/ASTaria/releases/download/v0.1.0-beta.11/ASTaria-0.1.0-beta.11-win-x64-portable.zip.sha256"
+    },
+    {
+      "name": "ASTaria-0.1.0-beta.11-win-x64.manifest.json",
+      "sha256": "ddf3f9cc463983c0221a33671c748e5a7e6cab04c290462c9d8d525108368926",
+      "sizeBytes": 2541,
+      "assetId": 620540563,
+      "url": "https://github.com/Wason-dev/ASTaria/releases/download/v0.1.0-beta.11/ASTaria-0.1.0-beta.11-win-x64.manifest.json"
+    }
+  ],
+  "verification": {
+    "assetDigestsMatchGitHub": true,
+    "manifestSignaturesVerified": true,
+    "updaterSelectionAndManifestValidation": true,
+    "tagMatchesBuildCommit": true,
+    "betaXReleaseBodyPreserved": true,
+    "mac": {
+      "isolatedNativeSmoke": true,
+      "appAndDmgAdHocSignatures": true,
+      "dmgVerified": true,
+      "mountedContentsVerified": true,
+      "applicationsSymlinkOnly": true
+    },
+    "windows": {
+      "source": {
+        "commit": "23c801050f94dc452b1206a76ac0022186d09d16",
+        "tree": "8dd726ed62b40d2ee5760fdd9873a586a3df4102",
+        "dirty": false
+      },
+      "assets": [
+        {
+          "name": "ASTaria-0.1.0-beta.11-win-x64-portable.zip",
+          "sha256": "2cffd6b30ce0e56d8efc8747999393f6fad1226eecfe001292b568a5fe712858",
+          "sizeBytes": 159847203
+        },
+        {
+          "name": "ASTaria-0.1.0-beta.11-win-x64-setup.exe",
+          "sha256": "05feb1e9ab7721f34cd687dffc603ba4b9a3f54e5aa944350a6969f6c2801e2b",
+          "sizeBytes": 115977453
+        }
+      ],
+      "nsisBuilt": true,
+      "branded": true,
+      "archivePayloadVerified": true,
+      "instructionsMatchMac": true,
+      "licenseHashVerified": true,
+      "packagedWindowsNativeAcceptance": false
+    },
+    "ci": [
+      {
+        "name": "Source Checks",
+        "runId": 37719119709,
+        "url": "https://github.com/Wason-dev/ASTaria/actions/runs/37719119709",
+        "conclusion": "success",
+        "macTests": 1508,
+        "windowsCoreTests": 124
+      },
+      {
+        "name": "Package Windows",
+        "runId": 37719149809,
+        "url": "https://github.com/Wason-dev/ASTaria/actions/runs/37719149809",
+        "conclusion": "success",
+        "updateTrustAndDesktopTests": 70
+      }
+    ],
+    "testCountNote": "Overlapping suites are not summed."
+  },
+  "limitations": [
+    "Windows user experience acceptance failed",
+    "Current Windows package installation and interaction not retested on user machine",
+    "Windows 11 untested",
+    "Real Windows in-app upgrade and rollback untested",
+    "Other computer testing pending",
+    "Real model download and inference untested",
+    "Syncthing actual cross-device transport untested",
+    "macOS not notarized",
+    "Windows executable not code-signed"
+  ]
+}

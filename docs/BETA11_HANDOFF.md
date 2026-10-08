@@ -7,6 +7,7 @@
 - 首次进入应有帧率、画质和 ASTaria 推荐选项；工作台空态教程不要求点击不存在的事项。已有 BetaX 修复需保留。
 - 首页/聊天沿用手动帧率，工作区环境渲染最高 60 FPS 是用户明确确认的省电设计。先读[省电与渲染决策记录](./POWER_AND_RENDERING_DECISIONS.md)，再做性能修改。记录每版优化的传统继续保留，不能只留最新结果而丢掉设计原因。
 - 用户后来明确要求合并分支并上传 Releases，覆盖了本文件早先的暂不发布决定。`codex/beta11-performance` 已合并到 `main`；发布仍应保留 Windows 体验未通过与实测缺口，不得拿旧本地包冒充当前源码构建。
+- 2026-10-08 [Beta11 Release](https://github.com/Wason-dev/ASTaria/releases/tag/v0.1.0-beta.11) 已公开为预发布，标签和两端实际构建均为干净提交 `23c8010`；9 个附件已回读核对，两端清单验签与更新器识别通过，BetaX 正文完整保留。macOS CI 1,508 项、Windows 核心 124 项、Windows 打包测试 70 项通过（不累加），Mac 成品隔离原生 smoke 通过；当前 Windows 包未重新实机安装或交互，升级/回退与 Windows 11 仍待验收。结构化记录见 [发布验收](./releases/beta11-acceptance.json)。后续文档提交不移动发布标签。
 - 用户已手动修改 BetaX 的 GitHub Release 说明以统一格式（2026-10-05）；该在线格式已读取，新版按相同结构撰写，不覆盖 BetaX 正文。
 - Windows 当前只有 Windows 10 测试环境，Windows 11 未验收；不能将单机结果写成全平台已通过。
 - 用户暂不允许下载本地模型，不能安装/下载 Ollama 或模型来补齐验收；真实模型下载与工具调用仍须如实保留验收缺口。

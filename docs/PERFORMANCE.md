@@ -161,3 +161,9 @@ ASTaria.app/Contents/MacOS/Electron --smoke-test --measure-interactions --chat-r
 ```
 
 当前源码全量测试 1,508 项通过，桌面构建与诊断脚本语法检查通过。Windows 共享修复尚未独立原生验收；最新只读检查在 ASTaria 未运行时仍为 GPU 99%、84°C、930 MHz、39.46 W，正常空闲复测待用户准备，不自行关闭用户程序。Mac 的短时结果不能外推 Windows、其他电脑、最终屏幕呈现或长期功耗。旧本地安装包不含本轮修复，其实机结果不能替代当前发布构建的验收。
+
+### 2026-10-08 · Beta11 发布构建与测量边界
+
+[Beta11](https://github.com/Wason-dev/ASTaria/releases/tag/v0.1.0-beta.11) 已发布，两端成品来自干净提交 `23c8010`，包含上面的聊天输入就绪修复、既有画质参数与省电预算。Mac 重新制作的 App/DMG 完成隔离原生 smoke，Windows EXE/ZIP 由 CI 生成并核对包内源码；CI、资产、签名及构建来源见 [当前发布验收](./RELEASE_NOTES_v0.1.0-beta.11.md#当前发布验收2026-10-08)。
+
+本次发布没有新增 Windows 原生性能样本，也没有重做两端完整性能矩阵；本文的数字保留各自历史测试条件。不能把 CI 测试或成品启动通过解释成卡顿已解决。用户的 Windows 体验验收仍未通过，另一台电脑、Windows 11、真实升级/回退、长期功耗和多设备实际传输仍须后续独立验证。

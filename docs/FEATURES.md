@@ -175,6 +175,8 @@ public/               静态资源与 ASTaria 图标
 
 当前页面的技术版本是 `0.1.0-beta.11`，展示名 **Beta11**，专注 macOS 13+ Apple Silicon arm64 与 Windows x64 的体验完善。旧本地测试包的验收是历史记录，当前发布资产的构建来源见 Release 清单。**分辨率、采样、辉光与像素公式保持不变**；用户反馈 Windows 仍卡顿，体验验收未通过。
 
+2026-10-08 的 [Beta11 Release](https://github.com/Wason-dev/ASTaria/releases/tag/v0.1.0-beta.11) 已提供从干净提交 `23c8010` 构建的 Mac DMG、Windows NSIS 安装 EXE 与完整 portable ZIP，当前包包含下述聊天修复和 Windows 应用内更新。全部 9 个附件的大小/哈希、两端发布清单签名与更新器识别已回读核对；macOS CI 1,508 项、Windows 核心 124 项及 Windows 打包测试 70 项通过，测试集重叠不累加。Mac 成品隔离原生 smoke 通过；当前 Windows 包的安装、交互、真实升级与失败回退仍未在用户电脑复测。完整构建与验收证据见 [Beta11 当前发布验收](./RELEASE_NOTES_v0.1.0-beta.11.md#当前发布验收2026-10-08)。
+
 - **零强度模糊**：模糊半径为 0 时 `backdrop-filter` 直接为 `none`，不再为无光学效果的零半径创建背景合成通道。
 - **无 SVG 路径时不做 SVG 工作**：没有精细折射路径（Windows 默认玻璃）时，不再测量宿主、也不生成或维护 SVG 位移层；这是 Windows 默认配置的常态。
 - **相机采样去重**：界面几何只在相机真正推进时更新，环境模拟时钟不触发重算；过渡结束、暂停与减少动态各自仍触发一次。
@@ -188,7 +190,7 @@ public/               静态资源与 ASTaria 图标
 
 Windows 首次展开聊天仍有偶发长帧，手动精细折射仍高开销；Windows 11、更多 GPU/DPI/多屏、休眠恢复、长期功耗、真实模型下载与 Syncthing 实际跨机传送未验收。旧综合浏览器预览脚本未整体迁移，详见[交接边界](./BETA11_HANDOFF.md#开发验收脚本边界)。
 
-## 历史版本：0.1.0-beta.10（BetaX，公开最新）
+## 历史版本：0.1.0-beta.10（BetaX）
 
 `0.1.0-beta.10`（tag `v0.1.0-beta.10`）在 GitHub 的展示名称为 **BetaX**。主发布面向 macOS 13+ Apple Silicon（arm64），使用 ad-hoc 签名，未做 Apple 公证。桌面运行时采用 Electron 44.1.0，内含 Node 本机服务、预编译的凭据助手和系统提醒助手。构建机需要 Apple Silicon Mac、arm64 Node.js 24.19+（Node 24 系列）、Command Line Tools 和独立取得的干净 Electron.app 及其 LICENSE、LICENSES.chromium.html；应用运行时不应依赖开发服务器或系统 Node。安装步骤以[安装说明](./INSTALL.md)为准。
 

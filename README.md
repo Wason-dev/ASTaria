@@ -4,9 +4,11 @@
 
 ASTaria 是一款本机优先的个人时间与事项应用。和析熙聊作业、计划或心愿，把任务放进课程和日常活动之间的真实空档，再从工作台开始专注。
 
-当前版本：**Beta11 · 0.1.0-beta.11**。源码已合并到 `main`；本版以 macOS 13+ Apple Silicon 与 Windows x64 预发布包提供，Windows 仍为未签名试验版。用户反馈 Windows 切页与展开聊天仍卡顿，体验验收未通过；Windows 11 和本版 Windows 自动升级/回退均未实机验收。BetaX 的加密目录同步能力沿用，多设备传输验收仍待完成。
+当前版本：**Beta11 · 0.1.0-beta.11**，已于 **2026-10-08** 发布。源码已合并到 `main`；[本版 Release](https://github.com/Wason-dev/ASTaria/releases/tag/v0.1.0-beta.11) 提供 macOS 13+ Apple Silicon DMG、Windows x64 安装 EXE 与便携 ZIP，两端均从干净提交 `23c8010` 构建。Windows 仍为未签名试验版，用户反馈切页与展开聊天仍卡顿，体验验收未通过；当前 Windows 包的重新安装与交互、本版自动升级/回退、Windows 11 均未实机验收。BetaX 的加密目录同步能力沿用，多设备传输验收仍待完成。
 
 [下载最新版本](https://github.com/Wason-dev/ASTaria/releases) · [安装说明](docs/INSTALL.md) · [更新记录](CHANGELOG.md) · [功能详情](docs/FEATURES.md) · [界面与交互规范](docs/UI_DESIGN_SYSTEM.md)
+
+本次发布通过 macOS 全量测试 1,508 项、Windows 核心测试 124 项及 Windows 打包测试 70 项（测试集重叠，不累加）；Mac 成品完成隔离原生启动检查，全部 9 个 Release 附件的大小与 SHA-256、两端清单签名和更新器识别均已核对。完整证据与限制见 [Beta11 发布说明](docs/RELEASE_NOTES_v0.1.0-beta.11.md)。
 
 ## 看看 ASTaria
 

@@ -1,0 +1,7 @@
+# These texts are hashed or compared byte-for-byte during release packaging.
+# Windows checkouts must retain the same bytes as macOS and the source tree.
+third-party/gsap-3.15.0-LICENSE.txt text eol=lf
+THIRD_PARTY_NOTICES.txt text eol=lf
+docs/INSTALL.md text eol=lf
+INSTALL.md text eol=lf
+install.txt text eol=lf

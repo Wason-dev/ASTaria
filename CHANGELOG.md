@@ -2,7 +2,7 @@
 
 ## 0.1.0-beta.11 · Beta11 · 2026-10-08 · 预发布（体验继续完善）
 
-本版专注 macOS 与 Windows 的体验完善，保持分辨率、采样、辉光与像素公式不变。源码已合并到 `main`，[Release](https://github.com/Wason-dev/ASTaria/releases/tag/v0.1.0-beta.11) 已提供从干净提交 `23c8010` 构建的 Mac DMG、Windows 安装 EXE 与便携 ZIP。两端 CI、Mac 成品隔离启动、附件哈希与发布清单签名已核对。旧本地包的安装/启动验收已完成，但用户仍报告 Windows 切页和展开聊天卡顿，体验验收未通过；当前 Windows 包未重新实机安装与交互验收，不继承旧包结论。具体测量、构建来源和验收边界见 [Beta11 说明](docs/RELEASE_NOTES_v0.1.0-beta.11.md)。
+本版专注 macOS 与 Windows 的体验完善，保持分辨率、采样、辉光与像素公式不变。源码已合并到 `main`，[Release](https://github.com/Wason-dev/ASTaria/releases/tag/v0.1.0-beta.11) 已提供从干净提交 `23c8010` 构建的 Mac DMG、Windows 安装 EXE 与便携 ZIP。两端 CI、Mac 成品隔离启动、附件哈希与发布清单签名已核对。旧本地包的安装/启动验收已完成，但 Windows 切页和展开聊天仍存在卡顿，体验验收未通过；当前 Windows 包未重新实机安装与交互验收，不继承旧包结论。具体测量、构建来源和验收边界见 [Beta11 说明](docs/RELEASE_NOTES_v0.1.0-beta.11.md)。
 
 - Windows x64 标准安装版加入应用内更新：验证发布清单 Ed25519 签名、SHA-256 与大小，退出后静默安装并重启，启动失败尝试回退；便携版和非标准位置仍手动更新。真实 Windows 升级/回退尚未验收。
 - 零强度模糊不再创建合成的背景通道：模糊半径为 0 时使用 `none`；没有 SVG 精细折射路径时不再测量宿主、也不生成与维护 SVG 位移层。

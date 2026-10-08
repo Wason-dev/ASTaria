@@ -4,7 +4,7 @@
 
 ASTaria 是一款本机优先的个人时间与事项应用。和析熙聊作业、计划或心愿，把任务放进课程和日常活动之间的真实空档，再从工作台开始专注。
 
-当前版本：**Beta11 · 0.1.0-beta.11**，已于 **2026-10-08** 发布。源码已合并到 `main`；[本版 Release](https://github.com/Wason-dev/ASTaria/releases/tag/v0.1.0-beta.11) 提供 macOS 13+ Apple Silicon DMG、Windows x64 安装 EXE 与便携 ZIP，两端均从干净提交 `23c8010` 构建。Windows 仍为未签名试验版，用户反馈切页与展开聊天仍卡顿，体验验收未通过；当前 Windows 包的重新安装与交互、本版自动升级/回退、Windows 11 均未实机验收。BetaX 的加密目录同步能力沿用，多设备传输验收仍待完成。
+当前版本：**Beta11 · 0.1.0-beta.11**，已于 **2026-10-08** 发布。源码已合并到 `main`；[本版 Release](https://github.com/Wason-dev/ASTaria/releases/tag/v0.1.0-beta.11) 提供 macOS 13+ Apple Silicon DMG、Windows x64 安装 EXE 与便携 ZIP，两端均从干净提交 `23c8010` 构建。Windows 仍为未签名试验版，切页与展开聊天仍存在卡顿，体验验收未通过；当前 Windows 包的重新安装与交互、本版自动升级/回退、Windows 11 均未实机验收。BetaX 的加密目录同步能力沿用，多设备传输验收仍待完成。
 
 [下载最新版本](https://github.com/Wason-dev/ASTaria/releases) · [安装说明](docs/INSTALL.md) · [更新记录](CHANGELOG.md) · [功能详情](docs/FEATURES.md) · [界面与交互规范](docs/UI_DESIGN_SYSTEM.md)
 
@@ -105,7 +105,7 @@ CI 自动执行源码测试、桌面网页构建、许可清单和版本文档�
 - 两端分别记录动态帧间隔，并核对实际 GPU 像素和深浅主题/玻璃截图；不再仅用静置后的平均 FPS 判断流畅度。
 - 旧本地包已通过安装/启动与内容校验；冻结时源码测试 1,494 项、Windows 专项 63 项、浏览器帧率设置专项 52 项通过。2026-10-06 当前源码测试 1,508 项通过，Mac 新一轮 20 项动态矩阵与六组真实输入检查通过；Windows 本轮修复待独立实测，构建来源和逐项验收见 Beta11 说明。
 
-具体改动、验证和未完成项见 [Beta11 说明](docs/RELEASE_NOTES_v0.1.0-beta.11.md)与[性能记录](docs/PERFORMANCE.md)。必须保留的取舍见[省电与渲染决策记录](docs/POWER_AND_RENDERING_DECISIONS.md)。Windows 首次展开聊天的偶发长帧和用户报告的切页卡顿尚未解决，手动精细折射仍高开销。Windows 11、更多 GPU/DPI/多屏、休眠恢复、长期功耗、真实模型下载与 Syncthing 实际跨机传送也仍未验收。
+具体改动、验证和未完成项见 [Beta11 说明](docs/RELEASE_NOTES_v0.1.0-beta.11.md)与[性能记录](docs/PERFORMANCE.md)。必须保留的取舍见[省电与渲染决策记录](docs/POWER_AND_RENDERING_DECISIONS.md)。Windows 首次展开聊天的偶发长帧和切页卡顿尚未解决，手动精细折射仍高开销。Windows 11、更多 GPU/DPI/多屏、休眠恢复、长期功耗、真实模型下载与 Syncthing 实际跨机传送也仍未验收。
 
 ## 许可
 

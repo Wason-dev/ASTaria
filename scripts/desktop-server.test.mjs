@@ -78,9 +78,9 @@ async function fixture(t, updates) {
 }
 
 test('desktop static asset resolver stays within the built frontend', () => {
-  const root = '/tmp/astaria-dist'
-  assert.equal(assetPath(root, '/'), '/tmp/astaria-dist/index.html')
-  assert.equal(assetPath(root, '/assets/app.js?v=1'), '/tmp/astaria-dist/assets/app.js')
+  const root = join(tmpdir(), 'astaria-dist')
+  assert.equal(assetPath(root, '/'), join(root, 'index.html'))
+  assert.equal(assetPath(root, '/assets/app.js?v=1'), join(root, 'assets', 'app.js'))
   for (const path of ['/../secret', '/%2e%2e/secret', '/.env', '/%5csecret', '/%00secret', '//remote/file', 'http://remote/file', '/%zz']) {
     assert.equal(assetPath(root, path), null, path)
   }
@@ -142,12 +142,17 @@ test('service drain waits for asynchronous operations before closing its databas
   assert.equal(idle, true)
 })
 
-test('bundled keychain preparation validates a shipped executable without compiling into user data', async t => {
+test('bundled keychain preparation enforces the platform and validates a shipped executable', async t => {
   const root = await mkdtemp(join(tmpdir(), 'astaria-keychain-prep-'))
   t.after(() => rm(root, { recursive: true, force: true }))
   const helper = join(root, 'helper')
   await writeFile(helper, '#!/bin/sh\nexit 0\n', { mode: 0o755 })
-  await createKeychain(join(root, 'nonexistent-profile'), { binaryPath: helper, binarySha256: createHash('sha256').update(await readFile(helper)).digest('hex') }).prepare()
+  const keychain = createKeychain(join(root, 'nonexistent-profile'), { binaryPath: helper, binarySha256: createHash('sha256').update(await readFile(helper)).digest('hex') })
+  if (process.platform !== 'darwin') {
+    await assert.rejects(keychain.prepare(), /当前密钥存储支持 macOS 钥匙串/)
+    return
+  }
+  await keychain.prepare()
   await assert.rejects(createKeychain(root, { binaryPath: join(root, 'missing') }).prepare())
 })
 

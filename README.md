@@ -52,7 +52,7 @@ macOS 设置中可检查、下载并安装 GitHub 更新，并验证内置公钥
 
 旧 Beta11 本地测试包在 Windows 应用内更新加入之前就已冻结，不应作为当前版本使用；BetaX 的 Windows 试验版也从未提供应用内更新。从 BetaX 升到 Beta11 的第一次仍需手动下载并运行新的 `setup.exe` 或解压新的 portable ZIP。
 
-在「设置 → 数据 → 跨设备同步」建立或加入同步组，选择共享文件夹或用户已经共享的 Syncthing 目录。每台电脑使用独立 SQLite，目录只传递加密操作；加入设备需要同步密钥，API Key 不同步。可查看待处理冲突、最近检查时间和变更回执。Syncthing 的真实跨机文件传送、Windows 11、休眠、更多 DPI/多屏配置、长期大数据运行仍未验收；详见[功能边界](docs/FEATURES.md)和[路线图与验收矩阵](PROJECT_ROADMAP.md)。
+在「设置 → 数据 → 跨设备同步」建立或加入同步组，选择共享文件夹或用户已经共享的 Syncthing 目录。每台电脑使用独立 SQLite，目录只传递加密操作；加入设备需要同步密钥，API Key 不同步。可查看待处理冲突、最近检查时间和变更回执。Syncthing 的真实跨机文件传送、Windows 11、休眠、更多 DPI/多屏配置、长期大数据运行仍未验收；详见[功能边界](docs/FEATURES.md)和[Beta11 发布说明](docs/RELEASE_NOTES_v0.1.0-beta.11.md)。
 
 ## 数据与隐私
 

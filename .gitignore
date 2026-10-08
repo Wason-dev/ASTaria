@@ -28,6 +28,7 @@ design/**/*.png
 
 # Local planning and publication records.
 .local-publication/
+/PROJECT_ROADMAP.md
 PUBLIC_READINESS.md
 BETA_REVIEW.md
 FIRST_BETA_PLAN.md

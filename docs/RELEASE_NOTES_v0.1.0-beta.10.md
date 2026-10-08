@@ -43,4 +43,4 @@ Syncthing 必须由用户自行配置并共享目录，ASTaria 只检测目录�
 
 macOS DMG 根目录仅包含 App、指向 `/Applications` 的 Applications 快捷方式及说明，由用户自行拖拽安装。Windows 安装程序默认使用当前用户目录；ZIP 必须完整解压后运行。更新前先导出备份、退出旧版。同步密钥与 API Key 不包含在备份内；恢复备份前请断开同步。
 
-完整边界见 [项目路线图](../PROJECT_ROADMAP.md)、[功能文档](FEATURES.md)、[安装说明](INSTALL.md)与[安全说明](../SECURITY.md)。
+完整边界见 [功能文档](FEATURES.md)、[安装说明](INSTALL.md)与[安全说明](../SECURITY.md)。

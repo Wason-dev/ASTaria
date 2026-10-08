@@ -1,0 +1,61 @@
+name: Windows Package (manual)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.19.0
+          cache: npm
+      - run: npm ci
+      - run: node scripts/verify-doc-versions.mjs
+      - run: node --test scripts/windows-update-installer.test.mjs scripts/desktop-updates.test.mjs scripts/update-download.test.mjs scripts/release-trust.test.mjs scripts/desktop-server.test.mjs
+      - run: npm run build:desktop
+      - run: node scripts/third-party-notices.mjs
+      - run: git diff --exit-code -- THIRD_PARTY_NOTICES.txt
+      - name: Prepare verified Electron and resource editor
+        shell: pwsh
+        run: |
+          $runtimeZip = Join-Path $env:RUNNER_TEMP 'electron-win.zip'
+          Invoke-WebRequest 'https://github.com/electron/electron/releases/download/v44.1.0/electron-v44.1.0-win32-x64.zip' -OutFile $runtimeZip
+          if ((Get-FileHash $runtimeZip -Algorithm SHA256).Hash.ToLower() -ne 'e45cae5ea51eb5c7a358cdf292dd908349a3f1913f494c8af7d01581a9eb8184') { throw 'Electron checksum mismatch' }
+          Expand-Archive $runtimeZip (Join-Path $env:RUNNER_TEMP 'electron-win')
+          $editor = Join-Path $env:RUNNER_TEMP 'rcedit-x64.exe'
+          Invoke-WebRequest 'https://github.com/electron/rcedit/releases/download/v2.0.0/rcedit-x64.exe' -OutFile $editor
+          if ((Get-FileHash $editor -Algorithm SHA256).Hash.ToLower() -ne '3e7801db1a5edbec91b49a24a094aad776cb4515488ea5a4ca2289c400eade2a') { throw 'Resource editor checksum mismatch' }
+      - name: Prepare NSIS compiler
+        shell: pwsh
+        run: |
+          choco install nsis --version=3.11 --yes --no-progress
+          if ($LASTEXITCODE -ne 0) { throw 'NSIS installation failed' }
+      - name: Build EXE, portable ZIP and unsigned manifest
+        shell: pwsh
+        run: |
+          node scripts/package-windows.mjs --runtime "$env:RUNNER_TEMP/electron-win" --out "$env:RUNNER_TEMP/astaria-package" --makensis "${env:ProgramFiles(x86)}/NSIS/makensis.exe" --rcedit "$env:RUNNER_TEMP/rcedit-x64.exe"
+          if ($LASTEXITCODE -ne 0) { throw 'Windows packaging failed' }
+          $manifest = Get-ChildItem "$env:RUNNER_TEMP/astaria-package/*/*.manifest.json" | Select-Object -First 1
+          $build = Get-Content $manifest.FullName -Raw | ConvertFrom-Json
+          if ($build.source.commit -ne $env:GITHUB_SHA -or $build.source.dirty -ne $false -or -not $build.nsisBuilt -or -not $build.branded) { throw 'Build provenance mismatch' }
+      # No signing key or publication permission is available to this workflow.
+      # Release manifests are verified and signed locally before publication.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: astaria-windows-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/astaria-package/*/*-setup.exe
+            ${{ runner.temp }}/astaria-package/*/*-portable.zip
+            ${{ runner.temp }}/astaria-package/*/*.sha256
+            ${{ runner.temp }}/astaria-package/*/*.manifest.json
+            ${{ runner.temp }}/astaria-package/*/install.txt
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 7

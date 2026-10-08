@@ -61,7 +61,7 @@ ASTaria.exe --smoke-test --measure-performance      # Windows
 
 ## Beta11：保留省电预算的双平台动态优化
 
-2026-10-05 开始的本地候选；源码已推送 GitHub 开发分支，安装包未上传 Release。目标是减少切页与聊天形变中的无用工作、误跳帧和长帧。工作区最高 60 FPS 的既有省电策略保持不变；首页/聊天保留手动 90/120，30/45 不升档，手动画质独立。原因与回归边界见[决策记录 P01–P08](./POWER_AND_RENDERING_DECISIONS.md)。
+2026-10-05 开始的 Beta11 候选测量；其后源码合并 `main` 并作为预发布来源。目标是减少切页与聊天形变中的无用工作、误跳帧和长帧。工作区最高 60 FPS 的既有省电策略保持不变；首页/聊天保留手动 90/120，30/45 不升档，手动画质独立。原因与回归边界见[决策记录 P01–P08](./POWER_AND_RENDERING_DECISIONS.md)。
 
 ### 本版实际改动
 
@@ -160,4 +160,4 @@ ASTaria.app/Contents/MacOS/Electron --smoke-test --measure-interactions --verify
 ASTaria.app/Contents/MacOS/Electron --smoke-test --measure-interactions --chat-readiness-only
 ```
 
-当前源码全量测试 1,508 项通过，桌面构建与诊断脚本语法检查通过。Windows 共享修复尚未独立原生验收；最新只读检查在 ASTaria 未运行时仍为 GPU 99%、84°C、930 MHz、39.46 W，正常空闲复测待用户准备，不自行关闭用户程序。Mac 的短时结果不能外推 Windows、其他电脑、最终屏幕呈现或长期功耗。旧本地安装包不含本轮修复，当前未制作新的最终安装包；源码已推送开发分支，安装包未发布。
+当前源码全量测试 1,508 项通过，桌面构建与诊断脚本语法检查通过。Windows 共享修复尚未独立原生验收；最新只读检查在 ASTaria 未运行时仍为 GPU 99%、84°C、930 MHz、39.46 W，正常空闲复测待用户准备，不自行关闭用户程序。Mac 的短时结果不能外推 Windows、其他电脑、最终屏幕呈现或长期功耗。旧本地安装包不含本轮修复，其实机结果不能替代当前发布构建的验收。

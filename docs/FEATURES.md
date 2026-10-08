@@ -4,7 +4,7 @@
 
 ## BetaX 历史范围与限制（0.1.0-beta.10）
 
-`0.1.0-beta.10`（tag `v0.1.0-beta.10`）的 GitHub 展示名称为 **BetaX**，目前仍是公开可下载的最新版。下面是该版本已实现的能力与仍未验收的边界，**仅作为历史记录保留**；**本节的测试与安装证据属于 BetaX，不能作为 Beta11 的验证结论**。主发布为 macOS 13+ Apple Silicon（arm64）的 ad-hoc 包；同一 Release 另提供 Windows x64 试验版（`-setup.exe` 与 `-portable.zip`）。
+`0.1.0-beta.10`（tag `v0.1.0-beta.10`）的 GitHub 展示名称为 **BetaX**。下面是该版本已实现的能力与仍未验收的边界，**仅作为历史记录保留**；**本节的测试与安装证据属于 BetaX，不能作为 Beta11 的验证结论**。主发布为 macOS 13+ Apple Silicon（arm64）的 ad-hoc 包；同一 Release 另提供 Windows x64 试验版（`-setup.exe` 与 `-portable.zip`）。
 
 - **Windows x64**：复用本机服务与 SQLite，数据保存在 `%APPDATA%\ASTaria`，API Key 使用系统凭据保护（DPAPI）；Release 提供 `setup.exe`（NSIS）与便携 ZIP 两个试验版资产。已在 Windows 10 x64（19044）真实交互会话核对 Electron、React、API、SQLite、WebGL2 与 DPAPI，本版合并定向测试共 123 项通过（其中 30 项是本地模型协议测试，同一批测试不重复计算），并有 Mac → Windows 10 → Mac 加密操作往返通过。最终发布 `setup.exe` 已在隔离中文路径目录真实安装，安装后交互桌面 smoke、DPAPI、原生窗口与 8 组滚动条检查通过；被占用 EXE 上的安装与卸载均以退出码 2 失败且不改动文件；卸载删除程序、快捷方式与卸载注册项并保留无关用户文件，安装测试同时证明真实 AppData 未被改动。仍未验收：Windows 11、原地升级、睡眠恢复、更广 DPI 与多屏（只测过 DPR 1.5 的一种配置）、长期功耗与 Windows 原生通知。
 - **共享文件夹**：用户选择普通目录、云盘本地同步目录或 NAS 挂载目录；每台设备只写自己的加密操作文件，保留自己的本机 SQLite。界面显示目录不可用、只读、暂停、未落地、冲突和待处理原因；服务提供者只能搬运密文文件，不能把活跃 SQLite 直接共享。
@@ -171,9 +171,9 @@ public/               静态资源与 ASTaria 图标
 
 网页生产构建会在 `dist/` 生成 `manifest.webmanifest` 与 `sw.js`（generateSW 产物）；桌面构建不注册这套 PWA 离线缓存。
 
-## 当前版本：Beta11（0.1.0-beta.11 · 本地）
+## 当前版本：Beta11（0.1.0-beta.11 · 预发布）
 
-当前页面的技术版本是 `0.1.0-beta.11`，展示名 **Beta11**，专注 macOS 13+ Apple Silicon arm64 与 Windows x64 的体验完善。旧本地测试包的安装与包名见[安装说明](./INSTALL.md)，后续源码尚未重新打包。**分辨率、采样、辉光与像素公式保持不变**；用户反馈 Windows 仍卡顿，体验验收未通过。
+当前页面的技术版本是 `0.1.0-beta.11`，展示名 **Beta11**，专注 macOS 13+ Apple Silicon arm64 与 Windows x64 的体验完善。旧本地测试包的验收是历史记录，当前发布资产的构建来源见 Release 清单。**分辨率、采样、辉光与像素公式保持不变**；用户反馈 Windows 仍卡顿，体验验收未通过。
 
 - **零强度模糊**：模糊半径为 0 时 `backdrop-filter` 直接为 `none`，不再为无光学效果的零半径创建背景合成通道。
 - **无 SVG 路径时不做 SVG 工作**：没有精细折射路径（Windows 默认玻璃）时，不再测量宿主、也不生成或维护 SVG 位移层；这是 Windows 默认配置的常态。
@@ -184,9 +184,9 @@ public/               静态资源与 ASTaria 图标
 - **边界条件**：浅色精确端点不再计算贡献为零的辉光中间通道；光标强度恰为 0 时跳过无效光学运算；所有非零特效强度保持完整。RAF 抖动容差由 0.25ms 放宽到 2ms，绝对 deadline 仍按完整间隔推进，目标平均 FPS 不变。
 - **帧率分区按省电设计生效**：手动选择的 90 / 120 FPS 在首页与聊天沿用；工作区的黑洞与环境渲染最高 60 FPS（这是有意的省电上限，不是缺陷）；30 / 45 档不会被升档，画质独立、不随帧率上限下调，返回首页即恢复所选帧率。本版保留该上限，只修复高刷时间戳抖动造成的误跳帧。
 
-**验收状态**：旧本地包已完成两端独立安装/启动验收，冻结时源码测试 1,494 项、Windows 专项 63 项、浏览器帧率设置专项 52 项通过；两端各完成 40 项交互、16 组 GPU 参考、12 张布局截图与保留页面检查。用户已反馈 Windows 仍卡顿，体验验收未通过。2026-10-06 当前源码测试 1,508 项通过，Mac 本轮聊天修复的 20 项动态矩阵与六组真实输入检查通过；Windows 修复实测、空闲性能复测和当前源码重新打包仍待完成。构建来源和安装/启动/卸载结果见 [Beta11 说明](./RELEASE_NOTES_v0.1.0-beta.11.md)，性能数字见[性能记录](./PERFORMANCE.md)。
+**验收状态**：旧本地包已完成两端独立安装/启动验收，冻结时源码测试 1,494 项、Windows 专项 63 项、浏览器帧率设置专项 52 项通过；两端各完成 40 项交互、16 组 GPU 参考、12 张布局截图与保留页面检查。用户已反馈 Windows 仍卡顿，体验验收未通过。2026-10-06 当前源码测试 1,508 项通过，Mac 本轮聊天修复的 20 项动态矩阵与六组真实输入检查通过；Windows 修复实测与空闲性能复测仍待完成。构建来源和安装/启动/卸载结果见 [Beta11 说明](./RELEASE_NOTES_v0.1.0-beta.11.md)，性能数字见[性能记录](./PERFORMANCE.md)。
 
-Windows 首次展开聊天仍有偶发长帧，手动精细折射仍高开销；Windows 11、更多 GPU/DPI/多屏、休眠恢复、长期功耗、真实模型下载与 Syncthing 实际跨机传送未验收。旧综合浏览器预览脚本未整体迁移，详见[交接边界](./BETA11_HANDOFF.md#开发验收脚本边界)。Beta11 源码已推送 GitHub 开发分支、未上传 Release；公开可下载的最新版仍为 `0.1.0-beta.10`（BetaX）。
+Windows 首次展开聊天仍有偶发长帧，手动精细折射仍高开销；Windows 11、更多 GPU/DPI/多屏、休眠恢复、长期功耗、真实模型下载与 Syncthing 实际跨机传送未验收。旧综合浏览器预览脚本未整体迁移，详见[交接边界](./BETA11_HANDOFF.md#开发验收脚本边界)。
 
 ## 历史版本：0.1.0-beta.10（BetaX，公开最新）
 
@@ -210,7 +210,7 @@ DMG 根目录只有 App、指向 `/Applications` 的 Applications 快捷方式�
 
 「下载并校验」完成后可选择「安装并重启」；下载支持取消，安装前核对 SHA-256、包大小、App 身份、架构、构建记录、代码签名和发布清单的 Ed25519 签名，原应用在新版本启动成功前保留，失败会尝试回退。本机数据不随 App 替换。App 必须位于可写目录；直接从 DMG 或受系统隔离的临时路径运行时，请先复制安装。发布须同时上传匹配的 DMG 和构建清单。
 
-Windows x64 标准安装版同样接入应用内更新：只有运行中的 EXE 位于 `%LOCALAPPDATA%\Programs\ASTaria\ASTaria.exe` 时才能安装；可手动检查更新，自动检查默认开启、App 可见时最多每六小时一次且可关闭；下载后按发布清单核对大小与 SHA-256，验签通过才成为安装候选，退出 App 后由静默安装脚本安装并重启新版本；新版本未通过启动确认时会把旧版本移回并尝试重启。便携版或非标准安装位置不提供应用内安装，界面提示退出 App 后手动运行安装包。Windows 更新同样不覆盖 `%APPDATA%\ASTaria` 用户数据；Release 清单的 Ed25519 验签与 Windows 包代码签名是两件事，Windows 包仍是未签名试验包。Windows 应用内更新是在本轮 Beta11 本地包（构建源码 `da3a1c1`）冻结之后加入源码的，不在该包内，尚未在真实 Windows 上验收。
+Windows x64 标准安装版同样接入应用内更新：只有运行中的 EXE 位于 `%LOCALAPPDATA%\Programs\ASTaria\ASTaria.exe` 时才能安装；可手动检查更新，自动检查默认开启、App 可见时最多每六小时一次且可关闭；下载后按发布清单核对大小与 SHA-256，验签通过才成为安装候选，退出 App 后由静默安装脚本安装并重启新版本；新版本未通过启动确认时会把旧版本移回并尝试重启。便携版或非标准安装位置不提供应用内安装，界面提示退出 App 后手动运行安装包。Windows 更新同样不覆盖 `%APPDATA%\ASTaria` 用户数据；Release 清单的 Ed25519 验签与 Windows 包代码签名是两件事，Windows 包仍是未签名试验包。Windows 应用内更新是在旧 Beta11 本地包（构建源码 `da3a1c1`）冻结之后加入源码的，不在该包内，尚未在真实 Windows 上验收。
 
 备份导出与恢复使用格式化 JSON 的 32 MiB UTF-8 字节上限，超限明确拒绝且不改动本机数据，不导出无法恢复的超限文件。中文字节、精确上限、超限拒绝与失败原子性测试已通过。恢复会更新状态，之后的新备份仍会重新核验大小。macOS 桌面端数据位于 `~/Library/Application Support/ASTaria/`：首次运行前应从「设置 → 数据」导出备份并保留原备份文件；浏览器保存的专注计时、外观调参等状态不等同于 SQLite 数据，不应假定会自动复制进桌面容器。若使用本地模型，Ollama 或 LM Studio 仍需在本机运行。性能数字见[性能说明](./PERFORMANCE.md)；干净机器、休眠恢复与长期功耗仍需继续测试。
 
@@ -218,7 +218,7 @@ Windows x64 标准安装版同样接入应用内更新：只有运行中的 EXE 
 
 `scripts/package-windows.mjs` 产出 `ASTaria-0.1.0-beta.10-win-x64/`，Release 上传 `ASTaria-0.1.0-beta.10-win-x64-setup.exe`（NSIS 安装程序）与 `ASTaria-0.1.0-beta.10-win-x64-portable.zip`：需要自行准备解压好的 Electron win32-x64 运行时；NSIS 需要额外提供 `makensis` 才编译，未提供时只生成 `.nsi` 与便携 ZIP。已核对：Windows 10 x64（19044）真实交互会话中的 Electron 启动、React 界面、本机 API、SQLite、WebGL2 与 DPAPI 凭据保护；本版合并定向测试共 123 项通过，其中包含 30 项本地模型协议测试（同批测试，不重复计算）；Mac → Windows 10 → Mac 的中文任务、假期与完成状态加密操作往返通过。安装与卸载已用最终发布 `setup.exe` 在隔离中文路径目录实测：安装成功，安装后交互桌面 smoke、DPAPI、原生窗口与 8 组滚动条检查通过；被占用 EXE 上的安装与卸载均退出码 2 且未修改文件；卸载删除程序、快捷方式与卸载注册项，保留无关用户文件，且安装测试证明真实 AppData 未变。仍未验收：Windows 11、原地升级、睡眠恢复、更广 DPI 与多屏（仅 DPR 1.5 的一种配置）、长期功耗与 Windows 原生通知。两个资产都是试验版，不作为正式 Windows 发行版。
 
-以上 123 项合并定向测试与安装/卸载验收属于 BetaX（`0.1.0-beta.10`）时点的 Windows x64 试验版。本轮 Beta11 本地测试包（构建源码 `da3a1c1`）同样不含 Windows 应用内更新：该功能是在本地包冻结之后才加入源码的，已有自动化测试，但尚未在真实 Windows 上验收。
+以上 123 项合并定向测试与安装/卸载验收属于 BetaX（`0.1.0-beta.10`）时点的 Windows x64 试验版。旧 Beta11 本地测试包（构建源码 `da3a1c1`）同样不含 Windows 应用内更新：该功能是在本地包冻结之后才加入源码的，已有自动化测试，但尚未在真实 Windows 上验收。
 
 Windows 本地模型复用回环 HTTP 协议：需用户先安装并打开 Ollama，ASTaria 才能请求下载受支持模型；也可连接已有兼容服务。上述 30 项本地模型协议测试已计入本版 123 项合并定向测试，不另外累加；本次按用户要求未下载模型，真实下载、GPU/CPU 推理与工具调用未验收。
 
@@ -250,4 +250,4 @@ Windows 默认走 CSS 通透/磨砂玻璃：保留 rim、tint、通透与磨砂�
 
 自动更新要求发布清单使用与 `desktop/releaseTrust.mjs` 内置公钥配对的 Ed25519 私钥签名。私钥保存在仓库外，不提交、不上传、不随 App 分发。保管并备份同一密钥；丢失或更换密钥需要先设计旧客户端可信的迁移。不传 `--sign-manifest` 的清单只适用于手动分发测试包，无法通过自动安装校验。公开 Release 上传前须对实际清单执行 `verifyReleaseManifest`，并核对 DMG SHA-256、App CDHash、源码提交和干净状态。
 
-Windows Release 清单同样必须先签名才能用于应用内更新：`scripts/package-windows.mjs` 只产出清单，需要再用现有 `scripts/sign-release-manifest.mjs <manifest.json> <private-key.pem>` 以固定私钥 `wason-2026-01` 签名，私钥须与 `desktop/releaseTrust.mjs` 内置公钥配对。Windows 打包器本身不带签名参数。未签名的清单（本机测试包即如此）只能手动分发安装，无法通过应用内更新的验签，不能作为应用内更新的来源。
+Windows Release 清单同样必须先签名才能用于应用内更新：`scripts/package-windows.mjs` 只产出清单，需要再用现有 `scripts/sign-release-manifest.mjs <manifest.json> <private-key.pem>` 以固定私钥 `wason-2026-01` 签名，私钥须与 `desktop/releaseTrust.mjs` 内置公钥配对。Windows 打包器本身不带签名参数。未签名的清单（旧本地测试包即如此）只能手动分发安装，无法通过应用内更新的验签，不能作为应用内更新的来源。

@@ -246,11 +246,13 @@ test('launching an update ignores a writable staging script', { timeout: 10000 }
   await launchMacUpdate({ script, target: join(f.root, 'missing.app'), staging, resultFile,
     executable: 'Electron', appCDHash: manifest.appCDHash }, 2147483647)
   let result
-  for (let attempt = 0; attempt < 100 && result === undefined; attempt++) {
+  // Shell redirection creates the file before printf writes its contents.
+  // Wait for the result value, not merely the file's existence.
+  for (let attempt = 0; attempt < 100 && (result === undefined || result === ''); attempt++) {
     try { result = await readFile(resultFile, 'utf8') } catch (error) {
       if (error.code !== 'ENOENT') throw error
-      await new Promise(resolve => setTimeout(resolve, 20))
     }
+    if (result === undefined || result === '') await new Promise(resolve => setTimeout(resolve, 20))
   }
   assert.equal(result, 'failed')
   await assert.rejects(stat(marker), { code: 'ENOENT' })

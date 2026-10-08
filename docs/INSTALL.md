@@ -1,13 +1,13 @@
-# ASTaria Beta11 本地测试包安装
+# ASTaria Beta11 预发布包安装
 
-本地技术版本 `0.1.0-beta.11`（展示名称 **Beta11**），本轮以本地测试包交付：macOS 13+ Apple Silicon（arm64）的 ad-hoc 签名包，未经 Apple 公证。下面的文件名与步骤对应当前本地 Beta11 交付。
+技术版本 `0.1.0-beta.11`（展示名称 **Beta11**）：macOS 13+ Apple Silicon（arm64）使用 ad-hoc 签名包，未经 Apple 公证；Windows x64 提供未签名试验包。请从 [Beta11 Release](https://github.com/Wason-dev/ASTaria/releases/tag/v0.1.0-beta.11) 下载并核对随包 SHA-256。
 
-Beta11 源码已在 GitHub 开发分支，但尚无公开安装包；公开下载的最新版仍是 BetaX · `0.1.0-beta.10`；需要公开版请用 [Releases](https://github.com/Wason-dev/ASTaria/releases)。
+Windows 体验仍有卡顿反馈；Windows 11 和本版自动升级/失败回退未实机验收。旧 `da3a1c1` 本地测试包缺少后续修复，请勿当成当前发布包。
 
 ## macOS 13+ · Apple Silicon
 
 ```text
-ASTaria 0.1.0-beta.11 · Beta11 本地测试包
+ASTaria 0.1.0-beta.11 · Beta11 预发布包
 
 系统要求：macOS 13 或更新版本，Apple Silicon（M 系列芯片）。不支持 Intel Mac。
 此包采用 ad-hoc 签名，未经 Apple 公证；不是正式公开发行版。
@@ -62,14 +62,14 @@ App 须位于可写目录，不能直接在 DMG 内更新。
 请避免网页和桌面版同时修改同一份数据。首次使用需在设置里配置自己的模型连接。
 ```
 
-## Windows 10/11 · x64（Beta11 本地测试包）
+## Windows 10/11 · x64（Beta11 试验包）
 
-本地 Beta11 交付包含两个 Windows x64 资产：`ASTaria-0.1.0-beta.11-win-x64-setup.exe`（NSIS
+Beta11 Release 包含两个 Windows x64 资产：`ASTaria-0.1.0-beta.11-win-x64-setup.exe`（NSIS
 安装程序，默认装到当前用户目录，不需要管理员权限）与 `ASTaria-0.1.0-beta.11-win-x64-portable.zip`。
-两者都是本地测试包，不是正式 Windows 发行版，也不承诺 Windows 11。
+两者都是未签名试验包，不是正式 Windows 发行版，也不承诺 Windows 11。
 
 Windows 10 x64（19044）已用于本轮原生交互测试，涵盖 Electron、React、本机 API、SQLite、
-WebGL2 和 DPAPI 凭据保护。最终包的安装与运行结果以 [Beta11 说明](RELEASE_NOTES_v0.1.0-beta.11.md)
+WebGL2 和 DPAPI 凭据保护。最终包的安装与运行结果以 [Beta11 说明](https://github.com/Wason-dev/ASTaria/blob/main/docs/RELEASE_NOTES_v0.1.0-beta.11.md)
 为准；不把历史版本的 123 项测试记录当成本版结果。
 
 应用内更新（标准安装版）：安装在 `%LOCALAPPDATA%\Programs\ASTaria` 的标准安装版从 Beta11 起可在
@@ -84,7 +84,7 @@ WebGL2 和 DPAPI 凭据保护。最终包的安装与运行结果以 [Beta11 说
 测试，但尚未在真实 Windows 上跑完整升级与回退，请勿当作已验收结果。更新前请导出备份并退出旧版。
 
 ```text
-ASTaria 0.1.0-beta.11 · Beta11 本地测试包 · Windows x64
+ASTaria 0.1.0-beta.11 · Beta11 试验包 · Windows x64
 
 1. setup.exe：双击运行，按提示完成后从开始菜单或安装目录启动 ASTaria。
    portable.zip：解压整个 ZIP，不要只移动单个 EXE，运行解压目录里的 ASTaria.exe。
@@ -97,7 +97,7 @@ ASTaria 0.1.0-beta.11 · Beta11 本地测试包 · Windows x64
    应用内更新替换。
 5. 首次升级：从 BetaX（0.1.0-beta.10）升到 Beta11 必须手动运行新的 setup.exe，或解压
    新的 portable ZIP——BetaX 的 Windows 试验版从未提供应用内更新。
-   本轮 Beta11 本地测试包不含 Windows 应用内更新，也请按上面的手动方式安装。
+   旧本地测试包（源码 da3a1c1）不含 Windows 应用内更新，请核对 Release 清单的构建提交。
 6. 未实机验收：Windows 10 的真实应用内升级与失败回退、Windows 11。
 7. 提醒：Windows 上没有退出 App 后的提醒。
 8. 在浏览器里运行源码不提供 DPAPI 和文件夹同步；这两项需要运行 Electron 包。
@@ -109,8 +109,8 @@ ASTaria 0.1.0-beta.11 · Beta11 本地测试包 · Windows x64
 
 发布 Windows 应用内更新前，发布清单必须签名：`scripts/package-windows.mjs` 产出清单后，用现有脚本
 `scripts/sign-release-manifest.mjs <manifest.json> <private-key.pem>` 与固定私钥 `wason-2026-01`
-签名；私钥保存在仓库外，不提交、不随包分发，须与内置公钥配对。未签名的清单（本机测试包就是这样）
-只能手动分发安装，无法通过应用内更新的验签，不能作为应用内更新的来源；本轮 Beta11 本地包
+签名；私钥保存在仓库外，不提交、不随包分发，须与内置公钥配对。未签名的清单
+只能手动分发安装，无法通过应用内更新的验签，不能作为应用内更新的来源；旧 Beta11 本地包
 （源码 `da3a1c1`）未签名，且不含 Windows 应用内更新。Windows 包目前仍未做代码签名，
 这与发布清单的 Ed25519 验签是两件事。
 

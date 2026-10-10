@@ -87,6 +87,20 @@ test('search keeps failed and empty page bodies distinct from verified content',
   assert.ok(result.sources.every(source => source.fetchedAt === '2026-10-03T01:00:00.000Z'))
 })
 
+test('a complete URL is fetched directly without a DeepSeek search request or key', async () => {
+  const pages = []
+  const search = createWebSearch({
+    keychain: { read: async () => { throw new Error('direct URL must not read a key') } },
+    getSettings: () => local({ enabled: true, maxUses: 2 }),
+    fetcher: async () => { throw new Error('direct URL must not call search API') },
+    pageFetcher: async (url, options) => { pages.push([url, options.signal]); return { content: 'ASTaria 仓库正文', fetchedAt: '2026-10-09T00:00:00.000Z', fetchStatus: 'ok' } },
+  })
+  const result = await search.search('https://github.com/Wason-dev/ASTaria')
+  assert.deepEqual(pages, [['https://github.com/Wason-dev/ASTaria', undefined]])
+  assert.deepEqual(result.sources, [{ title: 'https://github.com/Wason-dev/ASTaria', url: 'https://github.com/Wason-dev/ASTaria', snippet: '', publishedAt: null,
+    source: 'github.com', content: 'ASTaria 仓库正文', fetchedAt: '2026-10-09T00:00:00.000Z', fetchStatus: 'ok' }])
+})
+
 test('one page fetch failure is reported per source without losing verified pages', async () => {
   const controller = new AbortController()
   const seen = []

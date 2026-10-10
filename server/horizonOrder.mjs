@@ -53,7 +53,52 @@ function validateChange(input, snap) {
       if (dueDate && assignedDate > dueDate) fail(`「${task.title}」不能移到截止时间 DDL ${dueDate} 之后`)
     }
   }
+  // Reflow only dates whose submitted order or membership actually changed.
+  // A full three-day draft always contains today's rows, so checking capacity
+  // for every date made an otherwise valid change for tomorrow fail whenever
+  // today's overdue work had no remaining room. An unchanged date keeps its
+  // original placements, including an already elapsed placement.
+  const changedDates = new Set()
+  for (const [index, date] of snap.dates.entries()) {
+    const draftGroups = input.groups.filter(group => group.day === index)
+    const originalGroups = snap.view.groups.filter(group => group.day === index)
+    const draft = draftGroups.flatMap(group => group.itemIds)
+    const original = originalGroups.flatMap(group => group.tasks.map(task => task.id))
+    const membershipChanged = draftGroups.length !== originalGroups.length
+      || draftGroups.some((group, groupIndex) => {
+        const previous = originalGroups[groupIndex]
+        return !previous || group.itemIds.length !== previous.tasks.length
+          || group.itemIds.some((id, itemIndex) => id !== previous.tasks[itemIndex]?.id)
+      })
+    if (membershipChanged || draft.length !== original.length || draft.some((id, offset) => id !== original[offset])) changedDates.add(date)
+  }
+  for (const item of snap.movable) {
+    const assigned = input.assignedDates[item.id]
+    if (assigned !== item.date) { changedDates.add(item.date); changedDates.add(assigned) }
+  }
+  // Some legacy groupings are intentionally interleaved with the actual
+  // clock order. If the submitted order already conflicts with those saved
+  // placements, that date must be packed before the global order can be
+  // accepted. This only expands the set for a real ordering conflict; a full
+  // day with unrelated overdue work is still left alone when tomorrow is the
+  // date the user changed.
+  const movableById = new Map(snap.movable.map(item => [item.id, item]))
+  for (const [index, date] of snap.dates.entries()) {
+    if (changedDates.has(date)) continue
+    const ids = input.groups.filter(group => group.day === index).flatMap(group => group.itemIds)
+    let previousEnd = ''
+    for (const id of ids) {
+      const item = movableById.get(id)
+      if (item?.date === date && previousEnd && item.start < previousEnd) { changedDates.add(date); break }
+      if (item?.date === date) previousEnd = item.end
+    }
+  }
+  if (!changedDates.size) {
+    for (const item of snap.movable) if (item.needsReschedule) changedDates.add(item.date)
+  }
+  input.reflowDates = changedDates
   for (const date of snap.dates) {
+    if (!changedDates.has(date)) continue
     const work = snap.movable.filter(item => input.assignedDates[item.id] === date)
     if (!work.length) continue
     const windows = windowsFor(snap, date).map(range => range.end - range.start)
@@ -72,6 +117,10 @@ function deterministicPlan(input, snap) {
   for (const date of snap.dates) {
     const items = input.orderedIds.filter(id => input.assignedDates[id] === date).map(id => byId.get(id))
     if (!items.length) continue
+    if (input.reflowDates instanceof Set && !input.reflowDates.has(date)) {
+      plans.push(...items.map(item => ({ id: item.id, date: item.date, start: item.start, end: item.end })))
+      continue
+    }
     const windows = windowsFor(snap, date)
     // Work backwards first: these latest starts leave space for every later
     // session, so preserving an original time cannot strand the remaining work.
@@ -105,7 +154,16 @@ function deterministicPlan(input, snap) {
 }
 
 function refreshElapsedPlan(plans, input, snap, activity) {
-  if (!plans.some(plan => new Date(`${plan.date}T${plan.start}:00`).getTime() <= snap.at.getTime())) return plans
+  const reflowDates = input.reflowDates instanceof Set ? input.reflowDates : new Set(snap.dates)
+  const elapsedDates = new Set([...reflowDates].filter(date => plans.some(plan => plan.date === date
+    && new Date(`${plan.date}T${plan.start}:00`).getTime() <= snap.at.getTime())))
+  // The clock can cross a planned start while the model is responding. Add
+  // only those newly elapsed dates to the reflow set; unrelated dates retain
+  // their original placement and do not get needlessly rewritten.
+  for (const plan of plans) if (!reflowDates.has(plan.date)
+    && new Date(`${plan.date}T${plan.start}:00`).getTime() <= snap.at.getTime()) reflowDates.add(plan.date)
+  if (!elapsedDates.size && reflowDates.size === input.reflowDates?.size) return plans
+  input.reflowDates = reflowDates
   // A previously valid proposal can age while the provider is responding.
   // Treat its times as preferences, then re-fit the complete order in today's
   // current free windows. Explicit dates, durations and all constraints stay.

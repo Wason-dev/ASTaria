@@ -64,6 +64,47 @@ test('rejects local destinations, redirects, oversized and empty pages', async (
   assert.equal((await fetchSourcePage('https://source.example/', { lookup: async () => ['93.184.215.14'], request: large.request })).fetchStatus, 'failed')
 })
 
+test('follows up to three safe redirects and resolves every target separately', async () => {
+  const calls = []
+  const request = (url, options, callback) => {
+    calls.push(String(url))
+    const req = new EventEmitter()
+    req.end = () => queueMicrotask(() => {
+      const response = new EventEmitter()
+      response.destroy = () => {}
+      response.headers = calls.length < 3
+        ? { location: calls.length === 1 ? 'https://redirect.example/step-2' : '/final', 'content-type': 'text/html' }
+        : { 'content-type': 'text/html' }
+      response.statusCode = calls.length < 3 ? 302 : 200
+      callback(response)
+      if (response.statusCode === 200) { response.emit('data', Buffer.from('<main><p>最终正文</p></main>')); response.emit('end') }
+    })
+    return req
+  }
+  const result = await fetchSourcePage('https://source.example/start', {
+    lookup: async hostname => hostname === 'source.example' || hostname === 'redirect.example' ? ['93.184.215.14'] : [],
+    request,
+  })
+  assert.equal(result.fetchStatus, 'ok')
+  assert.equal(result.content, '最终正文')
+  assert.deepEqual(calls, ['https://source.example/start', 'https://redirect.example/step-2', 'https://redirect.example/final'])
+})
+
+test('rejects a redirect to a private host before opening it', async () => {
+  const client = responseClient({ statusCode: 302 })
+  client.request = (url, options, callback) => {
+    const req = new EventEmitter()
+    req.end = () => queueMicrotask(() => {
+      const response = new EventEmitter()
+      response.statusCode = 302; response.headers = { location: 'http://127.0.0.1/secret' }; response.destroy = () => {}
+      callback(response)
+    })
+    return req
+  }
+  const result = await fetchSourcePage('https://source.example/', { lookup: async () => ['93.184.215.14'], request: client.request })
+  assert.equal(result.fetchStatus, 'failed')
+})
+
 test('DNS resolution is bounded by the same deadline as the page request', async () => {
   const client = responseClient()
   const result = await fetchSourcePage('https://source.example/', {

@@ -12,6 +12,9 @@ import { createLocalService } from '../server/index.mjs'
 import { createKeychain } from '../server/keychain.mjs'
 import { createReminderService } from '../desktop/reminders.mjs'
 import { getPreferences } from '../server/preferences.mjs'
+import { createCompanion } from '../server/companion.mjs'
+import { createFreeTime } from '../server/freeTime.mjs'
+import { localDay, shiftDay } from '../src/home/agenda.ts'
 
 const token = 'a'.repeat(64)
 
@@ -19,6 +22,7 @@ test('desktop writes refresh real reminder data, and quit flushes before closing
   const { createDesktopServer } = await import('../desktop/server.mjs')
   const dir = await mkdtemp(join(tmpdir(), 'astaria-reminder-integration-')), db = createDatabase(':memory:')
   const native = [], now = new Date(), due = new Date(now.getTime() + 2 * 60 * 60_000).toISOString()
+  let entries = []
   const preferences = getPreferences(db)
   db.setPreference('app', { ...preferences, notifications: { ...preferences.notifications, quietStart: '00:00', quietEnd: '00:00' } })
   const task = db.createTask({ title: '提醒集成检查', due })
@@ -26,7 +30,11 @@ test('desktop writes refresh real reminder data, and quit flushes before closing
   const service = createLocalService({ db, dataDirectory: dir, vault: { status: async () => false },
     onMutation: () => { mutations++; reminders.schedule() } })
   reminders = createReminderService({ stateFile: join(dir, 'reminders.json'), snapshot: service.reminderSnapshot, now: () => now,
-    run: async (command, entries) => { native.push({ command, entries }); return { authorization: 2 } } })
+    run: async (command, input) => {
+      native.push({ command, entries: input })
+      if (command === 'replace') entries = structuredClone(input)
+      return { authorization: 2, entries, pending: entries.length, pendingWithContent: entries.length }
+    } })
   const server = createDesktopServer({ root: dir, service, token, reminders, port: 0 })
   t.after(async () => { await server.close(); await rm(dir, { recursive: true, force: true }) })
   const origin = (await server.listen()).replace(/\/$/u, '')
@@ -40,6 +48,52 @@ test('desktop writes refresh real reminder data, and quit flushes before closing
   assert.equal(mutations, 1, 'saved API mutation reaches notification scheduler')
   await server.close()
   assert.deepEqual(native.findLast(call => call.command === 'replace').entries, [], 'quit flush sees saved completion before SQLite closes')
+})
+
+test('余时真实事项改期自动替换系统预约，跨日和删除均不保留旧时间', async t => {
+  const dir = await mkdtemp(join(tmpdir(), 'astaria-reminder-reschedule-')), db = createDatabase(':memory:')
+  const now = new Date(), date = localDay(shiftDay(now, 1)), nextDate = localDay(shiftDay(now, 2))
+  const preferences = getPreferences(db)
+  db.setPreference('app', { ...preferences, notifications: { ...preferences.notifications, quietStart: '00:00', quietEnd: '00:00' } })
+  const companion = createCompanion({ db }), freeTime = createFreeTime({ db })
+  companion.saveFreeTimeGoal({ title: '余时改期回归', minPerWeek: 1, sessionMin: 30, sessionMax: 30 })
+  const session = freeTime.schedule({ date }).sessions[0]
+  assert.ok(session)
+  let block = { ...db.getPlanner().blocks.find(value => value.id === session.id), date, start: '18:00', end: '18:30' }
+  db.updatePlanner({ type: 'save-block', block }, db.getPlanner().revision)
+  let reminders, entries = []
+  const service = createLocalService({ db, dataDirectory: dir, vault: { status: async () => false }, onMutation: () => reminders.schedule() })
+  reminders = createReminderService({ stateFile: join(dir, 'reminders.json'), snapshot: service.reminderSnapshot, now: () => now,
+    run: async (command, input) => {
+      if (command === 'replace') entries = structuredClone(input)
+      return { authorization: 2, entries, pending: entries.length, pendingWithContent: entries.length }
+    } })
+  const handler = createDesktopHandler({ root: dir, service, token, reminders })
+  t.after(async () => { reminders.close(); await service.whenIdle(); service.close(); await rm(dir, { recursive: true, force: true }) })
+  await reminders.setEnabled(true)
+  const original = structuredClone(entries)
+  assert.equal(original.length, 1)
+  const save = async action => {
+    const result = await response(handler, request('/api/planner', { expectedRevision: db.getPlanner().revision, action }))
+    assert.equal(result.status, 200, result.text)
+    await service.whenIdle()
+    // Wait for the automatic scheduler, never call /refresh or flush here.
+    await new Promise(resolve => setTimeout(resolve, 450))
+    assert.equal((await reminders.status()).error, null)
+  }
+  block = { ...block, start: '19:00', end: '19:30' }
+  await save({ type: 'save-block', block })
+  assert.equal(entries[0].id, original[0].id)
+  assert.equal(entries[0].at, Math.floor(new Date(`${date}T18:55:00`).getTime() / 1000))
+  assert.equal(entries[0].body, '19:00–19:30 · 本次余时')
+  assert.ok(!entries.some(entry => entry.at === original[0].at))
+  block = { ...block, date: nextDate }
+  await save({ type: 'save-block', block })
+  assert.equal(entries.length, 1)
+  assert.notEqual(entries[0].id, original[0].id)
+  assert.equal(entries[0].at, Math.floor(new Date(`${nextDate}T18:55:00`).getTime() / 1000))
+  await save({ type: 'delete-block', id: block.id })
+  assert.deepEqual(entries, [])
 })
 function request(url, body, headers = {}) {
   const req = Readable.from(body === undefined ? [] : [Buffer.from(JSON.stringify(body))])

@@ -94,6 +94,8 @@ export class HorizonCanvas {
   private flowTime = 0
   private atmosphere: { image: HTMLCanvasElement; top: number; key: string } | null = null
   private samples: RibbonPoint[] = Array.from({ length: SAMPLE_COUNT + 1 }, () => ({ x: 0, y: 0, nx: 0, ny: 0 }))
+  private sampledProjectionKey = ''
+  private sampledPull = { angle: Number.NaN, displacement: Number.NaN, spread: Number.NaN }
   private readonly pathPoint = { x: 0, y: 0 }
   private motions = new Map<string, GroupMotion>()
   private pointerAngle = spring(0)
@@ -140,6 +142,7 @@ export class HorizonCanvas {
     this.ratio = clamp(finite(globalThis.devicePixelRatio, 1), 1, 1.6)
     this.canvas.width = Math.round(this.width * this.ratio)
     this.canvas.height = Math.round(this.height * this.ratio)
+    this.sampledProjectionKey = ''
     this.releaseAtmosphere()
   }
 
@@ -160,6 +163,11 @@ export class HorizonCanvas {
     this.pointerDisplacement = state.reduced ? spring(0) : springStep(this.pointerDisplacement, displacement, dt, 13, 1)
     const pull = { angle: this.pointerAngle.value, displacement: this.pointerDisplacement.value / this.height,
       spread: clamp(this.width * .11 / projection.radius, .015, .65) }
+    const projectionKey = `${projection.width}:${projection.height}:${projection.apexY}:${projection.radius}:${projection.cx}:${projection.cy}`
+    if (projectionKey === this.sampledProjectionKey
+      && pull.angle === this.sampledPull.angle && pull.displacement === this.sampledPull.displacement && pull.spread === this.sampledPull.spread) return
+    this.sampledProjectionKey = projectionKey
+    this.sampledPull = pull
     setStringFlightEdgePull(pull)
     for (let index = 0; index <= SAMPLE_COUNT; index++) {
       const at = index / SAMPLE_COUNT, point = horizonPoint(projection, at)

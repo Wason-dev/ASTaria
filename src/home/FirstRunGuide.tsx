@@ -136,7 +136,7 @@ export function FirstRunGuide({ preferences, previewOpen, previewComplete, onSta
             {recommended ? <p className="first-run-render-note">目标 60 FPS，从最高画质开始，持续卡顿时自动调整，流畅后逐步恢复。Windows 默认使用流畅玻璃。</p> : <div className="first-run-render-fields">
               <label>目标帧率<select aria-label="初始帧率" value={frameProfile} onChange={event => setFrameProfile(event.target.value as Preferences['render']['profile'])}>{([['economy', '30 FPS'], ['balanced', '45 FPS'], ['full', '60 FPS'], ['smooth90', '90 FPS'], ['smooth120', '120 FPS']] as const).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
               <label>黑洞画质<select aria-label="初始画质" value={quality} onChange={event => setQuality(event.target.value as typeof quality)}>{([['ultra','最高'],['high','高'],['low','轻量'],['safe','兼容']] as const).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-              <p className="first-run-render-note">手动画质保持固定；首页与聊天使用所选帧率，工作区为省电最高 60 FPS。高刷受屏幕与设备性能限制。</p>
+              <p className="first-run-render-note">手动画质保持固定；首页与聊天使用所选帧率，工作区背景为省电最高 30 FPS。高刷受屏幕与设备性能限制。</p>
             </div>}
           </fieldset>
         </>}

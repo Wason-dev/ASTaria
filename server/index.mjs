@@ -25,10 +25,10 @@ export const DATA_DIRECTORY = dataDirectory()
 const localAddresses = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
 const hosts = new Set(['127.0.0.1', 'localhost', '[::1]'])
 const publicMessage = (raw) => {
-  const { id, seq, role, content, createdAt, requestId, taskId, excludeFromContext, question, retractedAt, reasoningContent } = raw.role === 'assistant' && !raw.retractedAt ? normalizeAssistantProtocol(raw) : raw
+  const { id, seq, role, content, createdAt, requestId, taskId, excludeFromContext, question, retractedAt, reasoningContent, attachments, executionNotice } = raw.role === 'assistant' && !raw.retractedAt ? normalizeAssistantProtocol(raw) : raw
   return ({
   id, seq, role, content: retractedAt ? '已撤回' : content, createdAt, requestId, taskId, excludeFromContext,
-  ...(retractedAt ? { retractedAt } : { question, ...(role === 'assistant' && reasoningContent ? { reasoningContent } : {}) }),
+  ...(retractedAt ? { retractedAt } : { question, ...(attachments?.length ? { attachments } : {}), ...(role === 'assistant' && reasoningContent ? { reasoningContent } : {}), ...(executionNotice ? { executionNotice } : {}) }),
 }) }
 
 export function validateRequest(req) {
@@ -270,7 +270,7 @@ export function createLocalService({ db = createDatabase(join(DATA_DIRECTORY, 'a
         '/settings/key': ['key'], '/settings/key/remove': [], '/settings/test': [], '/settings/model': ['model'],
         '/settings/provider': ['provider', 'cloudModel', 'reasoningEffort', 'streamResponses', 'contextBudget', 'webSearch', 'local'], '/settings/local/models': ['engine', 'baseUrl'],
         '/settings/local/install': ['baseUrl', 'model', 'confirmed'],
-        '/chat': ['requestId', 'conversationId', 'text', 'context'], '/conversations': [],
+        '/chat': ['requestId', 'conversationId', 'text', 'attachments', 'context'], '/conversations': [],
         '/conversations/select': ['id'], '/conversations/rename': ['conversationId', 'title'], '/conversations/delete': ['conversationId'], '/operations/read': ['ids'],
         '/messages/retract': ['requestId', 'conversationId'],
         '/tasks/update': ['id', 'patch', 'expectedUpdatedAt'], '/tasks/delete': ['id'], '/tasks/reopen': ['id', 'expectedUpdatedAt'],

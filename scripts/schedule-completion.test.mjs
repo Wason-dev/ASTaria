@@ -176,7 +176,9 @@ for (const failure of ['conflict', 'stale-revision']) test(`explicit schedule cr
   const result = await f.run(input('明天17:15–18:00 PSEC社团活动'))
   assert.equal(result.status, 'completed')
   assert.equal(result.execution.status, 'failed')
-  assert.equal(result.execution.reply.mode, 'fallback')
+  assert.equal(result.execution.reply.mode, 'model')
+  assert.equal(result.messages.at(-1).content, '这次安排还没有保存。')
+  assert.ok(result.messages.at(-1).executionNotice.issues.length)
   assert.equal(f.requests.length, 3, 'a failed write can report failure without repeated forced retries')
   assert.equal(result.operations.length, 0)
   assert.deepEqual(f.db.listTasks(), originalTasks)
@@ -217,7 +219,9 @@ test('an atomic schedule cannot redefine the named time range in the user reques
   const result = await f.run(input('明天17:15–18:00 PSEC社团活动'))
   assert.equal(result.status, 'completed')
   assert.equal(result.execution.status, 'failed')
-  assert.equal(result.execution.reply.mode, 'fallback')
+  assert.equal(result.execution.reply.mode, 'model')
+  assert.equal(result.messages.at(-1).content, '尚未保存')
+  assert.match(result.messages.at(-1).executionNotice.issues.join('\n'), /用户原话不一致/)
   assert.equal(f.requests.length, 3, 'a failed write can report failure without repeated forced retries')
   assert.equal(f.db.listTasks().length, 0)
   assert.equal(f.db.getPlanner().blocks.length, 0)
@@ -269,7 +273,7 @@ test('a planner write for an existing task cannot redefine the time explicitly r
   assert.equal(f.db.listTasks().length, 1)
 })
 
-test('undoing the old child receipt before the final reply cancels the whole creation and suppresses stale success', async t => {
+test('undoing the old child receipt before the final reply cancels creation without replacing prose', async t => {
   const f = fixture(t)
   const staleReply = 'PSEC社团活动已安排明天17:15–18:00。'
   let childId
@@ -286,8 +290,9 @@ test('undoing the old child receipt before the final reply cancels the whole cre
   assert.equal(f.db.getPlanner().blocks.length, 0)
   assert.ok(result.operations.find(operation => operation.id === childId).undoneAt)
   assert.equal(result.execution.scheduleRequirements[0].status, 'cancelled')
-  assert.ok(!result.messages.some(message => message.role === 'assistant' && !message.toolCalls?.length && message.content === staleReply))
-  assert.match(result.messages.at(-1).content, /已撤销/u)
+  assert.equal(result.messages.at(-1).content, staleReply)
+  assert.equal(result.messages.at(-1).executionNotice, undefined)
+  assert.ok(result.operations.every(operation => operation.undoneAt), 'undo state stays on the receipt')
 })
 
 test('replaying a planner commit without its checkpoint or receipt reconstructs the original slot and verifies current state', async t => {

@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useChatSubmitKey } from '../xixi/useChatSubmitKey'
+import type { ChatAttachment } from '../xixi/types'
+import { ChatAttachmentPicker } from '../xixi/ChatAttachmentPicker'
 import './xixi-input.css'
 
 type Props = {
@@ -8,10 +10,14 @@ type Props = {
   id?: string
   disabled?: boolean
   onSubmit?: () => void
+  attachment: ChatAttachment | null
+  onAttachmentChange: (attachment: ChatAttachment | null) => void
+  attachmentError: string
+  onAttachmentError: (message: string) => void
 }
 
 /** The parent supplies the label and draft; Enter sends and Shift+Enter wraps. */
-export function XixiInput({ value, onChange, id = 'wb-xixi-input', disabled = false, onSubmit }: Props) {
+export function XixiInput({ value, onChange, id = 'wb-xixi-input', disabled = false, onSubmit, attachment, onAttachmentChange, attachmentError, onAttachmentError }: Props) {
   const [pulse, setPulse] = useState<number | null>(null)
   const pulseSequence = useRef(0)
   const pulseTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
@@ -40,6 +46,7 @@ export function XixiInput({ value, onChange, id = 'wb-xixi-input', disabled = fa
       <span className="home-input-glow" />
       <span className="home-input-rim" />
     </span>}
+    <ChatAttachmentPicker id={`${id}-image-upload`} attachment={attachment} onChange={onAttachmentChange} error={attachmentError} onError={onAttachmentError} disabled={disabled} />
     <textarea className="wb-input-textarea" id={id} rows={3} maxLength={4000} placeholder="哪里需要一起想想" value={value} disabled={disabled}
       onChange={event => {
         const next = event.currentTarget.value

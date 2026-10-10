@@ -6,6 +6,14 @@ import { blocksForDay, routinesForDay } from '../src/planner/model.ts'
 import { agendaDate, localDay, shiftDay } from '../src/home/agenda.ts'
 
 const hash = value => createHash('sha256').update(value).digest('hex')
+const retryDelays = [1000, 5000, 30000]
+function samePending(actual, expected, now) {
+  if (!Array.isArray(actual)) return false
+  // A reminder may fire while the helper starts. Never requeue a past trigger.
+  const normalize = entries => entries.filter(entry => entry.id !== 'astaria.test' && entry.at > now.getTime() / 1000)
+    .map(({ id, title, body, at }) => [id, title, body, at]).sort((a, b) => a[0].localeCompare(b[0]))
+  return JSON.stringify(normalize(actual)) === JSON.stringify(normalize(expected))
+}
 function allowed(at, quiet) {
   const minute = at.getHours() * 60 + at.getMinutes()
   const parse = x => Number(x.slice(0, 2)) * 60 + Number(x.slice(3))
@@ -61,37 +69,60 @@ export function nativeReminderRunner(binary) {
 
 export function createReminderService({ stateFile, snapshot, run, now = () => new Date() }) {
   let enabled = false, authorization = 0, count = 0, through = null, error = null, omitted = 0, fingerprint = '', timer, pending, closed = false
+  let rerun = false, retryAttempt = 0
   let previewMode = 'unknown', iconAvailable = null, registeredBundleMatches = null, registeredIconAvailable = null
   const ready = readFile(stateFile, 'utf8').then(value => { enabled = JSON.parse(value).enabled === true }).catch(() => {})
   const status = () => ({ supported: true, enabled, authorization, count, through, omitted, error, previewMode, iconAvailable, registeredBundleMatches, registeredIconAvailable })
+  const queue = delay => {
+    if (closed || timer) return
+    timer = setTimeout(() => { timer = undefined; void sync() }, delay)
+    timer.unref?.()
+  }
   const sync = async () => {
     await ready
     if (closed) return status()
-    if (pending) { await pending; return sync() }
+    clearTimeout(timer); timer = undefined
+    if (pending) { rerun = true; return pending }
     pending = (async () => {
-      try {
-        const native = await run('status'); authorization = native.authorization
-        previewMode = ['always', 'when-unlocked', 'never'][native.showPreviews] ?? 'unknown'
-        iconAvailable = typeof native.iconAvailable === 'boolean' ? native.iconAvailable : null
-        registeredBundleMatches = typeof native.registeredBundleMatches === 'boolean' ? native.registeredBundleMatches : null
-        registeredIconAvailable = typeof native.registeredIconAvailable === 'boolean' ? native.registeredIconAvailable : null
-        const plan = enabled ? buildReminderPlan(snapshot(), now()) : { entries: [], omitted: 0 }
-        const key = hash(JSON.stringify([plan.entries, authorization]))
-        if (key !== fingerprint) {
-          await run('replace', plan.entries)
-          const delivered = await run('status')
-          if (Number.isInteger(delivered.pendingWithContent) && delivered.pendingWithContent !== delivered.pending) {
-            throw new Error('系统收到的提醒内容不完整，请重新同步提醒')
+      do {
+        rerun = false
+        try {
+          const native = await run('status'); authorization = native.authorization
+          previewMode = ['always', 'when-unlocked', 'never'][native.showPreviews] ?? 'unknown'
+          iconAvailable = typeof native.iconAvailable === 'boolean' ? native.iconAvailable : null
+          registeredBundleMatches = typeof native.registeredBundleMatches === 'boolean' ? native.registeredBundleMatches : null
+          registeredIconAvailable = typeof native.registeredIconAvailable === 'boolean' ? native.registeredIconAvailable : null
+          const plan = enabled ? buildReminderPlan(snapshot(), now()) : { entries: [], omitted: 0 }
+          const key = hash(JSON.stringify([plan.entries, authorization]))
+          if (key !== fingerprint || !samePending(native.entries, plan.entries, now())) {
+            await run('replace', plan.entries)
+            const delivered = await run('status')
+            if (Number.isInteger(delivered.pendingWithContent) && delivered.pendingWithContent !== delivered.pending) {
+              throw new Error('系统收到的提醒内容不完整，请重新同步提醒')
+            }
+            if (!samePending(delivered.entries, plan.entries, now())) {
+              throw new Error('系统预约提醒与最新安排不一致，请检查通知设置或重新同步')
+            }
+            fingerprint = key
           }
-          fingerprint = key
-        }
-        count = plan.entries.length; omitted = plan.omitted; through = plan.entries.at(-1)?.at ?? null; error = null
-      } catch (reason) { error = reason instanceof Error ? reason.message : '系统提醒尚未同步' }
+          count = plan.entries.length; omitted = plan.omitted; through = plan.entries.at(-1)?.at ?? null; error = null
+          retryAttempt = 0
+        } catch (reason) { fingerprint = ''; error = reason instanceof Error ? reason.message : '系统提醒尚未同步' }
+      } while (rerun && !closed)
       return status()
-    })().finally(() => { pending = null })
+    })().finally(() => {
+      pending = null
+      if (error && retryAttempt < retryDelays.length) queue(retryDelays[retryAttempt++])
+    })
     return pending
   }
-  const schedule = () => { if (!closed && (enabled || error)) { clearTimeout(timer); timer = setTimeout(() => void sync(), 400); timer.unref?.() } }
+  const schedule = () => {
+    if (closed || (!enabled && !error)) return
+    // Bound batching from the first save; later saves cannot postpone it forever.
+    if (retryAttempt) { clearTimeout(timer); timer = undefined; retryAttempt = 0 }
+    if (pending) rerun = true
+    else queue(400)
+  }
   return {
     initialize: sync, status: async () => { await ready; if (pending) await pending; return status() }, schedule,
     setEnabled: async value => {
@@ -110,7 +141,7 @@ export function createReminderService({ stateFile, snapshot, run, now = () => ne
       await run('test')
       return { message: '测试提醒将在 5 秒后出现，可以切到桌面查看' }
     },
-    flush: async () => { clearTimeout(timer); return sync() },
+    flush: sync,
     close: () => { closed = true; clearTimeout(timer) },
   }
 }

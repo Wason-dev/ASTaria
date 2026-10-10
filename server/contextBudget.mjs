@@ -1,7 +1,24 @@
 // Budget the actual dispatch, including the clock, schemas and execution hints.
 // Compaction changes only the provider copy; SQLite retains the full transcript.
+const VISION_IMAGE_UNITS = 1_200
+const imageBudgetMarker = `[ASTaria image input; binary bytes are outside the text budget; reserve ${VISION_IMAGE_UNITS} units]${'x'.repeat(VISION_IMAGE_UNITS * 3)}`
+
+function contextJSON(value) {
+  return JSON.stringify(value, (key, nested) => {
+    // Provider messages carry image bytes as a data URL. Counting every Base64
+    // character as prose makes a valid 2 MB upload consume hundreds of
+    // thousands of text units before the vision model sees it. Keep a bounded
+    // reservation for the multimodal input while retaining the real data in
+    // the payload sent by provider.mjs.
+    if (key === 'url' && typeof nested === 'string' && /^data:image\/(?:png|jpeg|webp);base64,/u.test(nested)) {
+      return imageBudgetMarker
+    }
+    return nested
+  })
+}
+
 export function contextUnits(value) {
-  const text = typeof value === 'string' ? value : JSON.stringify(value)
+  const text = typeof value === 'string' ? value : contextJSON(value)
   const cjk = (text.match(/[\u3000-\u9fff\uff00-\uffef]/gu) ?? []).length
   return Math.ceil(cjk * 1.2 + (text.length - cjk) / 3)
 }

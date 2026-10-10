@@ -4,6 +4,7 @@ import { Readable } from 'node:stream'
 import { createDatabase } from '../server/database.mjs'
 import { createLocalService } from '../server/index.mjs'
 import { mergeConversation, mergeOperationReceipt } from '../src/xixi/conversationTimeline.ts'
+import { publicOperation } from '../server/operationReceipts.mjs'
 
 const requestId = 'creation-with-placement'
 const at = '2026-09-21T01:00:00.000Z'
@@ -20,7 +21,7 @@ function fixture(t) {
   const db = createDatabase(':memory:')
   const service = createLocalService({ db, vault: { status: async () => false }, complete: async () => { throw Error('No model call expected') } })
   t.after(() => service.close())
-  db.beginTurn({ requestId, conversationId: 'main', text: '记下数学作业并安排', context: {} })
+  db.beginTurn({ requestId, conversationId: 'main', text: '记下数学作业并安排', context: { timezone: 'Asia/Shanghai' } })
   const parent = db.applyOperation({ id: 'create-math', requestId, summary: '创建 1 项事项：数学作业', changes: [{ table: 'tasks', id: task.id, before: null, after: task }] })
   const child = db.applyPlannerOperation({ id: 'place-math', requestId, parentOperationId: parent.id, summary: '自动安排数学作业', expectedRevision: db.getPlanner().revision, actions: [{ type: 'save-block', block }] })
   db.finishTurn(requestId, { status: 'completed' })
@@ -45,6 +46,72 @@ test('creation and automatic placement expose one receipt in chat and notificati
   assert.equal(receipt.changes, undefined)
   assert.equal(receipt.plannerBefore, undefined)
   assert.equal(db.listOperations().length, 2, 'internal durable receipts remain intact')
+})
+
+test('old scheduling summaries show each time only in details, including refresh and undo', async t => {
+  const { db, service } = fixture(t)
+  const date = '2026-10-10'
+  db.updateTask(task.id, { due: date })
+  const blocks = [['08:55', '09:25'], ['09:35', '10:05'], ['14:15', '14:45']].map(([start, end], index) => ({
+    ...block, id: `next-${index}`, date, start, end,
+  }))
+  const times = blocks.map(({ date, start, end }) => `${date} ${start}–${end}`)
+  const summary = `安排 3 段任务时间：${times.join('、')}`
+  const operation = db.applyPlannerOperation({ id: 'three-slots', requestId, summary,
+    expectedRevision: db.getPlanner().revision, actions: blocks.map(block => ({ type: 'save-block', block })) })
+  for (const path of ['/conversation?id=main', '/operations']) {
+    const response = (await request(service, path)).value
+    const receipt = (response.operations ?? response).find(item => item.id === operation.id)
+    assert.equal(receipt.summary, '安排 3 段任务时间')
+    assert.deepEqual(receipt.details, times)
+    for (const time of times) assert.equal(JSON.stringify(receipt).split(time).length - 1, 1)
+  }
+  const undone = (await request(service, `/operations/${operation.id}/undo`, {})).value
+  assert.ok(undone.undoneAt)
+  assert.equal(undone.summary, '安排 3 段任务时间')
+  assert.deepEqual(undone.details, times)
+  assert.equal(db.listOperations().find(item => item.id === operation.id).summary, summary, 'stored audit summary is not rewritten')
+})
+
+test('short titles preserve provisional estimates and do not truncate unrelated summaries', async t => {
+  const { db, parent, child } = fixture(t)
+  const time = `${block.date} ${block.start}–${block.end}`
+  const automatic = { ...child, summary: `自动安排 1 段任务时间：${time}；1 项未估时事项先按30分钟预留（可调整）` }
+  const merged = publicOperation(parent, db, [parent, automatic])
+  assert.equal(merged.details.filter(detail => detail.includes('先按30分钟预留')).length, 1)
+  const single = publicOperation({ ...automatic, parentOperationId: undefined }, db, [])
+  assert.equal(single.summary, '自动安排 1 段任务时间；1 项未估时事项先按30分钟预留（可调整）')
+  assert.deepEqual(single.details, [time])
+  const arbitrary = { ...automatic, parentOperationId: undefined, summary: '明天调整：先核对实验时间' }
+  assert.equal(publicOperation(arbitrary, db, []).summary, arbitrary.summary)
+})
+
+test('execution notices survive conversation reload and backup separately from model content', async t => {
+  const { db, service } = fixture(t)
+  const content = '已经安排好能放下的部分，剩下那段需要换一个空档。'
+  const executionNotice = { issues: ['这段时间已经过去，请从当前时刻之后安排'] }
+  const message = db.appendMessage({ conversationId: 'main', requestId, role: 'assistant', content, executionNotice })
+  const read = async () => (await request(service, '/conversation?id=main')).value.messages.find(item => item.id === message.id)
+  assert.equal((await read()).content, content)
+  assert.deepEqual((await read()).executionNotice, executionNotice)
+  db.importData(db.exportData())
+  assert.equal((await read()).content, content)
+  assert.deepEqual((await read()).executionNotice, executionNotice)
+  const user = db.listMessages('main').find(item => item.role === 'user')
+  db.retractMessage(user.id)
+  assert.ok(!(await request(service, '/conversation?id=main')).value.messages.some(item => item.executionNotice))
+})
+
+test('only final assistant messages can persist a bounded execution notice', t => {
+  const { db } = fixture(t)
+  const input = { conversationId: 'main', role: 'assistant', content: '回复' }
+  for (const executionNotice of [{ issues: '失败' }, { issues: [123] }, { issues: ['x'.repeat(241)] }, { issues: [], replyUnavailable: 'yes' }]) {
+    assert.throws(() => db.appendMessage({ ...input, executionNotice }))
+  }
+  assert.throws(() => db.appendMessage({ ...input, role: 'user', executionNotice: { issues: ['失败'] } }))
+  assert.throws(() => db.appendMessage({ ...input, toolCalls: [{ id: 'call' }], executionNotice: { issues: ['失败'] } }))
+  assert.deepEqual(db.appendMessage({ ...input, content: '', executionNotice: { issues: [], replyUnavailable: true } }).executionNotice,
+    { issues: [], replyUnavailable: true })
 })
 
 test('DDL and estimate quick edits share a fresh version and project to every task view without silently moving plans', async t => {

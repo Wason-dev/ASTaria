@@ -86,6 +86,11 @@
 .xixi-reasoning-round > small { display: block; margin-bottom: 5px; color: var(--xixi-gold); font-size: 10px; opacity: .8 }
 .xixi-reasoning-error { display: flex; flex-wrap: wrap; align-items: center; gap: 7px }
 .xixi-reasoning-toggle:focus-visible, .xixi-reasoning-content:focus-visible { outline: 1px solid var(--xixi-gold); outline-offset: 2px }
+.xixi-execution-notice { margin-top: 9px; padding-left: 9px; border-left: 1px solid var(--xixi-line); color: var(--xixi-muted); font-size: 11px; overflow-wrap: anywhere }
+.xixi-execution-notice > strong { font-size: inherit; font-weight: 500; color: var(--xixi-gold) }
+.xixi-execution-notice ul { margin: 3px 0 0; padding-left: 16px }
+.xixi-execution-notice li + li { margin-top: 3px }
+.xixi-execution-notice p + strong { display: block; margin-top: 5px }
 .xixi-receipt { margin-top: 9px; padding: 9px 10px; border-radius: 11px; border: 1px solid var(--xixi-line); background: #a9906010; font-size: 11px }
 .xixi-receipt > header, .wb-xixi .xixi-receipt > header { display: flex; gap: 8px; justify-content: space-between; align-items: start; padding: 0; border: 0 }
 .xixi-receipt > header strong { font-size: 11px; font-weight: 400; letter-spacing: 0 }
@@ -98,6 +103,21 @@
 .p0 .xixi-load-older { align-self: center; color: var(--xixi-muted); font-size: 10px; margin-bottom: 5px }
 .xixi-send-error { margin: 8px 0 0; font-size: 11px; line-height: 1.7; color: #e5baa8; overflow-wrap: anywhere }
 .xixi-send-error .xixi-text-button { margin-left: 8px }
+.xixi-attachment-picker { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 0 10px 7px }
+.xixi-attachment-button { display: inline-flex; align-items: center; gap: 5px; min-height: 25px; padding: 3px 7px; border: 1px solid var(--xixi-line); border-radius: 999px; background: #ffffff08; color: var(--xixi-muted); font: inherit; font-size: 10px; cursor: pointer }
+.xixi-attachment-button:hover:enabled { border-color: #d5bb8b70; color: var(--xixi-gold); background: #d5bb8b12 }
+.xixi-attachment-button:focus-visible, .xixi-attachment-remove:focus-visible { outline: 1px solid var(--xixi-gold); outline-offset: 2px }
+.xixi-attachment-button svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.1; stroke-linecap: round; stroke-linejoin: round }
+.xixi-attachment-chip { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: min(100%, 270px); min-height: 29px; padding: 3px 5px 3px 4px; border: 1px solid #d5bb8b55; border-radius: 9px; background: #d5bb8b12; color: var(--xixi-muted); font-size: 10px }
+.xixi-attachment-chip img { width: 25px; height: 25px; flex: none; object-fit: cover; border-radius: 6px }
+.xixi-attachment-chip span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.xixi-attachment-remove { flex: none; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--xixi-muted); font-size: 16px; line-height: 1; cursor: pointer }
+.xixi-attachment-remove:hover:enabled { background: #ffffff12; color: var(--xixi-gold) }
+.xixi-attachment-error { flex-basis: 100%; margin: 0; color: #e5baa8; font-size: 10px; line-height: 1.5 }
+.xixi-message-attachments { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 6px; max-width: min(100%, 260px); margin-bottom: 6px }
+.xixi-message-attachments img { display: block; width: 100%; max-height: 190px; object-fit: cover; border: 1px solid var(--xixi-line); border-radius: 8px; background: #0002 }
+.p0 .workbench[data-theme=light] .xixi-attachment-chip { background: #d5bb8b20; border-color: #92754855 }
+.p0 .workbench[data-theme=light] .xixi-attachment-button { background: #ffffff40 }
 .home-compose-actions .xixi-manual { color: var(--p0-muted); font-size: 10px }
 .home-xixi .xixi-conversation { margin-block: 0 }
 .xixi-header-actions { display: flex; align-items: center; gap: 10px }

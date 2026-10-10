@@ -2,9 +2,10 @@ import { createHash } from 'node:crypto'
 import { validateModelSettings } from './modelSettings.mjs'
 import { validateRouteJudgment } from './routeAnalysis.mjs'
 import { planWeeksValue } from './freeTimePlan.mjs'
-import { ValidationError, knownKeys, identifier, text, object, choice, dateTime, day, clockTime, taskInput, questionOptions, validateMemory } from './validation.mjs'
+import { ValidationError, knownKeys, identifier, text, object, choice, dateTime, day, clockTime, taskInput, questionOptions, executionNotice, validateMemory } from './validation.mjs'
 import { dayEventValue, validateDayEvents, validateDayExceptions, horizonGroupValue } from './planner.mjs'
 import { BACKUP_MAX_BYTES, BACKUP_EXPORT_TOO_LARGE, BACKUP_IMPORT_TOO_LARGE, backupByteLength, serializeBackup } from '../src/xixi/backupLimits.ts'
+import { normalizeChatAttachments } from './chatAttachments.mjs'
 
 const columns = {
   areas: ['id', 'document'], tasks: ['id', 'document'], events: ['id', 'document'], availability: ['id', 'document'], assignments: ['id', 'document'],
@@ -156,13 +157,23 @@ export function validateCompanionState(value) {
 
 function validateDocument(table, document) {
   if (table === 'messages') {
-    knownKeys(document, ['id', 'conversationId', 'role', 'content', 'requestId', 'taskId', 'toolCallId', 'toolCalls', 'reasoningContent', 'question', 'sourceMessageIds', 'createdAt', 'excludeFromContext', 'retractedAt', 'contextRetractedAt'])
+    knownKeys(document, ['id', 'conversationId', 'role', 'content', 'attachments', 'requestId', 'taskId', 'toolCallId', 'toolCalls', 'reasoningContent', 'question', 'executionNotice', 'sourceMessageIds', 'createdAt', 'excludeFromContext', 'retractedAt', 'contextRetractedAt'])
     identifier(document.conversationId); choice(document.role, ['user', 'assistant', 'tool'], '消息角色'); stamp(document.createdAt); bool(document.excludeFromContext)
+    const attachments = normalizeChatAttachments(document.attachments)
     for (const key of ['requestId', 'taskId', 'toolCallId']) if (document[key] !== undefined) identifier(document[key])
     optionalStamp(document.retractedAt); optionalStamp(document.contextRetractedAt)
     if (document.sourceMessageIds !== undefined) ids(document.sourceMessageIds)
     if (document.reasoningContent !== undefined) { choice(document.role, ['assistant'], '思考内容角色'); text(document.reasoningContent, '思考内容', 2000000, { empty: true }) }
     if (document.question !== undefined) questionOptions(document.question)
+    if (document.executionNotice !== undefined) {
+      choice(document.role, ['assistant'], '执行提示角色')
+      if (document.toolCalls?.length) fail('执行提示不能附在工具调用中')
+      executionNotice(document.executionNotice)
+    }
+    // Assistant/tool messages may legitimately carry only tool calls,
+    // reasoning, or an empty provider response. User messages still need
+    // text unless they contain an image attachment.
+    text(document.content ?? '', '消息内容', 64000, { empty: document.role !== 'user' || Boolean(attachments?.length) })
     if (document.toolCalls !== undefined) for (const call of array(document.toolCalls, 12)) {
       knownKeys(call, ['id', 'type', 'function']); identifier(call.id); choice(call.type, ['function'], '工具类型')
       knownKeys(call.function, ['name', 'arguments']); identifier(call.function.name); text(call.function.arguments, '工具参数', 64000, { empty: true })
@@ -179,8 +190,10 @@ function validateDocument(table, document) {
     knownKeys(document, ['conversationId', 'text', 'throughSeq', 'sourceMessageIds', 'updatedAt'])
     identifier(document.conversationId); text(document.text, '摘要', 16000, { empty: true }); integer(document.throughSeq); ids(document.sourceMessageIds); stamp(document.updatedAt)
   } else if (table === 'turns') {
-    knownKeys(document, ['requestId', 'conversationId', 'text', 'context', 'userMessageId', 'status', 'ownerPid', 'ownerToken', 'createdAt', 'updatedAt', 'error', 'result', 'progress', 'retractedAt'])
-    identifier(document.requestId); identifier(document.conversationId); identifier(document.userMessageId); text(document.text, '请求', 16000)
+    knownKeys(document, ['requestId', 'conversationId', 'text', 'attachments', 'context', 'userMessageId', 'status', 'ownerPid', 'ownerToken', 'createdAt', 'updatedAt', 'error', 'result', 'progress', 'retractedAt'])
+    identifier(document.requestId); identifier(document.conversationId); identifier(document.userMessageId)
+    const attachments = normalizeChatAttachments(document.attachments)
+    text(document.text, '请求', 16000, { empty: Boolean(attachments?.length) })
     knownKeys(document.context, ['timezone', 'page', 'taskId', 'date', 'wishId', 'freeTimeGoalId']); text(document.context.timezone, '时区', 100)
     if (document.context.freeTimeGoalId !== undefined) identifier(document.context.freeTimeGoalId)
     if (document.context.wishId !== undefined) identifier(document.context.wishId)

@@ -64,7 +64,8 @@ test('failed provider reply closes committed actions with one local receipt and 
   const first = await f.xixi.chat(request)
   assert.equal(first.status, 'completed')
   assert.equal(first.operations.length, 2)
-  assert.match(first.messages.at(-1).content, /^已保存：/u)
+  assert.equal(first.messages.at(-1).content, '')
+  assert.deepEqual(first.messages.at(-1).executionNotice, { issues: [], replyUnavailable: true })
   assert.doesNotMatch(JSON.stringify(first), /secret-provider-body/)
   const retry = await f.xixi.chat(request)
   assert.equal(retry.status, 'completed')
@@ -73,6 +74,33 @@ test('failed provider reply closes committed actions with one local receipt and 
   assert.equal(retry.messages.filter(message => message.role === 'user').length, 1)
   assert.equal(f.requests.length, 2)
   assert.equal(retry.messages.filter(message => message.role === 'assistant' && !message.toolCalls?.length).length, 1)
+})
+
+for (const unavailable of [false, true]) test(`later model context carries independent execution status${unavailable ? ' without an empty assistant payload' : ''}`, async t => {
+  const f = fixture(t)
+  const request = input('前一个请求')
+  f.db.beginTurn(request)
+  const content = unavailable ? '' : '都安排好了'
+  const executionNotice = unavailable ? { issues: [], replyUnavailable: true } : { issues: ['实验报告的时段尚未保存'] }
+  const saved = f.db.appendMessage({ conversationId: 'main', requestId: request.requestId, role: 'assistant', content, executionNotice })
+  f.db.finishTurn(request.requestId, { status: 'completed' })
+  await f.xixi.chat(input('接着说'))
+  const history = f.requests[0].messages.find(message => message.role === 'assistant')
+  assert.match(history.content, /本机执行状态/)
+  assert.ok(history.content.includes(JSON.stringify(executionNotice)))
+  if (!unavailable) assert.ok(history.content.startsWith(content))
+  assert.equal(f.db.getMessage(saved.id).content, content, 'context annotations never rewrite the stored reply')
+})
+
+test('searching saved prose also returns its independent unfinished status', async t => {
+  const f = fixture(t)
+  const executionNotice = { issues: ['实验报告的时段尚未保存'] }
+  const saved = f.db.appendMessage({ conversationId: 'main', role: 'assistant', content: '都安排好了', executionNotice })
+  f.responses.push(call('search_history', { messageIds: [saved.id] }), reply('还有一段没有保存'))
+  await f.xixi.chat(input('查一下上次的情况'))
+  const found = toolResults(f.requests[1]).at(-1).messages.find(item => item.id === saved.id)
+  assert.equal(found.content, '都安排好了')
+  assert.deepEqual(found.executionNotice, executionNotice)
 })
 
 test('completed request is durable and idempotent', async t => {

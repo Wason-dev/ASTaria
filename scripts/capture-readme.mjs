@@ -19,7 +19,7 @@ import { createFreeTime } from '../server/freeTime.mjs'
 
 // Frozen demo clock in this process and its owned browser; never open the user's database.
 process.env.TZ = 'Asia/Shanghai'
-const DATE = '2026-09-29', INSTANT = `${DATE}T17:10:00+08:00`
+const DATE = '2026-10-08', INSTANT = `${DATE}T17:10:00+08:00`
 const NativeDate = Date
 globalThis.Date = class extends NativeDate {
   constructor(...args) { super(...(args.length ? args : [INSTANT])) }
@@ -33,35 +33,60 @@ let base, chrome, vite, ws, stopping = false
 const db = createDatabase(':memory:')
 const edit = action => db.updatePlanner(action, db.getPlanner().revision)
 for (const routine of db.getPlanner().routines) edit({ type: 'delete-routine', id: routine.id })
+assert.deepEqual(db.getPlanner().routines, [], 'the demo timetable starts from an empty weekly schedule')
+// One school week (Mon 10/5 - Sun 10/11) around the frozen Thursday. Weekday values
+// follow Date.getDay() (0 = Sunday). Each teaching day keeps its own course and room so
+// the 10/9 and 10/10 timetable swaps below are visible as real differences.
 for (const [id, title, kind, start, end, location, items] of [
-  ['physics', '物理实验', 'class', '09:00', '10:30', '实验室', ['实验记录本', '计算器']],
-  ['math', '数学', 'class', '10:45', '11:30', '教室', []],
+  ['weekend', '周末自由安排', 'available', '09:00', '22:00', '图书馆', []],
   ['lunch', '午餐与休息', 'break', '12:00', '13:00', '', []],
-  ['english', '英语研讨', 'class', '14:00', '15:00', '教室', []],
-  ['afternoon', '下午自习', 'available', '16:00', '17:30', '图书馆', []],
   ['dinner', '晚餐', 'break', '17:30', '18:00', '', []],
   ['study', '晚自习', 'available', '18:00', '20:00', '图书馆', []],
   ['dorm', '宿舍', 'available', '20:30', '22:30', '宿舍', []],
-]) edit({ type: 'save-routine', routine: { id: `demo-${id}`, title, kind, weekdays: [1,2,3,4,5], start, end, location, items, enabled: true } })
+  ['morning-free', '上午可安排', 'available', '08:50', '10:00', '图书馆', []],
+  ['afternoon-free', '下午可安排', 'available', '15:10', '17:00', '图书馆', []],
+  ['mon-physics', '大学物理', 'class', '08:10', '09:40', '理科楼 2-105', ['实验记录本', '计算器']],
+  ['mon-math', '高等数学', 'class', '10:00', '11:40', '理科楼 3-201', ['教材', '错题本']],
+  ['tue-program', '程序设计基础', 'class', '08:10', '09:40', '信息楼 A-302', ['笔记本电脑']],
+  ['tue-english', '英语研讨', 'class', '10:00', '11:40', '外语楼 5-108', ['阅读材料']],
+  ['mid-data', '数据结构', 'class', '10:00', '11:40', '信息楼 A-305', ['教材', '笔记本电脑']],
+  ['mid-os', '操作系统研讨', 'class', '14:00', '15:00', '信息楼 B-210', ['课程讲义']],
+  ['thu-network', '计算机网络', 'class', '08:10', '09:40', '信息楼 A-401', ['课程讲义']],
+  ['thu-database', '数据库实验', 'class', '10:00', '11:40', '实验楼 3-214', ['实验手册']],
+  ['fri-lab', '程序设计实验', 'class', '08:10', '09:40', '实验楼 2-108', ['实验手册', '笔记本电脑']],
+]) edit({ type: 'save-routine', routine: { id: `demo-${id}`, title, kind, start, end, location, items, enabled: true,
+  weekdays: { 'morning-free': [1,2,3,4,5], 'afternoon-free': [1,2,3,4,5], lunch: [1,2,3,4,5], dinner: [1,2,3,4,5],
+    study: [1,2,3,4,5], dorm: [1,2,3,4,5], weekend: [6,0], 'mon-physics': [1], 'mon-math': [1], 'tue-program': [2], 'tue-english': [2],
+    'mid-data': [3], 'mid-os': [3], 'thu-network': [4], 'thu-database': [4], 'fri-lab': [5] }[id] } })
 for (const [index, title, date, start, end, due] of [
-  [0, '整理实验数据', DATE, '17:00', '17:30', DATE],
-  [1, '英语演讲提纲', DATE, '19:00', '19:30', '2026-09-30'],
-  [2, '数学练习 · 函数', '2026-09-28', '18:00', '18:45', '2026-09-30'],
-  [3, '复习实验误差分析', '2026-09-30', '18:00', '18:30', '2026-10-02'],
-  [4, '小组项目讨论', '2026-10-01', '18:00', '18:45', '2026-10-02'],
-  [5, '整理一周阅读笔记', '2026-10-02', '19:00', '19:30', '2026-10-03'],
+  [0, '整理实验数据', DATE, '19:00', '19:30', DATE],
+  [1, '英语演讲提纲', '2026-10-09', '19:00', '19:30', '2026-10-09'],
+  [2, '复习实验误差分析', DATE, '19:30', '20:00', '2026-10-09'],
+  [3, '小组项目讨论', '2026-10-10', '18:00', '18:45', '2026-10-11'],
+  [4, '整理一周阅读笔记', '2026-10-11', '19:00', '19:30', '2026-10-12'],
 ]) {
-  const task = db.createTask({ title, due, estimateMin: start.endsWith(':00') && end.endsWith(':45') ? 45 : 30, inbox: false })
+  const task = db.createTask({ title, due, estimateMin: end.endsWith(':45') ? 45 : 30, inbox: false })
   edit({ type: 'save-block', block: { id: `demo-block-${index}`, taskId: task.id, date, start, end, locked: false } })
 }
 for (let index = 0; index < 6; index++) {
   const start = 20 * 60 + 30 + index * 15
   const clock = minute => `${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`
   const task = db.createTask({ title: ['整理课堂笔记', '补充实验图表', '检查小组资料', '复习英语词组', '准备数学错题', '规划周末阅读'][index], estimateMin: 15, inbox: false })
-  edit({ type: 'save-block', block: { id: `demo-horizon-${index}`, taskId: task.id, date: '2026-09-30', start: clock(start), end: clock(start + 15), locked: false,
+  edit({ type: 'save-block', block: { id: `demo-horizon-${index}`, taskId: task.id, date: '2026-10-09', start: clock(start), end: clock(start + 15), locked: false,
     horizonGroupId: `demo-group-${index}`, horizonGroupTitle: task.title } })
 }
+// Calendar exceptions and a real one-off event, all through the production planner actions.
+edit({ type: 'set-day-exception', date: '2026-10-05', endDate: '2026-10-06', kind: 'holiday' })
+edit({ type: 'set-day-exception', date: '2026-10-09', kind: 'rescheduled', sourceWeekday: 3 })
+edit({ type: 'set-day-exception', date: '2026-10-10', kind: 'rescheduled', sourceWeekday: 5 })
+edit({ type: 'save-day-event', event: { id: 'demo-ceremony', title: '校庆典礼', date: '2026-10-05', start: '09:30', end: '11:00', location: '礼堂', items: ['活动手册'] } })
 db.createTask({ title: '整理机器人项目资料', estimateMin: 30, inbox: false })
+// Unscheduled work with real deadlines: these fill the planner's 待安排 column.
+for (const [title, estimateMin, due] of [
+  ['准备课堂演示', 20, '2026-10-09'],
+  ['归还图书馆图书', 10, '2026-10-10'],
+  ['整理小组分工', 30, '2026-10-11'],
+]) db.createTask({ title, estimateMin, due, inbox: false })
 // The populated capture exercises a fresh user's tour with demonstration data.
 db.setPreference('onboarding-completed', false)
 db.createTask({ title: '选一本下月想读的书', estimateMin: 15, inbox: false })
@@ -83,8 +108,8 @@ const requestId = randomUUID()
 // Script only the model response; production tool execution, SQLite writes and receipts stay real.
 const responses = [
   () => tool('read_planner', { date: DATE }),
-  () => tool('create_tasks', { expectedRevision: db.getPlanner().revision, tasks: [{ title: '完成物理实验报告', due: '2026-09-30', estimateMin: 45, schedule: { date: DATE, start: '18:00', end: '18:45' } }] }),
-  () => ({ choices: [{ message: { role: 'assistant', content: '记好了，明天截止，今晚 18:00–18:45 做。留出完整 45 分钟，和英语提纲不冲突。' } }] }),
+  () => tool('create_tasks', { expectedRevision: db.getPlanner().revision, tasks: [{ title: '完成物理实验报告', due: '2026-10-09', estimateMin: 45, schedule: { date: DATE, start: '18:00', end: '18:45' } }] }),
+  () => ({ choices: [{ message: { role: 'assistant', content: '记好了，明天截止，今晚 18:00–18:45 做。留出完整 45 分钟，和 19:00 的实验数据整理不冲突。' } }] }),
 ]
 const xixi = createXixi({ db, complete: async () => { const response = responses.shift(); assert.ok(response, 'unexpected additional model call'); return response() } })
 const turn = await xixi.chat({ requestId, conversationId: db.getActiveConversation().id, text: '物理实验报告明天交，预计 45 分钟，帮我记下来并安排到今晚的空档。', context: { timezone: 'Asia/Shanghai', page: 'home', date: DATE } })
@@ -97,10 +122,21 @@ assert.equal(receiptBlock.start, '18:00')
 assert.equal(receiptBlock.end, '18:45')
 const receipt = db.listOperations().find(operation => operation.requestId === requestId && !operation.parentOperationId)
 assert.ok(receipt)
+// The demo week must really carry the holiday span, both timetable swaps and the one-off event.
+const demoState = db.getPlanner()
+assert.deepEqual(['2026-10-05', '2026-10-06'].map(day => demoState.dayExceptions[day]?.kind), ['holiday', 'holiday'])
+assert.equal(demoState.dayExceptions['2026-10-09']?.kind, 'rescheduled')
+assert.equal(demoState.dayExceptions['2026-10-09']?.sourceWeekday, 3)
+assert.equal(demoState.dayExceptions['2026-10-10']?.kind, 'rescheduled')
+assert.equal(demoState.dayExceptions['2026-10-10']?.sourceWeekday, 5)
+assert.ok(demoState.dayExceptions['2026-10-05'].routines.every(routine => routine.kind !== 'class'), 'a holiday snapshot keeps no classes')
+assert.ok(demoState.dayExceptions['2026-10-09'].routines.some(routine => routine.kind === 'class'), 'the 10/9 swap carries the source-day classes')
+assert.deepEqual(demoState.dayEvents.map(event => [event.date, event.title]), [['2026-10-05', '校庆典礼']])
+const fixtureChecks = ['calendar exceptions and the one-off event exist in real planner state']
 const savedKeys = []
 const service = createLocalService({ db, vault: { status: async () => true, save: async key => { savedKeys.push(key) }, read: async () => { throw Error('Demo must never access credentials') } }, complete: async () => { throw Error('No live model calls in README capture') }, fetcher: async () => { throw Error('No external API calls in README capture') }, dataDirectory: ':memory:' })
 let serial = 0
-const pending = new Map(), checks = [], errors = [], apiPaths = []
+const pending = new Map(), checks = [...fixtureChecks], errors = [], apiPaths = []
 const send = (method, params = {}) => new Promise((resolve, reject) => { const id = ++serial; const timeout = setTimeout(() => { pending.delete(id); reject(Error(`CDP timeout: ${method}`)) }, 15000); pending.set(id, { resolve, reject, timeout }); ws.send(JSON.stringify({ id, method, params })) })
 const api = request => new Promise(resolve => {
   const parsed = new URL(request.url), origin = new URL(base)
@@ -117,13 +153,20 @@ const onMessage = event => {
   if (message.method === 'Runtime.exceptionThrown') errors.push(message.params.exceptionDetails)
   if (message.method === 'Fetch.requestPaused') {
     const { requestId, request } = message.params, url = new URL(request.url)
+    // A navigation aborts in-flight requests, so the browser may have dropped this one before
+    // our answer arrives. A stale interception id is not a page error and must not fail the run.
+    const answer = async (method, params) => {
+      try { await send(method, params) } catch (error) {
+        if (!/Invalid InterceptionId/i.test(String(error?.message))) throw error
+      }
+    }
     const handle = async () => {
-      if (url.origin !== new URL(base).origin) await send('Fetch.failRequest', { requestId, errorReason: 'BlockedByClient' })
+      if (url.origin !== new URL(base).origin) await answer('Fetch.failRequest', { requestId, errorReason: 'BlockedByClient' })
       else if (url.pathname.startsWith('/api/')) {
         const result = await api(request)
-        await send('Fetch.fulfillRequest', { requestId, responseCode: result.status,
+        await answer('Fetch.fulfillRequest', { requestId, responseCode: result.status,
           responseHeaders: [{ name: 'Content-Type', value: 'application/json' }, { name: 'Cache-Control', value: 'no-store' }], body: Buffer.from(result.body).toString('base64') })
-      } else await send('Fetch.continueRequest', { requestId })
+      } else await answer('Fetch.continueRequest', { requestId })
     }
     void handle().catch(error => { if (!stopping) errors.push(error.message) })
   }
@@ -131,7 +174,9 @@ const onMessage = event => {
 }
 const evaluate = async expression => { const result = await send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true }); if (result.exceptionDetails) throw new Error(JSON.stringify(result.exceptionDetails)); return result.result.value }
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms))
-const wait = async expression => { for (let index = 0; index < 100; index++) { try { if (await evaluate(expression)) return } catch (error) { if (!String(error.message).includes('Inspected target navigated or closed')) throw error } await delay(70) } throw new Error(`Timeout: ${expression}`) }
+// Each retry is one CDP round trip, so a loaded machine slows both the render and this poll.
+// Give page transitions up to ~30s before failing; the assertions themselves are unchanged.
+const wait = async expression => { for (let index = 0; index < 300; index++) { try { if (await evaluate(expression)) return } catch (error) { if (!String(error.message).includes('Inspected target navigated or closed')) throw error } await delay(100) } throw new Error(`Timeout: ${expression}`) }
 const check = async (name, expression) => { assert.equal(await evaluate(expression), true, name); checks.push(name) }
 const click = async selector => {
   await wait(`!!document.querySelector(${JSON.stringify(selector)})`)
@@ -172,7 +217,7 @@ try {
   await send('Fetch.enable', { patterns: [{ urlPattern: '*', requestStage: 'Request' }] })
   await send('Emulation.setTimezoneOverride', { timezoneId: 'Asia/Shanghai' })
   await send('Emulation.setDeviceMetricsOverride', { width: 1600, height: 1050, deviceScaleFactor: 1, mobile: false })
-  await send('Page.addScriptToEvaluateOnNewDocument', { source: `{const NativeDate=Date;window.Date=class extends NativeDate{constructor(...args){super(...(args.length?args:['2026-09-29T17:10:00+08:00']))}static now(){return NativeDate.now()}};localStorage.setItem('astaria-sqlite-migration-v1','complete')}` })
+  await send('Page.addScriptToEvaluateOnNewDocument', { source: `{const NativeDate=Date;window.Date=class extends NativeDate{constructor(...args){super(...(args.length?args:['${INSTANT}']))}static now(){return NativeDate.now()}};localStorage.setItem('astaria-sqlite-migration-v1','complete')}` })
   await send('Page.navigate', { url: base }); await wait('!!document.querySelector(".home-brand")')
 
   const byText = async (selector, text) => {
@@ -180,6 +225,8 @@ try {
     await click('[data-readme-click=true]'); await evaluate(`document.querySelectorAll('[data-readme-click]').forEach(e=>delete e.dataset.readmeClick);true`)
   }
   const nav = async text => {
+    // A page transition can briefly unmount the shell; wait for it before driving the menu.
+    await wait(`!!document.querySelector('.home-brand') && !!document.querySelector('#home-menu')`)
     await evaluate(`document.querySelector('.home-brand').focus();true`)
     if (await evaluate(`document.querySelector('#home-menu').inert`)) await click('.home-brand')
     await byText('#home-menu button', text); await delay(450)
@@ -242,6 +289,9 @@ try {
     await send('Emulation.setDeviceMetricsOverride', { width: 1600, height: 1050, deviceScaleFactor: 1, mobile: false })
     await delay(150)
     if (step === 2) {
+      // The home scene publishes this bridge asynchronously; the launch button alone is not
+      // enough of a readiness signal, and the camera assertions below need the bridge.
+      await wait('!!window.__ASTARIA_P0__')
       await click('.home-launch')
       await wait('!window.__ASTARIA_P0__.getCameraSnapshot().cameraTransition && document.querySelector(".home-morph")?.dataset.progress === "1.000" && !document.querySelector("#home-xixi").inert')
       await click('.home-collapse')
@@ -321,7 +371,16 @@ try {
   await click('.pl-segment button[data-mode=week]')
   await wait('document.querySelector(".planner").dataset.mode === "week"')
   await delay(900)
-  await check('planner includes the new task and existing assignments', `document.querySelector('.planner').textContent.includes('完成物理实验报告')&&document.querySelector('.planner').textContent.includes('英语演讲提纲')`)
+  await check('planner includes the new task and existing assignments', `(()=>{const t=document.querySelector('.planner').textContent;return t.includes('完成物理实验报告')&&t.includes('英语演讲提纲')&&t.includes('数据结构')&&t.includes('计算机网络')&&t.includes('数据库实验')})()`)
+  await check('the holiday span really removes the Monday and Tuesday classes', `(()=>{const t=document.querySelector('.planner').textContent;return !t.includes('大学物理')&&!t.includes('高等数学')&&!t.includes('程序设计基础')&&!t.includes('英语研讨')})()`)
+  await check('planner shows the 10/5-10/6 holiday span and both timetable swaps', `(()=>{const label=day=>document.querySelector(\`.pl-timetable-date[data-date="\${day}"] .pl-timetable-override\`)?.textContent;return label('2026-10-05')==='假期'&&label('2026-10-06')==='假期'&&label('2026-10-09')==='临时调课 · 周三课表'&&label('2026-10-10')==='临时调课 · 周五课表'})()`)
+  // A holiday removes the weekly classes and keeps the one-off event as a fixed fact;
+  // the free-day window still has to be there and the marker has to be visible.
+  await check('holiday columns swap the weekly classes for a free-day window', `(()=>{const f=document.querySelector('[data-period-current=true]'),c=f?.querySelector('.pl-day-column[data-date="2026-10-05"]');if(!c)return false;const slots=[...c.querySelectorAll('.pl-slot')],classes=slots.filter(s=>s.dataset.kind==='class');return classes.length===1&&classes[0].getAttribute('aria-label').startsWith('单日活动，校庆典礼')&&slots.some(s=>s.dataset.kind==='available'&&s.getAttribute('aria-label').includes('周末自由安排'))&&!classes.some(s=>/大学物理|高等数学/.test(s.textContent))&&Number(getComputedStyle(f.querySelector('.pl-timetable-override')).opacity)>=.99})()`)
+  await check('10/9 runs the Wednesday timetable instead of its Friday classes', `(()=>{const c=document.querySelector('[data-period-current=true] .pl-day-column[data-date="2026-10-09"]');if(!c)return false;const t=c.textContent;return t.includes('数据结构')&&t.includes('操作系统研讨')&&!t.includes('程序设计实验')})()`)
+  await check('10/10 runs the Friday timetable on a Saturday', `(()=>{const c=document.querySelector('[data-period-current=true] .pl-day-column[data-date="2026-10-10"]');if(!c)return false;const t=c.textContent;return t.includes('程序设计实验')&&!t.includes('数据结构')&&!t.includes('操作系统研讨')})()`)
+  await check('planner exposes placed work and the one-off event', `(()=>{const t=document.querySelector('.planner').textContent;return t.includes('校庆典礼')&&t.includes('小组项目讨论')&&t.includes('英语演讲提纲')})()`)
+  await check('pending column lists the unscheduled work with real deadlines', `(()=>{const stack=document.querySelector('.pl-overview-unscheduled .task-stack');return !!stack&&Number(stack.dataset.count)>=4&&stack.getAttribute('aria-label')==='待安排'&&!!stack.querySelector('.task-stack-card[data-active=true] strong')?.textContent})()`)
   await shot('planner')
   await nav('余时')
   await wait('document.querySelector(".free-time-page")?.dataset.active === "true" && document.querySelectorAll(".free-time-goal-list li").length >= 3')
@@ -330,9 +389,11 @@ try {
   await shot('free-time')
   await evaluate(`(()=>{const original=HTMLCanvasElement.prototype.toDataURL;window.__glassEncodes=0;HTMLCanvasElement.prototype.toDataURL=function(...args){window.__glassEncodes++;return original.apply(this,args)};return true})()`)
   await click('.free-time-wish-heading button')
-  await check('wish glass samples with blur during expansion', `getComputedStyle(document.querySelector('.free-time-wish-entry .home-glass-surface')).backdropFilter.includes('blur(')`)
+  await evaluate(`(()=>{const el=document.querySelector('.free-time-wish-entry .home-glass-surface');window.__wishGlass=[];const t0=performance.now();const id=setInterval(()=>{window.__wishGlass.push([Math.round(performance.now()-t0),getComputedStyle(el).backdropFilter]);if(window.__wishGlass.length>24)clearInterval(id)},40);return true})()`)
   await delay(650)
   await check('wish expansion settles to one final refraction map', `(()=>{const pane=document.querySelector('.free-time-wish-entry'),surface=pane.querySelector('.home-glass-surface'),edge=pane.querySelector('feImage');return window.__glassEncodes<=3&&getComputedStyle(surface).backdropFilter.includes('url(')&&Number(edge.getAttribute('height'))===pane.clientHeight})()`)
+  await check('wish expansion keeps a live refraction surface while sampling', `window.__wishGlass.some(row => row[1].includes('blur(') || row[1].includes('url('))`)
+  await check('wish expansion settles to exactly one final refraction map', `(()=>{const r=window.__wishGlass.at(-1)[1],d=document.querySelector('.free-time-wish-entry');const defs=[...d.querySelectorAll('svg.home-glass-definitions')];const used=defs.filter(fe=>fe.querySelector('feImage')&&r==='url("#'+fe.querySelector('filter').id+'")');return used.length===1&&used[0].querySelectorAll('feImage').length===1&&(used[0].querySelector('feImage').getAttribute('href')||'').startsWith('data:image/png')})()`)
   await shot('free-time-wish-open')
   await click('.free-time-wish-heading button')
   await delay(650)
@@ -349,6 +410,24 @@ try {
   await shot('horizon')
   await click('.orbit-cancel')
   await wait('!document.querySelector(".horizon-studio")')
+  // Show the swapped day itself: select 10/9, then read the day view from the real UI.
+  await nav('日程')
+  await wait('document.querySelector(".planner")?.dataset.active === "true"')
+  if (await evaluate(`document.querySelector('.planner').dataset.mode !== 'week'`)) await click('.pl-segment button[data-mode=week]')
+  await click('[data-period-current=true] .pl-timetable-date[data-date="2026-10-09"]')
+  await wait(`document.querySelector('.planner').dataset.selectedDate === '2026-10-09'`)
+  await click('.pl-segment button[data-mode=day]')
+  await wait(`document.querySelector('.planner').dataset.mode === 'day'`)
+  await delay(700)
+  await check('day view shows the 10/9 makeup timetable and its switch control', `(()=>{const t=document.querySelector('.planner').textContent;return document.querySelector('.planner').dataset.selectedDate==='2026-10-09'&&t.includes('临时调课 · 周三课表')&&t.includes('数据结构')&&!t.includes('计算机网络')})()`)
+  await shot('planner-day')
+  await click('.pl-segment button[data-mode=week]')
+  await wait(`document.querySelector('.planner').dataset.mode === 'week'`)
+  await nav('工作台')
+  await wait('document.querySelector(".workbench")?.dataset.active === "true" && !!document.querySelector(".wb-available .wb-task")')
+  await delay(600)
+  await check('workbench lists only real tasks from the same seeded planner', `(()=>{const list=document.querySelector('.wb-available');if(!list)return false;const seeded=${JSON.stringify(db.listTasks().map(task => task.title))};const cards=[...list.querySelectorAll('.wb-task')].map(card=>card.querySelector('.wb-task-top strong')?.textContent);return cards.length>=1&&cards.every(title=>seeded.includes(title))&&new Set(cards).size===cards.length})()`)
+  await shot('workbench')
   const unaffectedTasks = db.listTasks().filter(task => task.id !== receiptTask.id)
   const unaffectedBlocks = db.getPlanner().blocks.filter(block => block.taskId !== receiptTask.id)
   await nav('首页')

@@ -17,6 +17,8 @@ import { useAppearance } from '../workbench/appearance'
 import { useXixiConversation } from '../xixi/useXixiConversation'
 import { ConversationLog } from '../xixi/ConversationLog'
 import { ConversationMenu } from '../xixi/ConversationMenu'
+import { ChatAttachmentPicker } from '../xixi/ChatAttachmentPicker'
+import type { ChatAttachment } from '../xixi/types'
 import { useChatSubmitKey } from '../xixi/useChatSubmitKey'
 import { restoreWithdrawnDraft } from '../xixi/draft'
 import { selectCurrentTask } from './currentTask'
@@ -143,6 +145,8 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
   const [inputPulse, setInputPulse] = useState<number | null>(null)
   const inputPulseSequence = useRef(0)
   const [draftWarning, setDraftWarning] = useState('')
+  const [attachment, setAttachment] = useState<ChatAttachment | null>(null)
+  const [attachmentError, setAttachmentError] = useState('')
   const [saveError, setSaveError] = useState('')
   const [savedIds, setSavedIds] = useState<string[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -361,20 +365,24 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
   }
   const submit = async (event: FormEvent) => {
     event.preventDefault()
-    if (!draft.trim() || data.saving || data.loading || data.loadError || chat.busy) return
+    if ((!draft.trim() && !attachment) || data.saving || data.loading || data.loadError || chat.busy) return
     setSaveError('')
     const sent = draft
     const revision = draftRevision.current
-    const accepted = await chat.send(sent, { page: 'home', ...(clarifyingWish ? { wishId: clarifyingWish.id } : {}), ...(refiningPlan ? { freeTimeGoalId: refiningPlan.id } : {}), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone })
+    const accepted = await chat.send(sent, { page: 'home', ...(clarifyingWish ? { wishId: clarifyingWish.id } : {}), ...(refiningPlan ? { freeTimeGoalId: refiningPlan.id } : {}), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }, attachment ? [attachment] : undefined)
     if (accepted && revision === draftRevision.current) {
       setDraft(value => value === sent ? '' : value)
+      setAttachment(null)
+      setAttachmentError('')
       stopInputPulse()
       compose.current?.focus()
     }
   }
-  const restoreDraft = (text: string) => {
+  const restoreDraft = (text: string, attachments?: ChatAttachment[]) => {
     draftRevision.current += 1
     setDraft(value => restoreWithdrawnDraft(value, text))
+    setAttachment(attachments?.[0] ?? null)
+    setAttachmentError('')
     requestAnimationFrame(() => {
       compose.current?.focus({ preventScroll: true })
       if (compose.current) compose.current.setSelectionRange(compose.current.value.length, compose.current.value.length)
@@ -509,7 +517,7 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
           <strong>析熙</strong>
         </div><div className="xixi-header-actions"><ConversationMenu chat={chat} />{compact && <button ref={informationToggle} className="home-information-toggle" onClick={() => setInformationActive(true)} aria-controls="home-agenda">日程 →</button>}</div></header>
         <ConversationLog chat={chat} active={page === 'home' && chatOpen && progress >= CHAT_READY_PROGRESS && (!compact || !informationActive)} onSettings={openSettings}
-          context={{ page: 'home', ...(clarifyingWish ? { wishId: clarifyingWish.id } : {}), ...(refiningPlan ? { freeTimeGoalId: refiningPlan.id } : {}), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }} onSent={sent => setDraft(value => value.trim() === sent ? '' : value)} onRetracted={restoreDraft}>
+          context={{ page: 'home', ...(clarifyingWish ? { wishId: clarifyingWish.id } : {}), ...(refiningPlan ? { freeTimeGoalId: refiningPlan.id } : {}), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }} onSent={sent => { setDraft(value => value.trim() === sent ? '' : value); setAttachment(null); setAttachmentError('') }} onRetracted={restoreDraft}>
           {receipts.map(task => <div className="home-receipt" key={task.id}><span>已记为事项</span><button onClick={() => openTask(task.id)}>{task.title}</button></div>)}
         </ConversationLog>
         <form onSubmit={event => void submit(event)}>
@@ -523,6 +531,7 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
           </span>}
           {clarifyingWish && <div className="home-clarifying-wish"><span>正在聊：{clarifyingWish.content}</span><div><button className="xixi-text-button" type="button" onClick={() => endClarification(true)}>回心愿清单</button><button className="xixi-text-button" type="button" onClick={() => endClarification()}>结束澄清</button></div></div>}
           {refiningPlan && <div className="home-clarifying-wish"><span>正在细化：{refiningPlan.title}</span><div><button className="xixi-text-button" type="button" onClick={() => endClarification(true)}>回长期计划</button><button className="xixi-text-button" type="button" onClick={() => endClarification()}>结束细化</button></div></div>}
+          <ChatAttachmentPicker id="home-image-upload" attachment={attachment} onChange={setAttachment} error={attachmentError} onError={setAttachmentError} disabled={data.saving || chat.busy} />
           <textarea ref={compose} id="home-compose" placeholder="写下你的事情" rows={2} maxLength={4000} value={draft} disabled={data.saving || chat.busy}
             onChange={event => {
               const value = event.target.value
@@ -531,7 +540,7 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
               setDraft(value)
             }} onBlur={stopInputPulse} {...submitKeys} />
           </div>
-          <div className="home-compose-actions"><button className="xixi-text-button xixi-manual" type="button" disabled={data.saving || chat.busy || data.loading || Boolean(data.loadError) || !draft.trim()} onClick={() => void capture()}>{data.saving ? '正在保存' : '只记为事项'}</button><button className="home-capture" type="submit" disabled={data.saving || data.loading || Boolean(data.loadError) || chat.busy || chat.loading || !draft.trim()}>{chat.sending ? '正在想' : '发给析熙'}</button></div>
+          <div className="home-compose-actions"><button className="xixi-text-button xixi-manual" type="button" disabled={data.saving || chat.busy || data.loading || Boolean(data.loadError) || !draft.trim()} onClick={() => void capture()}>{data.saving ? '正在保存' : '只记为事项'}</button><button className="home-capture" type="submit" disabled={data.saving || data.loading || Boolean(data.loadError) || chat.busy || chat.loading || (!draft.trim() && !attachment)}>{chat.sending ? '正在想' : '发给析熙'}</button></div>
           {chat.error && <p className="xixi-send-error" role="alert">{chat.error}{!chat.status?.configured && <button type="button" className="xixi-text-button" onClick={openSettings}>打开设置</button>}</p>}
           {(saveError || draftWarning || data.loadError) && <p className="home-form-error" role="alert">{saveError || draftWarning || data.loadError}{data.loadError && <button type="button" onClick={data.retry}>重试读取</button>}</p>}
         </form>

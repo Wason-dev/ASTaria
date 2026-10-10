@@ -40,6 +40,15 @@ export function questionOptions(input) {
   return { options }
 }
 
+export function executionNotice(input) {
+  if (input === undefined) return undefined
+  knownKeys(input, ['issues', 'replyUnavailable'], '执行提示')
+  if (!Array.isArray(input.issues) || input.issues.length > 1000) throw new ValidationError('未完成事项列表不正确')
+  const issues = [...new Set(input.issues.map(issue => text(issue, '未完成事项', 240)))]
+  if (input.replyUnavailable !== undefined) choice(input.replyUnavailable, [true], '回复中断状态')
+  return { issues, ...(input.replyUnavailable ? { replyUnavailable: true } : {}) }
+}
+
 export function choice(value, options, label, fallback) {
   if (value === undefined && fallback !== undefined) return fallback
   if (!options.includes(value)) throw new ValidationError(`${label}不正确`)

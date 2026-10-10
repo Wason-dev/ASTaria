@@ -167,7 +167,7 @@ test('same request event replay canonicalizes evidence, defaults and batch order
   assert.equal(f.db.getPlanner().dayEvents.length, 2)
 })
 
-for (const change of ['delete', 'move', 'undo']) test(`an event ${change} while composing reply cannot be reported as the original saved schedule`, async t => {
+for (const change of ['delete', 'move', 'undo']) test(`an event ${change} while composing preserves prose with independent execution evidence`, async t => {
   const f = fixture(t), staleReply = '两项活动仍然按原时间保存好了'
   f.responses.push(read(), () => save(f.db), () => {
     const event = f.db.getPlanner().dayEvents[0]
@@ -176,10 +176,17 @@ for (const change of ['delete', 'move', 'undo']) test(`an event ${change} while 
     return reply(staleReply)
   })
   const result = await f.run()
-  assert.ok(!result.messages.some(message => message.content === staleReply))
-  assert.equal(result.execution.reply.mode, 'fallback')
-  if (change !== 'undo') assert.equal(result.execution.status, 'partial')
-  else assert.ok(result.execution.eventRequirements.every(item => item.status === 'cancelled'))
+  const message = result.messages.find(message => message.content === staleReply)
+  assert.ok(message)
+  assert.equal(result.execution.reply.mode, 'model')
+  if (change !== 'undo') {
+    assert.equal(result.execution.status, 'partial')
+    assert.match(message.executionNotice.issues.join('\n'), /已保存的活动与当前日历不一致/)
+  } else {
+    assert.equal(message.executionNotice, undefined)
+    assert.ok(result.operations.every(operation => operation.undoneAt))
+    assert.ok(result.execution.eventRequirements.every(item => item.status === 'cancelled'))
+  }
 })
 
 test('event verification recovers a durable write even without a tool receipt or progress checkpoint', async t => {
@@ -194,7 +201,8 @@ test('event verification recovers a durable write even without a tool receipt or
   const result = await f.run(request)
   assert.equal(result.execution.status, 'partial')
   assert.equal(result.execution.eventRequirements[0].status, 'pending')
-  assert.ok(!result.messages.some(message => message.content === '校庆按原时间保存好了'))
+  const message = result.messages.find(message => message.content === '校庆按原时间保存好了')
+  assert.match(message.executionNotice.issues.join('\n'), /已保存的活动与当前日历不一致/)
   assert.equal(f.db.getPlanner().dayEvents.length, 0)
 })
 

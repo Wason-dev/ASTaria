@@ -75,7 +75,11 @@ export function createVerifiedOrder({ db, complete, now = () => new Date(), poli
   const list = ({ date } = {}) => db.transaction(() => snapshot(date).view)
   const operationId = requestId => `${namespace}-${hash(requestId)}`
   const journalKey = requestId => `${namespace}:${hash(requestId)}`
-  const inputHash = input => hash(input)
+  // reflowDates is derived local validation state, not part of the user's
+  // submitted request. It may expand when the clock crosses a planned start
+  // while the model is responding, so it must never invalidate idempotent
+  // replay of that same request.
+  const inputHash = input => hash(Object.fromEntries(Object.entries(input).filter(([key]) => key !== 'reflowDates')))
 
   function replay(input) {
     const stored = db.getPreference(journalKey(input.requestId))
@@ -155,16 +159,27 @@ export function createVerifiedOrder({ db, complete, now = () => new Date(), poli
     if (!Array.isArray(raw) || raw.length !== snap.movable.length) fail('析熙的安排遗漏了任务段或添加了额外时段，本次未写入日程')
     const original = new Map(snap.state.blocks.map(block => [block.id, block])), candidate = new Map()
     const expected = new Set(input.orderedIds)
+    const preservedPlacement = block => {
+      const before = original.get(block.id)
+      return input.reflowDates instanceof Set && !input.reflowDates.has(block.date)
+        && before?.date === block.date && before.start === block.start && before.end === block.end
+    }
     for (const value of raw) {
       knownKeys(value, ['id', 'date', 'start', 'end'], '析熙的任务段')
       const id = identifier(value.id), date = day(value.date), start = clockTime(value.start), end = clockTime(value.end)
       if (!expected.has(id) || candidate.has(id)) fail('析熙的安排重复了任务段或修改了不属于本次的时段，本次未写入日程')
       const before = original.get(id), task = snap.taskMap.get(before.taskId)
       const goal = snap.goals.find(goal => goal.id === task.freeTimeGoalId || goal.taskId === task.id)
+      const untouchedDate = input.reflowDates instanceof Set && !input.reflowDates.has(date)
+      // An untouched date may retain an already elapsed original placement.
+      // Future placements on that date are still valid model preferences and
+      // must go through the ordinary time, capacity, and ordering checks.
+      const preservedElapsed = untouchedDate && date === before.date && start === before.start && end === before.end
+        && instant(date, start) <= snap.at.getTime()
       if (!snap.dates.includes(date)) fail(`「${task.title}」被排到了${days === 7 ? '七' : '三'}天范围之外，本次未写入日程`)
       if (input.assignedDates && date !== input.assignedDates[id]) fail(`「${task.title}」没有安排到你选择的日期 ${input.assignedDates[id]}，本次未写入日程`)
       if (start >= end || minuteOf(end) - minuteOf(start) !== duration(before)) fail(`「${task.title}」的原时长必须完整保留，本次未写入日程`)
-      if (instant(date, start) <= snap.at.getTime()) fail(`「${task.title}」的开始时间已过去，请刷新后重试`, 409)
+      if (!preservedElapsed && instant(date, start) <= snap.at.getTime()) fail(`「${task.title}」的开始时间已过去，请刷新后重试`, 409)
       if (instant(date, end) > deadline(task.due)) fail(`「${task.title}」被排到了截止时间 DDL 之后，本次未写入日程`)
       if (goal?.targetDate && date > goal.targetDate) fail(`「${task.title}」超过了余时目标日期 ${goal.targetDate}，本次未写入日程`)
       if (task.occurrence && date !== task.occurrence.date) fail(`「${task.title}」是 ${task.occurrence.date} 的重复事项，不能移动到其他日期`)
@@ -172,11 +187,20 @@ export function createVerifiedOrder({ db, complete, now = () => new Date(), poli
     }
     const ordered = input.orderedIds.map(id => candidate.get(id)), working = { ...snap.working, blocks: [...snap.working.blocks] }
     let previousEnd = -Infinity
-    for (const block of ordered) {
+    for (const [index, block] of ordered.entries()) {
       const title = snap.taskMap.get(block.taskId).title
-      if (instant(block.date, block.start) < previousEnd) fail(`「${title}」没有遵循你调整后的先后顺序，本次未写入日程`)
-      const capacity = dayCapacity(working, snap.capacityTasks, block.date, snap.at)
-      if (!capacity.remaining.some(range => minuteOf(block.start) >= range.start && minuteOf(block.end) <= range.end)) fail(`「${title}」与课程、固定活动或已占用时间冲突，或不在真实空档内；本次未写入日程`)
+      const untouchedDate = input.reflowDates instanceof Set && !input.reflowDates.has(block.date)
+      const before = original.get(block.id)
+      const preservedElapsed = untouchedDate && block.date === before?.date && block.start === before?.start && block.end === before?.end
+        && instant(block.date, block.start) <= snap.at.getTime()
+      const previousBlock = ordered[index - 1]
+      const unchangedAdjacentOrder = previousBlock && previousBlock.date === block.date
+        && preservedPlacement(previousBlock) && preservedPlacement(block)
+      if (!unchangedAdjacentOrder && instant(block.date, block.start) < previousEnd) fail(`「${title}」没有遵循你调整后的先后顺序，本次未写入日程`)
+      if (!preservedElapsed) {
+        const capacity = dayCapacity(working, snap.capacityTasks, block.date, snap.at)
+        if (!capacity.remaining.some(range => minuteOf(block.start) >= range.start && minuteOf(block.end) <= range.end)) fail(`「${title}」与课程、固定活动或已占用时间冲突，或不在真实空档内；本次未写入日程`)
+      }
       working.blocks.push(block)
       previousEnd = instant(block.date, block.end)
     }

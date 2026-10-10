@@ -16,7 +16,7 @@ export function publicOperation(operation, db, operations = db.listOperations())
   const created = changes.filter(change => change.table === 'tasks' && change.before === null && change.after)
   const scheduleCount = children.filter(child => !child.undoneAt).reduce((count, child) => count + (child.planChanges ?? []).filter(change => change.after).length, 0)
   return {
-    id, requestId, summary: children.length && scheduleCount ? `${summary} · 已安排 ${scheduleCount} 段时间` : summary,
+    id, requestId, summary: children.length && scheduleCount ? `${summary} · 已安排 ${scheduleCount} 段时间` : scheduleHeading(summary, planChanges),
     createdAt, readAt: members.every(item => item.readAt) ? readAt : null, undoneAt, undoable,
     ...(children.length ? { relatedOperationIds: children.map(child => child.id) } : {}),
     ...(created.length ? { undoLabel: children.length ? '撤销创建与安排' : '撤销创建' } : {}),
@@ -32,6 +32,10 @@ export function publicOperation(operation, db, operations = db.listOperations())
         const task = db.getTask(taskId) ?? changes.find(item => item.table === 'tasks' && item.id === taskId)?.after
         return `${task?.title ? `${task.title} · ` : ''}${planDetail(change)}${child.undoneAt && !undoneAt ? ' · 时段已撤销' : ''}`
       })),
+      ...children.flatMap(child => {
+        const note = /；(\d+ 项未估时事项先按\d+分钟预留（可调整）)$/u.exec(child.summary)?.[1]
+        return note ? [note] : []
+      }),
     ].filter(Boolean),
     createdTasks: created.flatMap(change => {
       const task = db.getTask(change.id)
@@ -42,6 +46,16 @@ export function publicOperation(operation, db, operations = db.listOperations())
 
 function planDetail(change) {
   return change.after ? `${change.after.date} ${change.after.start}–${change.after.end}` : change.before ? `移除 ${change.before.date} ${change.before.start}–${change.before.end}` : ''
+}
+
+function scheduleHeading(summary, planChanges = []) {
+  // Keep durable summaries intact, including receipts from earlier versions.
+  // Shorten only the known scheduling format whose times are all in details;
+  // retain suffixes such as the provisional-duration explanation.
+  const match = /^((?:自动)?安排 \d+ 段任务时间)：(\d{4}-\d{2}-\d{2} \d{2}:\d{2}–\d{2}:\d{2}(?:、\d{4}-\d{2}-\d{2} \d{2}:\d{2}–\d{2}:\d{2})*)(.*)$/u.exec(summary)
+  if (!match) return summary
+  const details = new Set(planChanges.filter(change => change.after).map(planDetail))
+  return match[2].split('、').every(time => details.has(time)) ? `${match[1]}${match[3]}` : summary
 }
 
 export function publicOperations(operations, db) {

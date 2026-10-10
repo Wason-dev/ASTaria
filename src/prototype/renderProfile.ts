@@ -28,10 +28,10 @@ export function normalizeRenderProfile(value: unknown): RenderProfile {
 
 export function resolveRenderProfile(profile: RenderProfile, scene: RenderScene): RenderProfileConfig {
   const config = RENDER_PROFILES[normalizeRenderProfile(profile)]
-  // Workspaces intentionally cap the ambient scene at 60 FPS to save power.
+  // Beta12 caps workspace ambient rendering at 30 FPS to save power.
   // Homepage/chat keep the selected rate; lower profiles are never upgraded.
   // Product contract and rationale: docs/POWER_AND_RENDERING_DECISIONS.md P01.
-  return { ...config, frameRate: scene === 'home' ? config.frameRate : Math.min(config.frameRate, 60) }
+  return { ...config, frameRate: scene === 'home' ? config.frameRate : Math.min(config.frameRate, 30) }
 }
 
 /** Keep a stable cadence across display refresh rates instead of waiting a full

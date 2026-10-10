@@ -15,7 +15,8 @@ export type LocalDevice = {
   recommendedModel: string | null; recommendedContextTokens: number
   recommendations: DeviceRecommendation[]; note: string
 }
-export type ChatMessage = { id: string; seq: number; role: 'user' | 'assistant' | 'tool'; content: string; reasoningContent?: string; hasSavedReasoning?: boolean; createdAt: string; requestId?: string; taskId?: string; excludeFromContext?: boolean; delivery?: 'sending' | 'failed'; question?: { options: string[] }; retractedAt?: string }
+export type ExecutionNotice = { issues: string[]; replyUnavailable?: true }
+export type ChatMessage = { id: string; seq: number; role: 'user' | 'assistant' | 'tool'; content: string; attachments?: ChatAttachment[]; reasoningContent?: string; hasSavedReasoning?: boolean; executionNotice?: ExecutionNotice; createdAt: string; requestId?: string; taskId?: string; excludeFromContext?: boolean; delivery?: 'sending' | 'failed'; question?: { options: string[] }; retractedAt?: string }
 export type ReceiptTask = { id: string; title: string; due?: string; estimateMin?: number; updatedAt: string }
 export type Operation = { id: string; requestId: string; summary: string; createdAt: string; readAt: string | null; undoneAt: string | null; undoable?: boolean; undoLabel?: string; relatedOperationIds?: string[]; details?: string[]; createdTasks?: ReceiptTask[] }
 export type CompanionAction = { id: string; requestId: string; kind: 'scenario' | 'handoff' | 'wish' | 'goal'; label: string; targetId?: string; createdAt: string }
@@ -40,3 +41,5 @@ export type ChatReasoningRound = { id: string; content: string; round?: number }
 export type SavedReasoning = { reasoningContent: string; rounds?: ChatReasoningRound[]; roundCount?: number; status?: 'running' | 'completed' | 'failed' }
 export type ChatStreamDraft = { requestId: string; conversationId: string; round: number; reasoningContent: string; reasoningRounds?: ChatReasoningRound[]; content: string; phase: ChatStreamPhase; activities?: ChatStreamActivity[] }
 export type Memory = { id: string; content: string; scope: 'global' | 'task'; kind: 'preference' | 'project' | 'context'; lifetime?: 'temporary' | 'long-term' | 'inference'; taskId?: string; sourceMessageId: string; expiresAt?: string | null; createdAt: string; updatedAt: string }
+export type ChatAttachment = { name: string; mime: 'image/png' | 'image/jpeg' | 'image/webp'; size: number; data: string }
+export type ChatMessageAttachment = ChatAttachment

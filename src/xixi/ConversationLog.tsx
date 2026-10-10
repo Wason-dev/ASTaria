@@ -1,7 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { XixiConversation, XixiContext } from './useXixiConversation'
-import type { ChatReasoningRound, Operation, SavedReasoning } from './types'
+import type { ChatAttachment, ChatReasoningRound, Operation, SavedReasoning } from './types'
 import { MessageMarkdown } from './MessageMarkdown'
 import { conversationTimeline } from './conversationTimeline'
 import { ReceiptDeadline } from './ReceiptDeadline'
@@ -14,7 +14,7 @@ type Props = {
   onSettings: () => void
   context: XixiContext
   onSent: (text: string) => void
-  onRetracted: (text: string) => void
+  onRetracted: (text: string, attachments?: ChatAttachment[]) => void
   children?: ReactNode
 }
 
@@ -121,11 +121,14 @@ export function ConversationLog({ chat, active, onSettings, context, onSent, onR
       return <article className="xixi-message" data-role={entry.role} data-message-id={entry.id} data-delivery={entry.delivery} data-retracted={Boolean(entry.retractedAt)} key={entry.role === 'user' && entry.requestId ? `user:${entry.requestId}` : entry.id}>
       <span>{entry.role === 'user' ? '你' : '析熙'}</span>
       {entry.role === 'assistant' && showReasoning && <Reasoning expanded={expandedReasoning[reasoningId] ?? false} onExpandedChange={expanded => setReasoningExpanded(reasoningId, expanded)} content={reasoningContent} rounds={interrupted?.reasoningRounds} currentRound={interrupted?.phase === 'thinking' ? interrupted.round : undefined} interrupted={Boolean(interrupted)} live={Boolean(interrupted)} requestId={entry.requestId} conversationId={chat.conversation?.conversationId} />}
-      {entry.retractedAt ? <p>已撤回</p> : entry.role === 'assistant' ? <MessageMarkdown content={entry.content} /> : <p>{entry.content}</p>}
-      {!entry.retractedAt && <div className="xixi-message-actions">
+      {entry.retractedAt ? <p>已撤回</p> : <>
+        {entry.attachments?.length ? <div className="xixi-message-attachments" aria-label="消息中的图片">{entry.attachments.map((attachment, index) => <img key={`${attachment.name}:${index}`} src={attachment.data} alt={`${attachment.name}，已发送给析熙`} />)}</div> : null}
+        {entry.content && (entry.role === 'assistant' ? <MessageMarkdown content={entry.content} /> : <p>{entry.content}</p>)}
+      </>}
+      {!entry.retractedAt && (entry.content || entry.role === 'user') && <div className="xixi-message-actions">
         <button className="xixi-message-copy" type="button" title="复制" aria-label={entry.role === 'user' ? '复制你的消息' : '复制析熙的消息'} onClick={() => void copyMessage(entry.id, entry.content)}><CopyIcon /><span>复制</span></button>
         {entry.role === 'user' && <button className="xixi-message-retract" type="button" title="撤回并将原文放回输入框，已执行的安排仍可单独撤销" disabled={!active || Boolean(chat.retracting) || (chat.busy && !chat.sending)} onClick={async () => {
-          if (await chat.retractMessage(entry)) { draftRevision.current += 1; onRetracted(entry.content) }
+          if (await chat.retractMessage(entry)) { draftRevision.current += 1; onRetracted(entry.content, entry.attachments) }
         }}><ReturnIcon /><span>{chat.retracting === entry.id ? '撤回中' : '撤回'}</span></button>}
         {copyFeedback?.id === entry.id && <small role="status">{copyFeedback.text}</small>}
       </div>}
@@ -139,6 +142,10 @@ export function ConversationLog({ chat, active, onSettings, context, onSent, onR
           const revision = draftRevision.current
           if (await chat.send(option, context) && revision === draftRevision.current) onSent(option)
         }}>{option}</button>)}
+      </div>}
+      {!entry.retractedAt && entry.executionNotice && <div className="xixi-execution-notice" role="status" aria-label="执行状态">
+        {entry.executionNotice.replyUnavailable && <p>回复生成中断，已保存的操作见下方回执。</p>}
+        {entry.executionNotice.issues.length > 0 && <><strong>尚未完成</strong><ul>{entry.executionNotice.issues.map(issue => <li key={issue}>{issue}</li>)}</ul></>}
       </div>}
       {receipts.map(operation => <Receipt key={operation.id} operation={operation} chat={chat} />)}
       {companionActions.map(action => <div className="xixi-receipt" key={action.id}><strong>{action.label}</strong><button type="button" className="xixi-text-button" onClick={() => window.dispatchEvent(new CustomEvent('astaria-open-companion', { detail: { tab: action.kind === 'wish' || action.kind === 'goal' ? 'wishes' : 'scenarios', targetId: action.targetId } }))}>查看 ↗</button></div>)}

@@ -221,7 +221,8 @@ test('an exception without a fresh read is refused and leaves the calendar untou
   const refused = toolReceipts(f.db).at(-1)
   assert.equal(refused.ok, false)
   assert.match(refused.error, /先.*读取|read_planner/u)
-  assert.match(finalReply(result), /没有保存新的变更|尚未完成/u)
+  assert.equal(finalReply(result), '请先读取这些日期')
+  assert.match(result.messages.at(-1).executionNotice.issues.join('\n'), /核对当天的最新日程/u)
 })
 
 test('exporting and re-importing a backup keeps the exception receipt auditable but read-only', async t => {

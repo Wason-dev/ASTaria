@@ -345,7 +345,9 @@ test('failed final reply acknowledges committed plans locally without a retryabl
   const request = input()
   const first = await f.xixi.chat(request)
   assert.equal(first.status, 'completed')
-  assert.match(first.messages.at(-1).content, /18:00–18:35/)
+  assert.equal(first.messages.at(-1).content, '')
+  assert.deepEqual(first.messages.at(-1).executionNotice, { issues: [], replyUnavailable: true })
+  assert.ok(first.operations.some(operation => operation.summary.includes('18:00–18:35')))
   f.responses.push(tool('plan_tasks', { expectedRevision: f.db.getPlanner().revision, plans: [plan(task)] }), request => {
     assert.equal(receipt(request).reused, true)
     return reply('安排保留着')

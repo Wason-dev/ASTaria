@@ -30,6 +30,7 @@ export function createCompletion(keychain, fetcher = fetch, getModel = () => MOD
     const settings = getSettings?.()
     const local = settings?.provider === 'local'
     const label = local ? '本地模型' : 'DeepSeek'
+    const hasImages = payload.messages?.some(message => Array.isArray(message.content) && message.content.some(part => part?.type === 'image_url'))
     const model = local ? settings.local.model : getModel()
     if (!model || (!local && !MODELS.some(option => option.id === model))) throw new ProviderError('请在设置中选择有效模型')
     const endpoint = local ? `${localEndpoint(settings.local.baseUrl)}/chat/completions` : ENDPOINT
@@ -69,7 +70,9 @@ export function createCompletion(keychain, fetcher = fetch, getModel = () => MOD
     } catch { throw new ProviderError(local ? '无法连接本地模型，请确认服务已启动、模型已加载；对话已保留，可以重试' : '连接 DeepSeek 暂时失败，对话已保留，可以重试') }
     if (!response.ok) {
       await response.body?.cancel()
-      throw new ProviderError(local ? '本地模型未接受请求，请检查模型名称、上下文容量和工具调用支持' : response.status === 401 ? 'API Key 未通过验证，请在设置中重新录入' : response.status === 429 ? 'DeepSeek 暂时限流或额度不足，请稍后重试' : 'DeepSeek 暂时无法回复，请稍后重试')
+      throw new ProviderError(hasImages
+        ? `${label}未接受图片请求，请确认当前模型支持视觉输入后再试`
+        : local ? '本地模型未接受请求，请检查模型名称、上下文容量和工具调用支持' : response.status === 401 ? 'API Key 未通过验证，请在设置中重新录入' : response.status === 429 ? 'DeepSeek 暂时限流或额度不足，请稍后重试' : 'DeepSeek 暂时无法回复，请稍后重试')
     }
     // Bound upstream data, never reflecting provider response bodies into errors.
     const maxBytes = thinkingEnabled ? 4 * 1024 * 1024 : 512 * 1024

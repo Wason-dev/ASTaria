@@ -28,6 +28,7 @@ import { TaskHandoff } from '../xixi/CompanionPanel'
 import type { Handoff } from '../xixi/companionTypes'
 import { TaskSteps } from './TaskSteps'
 import type { XixiConversation } from '../xixi/useXixiConversation'
+import type { ChatAttachment } from '../xixi/types'
 import './workbench.css'
 import './readability.css'
 import './theme.css'
@@ -437,6 +438,8 @@ function XixiContext({ task, now, active, preview, appearance, chat, onSettings,
   const key = `${preview ? 'preview' : 'real'}-${task.id}`
   const [draft, setDraft] = useState(() => { try { return sessionStorage.getItem(`astaria-xixi-${key}`) ?? '' } catch { return '' } })
   const [warning, setWarning] = useState('')
+  const [attachment, setAttachment] = useState<ChatAttachment | null>(null)
+  const [attachmentError, setAttachmentError] = useState('')
   const draftRevision = useRef(0)
   const composeForm = useRef<HTMLFormElement>(null)
   useEffect(() => {
@@ -456,24 +459,30 @@ function XixiContext({ task, now, active, preview, appearance, chat, onSettings,
     catch { setWarning('草稿暂未保存，离开前请复制') }
   }, [key, draft])
   const send = async () => {
-    if (preview || chat.busy || !draft.trim()) return
+    if (preview || chat.busy || (!draft.trim() && !attachment)) return
     const sent = draft
     const revision = draftRevision.current
-    if (await chat.send(sent, { page: 'workbench', taskId: task.id, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone })) {
+    if (await chat.send(sent, { page: 'workbench', taskId: task.id, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }, attachment ? [attachment] : undefined)) {
       if (revision !== draftRevision.current) return
       // The focus panel may have closed while the reply was arriving.
       // Clear the persisted draft even when that component is now unmounted.
       try { if (sessionStorage.getItem(`astaria-xixi-${key}`) === sent) sessionStorage.removeItem(`astaria-xixi-${key}`) } catch { /* The current draft remains available in memory. */ }
       setDraft(value => value === sent ? '' : value)
+      setAttachment(null)
+      setAttachmentError('')
     }
   }
   const clearSentDraft = (sent: string) => {
     try { if (sessionStorage.getItem(`astaria-xixi-${key}`)?.trim() === sent) sessionStorage.removeItem(`astaria-xixi-${key}`) } catch { /* Keep the current draft in memory if session storage is unavailable. */ }
     setDraft(value => value.trim() === sent ? '' : value)
+    setAttachment(null)
+    setAttachmentError('')
   }
-  const restoreDraft = (text: string) => {
+  const restoreDraft = (text: string, attachments?: ChatAttachment[]) => {
     draftRevision.current += 1
     setDraft(value => restoreWithdrawnDraft(value, text))
+    setAttachment(attachments?.[0] ?? null)
+    setAttachmentError('')
     requestAnimationFrame(() => {
       const input = composeForm.current?.querySelector('textarea')
       input?.focus({ preventScroll: true })
@@ -487,8 +496,8 @@ function XixiContext({ task, now, active, preview, appearance, chat, onSettings,
       : <ConversationLog chat={chat} active={active} onSettings={onSettings} context={{ page: 'workbench', taskId: task.id, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }} onSent={clearSentDraft} onRetracted={restoreDraft} />}
     <form ref={composeForm} className="xixi-compose" onSubmit={event => { event.preventDefault(); void send() }}>
       <label className="p0-sr-only" htmlFor="wb-xixi-input">结合当前事项和析熙对话</label>
-      <XixiInput value={draft} onChange={setDraft} disabled={chat.busy} onSubmit={() => void send()} />
-      <footer><small>{warning || (preview ? '示例草稿不会发送' : 'Enter 发送 · Shift + Enter 换行')}</small><button type="submit" className="wb-action xixi-send" disabled={preview || chat.busy || chat.loading || !draft.trim()}>{chat.sending ? '正在想' : '发给析熙'}</button></footer>
+      <XixiInput value={draft} onChange={setDraft} disabled={chat.busy} attachment={attachment} onAttachmentChange={setAttachment} attachmentError={attachmentError} onAttachmentError={setAttachmentError} onSubmit={() => void send()} />
+      <footer><small>{warning || (preview ? '示例草稿不会发送' : 'Enter 发送 · Shift + Enter 换行')}</small><button type="submit" className="wb-action xixi-send" disabled={preview || chat.busy || chat.loading || (!draft.trim() && !attachment)}>{chat.sending ? '正在想' : '发给析熙'}</button></footer>
       {!preview && chat.error && <p className="xixi-send-error" role="alert">{chat.error}{!chat.status?.configured && <button type="button" className="xixi-text-button" onClick={onSettings}>打开设置</button>}</p>}
     </form>
   </Glass>

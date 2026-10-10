@@ -14,6 +14,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Readable, Writable } from 'node:stream'
 import { once } from 'node:events'
+import { setImmediate as settle } from 'node:timers/promises'
 import { buildReminderPlan, createReminderService, handleReminderRequest } from '../desktop/reminders.mjs'
 
 process.env.TZ = 'Asia/Shanghai'
@@ -39,13 +40,17 @@ const allTimes = value => value.entries.map(entry => entry.at)
 function nativeRun({ authorization = 2, fail = null } = {}) {
   const calls = []
   const native = {
-    calls, authorization, fail,
+    calls, authorization, fail, entries: [], ignoreReplace: false,
     async run(command, input) {
       calls.push({ command, input })
       if (native.fail === true || native.fail === command) throw new Error('系统提醒服务暂不可用，请稍后重试')
-      if (command === 'status') return { authorization: native.authorization, pending: 0 }
+      if (command === 'status') return { authorization: native.authorization, pending: native.entries.length,
+        pendingWithContent: native.entries.length, entries: structuredClone(native.entries) }
       if (command === 'authorize') return { authorization: native.authorization }
-      if (command === 'replace') return { ok: true, count: Array.isArray(input) ? input.length : 0 }
+      if (command === 'replace') {
+        if (!native.ignoreReplace) native.entries = structuredClone(input)
+        return { ok: true, count: input.length }
+      }
       throw new Error(`未知命令 ${command}`)
     },
   }
@@ -59,6 +64,7 @@ async function fixture(t, { snapshotValue = snapshot(), native = nativeRun(), no
   const stateFile = join(directory, 'system-reminders.json')
   const holder = { value: snapshotValue }
   const service = createReminderService({ stateFile, snapshot: () => holder.value, run: native.run, now })
+  t.after(() => service.close())
   return { service, native, holder, stateFile, directory }
 }
 
@@ -286,6 +292,96 @@ test('修改与完成后重新同步，且相同内容不重复下发', async t 
   service.schedule()
   await new Promise(resolve => setTimeout(resolve, 500))
   assert.equal(native.of('replace').length, settled, 'close() 之后不再同步')
+})
+
+test('同样条数和完整正文不能证明改期已同步；旧时间必须被识别并自动重试', async t => {
+  const f = await fixture(t, { snapshotValue: snapshot({ tasks: [task()], planner: planner({ blocks: [block()] }) }) })
+  await f.service.setEnabled(true)
+  const old = structuredClone(f.native.entries)
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  f.holder.value.planner.blocks[0] = block({ start: '19:00', end: '19:30' })
+  f.native.ignoreReplace = true
+  f.service.schedule()
+  t.mock.timers.tick(400)
+  await settle()
+  const failed = await f.service.status()
+  assert.match(failed.error ?? '', /系统.*提醒.*不一致/u)
+  assert.deepEqual(f.native.entries, old)
+  f.native.ignoreReplace = false
+  t.mock.timers.tick(1000)
+  await settle()
+  assert.equal((await f.service.status()).error, null)
+  assert.equal(f.native.entries[0].id, old[0].id)
+  assert.equal(f.native.entries[0].at, seconds('2026-09-29T18:55:00+08:00'))
+  assert.equal(f.native.entries[0].body, '19:00–19:30')
+})
+
+test('系统队列被外部改变时，即使本机指纹没变也会修复', async t => {
+  const f = await fixture(t, { snapshotValue: snapshot({ tasks: [task()], planner: planner({ blocks: [block()] }) }) })
+  await f.service.setEnabled(true)
+  const wanted = structuredClone(f.native.entries)
+  f.native.entries[0].at -= 3600
+  f.native.entries[0].body = '17:00–17:30'
+  await f.service.flush()
+  assert.deepEqual(f.native.entries, wanted)
+  assert.equal(f.native.of('replace').length, 2)
+  await f.service.flush()
+  assert.equal(f.native.of('replace').length, 2, '队列正确时仍然去重')
+})
+
+test('同步期间连续改期会在当前同步结束后立即收敛到最新时间', async t => {
+  const native = nativeRun()
+  const run = native.run
+  const gate = Promise.withResolvers(), entered = Promise.withResolvers()
+  let held = true
+  native.run = async (command, input) => {
+    if (held && command === 'replace') { held = false; entered.resolve(); await gate.promise }
+    return run(command, input)
+  }
+  const f = await fixture(t, { native, snapshotValue: snapshot({ tasks: [task()], planner: planner({ blocks: [block()] }) }) })
+  const enabling = f.service.setEnabled(true)
+  await entered.promise
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  f.holder.value = snapshot({ tasks: [task()], planner: planner({ blocks: [block({ start: '20:00', end: '20:30' })] }) })
+  f.service.schedule()
+  gate.resolve()
+  await enabling
+  assert.equal(native.entries[0].body, '20:00–20:30', '不等待下一次定时刷新，也不让旧同步覆盖新数据')
+})
+
+test('失败重试有限且重新读取最新事项，关闭后停止唤醒', async t => {
+  const f = await fixture(t, { snapshotValue: snapshot({ tasks: [task()], planner: planner({ blocks: [block()] }) }) })
+  await f.service.setEnabled(true)
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  f.native.fail = 'replace'
+  f.holder.value.planner.blocks[0] = block({ start: '19:00', end: '19:30' })
+  f.service.schedule()
+  for (const delay of [400, 1000, 5000, 30000]) { t.mock.timers.tick(delay); await settle(); await f.service.status() }
+  const attempts = f.native.of('replace').length
+  assert.equal(attempts, 5, '初次同步 + 改期同步 + 最多三次重试')
+  t.mock.timers.tick(3600000); await settle()
+  assert.equal(f.native.of('replace').length, attempts, '不永久高频轮询')
+  f.native.fail = null
+  f.holder.value.tasks[0].status = 'done'
+  f.service.schedule()
+  t.mock.timers.tick(400); await settle(); await f.service.status()
+  assert.deepEqual(f.native.entries, [], '恢复时以最新完成状态为准')
+  f.native.fail = 'status'
+  await f.service.flush()
+  f.service.close()
+  const calls = f.native.calls.length
+  t.mock.timers.tick(3600000); await settle()
+  assert.equal(f.native.calls.length, calls)
+})
+
+test('连续保存不会无限推迟第一次系统同步', async t => {
+  const f = await fixture(t, { snapshotValue: snapshot({ tasks: [task()], planner: planner({ blocks: [block()] }) }) })
+  await f.service.setEnabled(true)
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  f.holder.value.planner.blocks[0] = block({ start: '19:00', end: '19:30' })
+  for (let i = 0; i < 4; i++) { f.service.schedule(); t.mock.timers.tick(100); await settle() }
+  await f.service.status()
+  assert.equal(f.native.entries[0].body, '19:00–19:30')
 })
 
 test('HTTP 需要本地标记，并且限定路径、方法与体积', async t => {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { chatApi, localApi } from './api'
-import type { ChatMessage, ChatStreamDraft, ConversationState, ConversationSummary, LocalStatus, Operation, SavedReasoning } from './types'
+import type { ChatAttachment, ChatMessage, ChatStreamDraft, ConversationState, ConversationSummary, LocalStatus, Operation, SavedReasoning } from './types'
 import type { ResponsePhase } from '../prototype/responseEffects'
 import { mergeConversation, mergeOperationReceipt } from './conversationTimeline'
 import { advanceChatStream, restoreChatReasoning } from './stream'
@@ -8,7 +8,7 @@ import { sameSnapshot } from '../stores/sameSnapshot.ts'
 import { startVisiblePolling } from '../stores/visiblePolling.ts'
 
 export type XixiContext = { page: 'home' | 'workbench' | 'calendar' | 'timetable'; taskId?: string; wishId?: string; freeTimeGoalId?: string; date?: string; timezone: string }
-type PendingMessage = { requestId: string; conversationId: string; text: string; context: XixiContext; createdAt?: string; seq?: number }
+type PendingMessage = { requestId: string; conversationId: string; text: string; attachments?: ChatAttachment[]; context: XixiContext; createdAt?: string; seq?: number }
 type OutgoingMessage = PendingMessage & { delivery: 'sending' | 'failed' }
 const SELECTED_KEY = 'astaria-xixi-conversation-v1'
 const PENDING_KEY = 'astaria-xixi-pending-v1'
@@ -18,7 +18,10 @@ function selectedConversation() { try { return sessionStorage.getItem(SELECTED_K
 function pendingRequests(): PendingMessage[] {
   const value: unknown = JSON.parse(sessionStorage.getItem(PENDING_KEY) || '[]')
   if (!Array.isArray(value)) throw new Error('无法读取发送记录，请保留原文后重新打开页面')
-  return value.filter((item): item is PendingMessage => Boolean(item && typeof item.requestId === 'string' && typeof item.conversationId === 'string' && typeof item.text === 'string' && item.context && typeof item.context.page === 'string'))
+  return value.filter((item): item is PendingMessage => Boolean(item && typeof item.requestId === 'string' && typeof item.conversationId === 'string' && typeof item.text === 'string' && item.context && typeof item.context.page === 'string' && (!item.attachments || Array.isArray(item.attachments))))
+}
+function sameAttachments(left: ChatAttachment[] | undefined, right: ChatAttachment[] | undefined) {
+  return JSON.stringify(left ?? []) === JSON.stringify(right ?? [])
 }
 function restoredOutgoing(): OutgoingMessage[] {
   try { return pendingRequests().map(item => ({ ...item, delivery: 'failed' })) } catch { return [] }
@@ -145,9 +148,9 @@ export function useXixiConversation(onTasksChanged: () => void, onNotice: (messa
     }
   }, [refresh, refreshStatus])
 
-  const send = useCallback(async (text: string, context: XixiContext) => {
+  const send = useCallback(async (text: string, context: XixiContext, attachments?: ChatAttachment[]) => {
     const content = text.trim()
-    if (!content || busy.current || retractInFlight.current) return false
+    if ((!content && !attachments?.length) || busy.current || retractInFlight.current) return false
     if (!conversation) { setError('先连接本机服务，读取对话后再发给我'); return false }
     if (!currentStatus.current?.configured) {
       // A provider switch or a temporary status failure must not make a cached
@@ -164,8 +167,8 @@ export function useXixiConversation(onTasksChanged: () => void, onNotice: (messa
     let retrying = false
     try {
       const pending = pendingRequests()
-      const previous = pending.find(item => !cancelledRequests.current.has(item.requestId) && item.text === content && item.conversationId === conversation.conversationId && item.context.page === context.page && item.context.taskId === context.taskId && item.context.wishId === context.wishId && item.context.freeTimeGoalId === context.freeTimeGoalId && item.context.date === context.date)
-      request = previous ?? { requestId: crypto.randomUUID(), conversationId: conversation.conversationId, text: content, context, createdAt: new Date().toISOString(), seq: Math.max(0, ...conversation.messages.map(item => item.seq), ...pending.filter(item => item.conversationId === conversation.conversationId).map(item => item.seq ?? 0)) + 1 }
+      const previous = pending.find(item => !cancelledRequests.current.has(item.requestId) && item.text === content && sameAttachments(item.attachments, attachments) && item.conversationId === conversation.conversationId && item.context.page === context.page && item.context.taskId === context.taskId && item.context.wishId === context.wishId && item.context.freeTimeGoalId === context.freeTimeGoalId && item.context.date === context.date)
+      request = previous ?? { requestId: crypto.randomUUID(), conversationId: conversation.conversationId, text: content, ...(attachments?.length ? { attachments } : {}), context, createdAt: new Date().toISOString(), seq: Math.max(0, ...conversation.messages.map(item => item.seq), ...pending.filter(item => item.conversationId === conversation.conversationId).map(item => item.seq ?? 0)) + 1 }
       retrying = Boolean(previous)
       if (!previous) sessionStorage.setItem(PENDING_KEY, JSON.stringify([...pending, request]))
     } catch {
@@ -187,7 +190,7 @@ export function useXixiConversation(onTasksChanged: () => void, onNotice: (messa
     setError('')
     setOutgoing(items => [...items.filter(item => item.requestId !== request.requestId), { ...request, delivery: 'sending' }])
     try {
-      const { requestId, conversationId, text: messageText, context: messageContext } = request
+      const { requestId, conversationId, text: messageText, attachments: messageAttachments, context: messageContext } = request
       if (retrying) {
         // A retry begins after durable tool rounds; they are never replayed as
         // fresh deltas or erased when the next provider round starts.
@@ -201,7 +204,7 @@ export function useXixiConversation(onTasksChanged: () => void, onNotice: (messa
         if (!isCurrent()) return false
         setStream(currentDraft)
       }
-      const result = await chatApi({ requestId, conversationId, text: messageText, context: messageContext }, event => {
+      const result = await chatApi({ requestId, conversationId, text: messageText, ...(messageAttachments?.length ? { attachments: messageAttachments } : {}), context: messageContext }, event => {
         if (!isCurrent() || event.type === 'result' || event.type === 'error') return
         const nextDraft = advanceChatStream(currentDraft, event)
         if (nextDraft === currentDraft) return
@@ -268,7 +271,7 @@ export function useXixiConversation(onTasksChanged: () => void, onNotice: (messa
   const retryMessage = useCallback(async (requestId: string) => {
     const request = outgoing.find(item => item.requestId === requestId)
     if (!request || request.conversationId !== conversation?.conversationId) return false
-    return send(request.text, request.context)
+    return send(request.text, request.context, request.attachments)
   }, [outgoing, conversation?.conversationId, send])
 
   const retractMessage = useCallback(async (entry: ChatMessage) => {
@@ -504,7 +507,7 @@ export function useXixiConversation(onTasksChanged: () => void, onNotice: (messa
       const index = messages.findIndex(entry => entry.role === 'user' && entry.requestId === item.requestId)
       if (index >= 0) {
         if (!messages[index].retractedAt) messages[index] = { ...messages[index], delivery: item.delivery }
-      } else messages.push({ id: `optimistic:${item.requestId}`, seq: item.seq ?? Math.max(0, ...messages.map(entry => entry.seq)) + 1, role: 'user', content: item.text, createdAt: item.createdAt ?? '', requestId: item.requestId, taskId: item.context.taskId, delivery: item.delivery })
+        } else messages.push({ id: `optimistic:${item.requestId}`, seq: item.seq ?? Math.max(0, ...messages.map(entry => entry.seq)) + 1, role: 'user', content: item.text, ...(item.attachments?.length ? { attachments: item.attachments } : {}), createdAt: item.createdAt ?? '', requestId: item.requestId, taskId: item.context.taskId, delivery: item.delivery })
     }
     return { ...conversation, messages: messages.sort((a, b) => a.seq - b.seq) }
   }, [conversation, outgoing])

@@ -7,9 +7,10 @@ import { createPlannerStore, defaultPlanner } from './planner.mjs'
 import { createSyncStore } from './syncStore.mjs'
 import { createBackupStore, validateCompanionState } from './backup.mjs'
 import { validatePreferences } from './preferences.mjs'
+import { normalizeChatAttachments } from './chatAttachments.mjs'
 import {
   ValidationError, object, knownKeys, text, identifier, choice, number, day, dateTime, clockTime,
-  jsonValue, taskInput, eventInput, assignmentInput, validateMemory, questionOptions,
+  jsonValue, taskInput, eventInput, assignmentInput, validateMemory, questionOptions, executionNotice,
 } from './validation.mjs'
 
 const SEED_AREAS = [
@@ -556,6 +557,7 @@ export function createDatabase(filename) {
     object(input, '消息')
     assertTurnWritable(input.requestId, input.sourceMessageIds)
     if (input.question !== undefined && (input.role !== 'assistant' || input.toolCalls?.length)) fail('快捷问题只能附在完整的析熙消息中')
+    if (input.executionNotice !== undefined && (input.role !== 'assistant' || input.toolCalls?.length)) fail('执行提示只能附在完整的析熙消息中')
     if (input.reasoningContent != null && (input.role !== 'assistant' || typeof input.reasoningContent !== 'string' || input.reasoningContent.length > 2000000)) fail('模型思考内容格式不正确')
     let sourceMessageIds
     if (input.sourceMessageIds !== undefined) {
@@ -563,10 +565,12 @@ export function createDatabase(filename) {
       sourceMessageIds = [...new Set(input.sourceMessageIds.map(id => identifier(id, '消息来源')))]
       for (const id of sourceMessageIds) if (!getMessage(id)) fail('消息来源不存在')
     }
+    const attachments = normalizeChatAttachments(input.attachments)
     const message = clean({
       id: input.id ? identifier(input.id) : randomUUID(), conversationId: identifier(input.conversationId, '对话标识'),
       role: choice(input.role, ['user', 'assistant', 'tool'], '消息角色'),
-      content: text(input.content ?? '', '消息内容', 64000, { empty: true }),
+      content: text(input.content ?? '', '消息内容', 64000, { empty: input.role !== 'user' || Boolean(attachments?.length) }),
+      attachments,
       requestId: input.requestId === undefined ? undefined : identifier(input.requestId, '请求标识'),
       taskId: input.taskId === undefined ? undefined : identifier(input.taskId, '任务标识'),
       toolCallId: input.toolCallId === undefined ? undefined : identifier(input.toolCallId, '工具调用标识'),
@@ -576,6 +580,7 @@ export function createDatabase(filename) {
       // the UI receives a separate, bounded view of model-returned reasoning.
       reasoningContent: input.reasoningContent ?? undefined,
       question: input.question === undefined ? undefined : questionOptions(input.question),
+      executionNotice: executionNotice(input.executionNotice),
       sourceMessageIds,
       createdAt: now(), excludeFromContext: Boolean(sourceMessageIds?.some(id => getMessage(id).excludeFromContext)),
     })
@@ -951,7 +956,8 @@ export function createDatabase(filename) {
     object(input, '对话请求')
     const requestId = identifier(input.requestId, '请求标识')
     const conversationId = identifier(input.conversationId, '对话标识')
-    const content = text(input.text, '消息', 16000)
+    const attachments = normalizeChatAttachments(input.attachments)
+    const content = text(input.text ?? '', '消息', 16000, { empty: Boolean(attachments?.length) })
     const context = jsonValue(input.context ?? {}, '当前上下文', 16000)
     return transaction(() => {
       recoverAbandonedTurns()
@@ -959,7 +965,7 @@ export function createDatabase(filename) {
       const otherRunning = all('turns').find(turn => turn.conversationId === conversationId && turn.status === 'running' && turn.requestId !== requestId)
       if (otherRunning) fail('析熙正在回复这段对话，请等她说完', 409)
       if (previous) {
-        if (previous.conversationId !== conversationId || previous.text !== content || !same(previous.context, context)) fail('请求标识已用于不同内容', 409)
+        if (previous.conversationId !== conversationId || previous.text !== content || !same(previous.context, context) || !same(previous.attachments ?? [], attachments ?? [])) fail('请求标识已用于不同内容', 409)
         if (previous.retractedAt) return { ...previous, claimed: false }
         if (previous.status === 'failed') {
           const retry = { ...previous, status: 'running', ownerPid: process.pid, ownerToken, error: undefined, updatedAt: now() }
@@ -970,8 +976,8 @@ export function createDatabase(filename) {
       }
       assertTurnWritable(requestId)
       const userMessageId = input.userMessageId ? identifier(input.userMessageId) : `${requestId}:user`
-      appendMessage({ id: userMessageId, conversationId, requestId, role: 'user', content, taskId: context.taskId })
-      const turn = { requestId, conversationId, text: content, context, userMessageId, status: 'running', ownerPid: process.pid, ownerToken, createdAt: now(), updatedAt: now() }
+      appendMessage({ id: userMessageId, conversationId, requestId, role: 'user', content, attachments, taskId: context.taskId })
+      const turn = { requestId, conversationId, text: content, ...(attachments ? { attachments } : {}), context, userMessageId, status: 'running', ownerPid: process.pid, ownerToken, createdAt: now(), updatedAt: now() }
       put('turns', requestId, turn)
       return { ...turn, claimed: true }
     })

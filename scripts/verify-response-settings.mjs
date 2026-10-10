@@ -102,10 +102,10 @@ try {
   }
   await send('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false})
   await check('exactly five FPS choices in requested order',`JSON.stringify([...document.querySelectorAll('.xixi-render-options strong')].map(e=>e.textContent))===JSON.stringify(['120 FPS','90 FPS','60 FPS','45 FPS','30 FPS'])`)
-  await check('recommended quality starts at 60 and owns the FPS choice',"document.querySelector('select[aria-label=黑洞画质]').value==='auto'&&[...document.querySelectorAll('.xixi-render-options button')].every(e=>e.disabled)&&window.__ASTARIA_P0__.getSnapshot().targetFps===60")
+  await check('recommended quality owns the FPS choice and respects the workspace cap',"document.querySelector('select[aria-label=黑洞画质]').value==='auto'&&[...document.querySelectorAll('.xixi-render-options button')].every(e=>e.disabled)&&window.__ASTARIA_P0__.getSnapshot().targetFps===30")
   await field('select[aria-label="黑洞画质"]','ultra')
   await wait("!document.querySelector('.xixi-render-options button').disabled&&window.__ASTARIA_P0__.getSnapshot().quality==='ultra'")
-  for (const [index,profile,rate] of [[1,'smooth120',60],[2,'smooth90',60],[3,'full',60],[4,'balanced',45],[5,'economy',30]]) {
+  for (const [index,profile,rate] of [[1,'smooth120',30],[2,'smooth90',30],[3,'full',30],[4,'balanced',30],[5,'economy',30]]) {
     await click(`.xixi-render-options button:nth-child(${index})`)
     await wait(`window.__ASTARIA_P0__.getSnapshot().targetFps===${rate}&&window.__ASTARIA_P0__.getSnapshot().renderProfile==='${profile}'`)
     await check(`${profile}: setting persists and one choice stays selected`,getPreferences(db).render.profile===profile&&await ev(`document.querySelectorAll('.xixi-render-options button[aria-pressed=true]').length===1`))
@@ -127,7 +127,7 @@ try {
   await check('home chat keeps 120 FPS target',"window.__ASTARIA_P0__.getSnapshot().targetFps===120")
   for (const destination of ['工作台','日程','余时','首页']) {
     await click('.home-brand');await textClick('#home-menu button',destination)
-    await wait(`window.__ASTARIA_P0__.getSnapshot().targetFps===${destination==='首页'?120:60}`)
+    await wait(`window.__ASTARIA_P0__.getSnapshot().targetFps===${destination==='首页'?120:30}`)
     await check(`${destination}: page-aware FPS switches without changing selected tier`,"window.__ASTARIA_P0__.getSnapshot().renderProfile==='smooth120'")
     await wait('document.querySelector("#home-menu").dataset.open==="false"&&!window.__ASTARIA_P0__.getSnapshot().cameraTransition');await delay(400)
   }

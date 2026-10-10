@@ -19,13 +19,14 @@ function engine() {
 
 test('changing pages at the same effective cadence preserves the pending frame and adaptive history',()=>{
   const e=engine()
-  e.set('full','workspace','auto')
+  e.set('economy','home','auto');e.calls.length=0
+  e.set('economy','workspace','auto')
   assert.deepEqual(e.calls,['request','publish'])
   assert.equal(e.state.quality,'high','retain the actual adaptive quality')
   assert.equal(e.state.renderScene,'workspace')
-  e.calls.length=0;e.set('full','workspace','auto')
+  e.calls.length=0;e.set('economy','workspace','auto')
   assert.deepEqual(e.calls,[])
-  e.set('full','home','auto')
+  e.set('economy','home','auto')
   assert.deepEqual(e.calls,['request','publish'])
 })
 
@@ -36,7 +37,7 @@ test('a real frame budget or quality change still resets scheduling and applies 
   assert.equal(e.state.targetFps,120)
   e.calls.length=0;e.set('smooth120','workspace','ultra')
   assert.deepEqual(e.calls,['reset','ultra','cancel','request','publish'])
-  assert.equal(e.state.targetFps,60)
+  assert.equal(e.state.targetFps,30)
 })
 
 test('initial setup applies its profile even when defaults already match',()=>{
@@ -51,7 +52,7 @@ test('round trips preserve the chosen FPS tier and manual quality while applying
     e.set(profile,'home','ultra')
     assert.equal(e.state.targetFps,fps)
     e.set(profile,'workspace','ultra')
-    assert.equal(e.state.targetFps,Math.min(fps,60))
+    assert.equal(e.state.targetFps,Math.min(fps,30))
     assert.equal(e.state.renderProfile,profile)
     assert.equal(e.state.requestedQuality,'ultra')
     e.set(profile,'home','ultra')

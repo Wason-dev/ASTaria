@@ -48,7 +48,23 @@ README 仅保留最新版本说明，演示周包含假期、两种临时课表�
 
 ## 发布验收
 
-发布构建与附件正在制作，尚未将构建成功写作设备体验通过。最终源码提交、两端包哈希、CI、签名、DMG 挂载、附件回读与更新器校验会在此处及结构化验收记录中补齐。发布后的文档维护不会移动版本标签或改变包内源码。
+[Beta12 Release](https://github.com/Wason-dev/ASTaria/releases/tag/v0.1.0-beta.12) 已于 **2026-10-11** 公开，标记为预发布，共九项附件。两端安装包及版本标签对应同一干净源码提交 [`a69176fe7775684febb8cae6cacb6832a90c4720`](https://github.com/Wason-dev/ASTaria/commit/a69176fe7775684febb8cae6cacb6832a90c4720)，源码树为 `11bdff3454c04ffed8b07fe5d5f8fd0adbf5eca4`。发布后的文档维护不会移动版本标签或改变包内源码；可核对的结构化记录见 [Beta12 发布验收](./releases/beta12-acceptance.json)。
+
+| 检查 | 已取得结果 | 验收边界 |
+| --- | --- | --- |
+| 同一提交的 CI | [Source Checks](https://github.com/Wason-dev/ASTaria/actions/runs/38069288682) 与 [Windows Package](https://github.com/Wason-dev/ASTaria/actions/runs/38069333737) 均成功，所有 job 通过 | 核心测试与构建，不代表用户电脑体验通过；重叠测试集不累加 |
+| macOS 成品 | 隔离数据库的 React、本机 API、SQLite、WebGL2、初始/最小窗口尺寸与原生窗口按钮检查通过；App/DMG ad-hoc 签名、DMG 校验和只读挂载内容通过 | 自动化没有独占显示控制，全屏按钮恢复检查跳过；未 Apple 公证，不代替长期功耗、真实模型或系统提醒送达验收 |
+| Windows 成品内容 | NSIS 安装 EXE、x64 应用和 portable ZIP 哈希核对通过；ZIP CRC、构建信息、247 个源码文件、运行时、完整 GSAP 许可和安装说明通过；未发现私密规划、数据库或密钥文件 | 源码按 LF 归一后与标签和 Mac 一致。12 个网页产物中 11 个逐字节一致，入口 HTML 仅换行与空白行不同；本版安装与交互尚未实机复测 |
+| GitHub 附件 | 九项附件的大小和 SHA-256 逐项与 GitHub 元数据核对，两端发布清单下载回读并验证固定公钥的 Ed25519 签名；既有 Release 标题与正文保持原样 | 发布清单验签不等于系统代码签名 |
+| 应用内更新发现 | macOS arm64 与 Windows x64 的 Beta11 更新器均选中 Beta12，发布清单校验通过 | 只验证选版与清单，不宣称真实安装、重启或失败回退已验收 |
+
+主要下载文件的 SHA-256：
+
+| 文件 | SHA-256 |
+| --- | --- |
+| `ASTaria-0.1.0-beta.12-mac-arm64-adhoc.dmg` | `d7e8f630f57d2da5b1f0a5c9981a729b480fe2e6b0ddb6363e37326ab9725fa2` |
+| `ASTaria-0.1.0-beta.12-win-x64-setup.exe` | `f391096468a85c24ec450023e4d2481a7ae2a0591c5c2138315017ad2b617493` |
+| `ASTaria-0.1.0-beta.12-win-x64-portable.zip` | `ba8a318cd1858748aadee75188248f1176c02233eaaecfc94882af7e24708d2a` |
 
 ## 支持范围与未完成项
 

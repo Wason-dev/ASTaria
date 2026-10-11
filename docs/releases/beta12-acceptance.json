@@ -1,0 +1,263 @@
+{
+  "schemaVersion": 1,
+  "version": "0.1.0-beta.12",
+  "verifiedAt": "2026-10-11T03:15:56.928896Z",
+  "release": {
+    "id": 409088444,
+    "url": "https://github.com/Wason-dev/ASTaria/releases/tag/v0.1.0-beta.12",
+    "tag": "v0.1.0-beta.12",
+    "prerelease": true,
+    "draft": false,
+    "publishedAt": "2026-10-11T03:12:13Z"
+  },
+  "source": {
+    "commit": "a69176fe7775684febb8cae6cacb6832a90c4720",
+    "tree": "11bdff3454c04ffed8b07fe5d5f8fd0adbf5eca4",
+    "dirty": false
+  },
+  "assets": [
+    {
+      "name": "ASTaria-0.1.0-beta.12-mac-arm64-adhoc.dmg",
+      "sha256": "d7e8f630f57d2da5b1f0a5c9981a729b480fe2e6b0ddb6363e37326ab9725fa2",
+      "sizeBytes": 151541560,
+      "assetId": 628527624,
+      "url": "https://github.com/Wason-dev/ASTaria/releases/download/v0.1.0-beta.12/ASTaria-0.1.0-beta.12-mac-arm64-adhoc.dmg"
+    },
+    {
+      "name": "ASTaria-0.1.0-beta.12-mac-arm64-adhoc.dmg.sha256",
+      "sha256": "423ebd2bb0ab43954325fdf235b4b7cc6bdca3a602eb0ba0baba5711cbefd920",
+      "sizeBytes": 108,
+      "assetId": 628528978,
+      "url": "https://github.com/Wason-dev/ASTaria/releases/download/v0.1.0-beta.12/ASTaria-0.1.0-beta.12-mac-arm64-adhoc.dmg.sha256"
+    },
+    {
+      "name": "ASTaria-0.1.0-beta.12-mac-arm64-adhoc.manifest.json",
+      "sha256": "b438f25477335f387b0d9339de1a7f1fcc2eb56a33af7dfc2f8e6b44b44ad6d1",
+      "sizeBytes": 1505,
+      "assetId": 628529010,
+      "url": "https://github.com/Wason-dev/ASTaria/releases/download/v0.1.0-beta.12/ASTaria-0.1.0-beta.12-mac-arm64-adhoc.manifest.json"
+    },
+    {
+      "name": "install.txt",
+      "sha256": "9afdb57a5b5935386edd0d75e878ea75b3a779fc0c22ec2e33740d3467e0b270",
+      "sizeBytes": 8813,
+      "assetId": 629613489,
+      "url": "https://github.com/Wason-dev/ASTaria/releases/download/v0.1.0-beta.12/install.txt"
+    },
+    {
+      "name": "ASTaria-0.1.0-beta.12-win-x64-setup.exe",
+      "sha256": "f391096468a85c24ec450023e4d2481a7ae2a0591c5c2138315017ad2b617493",
+      "sizeBytes": 115943919,
+      "assetId": 629629711,
+      "url": "https://github.com/Wason-dev/ASTaria/releases/download/v0.1.0-beta.12/ASTaria-0.1.0-beta.12-win-x64-setup.exe"
+    },
+    {
+      "name": "ASTaria-0.1.0-beta.12-win-x64-setup.exe.sha256",
+      "sha256": "b7fdd779c79f13e59c5688345b7cd4ac022e2d39312f3885e28c5ecb2195aeae",
+      "sizeBytes": 106,
+      "assetId": 629632161,
+      "url": "https://github.com/Wason-dev/ASTaria/releases/download/v0.1.0-beta.12/ASTaria-0.1.0-beta.12-win-x64-setup.exe.sha256"
+    },
+    {
+      "name": "ASTaria-0.1.0-beta.12-win-x64-portable.zip",
+      "sha256": "ba8a318cd1858748aadee75188248f1176c02233eaaecfc94882af7e24708d2a",
+      "sizeBytes": 159858677,
+      "assetId": 629632194,
+      "url": "https://github.com/Wason-dev/ASTaria/releases/download/v0.1.0-beta.12/ASTaria-0.1.0-beta.12-win-x64-portable.zip"
+    },
+    {
+      "name": "ASTaria-0.1.0-beta.12-win-x64-portable.zip.sha256",
+      "sha256": "dea30a2bcb65e06524d8a6734f45393f3130c776a8c4071e3c1396091340c73a",
+      "sizeBytes": 109,
+      "assetId": 629635528,
+      "url": "https://github.com/Wason-dev/ASTaria/releases/download/v0.1.0-beta.12/ASTaria-0.1.0-beta.12-win-x64-portable.zip.sha256"
+    },
+    {
+      "name": "ASTaria-0.1.0-beta.12-win-x64.manifest.json",
+      "sha256": "3f5d7e53ddd63bc73dcc6275afcee5c61cda86062828321b6f2ee384f7cc6f9c",
+      "sizeBytes": 2541,
+      "assetId": 629635550,
+      "url": "https://github.com/Wason-dev/ASTaria/releases/download/v0.1.0-beta.12/ASTaria-0.1.0-beta.12-win-x64.manifest.json"
+    }
+  ],
+  "verification": {
+    "assetDigestsMatchGitHub": true,
+    "manifestSignaturesVerified": true,
+    "updaterSelectionAndManifestValidation": true,
+    "tagMatchesBuildCommit": true,
+    "previousReleaseTitlesAndBodiesPreserved": true,
+    "localSourceTests": {
+      "tests": 1531,
+      "passed": 1531,
+      "failed": 0
+    },
+    "ci": [
+      {
+        "name": "Source Checks",
+        "runId": 38069288682,
+        "url": "https://github.com/Wason-dev/ASTaria/actions/runs/38069288682",
+        "sourceCommit": "a69176fe7775684febb8cae6cacb6832a90c4720",
+        "conclusion": "success",
+        "jobs": [
+          {
+            "id": 114263232174,
+            "name": "windows-core",
+            "conclusion": "success"
+          },
+          {
+            "id": 114263232252,
+            "name": "check",
+            "conclusion": "success"
+          }
+        ]
+      },
+      {
+        "name": "Windows Package (manual)",
+        "runId": 38069333737,
+        "url": "https://github.com/Wason-dev/ASTaria/actions/runs/38069333737",
+        "sourceCommit": "a69176fe7775684febb8cae6cacb6832a90c4720",
+        "conclusion": "success",
+        "jobs": [
+          {
+            "id": 114263365425,
+            "name": "package",
+            "conclusion": "success"
+          }
+        ]
+      }
+    ],
+    "chatReceiptUI": {
+      "checks": 13,
+      "errors": 0,
+      "fictionalData": true,
+      "isolatedDatabase": true
+    },
+    "readmeScreenshots": {
+      "checks": 58,
+      "consoleErrors": 0,
+      "fictionalData": true,
+      "isolatedDatabase": true,
+      "screenshots": [
+        {
+          "path": "docs/images/home-receipt.png",
+          "sha256": "4fcd380458e5a386117cbee351480da12aec74120b45da39bcc97cee258e0782"
+        },
+        {
+          "path": "docs/images/home.png",
+          "sha256": "c6fcdf748d51ecf3a931024b36df861cecc3ee0cfd51216899865a98a1dcf126"
+        },
+        {
+          "path": "docs/images/planner.png",
+          "sha256": "7a87bce459f1622672196b742d709f403d5ea8a6b1d4bc9bd692da0988f972b7"
+        },
+        {
+          "path": "docs/images/planner-day.png",
+          "sha256": "71511106842638b312f6cd12f7a729602f9f094b65233237f3446f42f92e0e1c"
+        },
+        {
+          "path": "docs/images/free-time.png",
+          "sha256": "ec9944c23ad8d2005b7f8da24e394f4e939a6e708210f68736cb3c168b81f2e5"
+        },
+        {
+          "path": "docs/images/horizon.png",
+          "sha256": "aaaf089412ca0cdb0b05c46a3e66e14aa475548fbea78d9dccdd332b4fa3ce11"
+        },
+        {
+          "path": "docs/images/workbench.png",
+          "sha256": "be1b89dca1322830ccd2eee22d13fb77591a6eab7f58a11adce978c9b2f42852"
+        }
+      ]
+    },
+    "mac": {
+      "isolatedNativeSmoke": true,
+      "smokeCheckedAt": "2026-10-10T17:05:51.989Z",
+      "smoke": {
+        "react": true,
+        "api": true,
+        "sqlite": true,
+        "webgl2": true,
+        "passed": true
+      },
+      "windowChrome": {
+        "fullSizeContent": true,
+        "initial": {
+          "width": 1440,
+          "height": 900,
+          "dragHeight": 24,
+          "navigationClickable": true
+        },
+        "minimum": {
+          "width": 1024,
+          "height": 720,
+          "dragHeight": 24,
+          "navigationClickable": true
+        },
+        "nativeButtons": {
+          "x": 12,
+          "y": 8
+        },
+        "nativeButtonsHiddenByDefault": true,
+        "nativeWindowActionsAvailable": true,
+        "fullscreenRevealsNativeButtons": null,
+        "fullscreenRestoresHoverMode": null,
+        "fullscreenSkipped": "Automated smoke runs without exclusive display control"
+      },
+      "appAndDmgAdHocSignatures": true,
+      "dmgVerified": true,
+      "mountedContentsVerified": true,
+      "applicationsSymlinkOnly": true,
+      "notarized": false,
+      "realSystemNotificationDeliveryAcceptance": false
+    },
+    "windows": {
+      "nsisBuilt": true,
+      "branded": true,
+      "codeSigned": false,
+      "source": {
+        "commit": "a69176fe7775684febb8cae6cacb6832a90c4720",
+        "tree": "11bdff3454c04ffed8b07fe5d5f8fd0adbf5eca4",
+        "dirty": false
+      },
+      "windowsPortableArchiveCRC": true,
+      "x64Executable": true,
+      "setupExecutableAndHashVerified": true,
+      "manifestMatchesPayload": true,
+      "payloadSourceFilesMatchTagAndMacAfterLFNormalization": 247,
+      "windowsCRLFSourceFiles": 247,
+      "webAssetFilesCompared": 12,
+      "webAssetFilesByteMatchMac": 11,
+      "webEntryHTMLWhitespaceDifferences": [
+        {
+          "path": "dist/index.html",
+          "windowsSha256": "d7f701d6f9949d4d26fb00f2475c883fed78a9a0caa30865f5fdb373196de9e8",
+          "macSha256": "8170a72160dd90ccdbfc7f7590179ccb98c7e74f61a4cdf35c0453b751eda91c",
+          "onlyLineEndingsAndEmptyLinesDiffer": true
+        }
+      ],
+      "licensesAndInstructionsMatchSource": true,
+      "forbiddenDataPathsFound": [],
+      "windowsNativeAcceptance": false,
+      "packagedWindowsNativeAcceptance": false,
+      "realInAppUpgradeAndRollbackAcceptance": false
+    },
+    "testCountNote": "Overlapping suites are not summed."
+  },
+  "limitations": [
+    "Current Windows package installation and interaction not retested on user machine; previous stutter feedback remains open",
+    "Windows 11 untested",
+    "Real in-app upgrade, restart and failure rollback not accepted for this release",
+    "Mac fullscreen native button recovery skipped without exclusive display control",
+    "Real macOS notification delivery untested; Windows has no native system notification scheduling",
+    "Other computer, more GPU/DPI/multi-monitor hardware, sleep recovery and long-term power usage pending",
+    "Real model download, inference, tool calling and vision untested",
+    "Syncthing actual cross-device transport untested",
+    "macOS not notarized; Windows executable not code-signed"
+  ],
+  "pendingFeatureWork": [
+    "Natural response when a web search has no verifiable page body",
+    "Automatic full free-time rescheduling after temporary timetable changes",
+    "Further shared-folder synchronization improvements",
+    "Binary background effect brightness adjustment",
+    "Independent variable-rate glass refraction and globally idle zero-FPS rendering"
+  ]
+}

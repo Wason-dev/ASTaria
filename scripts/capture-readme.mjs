@@ -227,9 +227,18 @@ try {
   const nav = async text => {
     // A page transition can briefly unmount the shell; wait for it before driving the menu.
     await wait(`!!document.querySelector('.home-brand') && !!document.querySelector('#home-menu')`)
+    await wait(`!window.__ASTARIA_P0__?.getCameraSnapshot().cameraTransition`)
+    await evaluate(`new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`)
     await evaluate(`document.querySelector('.home-brand').focus();true`)
     if (await evaluate(`document.querySelector('#home-menu').inert`)) await click('.home-brand')
-    await byText('#home-menu button', text); await delay(450)
+    await wait(`!document.querySelector('#home-menu').inert && Number(getComputedStyle(document.querySelector('.home-menu-list')).opacity)>=.99`)
+    // The horizontal menu scrolls a newly focused item into view. Activate by
+    // keyboard after focus, so that scroll cannot move it between mouse down/up.
+    await evaluate(`(()=>{const e=[...document.querySelectorAll('#home-menu button')].find(e=>e.textContent.trim()===${JSON.stringify(text)});if(!e)throw Error('Missing menu item');e.focus();return true})()`)
+    await wait(`document.activeElement?.closest('#home-menu') && document.activeElement.textContent.trim()===${JSON.stringify(text)}`)
+    await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', text: '\r', unmodifiedText: '\r', windowsVirtualKeyCode: 13 })
+    await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 })
+    await delay(450)
   }
 
   await wait('document.querySelector(".first-run")?.open === true')
@@ -428,6 +437,11 @@ try {
   await delay(600)
   await check('workbench lists only real tasks from the same seeded planner', `(()=>{const list=document.querySelector('.wb-available');if(!list)return false;const seeded=${JSON.stringify(db.listTasks().map(task => task.title))};const cards=[...list.querySelectorAll('.wb-task')].map(card=>card.querySelector('.wb-task-top strong')?.textContent);return cards.length>=1&&cards.every(title=>seeded.includes(title))&&new Set(cards).size===cards.length})()`)
   await shot('workbench')
+  await click(`.wb-task[data-task-id="${receiptTask.id}"]`)
+  await wait(`!!document.querySelector('.wb-xixi textarea') && !document.querySelector('.wb-scroll').inert`)
+  await delay(600)
+  await check('focus chat shares the compact plus beside Send', `(()=>{const p=document.querySelector('.wb-xixi .xixi-attachment-button');return p?.getAttribute('aria-label')==='添加图片'&&p.nextElementSibling?.type==='submit'&&!document.querySelector('.wb-xixi .wb-input-shell button')})()`)
+  await shot('workbench-focus')
   const unaffectedTasks = db.listTasks().filter(task => task.id !== receiptTask.id)
   const unaffectedBlocks = db.getPlanner().blocks.filter(block => block.taskId !== receiptTask.id)
   await nav('首页')

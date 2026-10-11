@@ -18,7 +18,7 @@ const hash = async file => createHash('sha256').update(await readFile(file)).dig
 
 export async function packageWindows({ runtime, out, makensis, rcedit }) {
   const pkg = JSON.parse(await readFile(join(ROOT, 'package.json'), 'utf8'))
-  if (!/^\d+\.\d+\.\d+(?:-beta\.\d+)?$/u.test(pkg.version)) throw new Error('Invalid package version')
+  if (!/^\d+\.\d+\.\d+(?:-beta\.[1-9]\d*(?:\.(?:0|[1-9]\d*))?)?$/u.test(pkg.version)) throw new Error('Invalid package version')
   const stem = `ASTaria-${pkg.version}-win-x64`, release = join(out, stem)
   try { await stat(release); throw new Error('Output already exists') } catch (error) { if (error.code !== 'ENOENT') throw error }
   const binary = await readFile(join(runtime, 'electron.exe'))

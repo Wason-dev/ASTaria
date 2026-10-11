@@ -135,6 +135,8 @@ async function httpResponse(handle, req, updates) {
 }
 
 test('compareVersions 按数值比较数字预发布标识，而不是字典序', () => {
+  assert.equal(compareVersions('0.1.0-beta.12.1', '0.1.0-beta.12'), 1)
+  assert.equal(compareVersions('0.1.0-beta.12.1', '0.1.0-beta.13'), -1)
   assert.equal(compareVersions('1.0.0-alpha.2', '1.0.0-alpha.10'), -1)
   assert.equal(compareVersions('1.0.0-beta.10', '1.0.0-beta.9'), 1)
   assert.equal(compareVersions('1.0.0-beta.2', '1.0.0-beta.2'), 0)
@@ -228,8 +230,18 @@ test('selectRelease 只接受与设备架构、tag、状态和大小完全匹配
   assert.equal(selectRelease([good.release], { ...stable, platform: 'win32' }).downloadUrl, null)
 })
 
-test('Windows x64 只选择同版本 setup.exe 与配套发布清单', () => {
-  const version = '0.1.0-beta.12', tag = `v${version}`, stem = `ASTaria-${version}-win-x64`
+test('macOS 从 Beta12 发现补丁，验证完整 beta.12.1 文件名并继续按 SemVer 选版', () => {
+  const current = installed({ version: '0.1.0-beta.12' })
+  const patch = buildRelease({ version: '0.1.0-beta.12.1', releaseFlag: true })
+  const picked = selectRelease([patch.release], current)
+  assert.equal(picked.assetName, 'ASTaria-0.1.0-beta.12.1-mac-arm64-adhoc.dmg')
+  assert.equal(validateManifest(patch.manifest, picked, current, testReleaseKeys).version, patch.version)
+  const next = buildRelease({ version: '0.1.0-beta.13', releaseFlag: true })
+  assert.equal(selectRelease([patch.release, next.release], { ...current, version: patch.version }).version, next.version)
+})
+
+for (const version of ['0.1.0-beta.12', '0.1.0-beta.12.1']) test(`Windows x64 只选择同版本 ${version} setup.exe 与配套发布清单`, () => {
+  const tag = `v${version}`, stem = `ASTaria-${version}-win-x64`
   const setup = `${stem}-setup.exe`, manifest = `${stem}.manifest.json`
   const release = { tag_name: tag, prerelease: true, assets: [setup, manifest].map(name => ({
     name, state: 'uploaded', size: name === setup ? 8192 : 900, browser_download_url: downloadUrl(tag, name),
@@ -250,7 +262,7 @@ test('Windows x64 只选择同版本 setup.exe 与配套发布清单', () => {
 test('Windows 更新只把验签且哈希匹配的 EXE 交给安装器；便携版不可自动安装', async t => {
   const dir = await mkdtemp(join(tmpdir(), 'astaria-windows-updates-'))
   t.after(() => rm(dir, { recursive: true, force: true }))
-  const version = '0.1.0-beta.12', tag = `v${version}`, stem = `ASTaria-${version}-win-x64`
+  const version = '0.1.0-beta.12.1', tag = `v${version}`, stem = `ASTaria-${version}-win-x64`
   const setup = `${stem}-setup.exe`, manifestName = `${stem}.manifest.json`, bytes = Buffer.from('windows setup fixture')
   const sha256 = createHash('sha256').update(bytes).digest('hex')
   const manifest = signTestManifest({ schemaVersion: 1, name: 'ASTaria', bundleId: 'dev.wason.ASTaria',

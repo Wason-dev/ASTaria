@@ -1,3 +1,8 @@
+.home-xixi, .wb-xixi {
+  --xixi-muted: var(--wb-muted, var(--p0-muted));
+  --xixi-line: var(--wb-line, var(--p0-line));
+  --xixi-gold: var(--wb-gold, var(--p0-accent));
+}
 .xixi-conversation {
   --xixi-muted: var(--wb-muted, var(--p0-muted));
   --xixi-line: var(--wb-line, var(--p0-line));
@@ -103,16 +108,17 @@
 .p0 .xixi-load-older { align-self: center; color: var(--xixi-muted); font-size: 10px; margin-bottom: 5px }
 .xixi-send-error { margin: 8px 0 0; font-size: 11px; line-height: 1.7; color: #e5baa8; overflow-wrap: anywhere }
 .xixi-send-error .xixi-text-button { margin-left: 8px }
-.xixi-attachment-picker { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 0 10px 7px }
-.xixi-attachment-button { display: inline-flex; align-items: center; gap: 5px; min-height: 25px; padding: 3px 7px; border: 1px solid var(--xixi-line); border-radius: 999px; background: #ffffff08; color: var(--xixi-muted); font: inherit; font-size: 10px; cursor: pointer }
-.xixi-attachment-button:hover:enabled { border-color: #d5bb8b70; color: var(--xixi-gold); background: #d5bb8b12 }
-.xixi-attachment-button:focus-visible, .xixi-attachment-remove:focus-visible { outline: 1px solid var(--xixi-gold); outline-offset: 2px }
-.xixi-attachment-button svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.1; stroke-linecap: round; stroke-linejoin: round }
+.xixi-attachment-preview { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 8px 0; color: var(--xixi-muted); font-size: 11px }
+.xixi-send-actions { display: flex; align-items: center; gap: 8px; flex: none }
+.p0 .xixi-attachment-button { display: inline-flex; align-items: center; justify-content: center; flex: none; box-sizing: border-box; width: 31px; height: 31px; padding: 0; border: 1px solid var(--xixi-line); border-radius: 50%; background: transparent; color: var(--xixi-muted); cursor: pointer; transition: color 160ms ease, border-color 160ms ease, background 160ms ease }
+.p0 .xixi-attachment-button:hover:enabled { border-color: #d5bb8b70; color: var(--xixi-gold); background: #d5bb8b12 }
+.p0 .xixi-attachment-button:focus-visible, .p0 .xixi-attachment-remove:focus-visible { outline: 1px solid var(--xixi-gold); outline-offset: 2px }
+.p0 .xixi-attachment-button svg { display: block; width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.1; stroke-linecap: round; stroke-linejoin: round }
 .xixi-attachment-chip { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: min(100%, 270px); min-height: 29px; padding: 3px 5px 3px 4px; border: 1px solid #d5bb8b55; border-radius: 9px; background: #d5bb8b12; color: var(--xixi-muted); font-size: 10px }
 .xixi-attachment-chip img { width: 25px; height: 25px; flex: none; object-fit: cover; border-radius: 6px }
 .xixi-attachment-chip span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
-.xixi-attachment-remove { flex: none; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--xixi-muted); font-size: 16px; line-height: 1; cursor: pointer }
-.xixi-attachment-remove:hover:enabled { background: #ffffff12; color: var(--xixi-gold) }
+.p0 .xixi-attachment-remove { flex: none; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--xixi-muted); font-size: 16px; line-height: 1; cursor: pointer }
+.p0 .xixi-attachment-remove:hover:enabled { background: #ffffff12; color: var(--xixi-gold) }
 .xixi-attachment-error { flex-basis: 100%; margin: 0; color: #e5baa8; font-size: 10px; line-height: 1.5 }
 .xixi-message-attachments { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 6px; max-width: min(100%, 260px); margin-bottom: 6px }
 .xixi-message-attachments img { display: block; width: 100%; max-height: 190px; object-fit: cover; border: 1px solid var(--xixi-line); border-radius: 8px; background: #0002 }
@@ -178,3 +184,15 @@
   .xixi-send-error, .xixi-status, .xixi-empty { color: CanvasText }
 }
 .xixi-receipt-details{padding-left:15px;margin:7px 0 0;font-size:11px;line-height:1.65;color:var(--settings-muted,#bdb7a8);overflow-wrap:anywhere}
+
+.p0 .xixi-attachment-button:disabled { opacity: .45; cursor: default }
+.xixi-image-drop { position: fixed; z-index: 200; left: 50%; bottom: 36px; transform: translateX(-50%); max-width: calc(100% - 48px); padding: 12px 18px; border: 1px solid var(--p0-line); border-radius: 12px; background: var(--p0-panel); color: var(--p0-fg); font-size: 12px; line-height: 1.6; text-align: center; pointer-events: none; box-shadow: 0 4px 18px #0002 }
+@media (prefers-reduced-motion: reduce) { .p0 .xixi-attachment-button { transition: none } }
+@media (pointer: coarse) { .p0 .xixi-attachment-button { width: 44px; height: 44px } }
+@media (forced-colors: active) {
+  .p0 .xixi-attachment-button, .xixi-image-drop { border-color: ButtonText; color: ButtonText; background: Canvas }
+  .p0 .xixi-attachment-button:focus-visible { outline-color: Highlight }
+}
+
+.p0 .home-workspace[data-theme=light] .xixi-image-drop { background: #fafbf2f2 }
+.p0 .home-workspace[data-theme=light] .xixi-attachment-error { color: #965944 }

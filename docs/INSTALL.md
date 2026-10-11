@@ -1,20 +1,20 @@
-# ASTaria Beta12 预发布包安装
+# ASTaria Beta12.1 预发布包安装
 
-技术版本 `0.1.0-beta.12`（展示名称 **Beta12**）：macOS 13+ Apple Silicon（arm64）使用 ad-hoc 签名包，未经 Apple 公证；Windows x64 提供未签名试验包。从 [Beta12 Release](https://github.com/Wason-dev/ASTaria/releases/tag/v0.1.0-beta.12) 下载，核对随包 SHA-256。发布清单、源码提交与验收证据见 [Beta12 说明](https://github.com/Wason-dev/ASTaria/blob/main/docs/RELEASE_NOTES_v0.1.0-beta.12.md)。
+技术版本 `0.1.0-beta.12.1`（展示名称 **Beta12.1**）：macOS 13+ Apple Silicon（arm64）使用 ad-hoc 签名包，未经 Apple 公证；Windows x64 提供未签名试验包。从 [Beta12.1 Release](https://github.com/Wason-dev/ASTaria/releases/tag/v0.1.0-beta.12.1) 下载，核对随包 SHA-256。功能范围、回归检查与当前验收限制见 [Beta12.1 说明](https://github.com/Wason-dev/ASTaria/blob/main/docs/RELEASE_NOTES_v0.1.0-beta.12.1.md)；构建来源和发布附件证据会在 Release 完成后补充。
 
 Windows 仍有卡顿反馈；当前包实机安装与交互、Windows 11、真实自动升级/失败回退未验收。CI 与包内容检查不等于真实电脑体验通过。
 
 ## macOS 13+ · Apple Silicon
 
 ```text
-ASTaria 0.1.0-beta.12 · Beta12 预发布包
+ASTaria 0.1.0-beta.12.1 · Beta12.1 预发布包
 
 系统要求：macOS 13 或更新版本，Apple Silicon（M 系列芯片）。不支持 Intel Mac。
 此包采用 ad-hoc 签名，未经 Apple 公证。
 
 安装
 1. 退出正在运行的旧版 ASTaria。
-2. 打开 ASTaria-0.1.0-beta.12-mac-arm64-adhoc.dmg。
+2. 打开 ASTaria-0.1.0-beta.12.1-mac-arm64-adhoc.dmg。
    根目录只有 ASTaria.app、指向 /Applications 的 Applications 快捷方式和安装说明。
    把 ASTaria.app 拖到 Applications 快捷方式上；首次安装由用户完成拖拽。
 3. 从「应用程序」打开 ASTaria，安装后可推出磁盘映像。
@@ -33,7 +33,7 @@ App 必须位于可写目录，不能直接在 DMG 内更新。
 系统提醒
 在「设置 → 通知」开启「关闭 App 后仍提醒」，按系统提示允许 ASTaria 提醒。
 预约交给 macOS，无需 App 常驻；覆盖未来 30 天内最近的 64 条，打开或恢复时补充。
-Beta12 修改安排时间后会取消旧预约并按新时刻重建；完成或删除也会取消。
+修改安排时间后会取消旧预约并按新时刻重建；完成或删除也会取消。
 免打扰、系统专注模式和关机会影响送达，原生送达仍需设备验证。
 
 如果打不开
@@ -55,14 +55,14 @@ Beta12 修改安排时间后会取消旧预约并按新时刻重建；完成或�
 录入课程和安排。此版本沿用已有 ASTaria 本机数据，请避免网页和桌面同时修改同一份数据。
 ```
 
-## Windows x64（Beta12 试验包）
+## Windows x64（Beta12.1 试验包）
 
-Release 提供 `ASTaria-0.1.0-beta.12-win-x64-setup.exe`（NSIS 当前用户安装程序）及
-`ASTaria-0.1.0-beta.12-win-x64-portable.zip`，不单独分发缺少运行时的 EXE。未做代码签名，
+Release 提供 `ASTaria-0.1.0-beta.12.1-win-x64-setup.exe`（NSIS 当前用户安装程序）及
+`ASTaria-0.1.0-beta.12.1-win-x64-portable.zip`，不单独分发缺少运行时的 EXE。未做代码签名，
 不承诺 Windows 11 体验；Windows 10 历史测试不能代替本版成品验收。
 
 ```text
-ASTaria 0.1.0-beta.12 · Beta12 试验包 · Windows x64
+ASTaria 0.1.0-beta.12.1 · Beta12.1 试验包 · Windows x64
 
 1. setup.exe：双击运行，按提示安装后从开始菜单或安装目录启动，无需管理员权限。
    portable.zip：完整解压到新目录，再运行其中的 ASTaria.exe，不要只移动单个 EXE。
@@ -90,15 +90,19 @@ ASTaria 0.1.0-beta.12 · Beta12 试验包 · Windows x64
 
 首次启动选择个性、主题、玻璃、帧率和画质，也可跳过 API Key 稍后配置。
 「ASTaria 推荐」从最高画质开始，首页/聊天目标 60 FPS，持续负载不足时下调并逐步恢复；
-手动画质保持固定，首页/聊天帧率可选 30/45/60/90/120。Beta12 的工作台、余时、日程、
-设置背景最高 30 FPS，返回首页恢复选择，画质独立。这个省电上限只影响环境渲染，
+手动画质保持固定，首页/聊天帧率可选 30/45/60/90/120。Beta12.1 的工作台、余时、日程、
+设置背景在相机停稳后最高 30 FPS；切页相机运动期间沿用所选首页帧率，返回首页恢复选择。
+画质独立。这个省电上限只影响环境渲染，
 会降低背景动效更新频率，不限制输入、DOM 或显示器刷新率。
 
 联网搜索默认关闭。开启后，完整 HTTP/HTTPS 链接由本机抓取公开 HTML，普通关键词发送到
 DeepSeek 搜索通道；独立搜索请求不携带课表、聊天或记忆。网页抓取不登录、不执行脚本，
 拒绝本机和私网地址。搜索无正文时的固定兜底仍待改进。
 
-聊天可上传一张不超过 2 MB 的 PNG/JPEG/WebP。云端模式会把图片发给当前模型，本地模式
+首页和工作台专注聊天均在「发给析熙」左边提供圆形 ＋，可选择一张不超过 2 MB 的
+PNG/JPEG/WebP；也可直接拖图进 ASTaria。专注聊天打开时保留当前事项，其余正常页面
+打开首页聊天。拖入不自动发送，选好后在输入框下方预览、移除，再确认发送。读取中、
+设置/弹层或消息处理期间不接收新发送或拖图。云端模式把图片发给当前模型，本地模式
 发送到已配置的回环服务；需要视觉模型，实际识图未验收。图片保存在本机和 JSON 备份里，
 不进入跨设备同步。备份不含 API Key 或同步密钥，请妥善保护并另存同步恢复密钥。
 本地模型运行时需自行安装和启动，真实模型下载、推理、工具和识图未验收。

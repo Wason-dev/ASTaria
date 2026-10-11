@@ -383,7 +383,7 @@ export class BlackHoleRenderer {
 
   setRenderProfile(profile: RenderProfile, scene: RenderScene = 'home', quality?: QualityMode) {
     const next = normalizeRenderProfile(profile)
-    const config = resolveRenderProfile(next, scene)
+    const config = resolveRenderProfile(next, scene, this.cameraIsRunning())
     const requested = quality ?? config.quality
     if (this.profileInitialized && this.renderProfile === next && this.renderScene === scene && this.requestedQuality === requested) return
     const initialize = !this.profileInitialized
@@ -480,6 +480,7 @@ export class BlackHoleRenderer {
       this.cameraMotion[key].target = preset[key]
     }
     if (this.reducedMotion) this.finishCameraTransition()
+    this.syncFrameBudget()
     this.requestFrame()
     this.publishStats()
   }
@@ -675,6 +676,17 @@ export class BlackHoleRenderer {
     if (!this.pointerIsRunning()) this.finishPointerTransition()
   }
 
+  private syncFrameBudget() {
+    const { frameRate } = resolveRenderProfile(this.renderProfile, this.renderScene, this.cameraIsRunning())
+    if (frameRate === this.targetFps) return
+    this.targetFps = frameRate
+    // Rebase the deadline, not the simulation clock or camera velocity. This
+    // also works for reversals and hidden/resumed transitions, without timers.
+    this.nextFrameAt = 0
+    this.adaptiveQuality.resetWindow()
+    this.publishStats()
+  }
+
   private requestFrame() {
     if (!this.raf && !this.disposed && !this.contextLost && !this.visibilityPaused && !this.stringFlightIsCovered()) {
       this.raf = requestAnimationFrame(this.frame)
@@ -788,6 +800,7 @@ export class BlackHoleRenderer {
   private frame = (now: number) => {
     this.raf = 0
     if (this.disposed || this.contextLost || this.visibilityPaused || this.stringFlightIsCovered()) return
+    this.syncFrameBudget()
     if (!renderFrameIsDue(this.nextFrameAt, now)) {
       this.requestFrame()
       return
@@ -854,6 +867,7 @@ export class BlackHoleRenderer {
       this.foregroundFirstFrameMs = Math.max(0, performance.now() - this.foregroundStartedAt)
       this.foregroundStartedAt = null
     }
+    this.syncFrameBudget()
     this.nextFrameAt = nextRenderDeadline(this.nextFrameAt, now, this.targetFps)
     if (ambient || this.springIsRunning() || this.cameraIsRunning() || this.pointerIsRunning()
       || this.responseEffect.needsFrame(this.reducedMotion, this.paused)
@@ -1025,6 +1039,7 @@ export class BlackHoleRenderer {
       this.finishCameraTransition()
       this.finishPointerTransition()
     }
+    this.syncFrameBudget()
     this.cancelFrame()
     this.resetMeasurements()
     this.syncStatsTimer()

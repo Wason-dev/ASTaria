@@ -20,6 +20,9 @@ import { XixiBriefing } from './XixiBriefing'
 import { CompletedTasks } from './CompletedTasks'
 import { WorkbenchIcon as Icon } from './WorkbenchIcon'
 import { XixiInput } from './XixiInput'
+import { ChatAttachmentPicker, ChatAttachmentPreview } from '../xixi/ChatAttachmentPicker'
+import { useChatAttachment } from '../xixi/useChatAttachment'
+import { useChatImageDropTarget } from '../xixi/ChatImageDrop'
 import { useGlassHover } from './useGlassHover'
 import { ConversationLog } from '../xixi/ConversationLog'
 import { restoreWithdrawnDraft } from '../xixi/draft'
@@ -438,8 +441,9 @@ function XixiContext({ task, now, active, preview, appearance, chat, onSettings,
   const key = `${preview ? 'preview' : 'real'}-${task.id}`
   const [draft, setDraft] = useState(() => { try { return sessionStorage.getItem(`astaria-xixi-${key}`) ?? '' } catch { return '' } })
   const [warning, setWarning] = useState('')
-  const [attachment, setAttachment] = useState<ChatAttachment | null>(null)
-  const [attachmentError, setAttachmentError] = useState('')
+  const image = useChatAttachment(preview || chat.busy || chat.loading)
+  const { attachment, setAttachment } = image
+  useChatImageDropTarget(active && !preview, files => { void image.selectFiles(files) })
   const draftRevision = useRef(0)
   const composeForm = useRef<HTMLFormElement>(null)
   useEffect(() => {
@@ -459,7 +463,7 @@ function XixiContext({ task, now, active, preview, appearance, chat, onSettings,
     catch { setWarning('草稿暂未保存，离开前请复制') }
   }, [key, draft])
   const send = async () => {
-    if (preview || chat.busy || (!draft.trim() && !attachment)) return
+    if (preview || chat.busy || chat.loading || image.isReading() || (!draft.trim() && !attachment)) return
     const sent = draft
     const revision = draftRevision.current
     if (await chat.send(sent, { page: 'workbench', taskId: task.id, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }, attachment ? [attachment] : undefined)) {
@@ -469,20 +473,17 @@ function XixiContext({ task, now, active, preview, appearance, chat, onSettings,
       try { if (sessionStorage.getItem(`astaria-xixi-${key}`) === sent) sessionStorage.removeItem(`astaria-xixi-${key}`) } catch { /* The current draft remains available in memory. */ }
       setDraft(value => value === sent ? '' : value)
       setAttachment(null)
-      setAttachmentError('')
     }
   }
   const clearSentDraft = (sent: string) => {
     try { if (sessionStorage.getItem(`astaria-xixi-${key}`)?.trim() === sent) sessionStorage.removeItem(`astaria-xixi-${key}`) } catch { /* Keep the current draft in memory if session storage is unavailable. */ }
     setDraft(value => value.trim() === sent ? '' : value)
     setAttachment(null)
-    setAttachmentError('')
   }
   const restoreDraft = (text: string, attachments?: ChatAttachment[]) => {
     draftRevision.current += 1
     setDraft(value => restoreWithdrawnDraft(value, text))
     setAttachment(attachments?.[0] ?? null)
-    setAttachmentError('')
     requestAnimationFrame(() => {
       const input = composeForm.current?.querySelector('textarea')
       input?.focus({ preventScroll: true })
@@ -496,8 +497,12 @@ function XixiContext({ task, now, active, preview, appearance, chat, onSettings,
       : <ConversationLog chat={chat} active={active} onSettings={onSettings} context={{ page: 'workbench', taskId: task.id, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }} onSent={clearSentDraft} onRetracted={restoreDraft} />}
     <form ref={composeForm} className="xixi-compose" onSubmit={event => { event.preventDefault(); void send() }}>
       <label className="p0-sr-only" htmlFor="wb-xixi-input">结合当前事项和析熙对话</label>
-      <XixiInput value={draft} onChange={setDraft} disabled={chat.busy} attachment={attachment} onAttachmentChange={setAttachment} attachmentError={attachmentError} onAttachmentError={setAttachmentError} onSubmit={() => void send()} />
-      <footer><small>{warning || (preview ? '示例草稿不会发送' : 'Enter 发送 · Shift + Enter 换行')}</small><button type="submit" className="wb-action xixi-send" disabled={preview || chat.busy || chat.loading || (!draft.trim() && !attachment)}>{chat.sending ? '正在想' : '发给析熙'}</button></footer>
+      <XixiInput value={draft} onChange={setDraft} disabled={preview || chat.busy} onSubmit={() => void send()} />
+      <ChatAttachmentPreview attachment={attachment} error={image.error} reading={image.reading} onRemove={() => setAttachment(null)} disabled={preview || chat.busy} />
+      <footer><small>{warning || (preview ? '示例草稿不会发送' : 'Enter 发送 · Shift + Enter 换行')}</small><div className="xixi-send-actions">
+        <ChatAttachmentPicker id="wb-image-upload" onFiles={files => { void image.selectFiles(files) }} disabled={preview || chat.busy || chat.loading} />
+        <button type="submit" className="wb-action xixi-send" disabled={preview || image.reading || chat.busy || chat.loading || (!draft.trim() && !attachment)}>{chat.sending ? '正在想' : '发给析熙'}</button>
+      </div></footer>
       {!preview && chat.error && <p className="xixi-send-error" role="alert">{chat.error}{!chat.status?.configured && <button type="button" className="xixi-text-button" onClick={onSettings}>打开设置</button>}</p>}
     </form>
   </Glass>

@@ -42,14 +42,22 @@ function argumentsFor(argv) {
   return { runtime: result['--runtime'], out: result['--out'] }
 }
 export function bundleVersionFor(version) {
-  const match = /^(\d+)\.(\d+)\.(\d+)(?:-(alpha|beta|rc)\.(\d+))?(?:\+[0-9A-Za-z.-]+)?$/u.exec(version)
+  const match = /^(\d+)\.(\d+)\.(\d+)(?:-(alpha|beta|rc)\.(\d+)(?:\.(\d+))?)?(?:\+[0-9A-Za-z.-]+)?$/u.exec(version)
   if (!match) fail('Desktop bundle version requires major.minor.patch with an optional alpha, beta, or rc number.')
-  const [, major, minor, patch, stage, stageNumber] = match
+  const [, major, minor, patch, stage, stageNumber, betaRevision] = match
+  // Apple's prerelease suffix has one number (b1..b255). Keep the published
+  // beta.1..beta.12 bundle values unchanged; reserve b120..b129 for beta.12.x
+  // and b130 onward for later betas so beta.12.1 outranks beta.12 but remains
+  // below beta.13 and the stable 0.1.0 bundle.
+  if (betaRevision !== undefined && (stage !== 'beta' || Number(stageNumber) < 12
+    || Number(betaRevision) > 9 || /^0\d/u.test(betaRevision))) fail('Desktop bundle version exceeds macOS version limits.')
+  const ordinal = stage === 'beta' && Number(stageNumber) >= 12 && (betaRevision !== undefined || Number(stageNumber) > 12)
+    ? Number(stageNumber) * 10 + Number(betaRevision ?? 0) : Number(stageNumber)
   if ([major, minor, patch].some(value => Number(value) > 9999) || Number(major) > 9997
-    || (stage && (Number(stageNumber) < 1 || Number(stageNumber) > 255))) fail('Desktop bundle version exceeds macOS version limits.')
+    || (stage && (Number(stageNumber) < 1 || ordinal > 255))) fail('Desktop bundle version exceeds macOS version limits.')
   // Reserve versions 0-1 for early signed helpers, including the iconless
   // verification app registered as version 1 on development machines.
-  const suffix = stage ? `${{ alpha: 'a', beta: 'b', rc: 'fc' }[stage]}${Number(stageNumber)}` : ''
+  const suffix = stage ? `${{ alpha: 'a', beta: 'b', rc: 'fc' }[stage]}${ordinal}` : ''
   return `${Number(major) + 2}.${Number(minor)}.${Number(patch)}${suffix}`
 }
 async function requirePath(path, kind) {

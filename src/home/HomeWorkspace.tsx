@@ -17,7 +17,9 @@ import { useAppearance } from '../workbench/appearance'
 import { useXixiConversation } from '../xixi/useXixiConversation'
 import { ConversationLog } from '../xixi/ConversationLog'
 import { ConversationMenu } from '../xixi/ConversationMenu'
-import { ChatAttachmentPicker } from '../xixi/ChatAttachmentPicker'
+import { ChatAttachmentPicker, ChatAttachmentPreview } from '../xixi/ChatAttachmentPicker'
+import { useChatAttachment } from '../xixi/useChatAttachment'
+import { ChatImageDropProvider } from '../xixi/ChatImageDrop'
 import type { ChatAttachment } from '../xixi/types'
 import { useChatSubmitKey } from '../xixi/useChatSubmitKey'
 import { restoreWithdrawnDraft } from '../xixi/draft'
@@ -145,8 +147,8 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
   const [inputPulse, setInputPulse] = useState<number | null>(null)
   const inputPulseSequence = useRef(0)
   const [draftWarning, setDraftWarning] = useState('')
-  const [attachment, setAttachment] = useState<ChatAttachment | null>(null)
-  const [attachmentError, setAttachmentError] = useState('')
+  const image = useChatAttachment(data.saving || data.loading || Boolean(data.loadError) || chat.busy || chat.loading)
+  const { attachment, setAttachment } = image
   const [saveError, setSaveError] = useState('')
   const [savedIds, setSavedIds] = useState<string[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -365,7 +367,7 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
   }
   const submit = async (event: FormEvent) => {
     event.preventDefault()
-    if ((!draft.trim() && !attachment) || data.saving || data.loading || data.loadError || chat.busy) return
+    if (image.isReading() || (!draft.trim() && !attachment) || data.saving || data.loading || data.loadError || chat.busy) return
     setSaveError('')
     const sent = draft
     const revision = draftRevision.current
@@ -373,7 +375,6 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
     if (accepted && revision === draftRevision.current) {
       setDraft(value => value === sent ? '' : value)
       setAttachment(null)
-      setAttachmentError('')
       stopInputPulse()
       compose.current?.focus()
     }
@@ -382,7 +383,6 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
     draftRevision.current += 1
     setDraft(value => restoreWithdrawnDraft(value, text))
     setAttachment(attachments?.[0] ?? null)
-    setAttachmentError('')
     requestAnimationFrame(() => {
       compose.current?.focus({ preventScroll: true })
       if (compose.current) compose.current.setSelectionRange(compose.current.value.length, compose.current.value.length)
@@ -433,6 +433,9 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
   const chatVisible = progress > .35
 
   return <GlassRenderingContext.Provider value={preferences.value.render?.glass ?? 'auto'}><div ref={root} className="home-workspace" data-spatial-ui data-string-covered={stringCovered} data-theme={visibleTheme} data-chat-open={chatOpen} data-page={page} data-grid={preferences.value.grid} data-card-edges={preferences.value.cardEdges ?? 'both'} data-motion={preferences.value.effect.motion} data-effect-preview={previewPhase !== null}>
+    <ChatImageDropProvider blocked={showFirstRun || stringsOpen || settingsOpen || previewPhase !== null || Boolean(selectedId) || Boolean(receiptScenarioId) || chat.busy || chat.loading || data.saving || data.loading || Boolean(data.loadError)}
+      onBlocked={() => setNotification('请先结束当前操作，再添加图片')}
+      onFiles={files => { changePage('home', true); void image.selectFiles(files) }}>
     <nav ref={nav} className="home-nav" aria-label="ASTaria 导航" data-menu-open={menuOpen} inert={previewPhase !== null} aria-hidden={previewPhase !== null}
       onPointerEnter={event => { if (event.pointerType !== 'touch') { clearTimeout(menuTimer.current); menuOpenedByHover.current = !menuOpen; setMenuOpen(true) } }}
       onPointerLeave={() => { menuTimer.current = setTimeout(() => { if (!nav.current?.contains(document.activeElement)) setMenuOpen(false) }, 180) }}
@@ -517,7 +520,7 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
           <strong>析熙</strong>
         </div><div className="xixi-header-actions"><ConversationMenu chat={chat} />{compact && <button ref={informationToggle} className="home-information-toggle" onClick={() => setInformationActive(true)} aria-controls="home-agenda">日程 →</button>}</div></header>
         <ConversationLog chat={chat} active={page === 'home' && chatOpen && progress >= CHAT_READY_PROGRESS && (!compact || !informationActive)} onSettings={openSettings}
-          context={{ page: 'home', ...(clarifyingWish ? { wishId: clarifyingWish.id } : {}), ...(refiningPlan ? { freeTimeGoalId: refiningPlan.id } : {}), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }} onSent={sent => { setDraft(value => value.trim() === sent ? '' : value); setAttachment(null); setAttachmentError('') }} onRetracted={restoreDraft}>
+          context={{ page: 'home', ...(clarifyingWish ? { wishId: clarifyingWish.id } : {}), ...(refiningPlan ? { freeTimeGoalId: refiningPlan.id } : {}), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }} onSent={sent => { setDraft(value => value.trim() === sent ? '' : value); setAttachment(null) }} onRetracted={restoreDraft}>
           {receipts.map(task => <div className="home-receipt" key={task.id}><span>已记为事项</span><button onClick={() => openTask(task.id)}>{task.title}</button></div>)}
         </ConversationLog>
         <form onSubmit={event => void submit(event)}>
@@ -531,7 +534,6 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
           </span>}
           {clarifyingWish && <div className="home-clarifying-wish"><span>正在聊：{clarifyingWish.content}</span><div><button className="xixi-text-button" type="button" onClick={() => endClarification(true)}>回心愿清单</button><button className="xixi-text-button" type="button" onClick={() => endClarification()}>结束澄清</button></div></div>}
           {refiningPlan && <div className="home-clarifying-wish"><span>正在细化：{refiningPlan.title}</span><div><button className="xixi-text-button" type="button" onClick={() => endClarification(true)}>回长期计划</button><button className="xixi-text-button" type="button" onClick={() => endClarification()}>结束细化</button></div></div>}
-          <ChatAttachmentPicker id="home-image-upload" attachment={attachment} onChange={setAttachment} error={attachmentError} onError={setAttachmentError} disabled={data.saving || chat.busy} />
           <textarea ref={compose} id="home-compose" placeholder="写下你的事情" rows={2} maxLength={4000} value={draft} disabled={data.saving || chat.busy}
             onChange={event => {
               const value = event.target.value
@@ -540,7 +542,11 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
               setDraft(value)
             }} onBlur={stopInputPulse} {...submitKeys} />
           </div>
-          <div className="home-compose-actions"><button className="xixi-text-button xixi-manual" type="button" disabled={data.saving || chat.busy || data.loading || Boolean(data.loadError) || !draft.trim()} onClick={() => void capture()}>{data.saving ? '正在保存' : '只记为事项'}</button><button className="home-capture" type="submit" disabled={data.saving || data.loading || Boolean(data.loadError) || chat.busy || chat.loading || (!draft.trim() && !attachment)}>{chat.sending ? '正在想' : '发给析熙'}</button></div>
+          <ChatAttachmentPreview attachment={attachment} error={image.error} reading={image.reading} onRemove={() => setAttachment(null)} disabled={data.saving || chat.busy} />
+          <div className="home-compose-actions"><button className="xixi-text-button xixi-manual" type="button" disabled={data.saving || chat.busy || data.loading || Boolean(data.loadError) || !draft.trim()} onClick={() => void capture()}>{data.saving ? '正在保存' : '只记为事项'}</button><div className="xixi-send-actions">
+            <ChatAttachmentPicker id="home-image-upload" onFiles={files => { void image.selectFiles(files) }} disabled={data.saving || data.loading || Boolean(data.loadError) || chat.busy || chat.loading} />
+            <button className="home-capture" type="submit" disabled={image.reading || data.saving || data.loading || Boolean(data.loadError) || chat.busy || chat.loading || (!draft.trim() && !attachment)}>{chat.sending ? '正在想' : '发给析熙'}</button>
+          </div></div>
           {chat.error && <p className="xixi-send-error" role="alert">{chat.error}{!chat.status?.configured && <button type="button" className="xixi-text-button" onClick={openSettings}>打开设置</button>}</p>}
           {(saveError || draftWarning || data.loadError) && <p className="home-form-error" role="alert">{saveError || draftWarning || data.loadError}{data.loadError && <button type="button" onClick={data.retry}>重试读取</button>}</p>}
         </form>
@@ -565,7 +571,7 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
     {showFirstRun && preferences.loaded && <FirstRunGuide preferences={preferences.value} previewOpen={stringsPreview} previewComplete={previewReturned && previewDayChanged} onStartHorizon={() => { setPreviewReturned(false); setPreviewDayChanged(false); openStrings(true) }} onPreviewThemeChange={setFirstRunTheme} onTourPageChange={next => changePage(next)} onDone={() => { setShowFirstRun(false); void chat.refreshStatus() }} />}
     {selectedId && <TaskDialog task={selectedTask} saving={data.saving} onClose={closeTask} onStatus={data.setStatus} />}
     {receiptScenarioId && <ScenarioReceiptDialog scenarioId={receiptScenarioId} tasks={data.tasks} tasksLoading={data.loading} tasksError={data.loadError} onChanged={freeTimeChanged} onClose={() => setReceiptScenarioId(null)} onNotice={setNotification} />}
-  </div></GlassRenderingContext.Provider>
+  </ChatImageDropProvider></div></GlassRenderingContext.Provider>
 }
 
 function TaskDialog({ task, saving, onClose, onStatus }: {

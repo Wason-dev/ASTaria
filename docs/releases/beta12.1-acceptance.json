@@ -1,0 +1,221 @@
+{
+  "schemaVersion": 1,
+  "version": "0.1.0-beta.12.1",
+  "verifiedAt": "2026-10-11T06:17:21.493605Z",
+  "release": {
+    "id": 409461702,
+    "url": "https://github.com/Wason-dev/ASTaria/releases/tag/v0.1.0-beta.12.1",
+    "tag": "v0.1.0-beta.12.1",
+    "prerelease": true,
+    "draft": false,
+    "publishedAt": "2026-10-11T06:16:10Z"
+  },
+  "source": {
+    "commit": "60c57d71d4d5d844a8f33ab6bedf80b4cbfa5d05",
+    "tree": "af51396f1c998a771bccccf20bdd4cbc5b195b08",
+    "dirty": false
+  },
+  "assets": [
+    {
+      "name": "ASTaria-0.1.0-beta.12.1-mac-arm64-adhoc.dmg",
+      "sha256": "9a6ddaeb36db9002d73030ecd32631c06c174a20651800599aa3805beffe4c85",
+      "sizeBytes": 151587398,
+      "assetId": 629956351,
+      "url": "https://github.com/Wason-dev/ASTaria/releases/download/v0.1.0-beta.12.1/ASTaria-0.1.0-beta.12.1-mac-arm64-adhoc.dmg"
+    },
+    {
+      "name": "ASTaria-0.1.0-beta.12.1-mac-arm64-adhoc.dmg.sha256",
+      "sha256": "a032860d8f1d696ceeeaf12a57a14f2f8a343aa7961feb463fb0b3306c7759f2",
+      "sizeBytes": 110,
+      "assetId": 629960757,
+      "url": "https://github.com/Wason-dev/ASTaria/releases/download/v0.1.0-beta.12.1/ASTaria-0.1.0-beta.12.1-mac-arm64-adhoc.dmg.sha256"
+    },
+    {
+      "name": "ASTaria-0.1.0-beta.12.1-mac-arm64-adhoc.manifest.json",
+      "sha256": "3a2c376ba5ee4509a635f340d5f24d04a5f771d0898c047f471de7e5095c6374",
+      "sizeBytes": 1511,
+      "assetId": 629960780,
+      "url": "https://github.com/Wason-dev/ASTaria/releases/download/v0.1.0-beta.12.1/ASTaria-0.1.0-beta.12.1-mac-arm64-adhoc.manifest.json"
+    },
+    {
+      "name": "install.txt",
+      "sha256": "193abda28996b4521fc46d52b479cc2193c8a46bb756279aa8745c9d7466ec41",
+      "sizeBytes": 9328,
+      "assetId": 629960809,
+      "url": "https://github.com/Wason-dev/ASTaria/releases/download/v0.1.0-beta.12.1/install.txt"
+    },
+    {
+      "name": "ASTaria-0.1.0-beta.12.1-win-x64-setup.exe",
+      "sha256": "82fd35fb99fbe6e9cd35e2eca558d111f0a70d5d3b74123c9846626bef665ba4",
+      "sizeBytes": 115947524,
+      "assetId": 629960843,
+      "url": "https://github.com/Wason-dev/ASTaria/releases/download/v0.1.0-beta.12.1/ASTaria-0.1.0-beta.12.1-win-x64-setup.exe"
+    },
+    {
+      "name": "ASTaria-0.1.0-beta.12.1-win-x64-setup.exe.sha256",
+      "sha256": "e1d40a8a6caec3bbf89c5447ecd2ee5d2fda39b0bf90c02369516a6e5d0ede83",
+      "sizeBytes": 108,
+      "assetId": 629962999,
+      "url": "https://github.com/Wason-dev/ASTaria/releases/download/v0.1.0-beta.12.1/ASTaria-0.1.0-beta.12.1-win-x64-setup.exe.sha256"
+    },
+    {
+      "name": "ASTaria-0.1.0-beta.12.1-win-x64-portable.zip",
+      "sha256": "4063adc830c461be57dc8f0122b3892f59afdf978262fb275631595868030b94",
+      "sizeBytes": 159866053,
+      "assetId": 629963036,
+      "url": "https://github.com/Wason-dev/ASTaria/releases/download/v0.1.0-beta.12.1/ASTaria-0.1.0-beta.12.1-win-x64-portable.zip"
+    },
+    {
+      "name": "ASTaria-0.1.0-beta.12.1-win-x64-portable.zip.sha256",
+      "sha256": "b8ee6179d50eaa02bd1bb71af24fa7a9afded7a6a5646bb34590dba625e234bd",
+      "sizeBytes": 111,
+      "assetId": 629966114,
+      "url": "https://github.com/Wason-dev/ASTaria/releases/download/v0.1.0-beta.12.1/ASTaria-0.1.0-beta.12.1-win-x64-portable.zip.sha256"
+    },
+    {
+      "name": "ASTaria-0.1.0-beta.12.1-win-x64.manifest.json",
+      "sha256": "7911be95c7d7ec90f319df75d75bfbf9e8b5825ee091ba2c2f55aa6b5d618e7c",
+      "sizeBytes": 2551,
+      "assetId": 629966155,
+      "url": "https://github.com/Wason-dev/ASTaria/releases/download/v0.1.0-beta.12.1/ASTaria-0.1.0-beta.12.1-win-x64.manifest.json"
+    }
+  ],
+  "verification": {
+    "assetDigestsMatchGitHub": true,
+    "manifestSignaturesVerified": true,
+    "updaterSelectionAndManifestValidation": true,
+    "tagMatchesBuildCommit": true,
+    "previousReleaseTitlesAndBodiesPreserved": true,
+    "localSourceTests": {
+      "tests": 1535,
+      "passed": 1535,
+      "failed": 0
+    },
+    "ci": [
+      {
+        "name": "Source Checks",
+        "runId": 38112711691,
+        "url": "https://github.com/Wason-dev/ASTaria/actions/runs/38112711691",
+        "sourceCommit": "60c57d71d4d5d844a8f33ab6bedf80b4cbfa5d05",
+        "conclusion": "success",
+        "jobs": [
+          {
+            "id": 114391414702,
+            "name": "check",
+            "conclusion": "success"
+          },
+          {
+            "id": 114391414773,
+            "name": "windows-core",
+            "conclusion": "success"
+          }
+        ]
+      },
+      {
+        "name": "Windows Package (manual)",
+        "runId": 38112781031,
+        "url": "https://github.com/Wason-dev/ASTaria/actions/runs/38112781031",
+        "sourceCommit": "60c57d71d4d5d844a8f33ab6bedf80b4cbfa5d05",
+        "conclusion": "success",
+        "jobs": [
+          {
+            "id": 114391625367,
+            "name": "package",
+            "conclusion": "success"
+          }
+        ]
+      }
+    ],
+    "patchUI": {
+      "checks": 64,
+      "errors": 0,
+      "fictionalData": true,
+      "isolatedDatabase": true,
+      "coverage": [
+        "homepage and Workbench Focus image selection",
+        "image drag and drop",
+        "active-task conversation context",
+        "busy and onboarding rejection",
+        "FileReader races and invalid replacements",
+        "light/dark themes and clear/soft glass",
+        "narrow viewports",
+        "60/120 FPS page-transition budgets"
+      ]
+    },
+    "readmeScreenshots": {
+      "checks": 59,
+      "consoleErrors": 0,
+      "fictionalData": true,
+      "isolatedDatabase": true,
+      "coverage": [
+        "saved receipt and undo",
+        "temporary timetable changes",
+        "Workbench Focus Xixi compact image input"
+      ]
+    },
+    "mac": {
+      "isolatedNativeSmoke": true,
+      "smoke": {
+        "react": true,
+        "api": true,
+        "sqlite": true,
+        "webgl2": true,
+        "passed": true
+      },
+      "appAndDmgAdHocSignatures": true,
+      "dmgVerified": true,
+      "applicationsSymlinkOnly": true,
+      "notarized": false,
+      "realSystemNotificationDeliveryAcceptance": false
+    },
+    "windows": {
+      "nsisBuilt": true,
+      "branded": true,
+      "codeSigned": false,
+      "source": {
+        "commit": "60c57d71d4d5d844a8f33ab6bedf80b4cbfa5d05",
+        "tree": "af51396f1c998a771bccccf20bdd4cbc5b195b08",
+        "dirty": false
+      },
+      "windowsPortableArchiveCRC": true,
+      "x64Executable": true,
+      "setupExecutableAndHashVerified": true,
+      "manifestMatchesPayload": true,
+      "payloadSourceFilesMatchTagAndMacAfterLFNormalization": 249,
+      "windowsCRLFSourceFiles": 249,
+      "webAssetFilesCompared": 12,
+      "webAssetFilesByteMatchMac": 11,
+      "webEntryHTMLWhitespaceDifferences": [
+        {
+          "path": "dist/index.html",
+          "windowsSha256": "fb2f4ae3462a1d05df71b6a70816ec2ae02c5332aba875c137566575cff96da6",
+          "macSha256": "9ea71f3b89e3f5e1ab36a1490006a757c3b3d1a7c1433649183fda8ae2c0d011",
+          "onlyLineEndingsAndEmptyLinesDiffer": true
+        }
+      ],
+      "licensesAndInstructionsMatchSource": true,
+      "forbiddenDataPathsFound": [],
+      "windowsNativeAcceptance": false,
+      "packagedWindowsNativeAcceptance": false,
+      "realInAppUpgradeAndRollbackAcceptance": false
+    },
+    "testCountNote": "Overlapping suites are not summed."
+  },
+  "limitations": [
+    "Current Windows package installation and interaction were not retested on the user machine; previous page-switch and expanded-chat stutter feedback remains open.",
+    "Windows 11 is untested.",
+    "Real in-app upgrade, restart, and failure rollback are not accepted for this release.",
+    "Real macOS system-notification delivery is untested; Windows has no native system notification scheduling.",
+    "Other computer, GPU/DPI/multi-monitor hardware, sleep recovery, and long-term power use remain unvalidated.",
+    "Real local-model download, inference, tool calling, and vision remain unvalidated.",
+    "Real Syncthing cross-device transport and later sync-directory optimization remain unvalidated.",
+    "macOS is not notarized; the Windows executable is not Authenticode-signed."
+  ],
+  "pendingFeatureWork": [
+    "Natural response when a web search has no verifiable page body.",
+    "Automatic full free-time rescheduling after temporary timetable changes.",
+    "Further shared-folder synchronization improvements.",
+    "Binary background effect brightness adjustment.",
+    "Independent variable-rate glass refraction and globally idle zero-FPS rendering."
+  ]
+}

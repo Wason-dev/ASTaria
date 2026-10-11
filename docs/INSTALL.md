@@ -1,6 +1,6 @@
 # ASTaria Beta12.1 预发布包安装
 
-技术版本 `0.1.0-beta.12.1`（展示名称 **Beta12.1**）：macOS 13+ Apple Silicon（arm64）使用 ad-hoc 签名包，未经 Apple 公证；Windows x64 提供未签名试验包。从 [Beta12.1 Release](https://github.com/Wason-dev/ASTaria/releases/tag/v0.1.0-beta.12.1) 下载，核对随包 SHA-256。功能范围、回归检查与当前验收限制见 [Beta12.1 说明](https://github.com/Wason-dev/ASTaria/blob/main/docs/RELEASE_NOTES_v0.1.0-beta.12.1.md)；构建来源和发布附件证据会在 Release 完成后补充。
+技术版本 `0.1.0-beta.12.1`（展示名称 **Beta12.1**）：macOS 13+ Apple Silicon（arm64）使用 ad-hoc 签名包，未经 Apple 公证；Windows x64 提供未签名试验包。从 [Beta12.1 Release](https://github.com/Wason-dev/ASTaria/releases/tag/v0.1.0-beta.12.1) 下载，核对随包 SHA-256。功能范围、回归检查与当前验收限制见 [Beta12.1 说明](https://github.com/Wason-dev/ASTaria/blob/main/docs/RELEASE_NOTES_v0.1.0-beta.12.1.md)；已发布资产的 SHA-256、来源提交、CI 与包内容核验见 [Beta12.1 验收记录](https://github.com/Wason-dev/ASTaria/blob/main/docs/releases/beta12.1-acceptance.json)。
 
 Windows 仍有卡顿反馈；当前包实机安装与交互、Windows 11、真实自动升级/失败回退未验收。CI 与包内容检查不等于真实电脑体验通过。
 

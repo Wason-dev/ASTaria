@@ -8,7 +8,7 @@ ASTaria 是一款本机优先的个人时间与事项应用。和析熙聊作业
 
 [下载 Beta12.1](https://github.com/Wason-dev/ASTaria/releases/tag/v0.1.0-beta.12.1) · [安装说明](docs/INSTALL.md) · [更新记录](CHANGELOG.md) · [功能详情](docs/FEATURES.md) · [界面与交互规范](docs/UI_DESIGN_SYSTEM.md)
 
-本版的回归检查与当前验收限制记录在 [Beta12.1 发布说明](docs/RELEASE_NOTES_v0.1.0-beta.12.1.md)；构建来源、附件哈希与发布回读会在 Release 完成后补充。自动化测试不代替真实模型或设备体验验收。
+本版的回归检查、当前验收限制、已发布资产的 SHA-256、来源提交、CI、macOS 冒烟与 Windows 包内容核验记录在 [Beta12.1 发布说明](docs/RELEASE_NOTES_v0.1.0-beta.12.1.md)和[验收记录](docs/releases/beta12.1-acceptance.json)。自动化测试不代替真实模型或设备体验验收。
 
 ## 看看 ASTaria
 

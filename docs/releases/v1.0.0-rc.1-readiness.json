@@ -2521,8 +2521,7 @@
       "10/21 mobile settings layout/material preferences, mobile native 6px blur before SVG refraction and Mac PDF CMap/font packaging."
     ],
     "sourceOnlySinceLatestRecordedPackage": [
-      "10/21 after local replacement: homepage DDL and selected-day collection rows regain the same neutral dot as individual tasks in both themes; preview/source only, not included in the installed candidate.",
-      "10/21 evening candidate: Android edge-to-edge system bars and animated IME ownership; continuous chat foreground sizing; mobile workspace sampling opaque on first visible frame. Native device verification pending."
+      "10/21 collection-dot and mobile transition changes are in the separate Android test APK (latestAndroidTestCandidate); the installed desktop RC1 and earlier cross-platform batch remain unchanged."
     ],
     "latestPackageVerification": {
       "evidence": "artifacts/package-2026-10-21/result.json",
@@ -2556,5 +2555,18 @@
       }
     }
   ],
-  "previousPackagedBatchReplacedAt": "2026-10-17T07:03:40.431Z"
+  "previousPackagedBatchReplacedAt": "2026-10-17T07:03:40.431Z",
+  "latestAndroidTestCandidate": {
+    "evidence": "artifacts/mobile-transitions-2026-10-21/result.json",
+    "builtAt": "2026-10-21T15:19:14.363190+00:00",
+    "sourceCommit": "f3f1d9a5234a0633d9466a1a0451b83d1b45b7e8",
+    "path": "desktop-builds/1.0.0-rc.1-2026-10-21-mobile-transitions/ASTaria-1.0.0-rc.1-android-transitions-debug.apk",
+    "sha256": "7cec89f42d7b2994e3326e0549a799695abf18942ffec118d4f426b9c07689fd",
+    "sizeBytes": 10296286,
+    "signing": "debug, v2 verified",
+    "payloadFiles": 308,
+    "status": "local-test-candidate",
+    "nativeAcceptance": "pending",
+    "publiclyPublished": false
+  }
 }

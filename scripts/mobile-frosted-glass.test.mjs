@@ -249,7 +249,9 @@ test('glass keeps its material and exact geometry across real component transiti
 
     await run('clear/soft, material rerenders, transform reversal, reduced motion and foreground restoration preserve the committed geometry', async()=>{
       await navigate(android)
-      await evaluate('qa.render({rendering:"detailed"});qa.geometry.current.update(300,220,17,1);true')
+      // The mobile build sets this attribute before mounting. UA emulation
+      // alone selects Android capability routing, not the mobile blur path.
+      await evaluate('document.documentElement.dataset.mobile="browser";qa.render({rendering:"detailed"});qa.geometry.current.update(300,220,17,1);true')
       for(const blur of [0,6,0,6]) {
         await evaluate(`qa.render({blur:${blur},theme:${JSON.stringify(blur?'light':'dark')}});true`)
         const state=await snapshot('material-'+blur)
@@ -333,6 +335,7 @@ test('glass keeps its material and exact geometry across real component transiti
 
     await run('actual timetable overview keeps independent rounded optics across clear/soft, rapid resize and retained-page return',async()=>{
       await navigate(android)
+      await evaluate('document.documentElement.dataset.mobile="browser";true')
       for(const theme of ['dark','light']) for(const blur of [0,6]) {
         await evaluate(`qa.render({overview:true,rendering:"detailed",width:280.25,height:400.25,blur:${blur},theme:${JSON.stringify(theme)}});true`);await delay(260)
         await capture('overview-'+theme+'-'+blur+'-initial')

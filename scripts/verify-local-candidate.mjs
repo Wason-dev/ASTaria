@@ -20,7 +20,15 @@ const MAX_RUNTIME_LEGAL = 32 * 1024 * 1024
 // Match package-desktop.copyPayload; published dependency source/maps are a
 // separate allowlist, because copyServerDependencies preserves those files.
 const SOURCE_EXTENSIONS = new Set(['.mjs', '.cjs', '.js', '.jsx', '.ts', '.tsx', '.css', '.md', '.m', '.h', '.svg', '.png', '.jpg', '.jpeg', '.webp', '.avif', '.woff', '.woff2', '.wasm'])
-const ASSET_EXTENSIONS = new Set([...SOURCE_EXTENSIONS, '.ttf', '.json', '.html', '.txt', '.webmanifest', '.ico', '.icns', '.gif', '.mp3', '.mp4', '.mov', '.ogg', '.wav'])
+const ASSET_EXTENSIONS = new Set([...SOURCE_EXTENSIONS, '.ttf', '.pfb', '.bcmap', '.json', '.html', '.txt', '.webmanifest', '.ico', '.icns', '.gif', '.mp3', '.mp4', '.mov', '.ogg', '.wav'])
+// PDF.js 6.4.299 has a fallback worker import and a fallback decoder import.
+// documentReader preloads the worker and supplies package-local binary assets.
+// These reviewed browser bundles are pinned byte-for-byte, not trusted by
+// filename or import shape. Any rebuilt/modified bundle requires review again.
+const REVIEWED_PDF_IMPORTS = new Map([
+  ['dist/assets/pdf-DwPcVHfU.js', { sha256: 'f927f07ffbd3d18faca2791b6ac5a4c4979bad84f7376620185ae32d9d3c9f00', lines: [46] }],
+  ['dist/assets/pdf.worker-uQTas6ku.js', { sha256: '7dc319253be7d55f59593191bf79f9b4efb10f521ae2c5baee7f765ec9b586c7', lines: [6] }],
+])
 const EXCLUDED_NAMES = new Set(['node_modules', 'data', 'userdata', 'user-data', 'logs', 'backups', 'coverage', 'cache', 'caches', 'tmp', 'temp', 'test-results', 'playwright-report'])
 const LEGAL = [
   ['LICENSE', 'ASTARIA-LICENSE.txt'], ['NOTICE', 'ASTARIA-NOTICE.txt'],
@@ -264,7 +272,7 @@ function exportTarget(exports, key, kind) {
 
 async function verifyImports(payload, files, dependencies, issue) {
   const manifests = new Map(), builtin = new Set(), queue = [], visited = new Set()
-  const stats = { modules: 0, imports: 0, dynamicImportsRejected: 0, builtins: [], electron: false }
+  const stats = { modules: 0, imports: 0, dynamicImportsRejected: 0, reviewedVendorImports: 0, builtins: [], electron: false }
   const manifest = async name => {
     if (!files.has(name)) throw new Error('manifest outside accepted inventory')
     if (!manifests.has(name)) manifests.set(name, await jsonAt(files.get(name).path))
@@ -318,10 +326,12 @@ async function verifyImports(payload, files, dependencies, issue) {
     const name = queue.shift()
     if (visited.has(name) || !CODE.test(name) || /\.d\.[cm]?ts$/u.test(name)) continue
     visited.add(name); stats.modules++
-    let references
-    try { references = staticImports((await bytesAt(files.get(name).path)).toString('utf8'), name) }
+    let references, bytes
+    try { bytes = await bytesAt(files.get(name).path); references = staticImports(bytes.toString('utf8'), name) }
     catch { issue('MODULE_PARSE', name, 'Production module cannot be statically parsed.'); continue }
-    for (const line of references.unknown) { stats.dynamicImportsRejected++; issue('DYNAMIC_IMPORT', name, `Import target is not statically bounded (line ${line}).`) }
+    const reviewed = REVIEWED_PDF_IMPORTS.get(name)
+    if (reviewed && digest(bytes) === reviewed.sha256 && same(references.unknown, reviewed.lines)) stats.reviewedVendorImports += references.unknown.length
+    else for (const line of references.unknown) { stats.dynamicImportsRejected++; issue('DYNAMIC_IMPORT', name, `Import target is not statically bounded (line ${line}).`) }
     for (const reference of references.imports) {
       stats.imports++
       try {

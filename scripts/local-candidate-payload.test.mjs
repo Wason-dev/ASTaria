@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { NtExecutable, NtExecutableResource, Resource } from 'resedit'
-import { copyPayload } from './package-desktop.mjs'
+import { copyPayload, copyDesktopAssets } from './package-desktop.mjs'
 import { copyServerDependencies } from './desktop-dependencies.mjs'
 import { candidateCli, verifyLocalCandidate } from './verify-local-candidate.mjs'
 
@@ -42,7 +42,8 @@ async function fixture(base, platform) {
   await mkdir(payload, { recursive: true })
   // Use the existing safe copy helpers, without calling a packaging entry point.
   for (const directory of ['desktop', 'server', 'src']) await copyPayload(join(ROOT, directory), join(payload, directory))
-  await cp(join(ROOT, 'dist'), join(payload, 'dist'), { recursive: true })
+  if (app) await copyDesktopAssets(join(ROOT, 'dist'), join(payload, 'dist'))
+  else await cp(join(ROOT, 'dist'), join(payload, 'dist'), { recursive: true })
   const dependencies = await copyServerDependencies(ROOT, payload)
   await put(payload, 'package.json', JSON.stringify({ name: 'astaria', productName: 'ASTaria', version: VERSION,
     type: 'module', main: 'desktop/main.cjs', license: 'Apache-2.0' }))
@@ -171,6 +172,23 @@ test('static local candidate payload acceptance for both copy layouts', async t 
         await changed(path, "import(globalThis.unknownCandidateModule);\n" + original, async () => {
           assert.ok(codes(await verify()).includes('DYNAMIC_IMPORT'))
         })
+      })
+      await t.test('PDF assets are complete and reviewed bundles cannot bypass import checks after modification', async () => {
+        const assets = await readdir(join(ROOT, 'dist/assets'))
+        for (const extension of ['.bcmap', '.pfb']) {
+          const names = assets.filter(name => name.endsWith(extension))
+          assert.ok(names.length, `Production PDF resources include ${extension}`)
+          for (const name of names) assert.deepEqual(await readFile(join(candidate.payload, 'dist/assets', name)), await readFile(join(ROOT, 'dist/assets', name)))
+          await changed(join(candidate.payload, 'dist/assets', names[0]), null, async () => {
+            assert.equal((await verify()).ok, false, 'Missing PDF resources must fail acceptance')
+          })
+        }
+        for (const name of assets.filter(name => /^pdf(?:\.worker)?-.*\.js$/u.test(name))) {
+          const path = join(candidate.payload, 'dist/assets', name), original = await readFile(path, 'utf8')
+          await changed(path, original + '\nimport(globalThis.unreviewedPdfModule);\n', async () => {
+            assert.ok(codes(await verify()).includes('DYNAMIC_IMPORT'), 'Reviewed filename alone must not allow a modified bundle')
+          })
+        }
       })
       await t.test('all four nonempty legal texts and GSAP build hash are enforced', async () => {
         for (const name of ['ASTARIA-LICENSE.txt', 'ASTARIA-NOTICE.txt', 'THIRD_PARTY_NOTICES.txt', 'GSAP-LICENSE.txt']) {

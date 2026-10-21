@@ -12,7 +12,7 @@ import { copyMacBundle } from './copy-mac-bundle.mjs'
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const NAME = 'ASTaria', BUNDLE_ID = 'dev.wason.ASTaria', ARCH = 'arm64'
 const SOURCE_EXTENSIONS = new Set(['.mjs', '.cjs', '.js', '.jsx', '.ts', '.tsx', '.css', '.md', '.m', '.h', '.svg', '.png', '.jpg', '.jpeg', '.webp', '.avif', '.woff', '.woff2', '.wasm'])
-const ASSET_EXTENSIONS = new Set([...SOURCE_EXTENSIONS, '.ttf', '.json', '.html', '.txt', '.webmanifest', '.ico', '.icns', '.gif', '.mp3', '.mp4', '.mov', '.ogg', '.wav'])
+const ASSET_EXTENSIONS = new Set([...SOURCE_EXTENSIONS, '.ttf', '.pfb', '.bcmap', '.json', '.html', '.txt', '.webmanifest', '.ico', '.icns', '.gif', '.mp3', '.mp4', '.mov', '.ogg', '.wav'])
 const EXCLUDED_NAMES = new Set(['node_modules', 'data', 'userdata', 'user-data', 'logs', 'backups', 'coverage', 'cache', 'caches', 'tmp', 'temp', 'test-results', 'playwright-report'])
 const USAGE = 'node scripts/package-desktop.mjs --runtime /path/to/Electron.app --out /path/to/output [--icon /path/to/icon.png]'
 
@@ -113,6 +113,10 @@ async function sha256(path) {
   return digest.digest('hex')
 }
 
+export function copyDesktopAssets(source, destination) {
+  return copyPayload(source, destination, ASSET_EXTENSIONS)
+}
+
 export function sourceProvenance(directory = ROOT) {
   const git = args => {
     const result = spawnSync('git', ['-C', directory, ...args], { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 })
@@ -210,7 +214,7 @@ async function main() {
     await mkdir(payload)
     for (const path of ['desktop', 'server', 'src']) await copyPayload(join(ROOT, path), join(payload, path), SOURCE_EXTENSIONS)
     buildInfo.serverDependencies = await copyServerDependencies(ROOT, payload)
-    await copyPayload(join(ROOT, 'dist'), join(payload, 'dist'), ASSET_EXTENSIONS)
+    await copyDesktopAssets(join(ROOT, 'dist'), join(payload, 'dist'))
     await copyPayload(prompts, join(payload, 'prompts'), SOURCE_EXTENSIONS)
     await writeFile(join(payload, 'package.json'), `${JSON.stringify({ name: 'astaria', productName: NAME, version, license: 'Apache-2.0', private: true, type: 'module', main: 'desktop/main.cjs' }, null, 2)}\n`)
     await writeFile(join(payload, 'build-info.json'), `${JSON.stringify(buildInfo, null, 2)}\n`)

@@ -57,7 +57,7 @@
   .p0 .home-workspace[data-theme=light] .home-month-grid button:focus-visible { outline-color: #927443 }
   .p0 .home-workspace[data-theme=light] .home-agenda-list button[data-task-status=doing] > span { color: #8a692e }
   .p0 .home-workspace[data-theme=light] .home-agenda-list button[data-overdue=true] > small { color: #926844 }
-  .p0 .home-workspace[data-theme=light] [data-task-status=todo] { --task-state-color: #627887 }
+  .p0 .home-workspace[data-theme=light] :is([data-task-status=todo], [data-task-collection]) { --task-state-color: #627887 }
   .p0 .home-workspace[data-theme=light] [data-task-status=doing] { --task-state-color: #8a692e }
   .p0 .home-workspace[data-theme=light] [data-task-status=done] { --task-state-color: #477c62 }
   .p0 .home-workspace[data-theme=light] [data-task-status=dropped] { --task-state-color: #97645a }

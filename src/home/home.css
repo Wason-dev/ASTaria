@@ -107,7 +107,7 @@
 .home-form-error { font-size: 11px; line-height: 1.7; margin: 8px 0 0; overflow-wrap: anywhere }
 .p0 .home-form-error button { text-decoration: underline; margin-left: 8px }
 /* One status palette for task details and agenda rows. */
-.home-workspace [data-task-status=todo] { --task-state-color: #aeb7c0 }
+.home-workspace :is([data-task-status=todo], [data-task-collection]) { --task-state-color: #aeb7c0 }
 .home-workspace [data-task-status=doing] { --task-state-color: #d6b46f }
 .home-workspace [data-task-status=done] { --task-state-color: #82b79a }
 .home-workspace [data-task-status=dropped] { --task-state-color: #be8c82 }

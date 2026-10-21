@@ -26,7 +26,7 @@
     "mobileProductionScope": "10/16 phone four-workspace glass/margin/type consistency, settings navigation and panel motion, home lower-edge repaint, plus shared desktop changes. Android and iOS Web resources were synced from the same dist-mobile build.",
     "packagedSourcesAre": "mobile-detail-2026-10-16",
     "packagedSourcesNote": "Historical 10/16 build evidence only. Later packages were recorded on 10/17 and subsequent source/preview changes are not packaged; see releasePreparation.",
-    "currentIterationPackaged": true,
+    "currentIterationPackaged": false,
     "desktopProductionEvidence": "artifacts/package-2026-10-16/final-desktop-build.log",
     "mobileProductionEvidence": "artifacts/package-2026-10-16/final-mobile-build.log",
     "evidenceAsOf": "2026-10-16",
@@ -2520,7 +2520,9 @@
       "10/20 local Worker reading PDF/DOCX/XLSX/XLS/CSV/TSV; bounded read_attachment, scanned page vision, durable originals and retries.",
       "10/21 mobile settings layout/material preferences, mobile native 6px blur before SVG refraction and Mac PDF CMap/font packaging."
     ],
-    "sourceOnlySinceLatestRecordedPackage": [],
+    "sourceOnlySinceLatestRecordedPackage": [
+      "10/21 after local replacement: homepage DDL and selected-day collection rows regain the same neutral dot as individual tasks in both themes; preview/source only, not included in the installed candidate."
+    ],
     "latestPackageVerification": {
       "evidence": "artifacts/package-2026-10-21/result.json",
       "targetedTests": {

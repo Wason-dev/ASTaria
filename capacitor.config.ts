@@ -10,7 +10,9 @@ const config: CapacitorConfig = {
   // No remote server.url: pages and data stay on the device. AI requests are
   // separate, explicit requests to the user's configured provider.
   plugins: {
-    SystemBars: { style: 'DARK', initialViewportFitValueHint: 'cover', insetsHandling: 'css' },
+    // ASTariaAppearance owns edge-to-edge safe areas and animated IME insets.
+    // A second native padding owner would resize the WebView ahead of the IME.
+    SystemBars: { style: 'DARK', initialViewportFitValueHint: 'cover', insetsHandling: 'disable' },
     LocalNotifications: { smallIcon: 'ic_stat_astaria', iconColor: '#d5bb8b' },
   },
 }

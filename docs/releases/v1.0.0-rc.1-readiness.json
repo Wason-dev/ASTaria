@@ -2477,7 +2477,7 @@
     "status": "waiting-not-released",
     "releaseDate": null,
     "blockers": [
-      "Apple Developer enrollment remains unresolved; distribution signing, notarization and TestFlight remain pending.",
+      "Apple Developer enrollment is progressing per user on 2026-10-21; completed enrollment, distribution signing, notarization and TestFlight remain pending.",
       "Windows test hardware is not ready; current-candidate native acceptance is pending."
     ],
     "notImplemented": [
@@ -2521,7 +2521,8 @@
       "10/21 mobile settings layout/material preferences, mobile native 6px blur before SVG refraction and Mac PDF CMap/font packaging."
     ],
     "sourceOnlySinceLatestRecordedPackage": [
-      "10/21 after local replacement: homepage DDL and selected-day collection rows regain the same neutral dot as individual tasks in both themes; preview/source only, not included in the installed candidate."
+      "10/21 after local replacement: homepage DDL and selected-day collection rows regain the same neutral dot as individual tasks in both themes; preview/source only, not included in the installed candidate.",
+      "10/21 evening candidate: Android edge-to-edge system bars and animated IME ownership; continuous chat foreground sizing; mobile workspace sampling opaque on first visible frame. Native device verification pending."
     ],
     "latestPackageVerification": {
       "evidence": "artifacts/package-2026-10-21/result.json",

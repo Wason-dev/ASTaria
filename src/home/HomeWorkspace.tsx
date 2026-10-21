@@ -1,6 +1,6 @@
 import type { FreeTimeGoal, Wish } from '../xixi/companionTypes'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { FormEvent } from 'react'
+import type { CSSProperties, FormEvent } from 'react'
 import type { Task, TaskStatus } from '../domain/task'
 import type { SceneCamera } from '../spatial/scene'
 import { readableDate, STATUS_LABELS } from '../spatial/scene'
@@ -189,6 +189,10 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
     const startTop = layout.taskBottom + 12
     if (morph.current) {
       const surface = morph.current
+      if (mobile) {
+        surface.style.setProperty('--home-chat-end-height', `${endHeight}px`)
+        surface.style.setProperty('--home-chat-end-top', `${Math.max(84, (layout.height - endHeight) / 2)}px`)
+      }
       surface.style.top = `${startTop + (Math.max(84, (layout.height - endHeight) / 2) - startTop) * amount}px`
       const width = 128 + (endWidth - 128) * amount + (compact ? 0 : endWidth * Math.max(0, (amount - .5) / .5))
       const height = 38 + (endHeight - 38) * amount
@@ -202,7 +206,7 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
     if (current.current) { current.current.style.opacity = String(Math.max(0, 1 - amount * 3)); current.current.style.visibility = amount > .6 ? 'hidden' : 'visible' }
     if (launch.current) { launch.current.style.opacity = String(Math.max(0, 1 - amount * 4)); launch.current.style.visibility = amount > .35 ? 'hidden' : 'visible' }
     if (deck.current) { deck.current.style.opacity = String(Math.max(0, Math.min(1, (amount - .45) / .55))); deck.current.style.visibility = amount > .35 ? 'visible' : 'hidden' }
-  }, [sceneUnavailable, cameraMissing, chatOpen, layout, compact])
+  }, [sceneUnavailable, cameraMissing, chatOpen, layout, compact, mobile])
   const camera = useSceneCamera(readCamera, `${page}:${chatOpen}:${stringsOpen}:${layout.width}:${layout.height}`, animateSceneUI, chatInteractionPhase)
   const progress = sceneUnavailable || cameraMissing ? Number(chatOpen) : chatCameraProgress(camera)
 
@@ -217,7 +221,13 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
     const measure = () => {
       if (!root.current || !current.current) return
       const box = root.current.getBoundingClientRect()
-      const height = mobile ? Number.parseFloat(document.documentElement.style.getPropertyValue('--m-visible-height')) || box.height : box.height
+      // Keyboard progress changes only the foreground CSS box, never the
+      // scene/camera's layout baseline or the morph's animation target.
+      const height = box.height
+      if (mobile && morph.current?.dataset.progress === '1.000') {
+        const style = getComputedStyle(morph.current)
+        morphGlass.current?.update(parseFloat(style.width), parseFloat(style.height), parseFloat(style.borderTopLeftRadius), 1)
+      }
       const taskBottom = current.current.getBoundingClientRect().bottom - box.top
       setLayout(previous => previous.width === box.width && previous.height === height && previous.taskBottom === taskBottom
         ? previous : { width: box.width, height, taskBottom })
@@ -503,7 +513,8 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
       </button>
     </div>
 
-    <div ref={morph} className="home-morph" style={{ top: startTop + (endTop - startTop) * progress, width: extendedWidth, height, borderRadius: radius }} data-progress={progress.toFixed(3)} data-compact={compact} data-information-active={informationActive}>
+    <div ref={morph} className="home-morph" style={{ top: startTop + (endTop - startTop) * progress, width: extendedWidth, height, borderRadius: radius,
+      '--home-chat-end-top': `${endTop}px`, '--home-chat-end-height': `${endHeight}px` } as CSSProperties} data-progress={progress.toFixed(3)} data-compact={compact} data-information-active={informationActive}>
       <GlassSurface geometryRef={morphGlass} width={Math.round(extendedWidth)} height={Math.round(height)} radius={radius} progress={progress} material={homeGlass} />
       <button ref={launch} className="home-launch" onClick={() => changeChat(true)} aria-expanded={chatOpen} aria-controls="home-xixi"
         style={{ opacity: Math.max(0, 1 - progress * 4), visibility: progress > .35 ? 'hidden' : 'visible' }} disabled={chatOpen}>交给析熙</button>

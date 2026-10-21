@@ -10,6 +10,8 @@ export type NativeViewport = {
   visibleHeight: number
   keyboardInset: number
   keyboardVisible: boolean
+  /** Present when native owns edge-to-edge insets, independently of WebView CSS. */
+  safeArea?: { top: number; right: number; bottom: number; left: number }
 }
 
 export type MobileViewportInput = {
@@ -32,6 +34,7 @@ export type MobileViewportMetrics = {
   /** Bottom occlusion only: iOS viewport panning is not part of the IME. */
   keyboardInset: number
   keyboard: 'open' | 'closed'
+  safeArea?: NativeViewport['safeArea']
 }
 
 export type MobileViewportState = MobileViewportMetrics & {
@@ -72,15 +75,21 @@ export function calculateMobileViewport(input: MobileViewportInput, previous?: M
   const keyboardSession = Boolean(sameGeometry && bottom < baseline - 1 &&
     (previous.keyboardSession || (unzoomed && (input.focused || inferredKeyboard))))
   const layoutHeight = native?.layoutHeight ?? (keyboardSession ? Math.max(baseline, height) : height)
-  const availableBottom = Math.min(layoutHeight, bottom, native?.visibleHeight ?? layoutHeight)
-  const offsetTop = Math.min(Math.max(0, layoutHeight - 1), top, Math.max(0, availableBottom - 1))
+  const safeArea = native?.safeArea && Object.values(native.safeArea).length === 4 &&
+    ['top', 'right', 'bottom', 'left'].every(key => Number.isFinite(native.safeArea![key as keyof NonNullable<NativeViewport['safeArea']>]) &&
+      native.safeArea![key as keyof NonNullable<NativeViewport['safeArea']>] >= 0) ? native.safeArea : undefined
+  // A native animation frame and a resized/panned visualViewport may refer to
+  // different IME frames. The edge-to-edge owner is authoritative in that case.
+  const availableBottom = safeArea ? Math.min(layoutHeight, native!.visibleHeight) : Math.min(layoutHeight, bottom, native?.visibleHeight ?? layoutHeight)
+  const offsetTop = safeArea ? 0 : Math.min(Math.max(0, layoutHeight - 1), top, Math.max(0, availableBottom - 1))
   const visibleHeight = Math.max(1, availableBottom - offsetTop)
   const keyboard = native ? (native.keyboardVisible ? 'open' : 'closed') : inferredKeyboard ? 'open' : 'closed'
   const keyboardInset = keyboard === 'open' ? Math.min(layoutHeight, native ? native.keyboardInset : Math.max(0, layoutHeight - bottom)) : 0
   return {
     layoutWidth: px(native?.layoutWidth ?? width), layoutHeight: px(layoutHeight),
     visibleHeight: px(visibleHeight), offsetTop: px(offsetTop), keyboardInset: px(keyboardInset), keyboard,
-    geometry, keyboardSession: keyboardSession || keyboard === 'open',
+    geometry, keyboardSession: safeArea ? keyboard === 'open' : keyboardSession || keyboard === 'open',
+    ...(safeArea ? { safeArea } : {}),
   }
 }
 
@@ -113,7 +122,7 @@ function isEditing(document: Document) {
     !['button', 'checkbox', 'color', 'file', 'hidden', 'image', 'radio', 'range', 'reset', 'submit'].includes(element.type)
 }
 
-/** No root sizing, transforms, polling or safe-area writes. Returns an idempotent disposer. */
+/** No root sizing, transforms or polling. Native safe areas have one owner. */
 export function attachMobileViewport(options: {
   window?: Window
   document?: Document
@@ -143,7 +152,8 @@ export function attachMobileViewport(options: {
       focused: isEditing(document), visualViewport: viewport, native,
     }, state)
     const { layoutWidth, layoutHeight, visibleHeight, offsetTop, keyboardInset, keyboard } = state
-    const metrics: MobileViewportMetrics = { layoutWidth, layoutHeight, visibleHeight, offsetTop, keyboardInset, keyboard }
+    const metrics: MobileViewportMetrics = { layoutWidth, layoutHeight, visibleHeight, offsetTop, keyboardInset, keyboard,
+      ...(state.safeArea ? { safeArea: state.safeArea } : {}) }
     const signature = JSON.stringify(metrics)
     if (signature === published) return
     published = signature
@@ -153,6 +163,10 @@ export function attachMobileViewport(options: {
       '--mobile-viewport-height': visibleHeight,
     })) {
       const text = `${value}px`
+      if (root.style.getPropertyValue(name) !== text) root.style.setProperty(name, text)
+    }
+    if (state.safeArea) for (const [edge, value] of Object.entries(state.safeArea)) {
+      const name = `--safe-area-inset-${edge}`, text = `${px(value)}px`
       if (root.style.getPropertyValue(name) !== text) root.style.setProperty(name, text)
     }
     if (root.dataset.mobileKeyboard !== keyboard) root.dataset.mobileKeyboard = keyboard
@@ -180,7 +194,13 @@ export function attachMobileViewport(options: {
   if (bridge) {
     // Subscribe before querying; a newer push must win over an older query reply.
     void bridge.addListener('viewportChanged', value => {
-      if (!disposed) { nativeRevision++; native = value; schedule() }
+      if (!disposed) {
+        nativeRevision++; native = value
+        // This already is the system's current animation frame. A second RAF
+        // would put the foreground an extra frame behind the keyboard.
+        if (value.safeArea) update()
+        else schedule()
+      }
     }).then(handle => {
       if (disposed) void handle.remove().catch(() => {})
       else { nativeListener = handle; refreshNative() }

@@ -343,6 +343,21 @@ describe('calculateMobileViewport', () => {
     assert.equal(state.keyboard, 'closed')
   })
 
+  test('edge-to-edge IME frames override a WebView that already reports the keyboard end size', () => {
+    let state
+    for (const inset of [0, 12, 48, 110, 230, 300, 220, 100, 24, 0]) {
+      state = calculateMobileViewport({ innerWidth: 390, innerHeight: 500, focused: true,
+        visualViewport: { height: 480, offsetTop: 20 },
+        native: viewportPayload(390, 800, { visibleHeight: 800 - inset, keyboardInset: inset,
+          keyboardVisible: inset > 0, safeArea: { top: 28, right: 0, bottom: 24, left: 0 } }),
+      }, state)
+      assert.equal(state.layoutHeight, 800, 'scene baseline remains fixed')
+      assert.equal(state.visibleHeight, 800 - inset, 'follow the actual system animation frame, including sub-threshold frames')
+      assert.equal(state.offsetTop, 0, 'do not mix WebView panning from another frame')
+      assert.equal(state.keyboardInset, inset)
+    }
+  })
+
   test('native close restores the full layout', () => {
     let state = calculateMobileViewport({
       innerWidth: 390,
@@ -732,6 +747,26 @@ describe('attachMobileViewport', () => {
     assert.equal(document.dispatched[2].visibleHeight, 800)
     assert.equal(document.dispatched[2].keyboard, 'closed')
 
+    detach()
+  })
+
+  test('native animation pushes update once immediately and publish safe areas before foreground layout', async () => {
+    const document = new FakeDocument(), env = createWindow(document)
+    let push
+    const bridge = { async getViewport() { return viewportPayload(390, 800) },
+      async addListener(_event, listener) { push = listener; return { async remove() {} } } }
+    const detach = attachMobileViewport({ window: env.window, document, nativeBridge: bridge })
+    await flushMicrotasks(); env.flush()
+    const frame = viewportPayload(390, 800, { visibleHeight: 788, keyboardInset: 12, keyboardVisible: true,
+      safeArea: { top: 28, right: 0, bottom: 24, left: 0 } })
+    push(frame)
+    assert.equal(document.css.getPropertyValue('--m-visible-height'), '788px')
+    assert.equal(document.css.getPropertyValue('--safe-area-inset-top'), '28px')
+    assert.equal(document.css.getPropertyValue('--safe-area-inset-bottom'), '24px')
+    assert.equal(env.pendingFrames(), 0, 'no extra RAF behind the native frame')
+    const writes = document.css.writes.length
+    push(frame)
+    assert.equal(document.css.writes.length, writes, 'identical native frame is deduplicated')
     detach()
   })
 })

@@ -3,7 +3,6 @@ html[data-mobile] .p0 { bottom: auto; height: var(--m-layout-height, 100svh) }
 html[data-mobile] .home-workspace {
   inset: var(--safe-area-inset-top, env(safe-area-inset-top)) var(--safe-area-inset-right, env(safe-area-inset-right)) var(--safe-area-inset-bottom, env(safe-area-inset-bottom)) var(--safe-area-inset-left, env(safe-area-inset-left));
 }
-html[data-mobile-keyboard="open"] .home-workspace { bottom: 0 }
 html[data-mobile] .p0 button { touch-action: manipulation }
 /* Android follows the compact content rhythm. iOS needs 16px editable controls
    to avoid WebKit zooming the viewport on focus; do not enlarge all platforms. */
@@ -62,11 +61,14 @@ html[data-mobile] .p0-whisper { bottom:calc(21px + var(--safe-area-inset-bottom,
 html[data-mobile-keyboard=open] .p0-whisper,
 html[data-mobile-keyboard=open] .home-notification,
 html[data-mobile] .home-workspace:not([data-page=home]) .home-notification { display:none }
-html[data-mobile-keyboard=open] .home-workspace[data-chat-open=true] .home-morph {
-  top:calc(var(--m-visible-offset-top,0px) + 52px)!important;
-  height:calc(var(--m-visible-height,100svh) - 64px - var(--safe-area-inset-top,0px))!important;
+/* Once the original morph has opened, continuously fit its foreground to the
+   visible viewport. No 120px keyboard threshold, second easing or camera reset. */
+html[data-mobile] .home-workspace[data-chat-open=true] .home-morph[data-progress="1.000"] {
+  --m-chat-available:calc(var(--m-visible-height,100svh) - var(--safe-area-inset-top,0px));
+  --m-chat-top:max(52px,min(var(--home-chat-end-top),calc((var(--m-chat-available) - var(--home-chat-end-height)) / 2)));
+  top:calc(var(--m-visible-offset-top,0px) + var(--m-chat-top))!important;
+  height:min(var(--home-chat-end-height),calc(var(--m-chat-available) - var(--m-chat-top) - 12px))!important;
 }
-html[data-mobile-keyboard=open] .home-workspace[data-chat-open=true] .home-nav { top:0 }
 html[data-mobile] .p0 :is(.xixi-settings-scroll,.free-time-scroll,.wb-scroll) { bottom:auto; height:calc(var(--m-visible-height,var(--m-layout-height,100svh)) - 86px - var(--safe-area-inset-top,0px)); }
 html[data-mobile] .p0 :is(.tti-dialog,.ics-import,.pl-dialog,.home-task-dialog) { max-height:calc(var(--m-visible-height,100svh) - 32px); }
 html[data-mobile] .home-workspace[data-page=settings] > .home-scene-ui,
@@ -92,6 +94,15 @@ html[data-mobile] .home-workspace[data-page=settings] > .planner { visibility:hi
 /* The brand menu is a foreground layer. It never takes height from the active
    workspace or moves its reading position. */
 html[data-mobile] :is(.wb-scroll,.xixi-settings-scroll,.free-time-viewport,.mobile-schedule-workspace) { transition-property:opacity,visibility; transition-duration:220ms,0s; transition-timing-function:ease,linear; }
+/* Incoming sampling ancestors must be opaque on their FIRST visible frame.
+   Only existing ink/tint/rim animations may ease in. Outgoing fades stay finite. */
+html[data-mobile] .home-workspace :is(.workbench,.free-time-page)[data-active=true] :is(.wb-scroll,.free-time-viewport),
+html[data-mobile] .home-workspace[data-page=settings] .xixi-settings:not([data-closing=true]) .xixi-settings-scroll,
+html[data-mobile] .home-workspace .mobile-schedule-workspace[data-active=true] { opacity:1; transition:none; }
+html[data-mobile] .mobile-schedule-workspace[data-active=true] :is(.m-calendar-heading,.m-calendar-body-content) { animation:mobile-workspace-ink-in 300ms cubic-bezier(.16,.8,.25,1) backwards; }
+@keyframes mobile-workspace-ink-in { from { opacity:0; transform:translateY(9px); } to { opacity:1; transform:none; } }
+@media(prefers-reduced-motion:reduce) { html[data-mobile] .mobile-schedule-workspace[data-active=true] :is(.m-calendar-heading,.m-calendar-body-content) { animation:none; } }
+html[data-mobile] .home-workspace[data-motion=reduced] .mobile-schedule-workspace[data-active=true] :is(.m-calendar-heading,.m-calendar-body-content) { animation:none; }
 /* A retained home's animated children have inline visibility. Cover the whole
    foreground tree on other pages so no label can leak through their glass. */
 html[data-mobile] .home-workspace:not([data-page=home]) > .home-scene-ui,
@@ -119,6 +130,8 @@ html[data-mobile] .home-workspace[data-theme=light] {
 }
 html[data-mobile] .home-workspace[data-glass-tone=dark] { --m-panel-tint:.62; }
 .mobile-workspace-scene { position:absolute; inset:0; pointer-events:none; background:var(--m-scene-fill); visibility:hidden; }
+/* The scene continues behind system icons; only interactive content is inset. */
+html[data-mobile] .mobile-workspace-scene { inset:calc(-1 * var(--safe-area-inset-top,env(safe-area-inset-top,0px))) calc(-1 * var(--safe-area-inset-right,env(safe-area-inset-right,0px))) calc(-1 * var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px))) calc(-1 * var(--safe-area-inset-left,env(safe-area-inset-left,0px))); }
 html[data-mobile] .home-workspace:not([data-page=home]) > .mobile-workspace-scene { visibility:visible; }
 .mobile-workspace-scene::after { content:''; position:absolute; inset:0; opacity:.25; background-image:linear-gradient(#c0c5ce0c 1px,transparent 1px),linear-gradient(90deg,#c0c5ce0c 1px,transparent 1px); background-size:32px 32px; }
 .home-workspace[data-grid=false] > .mobile-workspace-scene::after { display:none; }

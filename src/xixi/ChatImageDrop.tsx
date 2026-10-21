@@ -74,6 +74,6 @@ export function ChatImageDropProvider({ children, onFiles, blocked, onBlocked }:
   }, [])
   return <DropTarget.Provider value={target}>
     {children}
-    {dragging && <div className="xixi-image-drop" role="status">{blocked ? '请先结束当前操作，再添加图片' : '松开，将图片添加到析熙的输入框'}</div>}
+    {dragging && <div className="xixi-image-drop" role="status">{blocked ? '请先结束当前操作，再添加附件' : '松开，将附件添加到析熙的输入框'}</div>}
   </DropTarget.Provider>
 }

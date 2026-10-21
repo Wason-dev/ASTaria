@@ -1,0 +1,123 @@
+/* Coverage is a parent-owned foreground boundary, never a root or dialog.
+   Planner's local boundary is explicit; HomeWorkspace / .m-app use the generic
+   attributes on their foreground siblings and keep the scene visible. */
+[data-import-underlay][data-import-covered=true],
+.planner[data-modal-open=true] > :is(.pl-background, .pl-scroll) { visibility: hidden; pointer-events: none }
+
+.import-surface {
+  --import-ink: #eeeae3; --import-body: #d4d0c9; --import-muted: #c6cad0;
+  --import-line: #e1ded526; --import-gold: #d5bb8b; --import-well: rgb(8 10 14 / .16); --import-warning: #edc5a5;
+  position: fixed; inset: 0; margin: auto; box-sizing: border-box;
+  width: min(920px, calc(100vw - 48px)); height: min(720px, calc(var(--m-visible-height, 100dvh) - 48px));
+  max-width: none; max-height: none; padding: 0; overflow: hidden;
+  border: 1px solid var(--import-line); border-radius: 22px; background: transparent;
+  color: var(--import-ink); color-scheme: dark; text-shadow: none;
+  font: 13px/1.65 Inter, 'Helvetica Neue', 'PingFang SC', sans-serif;
+  box-shadow: 0 16px 48px #0005;
+}
+.import-surface[data-theme=light] {
+  --import-ink: #30343a; --import-body: #505b66; --import-muted: #505b66;
+  --import-line: #41465026; --import-gold: #927443; --import-well: rgb(250 251 252 / .3); --import-warning: #8b4629;
+  color-scheme: light; box-shadow: 0 14px 42px #252d3926;
+}
+.import-surface::backdrop { background: rgb(8 10 14 / .12); animation: import-fade-in 220ms ease both }
+.import-surface::after { content:''; position:absolute; inset:1px; z-index:0; pointer-events:none; border-radius:inherit; opacity:0; }
+.import-surface[data-theme=light]::backdrop { background: rgb(250 251 252 / .06) }
+/* No opacity, transform, filter or isolation on live sampling ancestors during
+   entry: the measured surface independently samples the scene, below content. */
+.import-surface > .home-glass-measure { position: absolute; inset: 0; border-radius: inherit; overflow: hidden; pointer-events: none }
+.import-surface .home-glass-definitions { position: absolute; pointer-events: none }
+.import-surface .home-glass-surface {
+  position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background-color: rgb(8 10 14 / var(--glass-tint));
+  background-image: repeating-linear-gradient(to right, #c3c9d50d 0 1px, transparent 1px 28px), repeating-linear-gradient(to bottom, #c3c9d50d 0 1px, transparent 1px 28px);
+  box-shadow: inset 0 1px 1px rgb(255 255 255 / calc(var(--glass-rim) * .24)), inset 0 -1px 2px rgb(255 255 255 / calc(var(--glass-rim) * .07));
+}
+.import-surface[data-theme=light] .home-glass-surface { background-color: rgb(250 251 252 / var(--glass-tint)); background-image: repeating-linear-gradient(to right, #7891a414 0 1px, transparent 1px 28px), repeating-linear-gradient(to bottom, #7891a414 0 1px, transparent 1px 28px) }
+.import-surface .home-glass-surface::before { display:none }
+.import-surface .home-glass-surface::after { content: ''; position: absolute; inset: 0; border-radius: inherit; padding: 1px; pointer-events: none; background: linear-gradient(125deg, rgb(255 255 255 / calc(var(--glass-rim) * .9)), rgb(255 255 255 / calc(var(--glass-rim) * .07)) 34%, rgb(255 255 255 / calc(var(--glass-rim) * .24)) 70%, rgb(255 255 255 / calc(var(--glass-rim) * .9))); mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); mask-composite: exclude }
+.import-surface-content { position: relative; height: 100%; min-width: 0; display: flex; flex-direction: column; animation: import-content-in 260ms cubic-bezier(.16,.8,.25,1) both }
+.import-header, .import-footer { display: flex; align-items: center; gap: 10px; flex: none; padding: 16px 24px }
+.import-header { border-bottom: 1px solid var(--import-line) }
+.import-header > div { flex: 1; min-width: 0 }
+.import-surface .import-header h2 { margin: 0; color: var(--import-ink); font-size: 20px; font-weight: 400; letter-spacing: -.02em }
+.import-header p { font-size: 11px; color: var(--import-muted) }
+.import-surface button.import-close { width: 34px; min-height: 34px; padding: 0; display: grid; place-items: center; border-radius: 50%; flex: none }
+.import-close svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.25; stroke-linecap: round }
+.import-body { flex: 1; min-height: 0; min-width: 0; overflow: auto; padding: 20px 24px; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--import-line) transparent; scrollbar-gutter: stable }
+.import-step { min-width: 0; animation: import-step-in 200ms ease both }
+.import-step[data-leaving=true] { animation: import-step-out 100ms ease both; pointer-events: none }
+.import-footer { border-top: 1px solid var(--import-line); flex-wrap: wrap; justify-content: flex-end; padding-block: 12px }
+.import-footer > .import-footer-note { margin-right: auto; color: var(--import-muted); font-size: 11px; flex: 1 1 160px }
+.import-surface p { margin: 0; overflow-wrap: anywhere }
+.import-surface h3 { margin: 0 0 6px; font-size: 17px; font-weight: 400; line-height: 1.5 }
+.import-surface h4 { margin: 12px 0 6px; font-size: 13px; font-weight: 400 }
+.import-surface :is(h3,h4):focus { outline: none }
+/* Outrank the dedicated mobile root reset without loading desktop globals. */
+dialog.import-surface :is(button,input,select) { box-sizing: border-box; color: inherit; font: inherit; border: 1px solid var(--import-line); border-radius: 8px; background: var(--import-well); min-height: 34px; padding: 5px 10px }
+dialog.import-surface button { border-radius: 999px; font-weight: 400; cursor: pointer; white-space: normal; max-width: 100%; transition: opacity 160ms ease }
+.import-surface button:hover:enabled { border-color: var(--import-gold) }
+.import-surface button:active:enabled { opacity: .78 }
+.import-surface :is(button,input,select,summary,[tabindex]):focus-visible { outline: 2px solid var(--import-gold); outline-offset: 2px }
+.import-surface :is(button,input,select):disabled { opacity: .5; cursor: default }
+.import-surface input, .import-surface select { width: 100%; min-width: 0; font-variant-numeric: tabular-nums }
+.import-surface input::placeholder { color: var(--import-muted); opacity: 1 }
+.import-surface input[aria-invalid=true] { border-color: var(--import-warning) }
+dialog.import-surface label { display: grid; gap: 4px; min-width: 0; color: var(--import-body); font-size: 11px }
+.import-surface label :is(input,select) { font-size: 13px; color: var(--import-ink) }
+.import-surface summary { cursor: pointer; padding: 7px 0; color: var(--import-body); font-size: 12px }
+.import-surface summary::marker { color: var(--import-gold) }
+.import-surface .import-primary { border-color: var(--import-gold); color: var(--import-ink); background: color-mix(in srgb, var(--import-gold) 8%, transparent) }
+.import-progress { display: flex; align-items: center; gap: 18px; margin: 0; padding: 12px 24px 0; list-style: none; color: var(--import-muted); font-size: 11px; flex: none }
+.import-progress li { display: flex; align-items: center; gap: 6px; white-space: nowrap }
+.import-progress-total { display: none }
+.import-progress li::before { content: ''; height: 4px; width: 4px; border-radius: 50%; background: var(--import-line) }
+.import-progress [aria-current=step] { color: var(--import-gold) }
+.import-progress [aria-current=step]::before { background: currentColor }
+.import-surface .import-drop { border-radius: 14px; width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 30px 16px !important; border-style: dashed !important; text-align: center }
+.import-drop > svg { width: 30px; height: 30px; margin-bottom: 4px; color: var(--import-gold); fill: none; stroke: currentColor; stroke-width: 1.2; stroke-linecap: round; stroke-linejoin: round }
+.import-drop strong { font-size: 14px; font-weight: 400 }
+.import-drop small { font-size: 11px; color: var(--import-muted) }
+.import-feedback { display: grid; gap: 8px; margin-top: 14px; font-size: 12px; color: var(--import-body) }
+.import-feedback:empty { display: none }
+.import-feedback button { margin-left: 8px }
+.import-feedback [role=alert] { color: var(--import-warning) }
+.import-surface[data-dragging=true] .import-body { outline: 1px dashed var(--import-gold); outline-offset: -7px }
+.import-surface[data-closing=true] { animation: import-surface-out 180ms ease both; pointer-events: none }
+.import-surface[data-closing=true] .import-surface-content { animation: none }
+.import-surface[data-closing=true]::backdrop { animation: import-fade-out 180ms ease both }
+.import-surface[data-density=comfortable] :is(button,input,select) { min-height: 38px }
+.import-surface[data-reduced-motion=true] *, .import-surface[data-reduced-motion=true], .import-surface[data-reduced-motion=true]::backdrop { animation: none !important; transition: none !important }
+@keyframes import-content-in { from { opacity: 0; transform: translateY(10px) } to { opacity: 1; transform: none } }
+@keyframes import-surface-out { to { opacity: 0; transform: translateY(8px) } }
+@keyframes import-step-in { from { opacity: 0; transform: translateY(5px) } to { opacity: 1; transform: none } }
+@keyframes import-step-out { to { opacity: 0; transform: translateY(-4px) } }
+@keyframes import-fade-in { from { opacity: 0 } to { opacity: 1 } }
+@keyframes import-fade-out { to { opacity: 0 } }
+@media (max-width: 700px) {
+  .import-surface { inset: var(--m-visible-offset-top, 0px) 0 auto; margin: 0 auto; width: 100%; height: var(--m-visible-height, 100dvh); border-radius: 22px 22px 0 0; border-bottom: 0 }
+  .import-header { padding: calc(14px + var(--m-safe-top, env(safe-area-inset-top, 0px))) 16px 12px }
+  .import-progress { gap: 12px; padding-inline: 16px; font-size: 10px }
+  .import-progress li:not([aria-current=step]) { display: none }
+  .import-progress-total { display: inline }
+  .import-body { padding: 18px 16px }
+  .import-footer { padding: 12px 16px calc(12px + var(--m-safe-bottom, env(safe-area-inset-bottom, 0px))); gap: 8px }
+  .import-footer > .import-footer-note { flex-basis: 100% }
+  .import-surface label :is(input,select) { font-size: 14px }
+}
+@media (pointer: coarse) { dialog.import-surface :is(button,input,select), .import-surface button.import-close { min-height: 44px } .import-surface button.import-close { width: 44px } }
+@supports (-webkit-touch-callout: none) { @media (max-width: 700px) { .import-surface label :is(input,select) { font-size: 16px } } }
+@media (prefers-reduced-motion: reduce) { .import-surface, .import-surface *, .import-surface::backdrop { animation: none !important; transition: none !important } }
+@media (forced-colors: active) {
+  .import-surface { border: 1px solid CanvasText; background: Canvas; color: CanvasText; box-shadow: none }
+  .import-surface > .home-glass-measure { display: none }
+  dialog.import-surface :is(button,input,select) { border-color: ButtonText }
+  .import-surface :focus-visible { outline-color: Highlight }
+  .import-surface :is([aria-checked=true],[aria-pressed=true]) { border: 2px solid Highlight }
+}
+.import-select { display: grid; gap: 4px; min-width: 0; align-content: start }
+.import-field-label { font-size: 11px; color: var(--import-body) }
+dialog.import-surface .import-select > button { border-radius: 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; text-align: left; padding-inline: 8px }
+.import-select-options { display: grid; gap: 4px; padding: 4px; border: 1px solid var(--import-line); border-radius: 9px; background: var(--import-well) }
+.import-select-options button { padding: 4px; font-size: 12px }
+.import-select-options [aria-selected=true] { color: var(--import-gold); border-color: var(--import-gold) }

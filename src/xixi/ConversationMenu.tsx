@@ -2,9 +2,11 @@ import { useEffect, useId, useRef, useState } from 'react'
 import type { FormEvent, RefObject } from 'react'
 import type { ConversationSummary } from './types'
 import type { XixiConversation } from './useXixiConversation'
+import { FloatingGlassDialog } from '../ui/FloatingGlassDialog'
 
 export function ConversationMenu({ chat, disabled = false }: { chat: XixiConversation; disabled?: boolean }) {
   const [open, setOpen] = useState(false)
+  const [closeRequested, setCloseRequested] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingTitle, setEditingTitle] = useState('')
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
@@ -17,11 +19,6 @@ export function ConversationMenu({ chat, disabled = false }: { chat: XixiConvers
   useEffect(() => {
     if (!open) { setEditingId(null); setConfirmingId(null); return }
     void chat.loadTopics()
-    const outside = (event: PointerEvent) => {
-      if (event.target instanceof Node && !panel.current?.contains(event.target)) setOpen(false)
-    }
-    document.addEventListener('pointerdown', outside)
-    return () => document.removeEventListener('pointerdown', outside)
   }, [open, chat.loadTopics])
   useEffect(() => { if (editingId) { editInput.current?.focus(); editInput.current?.select() } }, [editingId])
   useEffect(() => { if (confirmingId) cancelDelete.current?.focus() }, [confirmingId])
@@ -33,7 +30,8 @@ export function ConversationMenu({ chat, disabled = false }: { chat: XixiConvers
       target?.focus()
     })
   }
-  const closeMenu = () => { setOpen(false); setEditingId(null); setConfirmingId(null); trigger.current?.focus() }
+  const closeMenu = () => setCloseRequested(true)
+  const finishClose = () => { setOpen(false); setEditingId(null); setConfirmingId(null) }
   const cancelAction = () => {
     const topicId = editingId || confirmingId
     setEditingId(null); setEditingTitle(''); setConfirmingId(null); chat.clearTopicActionError()
@@ -56,22 +54,19 @@ export function ConversationMenu({ chat, disabled = false }: { chat: XixiConvers
     if (await chat.deleteTopic(topic.id)) { setConfirmingId(null); focusRow(topic.id) }
   }
 
-  return <div ref={panel} className="xixi-topic-menu" onKeyDown={event => {
-    if (open && event.key === 'Escape') {
-      event.preventDefault(); event.stopPropagation()
-      if (editingId || confirmingId) cancelAction()
-      else closeMenu()
-    }
-  }}>
-    <button ref={trigger} type="button" className="xixi-text-button" disabled={disabled || chat.busy || chat.loading} aria-expanded={open} aria-controls={id} onClick={() => { chat.clearTopicActionError(); setOpen(value => !value) }}>对话记录</button>
-    {open && <div id={id} className="xixi-topic-popover" role="dialog" aria-label="对话记录">
+  return <div className="xixi-topic-menu">
+    <button ref={trigger} type="button" className="xixi-text-button" disabled={disabled || chat.busy || chat.loading} aria-expanded={open} aria-controls={id} onClick={() => { chat.clearTopicActionError(); setCloseRequested(false); setOpen(true) }}>对话记录</button>
+    {open && trigger.current && <FloatingGlassDialog anchor={trigger.current} id={id} title="对话记录" className="xixi-topics-dialog" width={312} maxHeight={420} placement="below" align="end" closeRequested={closeRequested} onClose={finishClose} onEscape={() => {
+      if (!editingId && !confirmingId) return false
+      cancelAction(); return true
+    }}><div ref={panel} className="xixi-topic-popover">
       <button className="xixi-topic-new" type="button" disabled={chat.busy} onClick={async () => { if (await chat.newTopic()) closeMenu() }}>另开话题 <span aria-hidden="true">＋</span></button>
       {chat.topicsLoading && <p role="status">正在读取</p>}
       {chat.topicsError && <p className="xixi-topic-error" role="alert">{chat.topicsError}<button className="xixi-text-button" type="button" onClick={() => void chat.loadTopics()}>重试</button></p>}
       {chat.topicActionError && <p className="xixi-topic-error" role="alert">{chat.topicActionError}</p>}
       {!chat.topicsLoading && !chat.topics.length && <p className="xixi-topic-empty">还没有其他对话</p>}
       <ul>{chat.topics.map(topic => <TopicRow key={topic.id} topic={topic} active={topic.id === chat.conversation?.conversationId} disabled={chat.busy} editing={editingId === topic.id} editingTitle={editingTitle} confirming={confirmingId === topic.id} editInput={editInput} cancelDelete={cancelDelete} onEditChange={setEditingTitle} onSelect={async () => { if (await chat.selectTopic(topic.id)) closeMenu() }} onRename={() => beginRename(topic)} onSave={submitRename} onCancel={cancelAction} onDelete={() => void deleteTopic(topic)} />)}</ul>
-    </div>}
+    </div></FloatingGlassDialog>}
   </div>
 }
 

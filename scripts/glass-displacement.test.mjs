@@ -217,9 +217,9 @@ test('the texture stays neutral away from the edge frame and only the frame is s
   }
 })
 
-test('the upload-and-encode canvas requests a readback-friendly context without changing pixel output', () => {
+test('the upload-and-encode canvas uses the normal context without changing pixel output', () => {
   assertMatchesReference(341, 619, 23)
-  assert.deepEqual(host.lastContextOptions, { willReadFrequently: true })
+  assert.equal(host.lastContextOptions, undefined)
 })
 
 test('a cached texture is returned for the exact rounded size without touching the canvas', () => {

@@ -1,8 +1,7 @@
-import { randomBytes } from 'node:crypto'
-import { isDeepStrictEqual as equal } from 'node:util'
-import { mergeSyncDocument, syncRevision, validateSyncOperation } from './syncProtocol.mjs'
+import { randomHex, jsonEqual as equal } from './portable.mjs'
+import { mergeSyncDocument, syncRevision, validateSyncOperation } from './syncModel.mjs'
 
-const id = () => randomBytes(16).toString('hex')
+const id = () => randomHex(16)
 const stamp = () => new Date().toISOString()
 const identity = change => `${change.entity}/${change.entityId}`
 const entities = { tasks: '事项', areas: '分类', events: '日历活动', availability: '可安排时间', assignments: '安排', planner: '课表与日程', goals: '余时目标', completions: '完成记录' }

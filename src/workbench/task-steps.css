@@ -9,7 +9,11 @@
 .wb-steps-next > span { font-size: calc(var(--wb-font) - 2px); color: var(--wb-gold) }
 .wb-steps-next p { margin: 5px 0 0; line-height: 1.65; font-size: var(--wb-font); overflow-wrap: anywhere }
 .wb-steps-next[data-complete=true] p { color: var(--wb-gold) }
-.wb-steps-list { flex: 1; min-height: 0; list-style: none; padding: 8px 0; margin: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--wb-gold) 30%, transparent) transparent; overscroll-behavior: contain }
+/* Shared grid cell reserves the tallest page in natural-height layouts; fixed
+   desktop panels keep their existing flex height and per-page scrolling. */
+.wb-steps-window { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); flex: 1; min-height: 0; min-width: 0; overflow: clip }
+.wb-steps-list { grid-area: 1 / 1; min-width: 0; min-height: 0; list-style: none; padding: 8px 0; margin: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--wb-gold) 30%, transparent) transparent; overscroll-behavior: contain }
+.wb-steps-list[data-active=false] { visibility: hidden; pointer-events: none }
 .wb-steps-list > li { border-radius: 10px; transition: background-color 240ms }
 .wb-steps-list > li + li { margin-top: 2px }
 .wb-steps-list > li[data-completed=true] { background: color-mix(in srgb, var(--wb-gold) 6%, transparent) }
@@ -31,8 +35,8 @@
 .wb-steps-pages { display: flex; align-items: center; gap: 8px }
 .wb-steps-pages > span { font-variant-numeric: tabular-nums; white-space: nowrap }
 .p0 .wb-steps-pages button { padding: 5px 6px; color: inherit; font-size: inherit; border-radius: 6px }
-.p0 .wb-steps-pages button:enabled:hover { background: color-mix(in srgb, var(--wb-gold) 10%, transparent); color: var(--wb-gold) }
-.p0 .wb-steps-pages button:disabled { opacity: .4; cursor: default }
+.p0 .wb-steps-pages button:enabled:not([aria-disabled=true]):hover { background: color-mix(in srgb, var(--wb-gold) 10%, transparent); color: var(--wb-gold) }
+.p0 .wb-steps-pages button:is(:disabled,[aria-disabled=true]) { opacity: .4; cursor: default }
 .p0 .wb-steps-pages button:focus-visible { outline: 2px solid var(--wb-gold); outline-offset: 2px }
 .wb-steps-save { white-space: nowrap }
 .wb-steps-error { flex: none; margin: 10px 0 0; font-size: calc(var(--wb-font) - 1px); line-height: 1.65; color: #b26c53; overflow-wrap: anywhere }
@@ -48,6 +52,7 @@
 @media (prefers-reduced-motion: reduce) {
   .wb-steps-progress > span,.wb-steps-list > li,.wb-step-title,.p0 .wb-steps-list input[type=checkbox],.p0 .wb-steps-list input[type=checkbox]::after { transition: none }
 }
+[data-motion=reduced] :is(.wb-steps-progress > span,.wb-steps-list > li,.wb-step-title),.p0 [data-motion=reduced] .wb-steps-list input[type=checkbox],.p0 [data-motion=reduced] .wb-steps-list input[type=checkbox]::after { transition: none }
 @media (forced-colors: active) {
   .p0 .wb-steps-list input[type=checkbox] { appearance: auto }
   .p0 .wb-steps-list input[type=checkbox]::after { display: none }

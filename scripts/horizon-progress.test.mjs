@@ -64,6 +64,21 @@ test('incomplete nested result structures stay uncertain rather than completing 
   }
 })
 
+test('an arrangement question is a no-write result and only accepts actionable choices for a real movable item', async () => {
+  const schedulingQuestion = { prompt: '当前只剩 20 分钟，要分段还是保留完整一段？', sourceId: 'block-one', snapshotKey: result.snapshotKey,
+    options: [{ value: 'split', label: '先做 20 分钟' }, { value: 'whole', label: '保留完整一段' }, { value: 'cancel', label: '先不改' }] }
+  const question = { ...result, operation: null, schedulingQuestion }
+  assert.equal(isHorizonResult(question), true)
+  assert.deepEqual(await readHorizonStream(streamFrom([frame({ type: 'result', result: question })]), () => {}), question)
+  for (const invalid of [
+    { ...question, operation: result.operation },
+    { ...question, items: [{ ...result.items[0], movable: false }] },
+    ...[{ sourceId: 'unknown' }, { snapshotKey: 'stale' }, { options: schedulingQuestion.options.slice(1) },
+      { options: schedulingQuestion.options.slice(0, 2) }, { options: [schedulingQuestion.options[0], schedulingQuestion.options[0]] },
+      { prompt: 'x'.repeat(1001) }].map(patch => ({ ...question, schedulingQuestion: { ...schedulingQuestion, ...patch } })),
+  ]) assert.equal(isHorizonResult(invalid), false)
+})
+
 test('explicit stream errors preserve their real cause and HTTP status', async () => {
   for (const status of [400, 409, 503]) {
     await assert.rejects(readHorizonStream(streamFrom([frame({ type: 'error', error: '今晚空档不足', status })]), () => {}),

@@ -13,6 +13,7 @@ export type Task = {
   id: string
   title: string
   notes?: string
+  collection?: string
   area: AreaId | null
   source: 'manual' | 'ai' | 'import' | 'recurring'
   inbox: boolean

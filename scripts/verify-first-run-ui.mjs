@@ -7,6 +7,8 @@
  *   2. 真实任务：建立一个未排程 todo 后重置引导，工作台必须要求打开真实任务，可跳过，
  *      打开任务再返回后进度变为已完成；
  *   3. 注入态：延迟/失败 /api/tasks，确认 loading 与 error 不被误判成 empty。
+ *   4. 快捷配置无需展开即可继续；手动选项和返回后的选择保留，密钥帮助按需展开。
+ *   5. 桌面与窄屏导览可收起/恢复，三个工作区的几何与滚动位置不被引导挤压。
  * 覆盖 dark/light × clear/soft，截图与 JSON 写入 artifacts/verification/betax-first-run-ui。
  *
  * 只使用本机临时数据与内存凭据；不访问真实数据库、钥匙串或模型，不联网。
@@ -132,14 +134,58 @@ async function runCase({ id, theme, glass, tasks, inject }) {
     const nextLabel = () => text('.first-run-next')
     const shot = async name => writeFile(join(artifacts, name), Buffer.from((await send('Page.captureScreenshot', { format: 'png' })).data, 'base64'))
     const stepIndex = () => evaluate(`Number(document.querySelector('.first-run')?.dataset.step ?? -1)`)
+    const workspaceGeometry = () => evaluate(`(()=>{
+      return [...document.querySelectorAll('.wb-scroll,.pl-scroll,.free-time-viewport')].map(e=>{
+        const r=e.getBoundingClientRect();return {className:e.className,x:r.x,y:r.y,width:r.width,height:r.height,scrollTop:e.scrollTop,scrollLeft:e.scrollLeft}
+      })
+    })()`)
+    const assertNoWorkspaceResize = async label => {
+      const result = await evaluate(`(()=>{
+        const guide=document.querySelector('.first-run'),tour=guide.dataset.tour;
+        const measure=()=>[...document.querySelectorAll('.wb-scroll,.pl-scroll,.free-time-viewport')].filter(e=>!e.closest('[inert],[aria-hidden=true]')).map(e=>{
+          const r=e.getBoundingClientRect();return {className:e.className,x:r.x,y:r.y,width:r.width,height:r.height}
+        });
+        const withGuide=measure();
+        try{guide.removeAttribute('data-tour');return {withGuide,withoutGuide:measure()}}
+        finally{guide.dataset.tour=tour}
+      })()`)
+      assert.deepEqual(result.withGuide, result.withoutGuide, `${label}：引导不改变工作区几何`)
+    }
+    const checkTourCollapse = async label => {
+      // Hidden retained pages intentionally skip layout until needed; their
+      // stale desktop rectangles are refreshed by a later focus/layout pass.
+      // Verify the visible workspace, not geometry the browser may skip.
+      const visibleGeometry = async () => {
+        const rows = await workspaceGeometry()
+        const visible = await evaluate(`['.wb-scroll','.pl-scroll','.free-time-viewport'].filter(s=>{const e=document.querySelector(s);return e&&!e.closest('[inert],[aria-hidden=true]')})`)
+        return rows.filter(row => visible.some(selector => row.className.split(' ').includes(selector.slice(1))))
+      }
+      assert.equal(await evaluate(`document.querySelector('.first-run').dataset.collapsed`), 'true', `${label}：默认紧凑收起`)
+      assert.equal(await evaluate(`document.querySelector('.first-run-toggle').getAttribute('aria-expanded')`), 'false')
+      await assertNoWorkspaceResize(`${label}收起时`)
+      const before = await visibleGeometry()
+      await click('.first-run-toggle')
+      await wait(`document.querySelector('.first-run-toggle').getAttribute('aria-expanded') === 'true' && !document.querySelector('#first-run-body').hidden`, '教程真实展开')
+      await assertNoWorkspaceResize(`${label}展开时`)
+      assert.deepEqual(await visibleGeometry(), before, `${label}：展开不改变可见工作区或滚动位置`)
+      await click('.first-run-toggle')
+      await wait(`document.querySelector('.first-run-toggle').getAttribute('aria-expanded') === 'false' && document.querySelector('#first-run-body').hidden`, '教程真实收起')
+      assert.deepEqual(await visibleGeometry(), before, `${label}：收起后恢复同一工作区`)
+      assert.equal(await evaluate(`(()=>{const d=document.querySelector('.first-run'),b=d.getBoundingClientRect(),n=d.querySelector('.first-run-next').getBoundingClientRect();return b.height<=150&&b.width<=320&&b.left>=0&&b.right<=innerWidth&&b.bottom<=innerHeight&&n.top>=b.top&&n.bottom<=b.bottom})()`), true, `${label}：紧凑入口与继续按钮可达`)
+    }
 
     /** 跳过模型连接后，沿导览一路点进工作台步骤（step 5）。 */
     const advanceToWorkbenchStep = async () => {
       await wait(`document.querySelector('.first-run')?.dataset.tour === 'true'`, '进入导览步骤')
       assert.equal(await stepIndex(), 2, '导览从首页步骤开始')
+      if (!inject) await checkTourCollapse('首页导览')
       for (const step of ['3', '4', '5']) {
         await click('.first-run-next')
         await wait(`document.querySelector('.first-run')?.dataset.step === '${step}'`, `进入导览步骤 ${step}`)
+        if (!inject) {
+          await delay(250)
+          await checkTourCollapse(`导览步骤 ${step}`)
+        }
       }
       await wait(`document.querySelector('.home-workspace')?.dataset.page === 'workbench'`, '首页切到工作台')
     }
@@ -153,11 +199,16 @@ async function runCase({ id, theme, glass, tasks, inject }) {
     await wait('!!document.querySelector(".first-run[open][data-tour=false]")', '首次引导第一步出现')
     assert.notEqual(db.getPreference('onboarding-completed'), true, '引导完成前不写入 onboarding 状态')
 
-    // 第一步：外观、玻璃与个性（真实写入偏好）
-    await evaluate(`[...document.querySelectorAll('.first-run fieldset')].find(e=>e.textContent.includes('玻璃质感')).querySelectorAll('button')[${glass === 'soft' ? 0 : 1}].dataset.qaPick='glass';true`)
-    await click('[data-qa-pick=glass]')
-    await evaluate(`[...document.querySelectorAll('.first-run fieldset')].find(e=>e.textContent.includes('背景')).querySelectorAll('button')[${theme === 'dark' ? 0 : 1}].dataset.qaPick='theme';true`)
-    await click('[data-qa-pick=theme]')
+    // 第一步：空库用例不展开详情即可继续，其他用例仍覆盖完整手动选择与真实保存。
+    assert.equal(await evaluate(`document.querySelector('.first-run-customize').open`), false, '详细设置默认收起')
+    assert.ok((await text('.first-run-config')).includes('ASTaria 推荐'), '快捷页直接展示当前推荐配置')
+    if (id !== 'empty') {
+      await click('.first-run-customize > summary')
+      await evaluate(`[...document.querySelectorAll('.first-run fieldset')].find(e=>e.textContent.includes('玻璃质感')).querySelectorAll('button')[${glass === 'soft' ? 0 : 1}].dataset.qaPick='glass';true`)
+      await click('[data-qa-pick=glass]')
+      await evaluate(`[...document.querySelectorAll('.first-run fieldset')].find(e=>e.textContent.includes('背景')).querySelectorAll('button')[${theme === 'dark' ? 0 : 1}].dataset.qaPick='theme';true`)
+      await click('[data-qa-pick=theme]')
+    }
     assert.equal(await evaluate(`document.querySelector('.first-run').dataset.theme`), theme, '引导主题与选择一致')
     assert.equal(await evaluate(`document.querySelector('.first-run').dataset.glass`), glass, '引导玻璃与选择一致')
     assert.equal(await evaluate(`[...document.querySelectorAll('.first-run-render button')].find(e=>e.textContent==='ASTaria 推荐').getAttribute('aria-pressed')`), 'true')
@@ -166,6 +217,7 @@ async function runCase({ id, theme, glass, tasks, inject }) {
       await click('[data-qa-manual]')
       await evaluate(`for(const [label,value] of [['初始帧率','smooth90'],['初始画质','high']]){const e=document.querySelector('select[aria-label="'+label+'"]');e.value=value;e.dispatchEvent(new Event('change',{bubbles:true}))}true`)
     }
+    if (id !== 'empty') await click('.first-run-customize > summary')
     await send('Emulation.setDeviceMetricsOverride', { width:390, height:760, deviceScaleFactor:1, mobile:false })
     await delay(250)
     assert.equal(await evaluate(`(()=>{const d=document.querySelector('.first-run'),b=d.querySelector('.first-run-next').getBoundingClientRect();return d.scrollWidth<=d.clientWidth+1&&b.bottom<=innerHeight&&b.top>=0})()`), true, 'narrow guide keeps footer reachable')
@@ -173,7 +225,7 @@ async function runCase({ id, theme, glass, tasks, inject }) {
     await send('Emulation.setDeviceMetricsOverride', { width:1440, height:1000, deviceScaleFactor:1, mobile:false })
     await delay(250)
     await shot(`${id}-01-appearance-${theme}-${glass}.png`)
-    assert.equal(await nextLabel(), '继续')
+    assert.equal(await nextLabel(), '保存并继续')
     await click('.first-run-next')
     await wait(`(()=>{const p=document.querySelector('.first-run');return p&&p.dataset.step==='1'})()`, '进入模型连接步骤')
     const saved = getPreferences(db)
@@ -182,9 +234,29 @@ async function runCase({ id, theme, glass, tasks, inject }) {
     assert.equal(saved.render.profile, tasks.length ? 'smooth90' : 'full')
     assert.equal(saved.render.quality, tasks.length ? 'high' : 'auto')
     await wait(`window.__ASTARIA_P0__?.getSnapshot().requestedQuality === '${tasks.length ? 'high' : 'auto'}'`)
+    if (tasks.length) {
+      await click('.first-run footer button:not(.first-run-next)')
+      await wait(`document.querySelector('.first-run').dataset.step === '0'`, '可返回快捷设置')
+      assert.equal(await evaluate(`document.querySelector('select[aria-label="初始帧率"]').value`), 'smooth90', '返回后手动帧率保留')
+      assert.equal(await evaluate(`document.querySelector('select[aria-label="初始画质"]').value`), 'high', '返回后手动画质保留')
+      assert.ok((await text('.first-run-config')).includes('90 FPS'), '收起详情也能核对手动配置')
+      await click('.first-run-next')
+      await wait(`document.querySelector('.first-run').dataset.step === '1'`, '再次进入模型连接')
+    }
 
     // 第二步：跳过模型连接（不填 Key，不触碰凭据）
     await wait(`!!document.querySelector('#first-run-key')`, '模型连接步骤已渲染')
+    assert.equal(await evaluate(`document.querySelector('#first-run-key').type`), 'password', '密钥使用密码输入框')
+    assert.equal(await evaluate(`document.querySelector('.first-run-model-steps').open`), false, '官方操作帮助默认收起')
+    assert.ok((await text('.first-run-model-help')).includes('Ollama / LM Studio'), '桌面说明本地路线')
+    assert.ok((await text('.first-run-model-help')).includes('按 API 用量计费'), '说明开放平台计费')
+    await click('.first-run-model-steps > summary')
+    assert.deepEqual(await evaluate(`[...document.querySelectorAll('.first-run-model-help a')].map(a=>({url:a.href,target:a.target,noopener:a.relList.contains('noopener'),noreferrer:a.relList.contains('noreferrer')}))`), [
+      { url: 'https://platform.deepseek.com/', target: '_blank', noopener: true, noreferrer: true },
+      { url: 'https://platform.deepseek.com/api_keys', target: '_blank', noopener: true, noreferrer: true },
+    ], '仅提供安全官方外链，不打开登录或真实账户')
+    assert.equal(await evaluate(`document.querySelectorAll('.first-run iframe').length`), 0, '没有内嵌登录')
+    await click('.first-run-model-steps > summary')
     assert.equal(await nextLabel(), '稍后配置')
     assert.equal(db.getPreference('model-connection'), null, '跳过模型连接不写连接设置')
     await click('.first-run-next')
@@ -211,12 +283,27 @@ async function runCase({ id, theme, glass, tasks, inject }) {
       else assert.ok(copies.error?.includes('事项暂时未能读取'), `失败时文案说明读取失败：${copies.error}`)
       assert.equal(await evaluate(`document.querySelector('.home-workspace')?.dataset.page`), 'workbench', '注入期间仍停在工作台导览')
       assert.equal(await evaluate(`document.querySelector('.first-run')?.dataset.step`), '5', '注入期间引导仍在 step 5')
+      assert.equal(await nextLabel(), '继续', '加载与失败仍可直接继续')
+      await checkTourCollapse(`${expected} 工作台导览`)
+      await click('.first-run-toggle')
       await shot(`${id}-01-workbench-${expected}-${theme}-${glass}.png`)
       injecting = false
       const injectedRecord = { id, injected: `${inject}:${expected}`, observed: [...seen], copies }
       await writeFile(join(artifacts, `${id}-injected.json`), `${JSON.stringify(injectedRecord, null, 2)}\n`)
       return injectedRecord
     }
+
+    await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 760, deviceScaleFactor: 1, mobile: false })
+    // Let the existing responsive page-position transition finish before
+    // comparing an unrelated guide expand/collapse against its baseline.
+    await delay(800)
+    await checkTourCollapse('窄屏工作台导览')
+    await shot(`${id}-workbench-collapsed-narrow-${theme}-${glass}.png`)
+    await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false })
+    await delay(800)
+    await click('.first-run-toggle')
+    await shot(`${id}-workbench-expanded-${theme}-${glass}.png`)
+    await click('.first-run-toggle')
 
     if (tasks.length) {
       // 真实任务：通过本机 API 建立未排程 todo，再重置引导重新读取
@@ -250,6 +337,7 @@ async function runCase({ id, theme, glass, tasks, inject }) {
       assert.equal(await evaluate(`document.querySelector('.first-run')?.dataset.step`), '5', '仍在工作台导览步骤')
       assert.equal(await text('.first-run .first-run-feedback'), '已完成这一步', '打开并返回后显示已完成')
       assert.equal(await nextLabel(), '继续', '返回后按钮回到继续')
+      await click('.first-run-toggle')
       await shot(`${id}-03-workbench-task-${theme}-${glass}.png`)
     } else {
       // 空库：文案说明没有可开始事项，按钮为继续，不得出现跳过
@@ -260,6 +348,7 @@ async function runCase({ id, theme, glass, tasks, inject }) {
       assert.equal(await nextLabel(), '继续')
       assert.equal(await text('.wb-available .wb-task').catch(() => null), null, '空库没有任务卡')
       assert.deepEqual(db.listTasks({ includeDeleted: true }), [], '数据库里没有任何任务行')
+      await click('.first-run-toggle')
       await shot(`${id}-02-workbench-empty-${theme}-${glass}.png`)
     }
 

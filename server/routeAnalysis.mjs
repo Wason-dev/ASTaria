@@ -1,10 +1,10 @@
-import { randomUUID } from 'node:crypto'
+import { randomUUID } from './portable.mjs'
 import { ValidationError, knownKeys, text, identifier, choice, day, clockTime } from './validation.mjs'
 import { ProviderError } from './provider.mjs'
 import { dayCapacity, blocksForDay, minuteOf } from '../src/planner/model.ts'
 import { localDay } from '../src/home/agenda.ts'
 import { assertContextBudget } from './contextBudget.mjs'
-import { resolveContextBudget } from './modelSettings.mjs'
+import { resolveContextBudget } from './modelSettingsCore.mjs'
 
 const fail = (message, status = 400) => { throw new ValidationError(message, status) }
 const horizons = ['week', 'fourWeeks', 'threeMonths', 'oneYear']

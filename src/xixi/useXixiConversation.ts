@@ -3,32 +3,26 @@ import { chatApi, localApi } from './api'
 import type { ChatAttachment, ChatMessage, ChatStreamDraft, ConversationState, ConversationSummary, LocalStatus, Operation, SavedReasoning } from './types'
 import type { ResponsePhase } from '../prototype/responseEffects'
 import { mergeConversation, mergeOperationReceipt } from './conversationTimeline'
-import { advanceChatStream, restoreChatReasoning } from './stream'
+import { advanceChatStream, restoreChatReasoning, streamHasVisibleProgress } from './stream'
 import { sameSnapshot } from '../stores/sameSnapshot.ts'
 import { startVisiblePolling } from '../stores/visiblePolling.ts'
+import { isReceiptEstimateRequest } from './receiptTaskSettings'
+import { pendingChatRequests } from './pendingChatRequest'
+import type { PendingChatContext, PendingChatRequest, PendingChatRequestStore } from './pendingChatRequest'
 
-export type XixiContext = { page: 'home' | 'workbench' | 'calendar' | 'timetable'; taskId?: string; wishId?: string; freeTimeGoalId?: string; date?: string; timezone: string }
-type PendingMessage = { requestId: string; conversationId: string; text: string; attachments?: ChatAttachment[]; context: XixiContext; createdAt?: string; seq?: number }
+export type XixiContext = PendingChatContext
+type PendingMessage = PendingChatRequest
 type OutgoingMessage = PendingMessage & { delivery: 'sending' | 'failed' }
 const SELECTED_KEY = 'astaria-xixi-conversation-v1'
-const PENDING_KEY = 'astaria-xixi-pending-v1'
 const MODEL_NOT_CONNECTED = '先在设置里连接 API 或本地模型，写下的内容会留在这里'
 
 function selectedConversation() { try { return sessionStorage.getItem(SELECTED_KEY) || null } catch { return null } }
-function pendingRequests(): PendingMessage[] {
-  const value: unknown = JSON.parse(sessionStorage.getItem(PENDING_KEY) || '[]')
-  if (!Array.isArray(value)) throw new Error('无法读取发送记录，请保留原文后重新打开页面')
-  return value.filter((item): item is PendingMessage => Boolean(item && typeof item.requestId === 'string' && typeof item.conversationId === 'string' && typeof item.text === 'string' && item.context && typeof item.context.page === 'string' && (!item.attachments || Array.isArray(item.attachments))))
-}
 function sameAttachments(left: ChatAttachment[] | undefined, right: ChatAttachment[] | undefined) {
   return JSON.stringify(left ?? []) === JSON.stringify(right ?? [])
 }
-function restoredOutgoing(): OutgoingMessage[] {
-  try { return pendingRequests().map(item => ({ ...item, delivery: 'failed' })) } catch { return [] }
-}
-export function useXixiConversation(onTasksChanged: () => void, onNotice: (message: string) => void) {
+export function useXixiConversation(onTasksChanged: () => void, onNotice: (message: string) => void, pendingStore: PendingChatRequestStore = pendingChatRequests) {
   const [conversation, setConversation] = useState<ConversationState | null>(null)
-  const [outgoing, setOutgoing] = useState<OutgoingMessage[]>(restoredOutgoing)
+  const [outgoing, setOutgoing] = useState<OutgoingMessage[]>([])
   const [status, setStatus] = useState<LocalStatus | null>(null)
   const currentStatus = useRef<LocalStatus | null>(null)
   const statusRevision = useRef(0)
@@ -36,6 +30,10 @@ export function useXixiConversation(onTasksChanged: () => void, onNotice: (messa
   const [loadError, setLoadError] = useState('')
   const [error, setError] = useState('')
   const [sending, setSending] = useState(false)
+  const [preparingSend, setPreparingSend] = useState(false)
+  const preparation = useRef<object | null>(null)
+  const restorationRevision = useRef(0)
+  const pendingRestoration = useRef<Promise<void>>(Promise.resolve())
   const [stream, setStream] = useState<ChatStreamDraft | null>(null)
   const [interruptedReasoning, setInterruptedReasoning] = useState<Record<string, ChatStreamDraft>>({})
   const [responsePhase, setResponsePhase] = useState<ResponsePhase>('idle')
@@ -81,15 +79,12 @@ export function useXixiConversation(onTasksChanged: () => void, onNotice: (messa
       busy.current = false
       setStream(null); setSending(false); setResponsePhase('idle')
     }
-    try {
-      const pending = pendingRequests(), retained = pending.filter(item => !withdrawn.has(item.requestId))
-      if (retained.length !== pending.length) sessionStorage.setItem(PENDING_KEY, JSON.stringify(retained))
-    } catch { /* Server-side withdrawal also prevents retry. */ }
+    void pendingStore.remove(withdrawn).catch(() => { /* A later refresh retries cleanup; the server also blocks retry. */ })
     setOutgoing(items => {
       const retained = items.filter(item => !withdrawn.has(item.requestId))
       return retained.length === items.length ? items : retained
     })
-  }, [])
+  }, [pendingStore])
 
   const refreshStatus = useCallback(async () => {
     const requestRevision = ++statusRevision.current
@@ -129,6 +124,16 @@ export function useXixiConversation(onTasksChanged: () => void, onNotice: (messa
 
   useEffect(() => {
     mounted.current = true
+    const currentRestoration = ++restorationRevision.current
+    pendingRestoration.current = pendingStore.list().then(items => {
+      if (!mounted.current || currentRestoration !== restorationRevision.current) return
+      setOutgoing(current => {
+        const known = new Set(current.map(item => item.requestId))
+        return [...current, ...items.filter(item => !known.has(item.requestId) && !cancelledRequests.current.has(item.requestId)).map(item => ({ ...item, delivery: 'failed' as const }))]
+      })
+    }).catch(() => {
+      if (mounted.current && currentRestoration === restorationRevision.current) setError('暂时无法读取本机发送记录，请保留原文后重试')
+    })
     void refreshStatus()
     const stopPolling = startVisiblePolling(() => { void refresh() }, 5000)
     const visible = () => {
@@ -137,6 +142,8 @@ export function useXixiConversation(onTasksChanged: () => void, onNotice: (messa
     document.addEventListener('visibilitychange', visible)
     return () => {
       mounted.current = false
+      restorationRevision.current += 1
+      preparation.current = null
       revision.current += 1
       statusRevision.current += 1
       stopPolling()
@@ -146,34 +153,50 @@ export function useXixiConversation(onTasksChanged: () => void, onNotice: (messa
       busy.current = false
       document.removeEventListener('visibilitychange', visible)
     }
-  }, [refresh, refreshStatus])
+  }, [refresh, refreshStatus, pendingStore])
 
-  const send = useCallback(async (text: string, context: XixiContext, attachments?: ChatAttachment[]) => {
+  const send = useCallback(async (text: string, context: XixiContext, attachments?: ChatAttachment[], retryId?: string) => {
     const content = text.trim()
     if ((!content && !attachments?.length) || busy.current || retractInFlight.current) return false
     if (!conversation) { setError('先连接本机服务，读取对话后再发给我'); return false }
-    if (!currentStatus.current?.configured) {
-      // A provider switch or a temporary status failure must not make a cached
-      // "not configured" result block chat until the app is restarted.
-      busy.current = true
-      try { await refreshStatus() } finally { busy.current = false }
-      if (!mounted.current || selectedId.current !== conversation.conversationId) return false
-      if (!currentStatus.current?.configured) {
-        setError(currentStatus.current ? MODEL_NOT_CONNECTED : '本机服务暂时无法连接，请稍后重试，写下的内容会留在这里')
-        return false
-      }
-    }
+    const preparing = {}
+    preparation.current = preparing
+    busy.current = true
+    setPreparingSend(true)
+    const stillPreparing = () => mounted.current && preparation.current === preparing && selectedId.current === conversation.conversationId
     let request: PendingMessage
     let retrying = false
+    let prepared = false
     try {
-      const pending = pendingRequests()
-      const previous = pending.find(item => !cancelledRequests.current.has(item.requestId) && item.text === content && sameAttachments(item.attachments, attachments) && item.conversationId === conversation.conversationId && item.context.page === context.page && item.context.taskId === context.taskId && item.context.wishId === context.wishId && item.context.freeTimeGoalId === context.freeTimeGoalId && item.context.date === context.date)
+      if (!currentStatus.current?.configured) {
+        // A provider switch or a temporary status failure must not make a cached
+        // "not configured" result block chat until the app is restarted.
+        await refreshStatus()
+        if (!stillPreparing()) return false
+        if (!currentStatus.current?.configured) {
+          setError(currentStatus.current ? MODEL_NOT_CONNECTED : '本机服务暂时无法连接，请稍后重试，写下的内容会留在这里')
+          return false
+        }
+      }
+      await pendingRestoration.current
+      const pending = await pendingStore.list()
+      if (!stillPreparing()) return false
+      const previous = pending.find(item => (!retryId || item.requestId === retryId) && !cancelledRequests.current.has(item.requestId) && item.text === content && sameAttachments(item.attachments, attachments) && item.conversationId === conversation.conversationId && item.context.page === context.page && item.context.taskId === context.taskId && item.context.wishId === context.wishId && item.context.freeTimeGoalId === context.freeTimeGoalId && item.context.date === context.date)
+      if (retryId && !previous) { setError('这条消息的发送记录已更新，请先重新读取对话'); return false }
       request = previous ?? { requestId: crypto.randomUUID(), conversationId: conversation.conversationId, text: content, ...(attachments?.length ? { attachments } : {}), context, createdAt: new Date().toISOString(), seq: Math.max(0, ...conversation.messages.map(item => item.seq), ...pending.filter(item => item.conversationId === conversation.conversationId).map(item => item.seq ?? 0)) + 1 }
       retrying = Boolean(previous)
-      if (!previous) sessionStorage.setItem(PENDING_KEY, JSON.stringify([...pending, request]))
+      await pendingStore.save(request)
+      if (!stillPreparing() || cancelledRequests.current.has(request.requestId)) return false
+      prepared = true
     } catch {
-      setError('暂时无法保存发送记录，请允许浏览器会话存储后重试，原文还在')
+      if (stillPreparing()) setError('暂时无法保存本机发送记录，输入还在，请重试')
       return false
+    } finally {
+      if (preparation.current === preparing) {
+        preparation.current = null
+        if (!prepared) busy.current = false
+        if (mounted.current) setPreparingSend(false)
+      }
     }
     busy.current = true
     activeRequest.current = request.requestId
@@ -189,6 +212,14 @@ export function useXixiConversation(onTasksChanged: () => void, onNotice: (messa
     setResponsePhase('thinking')
     setError('')
     setOutgoing(items => [...items.filter(item => item.requestId !== request.requestId), { ...request, delivery: 'sending' }])
+    // Some isolated test environments stub `window` without timers; fall
+    // back to the ambient setTimeout/clearTimeout so the guard stays safe.
+    const scheduleTimeout: typeof globalThis = typeof window.setTimeout === 'function' ? window : globalThis
+    const progressTimer = scheduleTimeout.setTimeout(() => {
+      if (mounted.current && activeTransport.current === transport && !streamHasVisibleProgress(currentDraft)) {
+        setError('析熙还在整理思路；如果 30 秒内没有回复，可以直接重试，当前消息已保留')
+      }
+    }, 30_000)
     try {
       const { requestId, conversationId, text: messageText, attachments: messageAttachments, context: messageContext } = request
       if (retrying) {
@@ -229,7 +260,8 @@ export function useXixiConversation(onTasksChanged: () => void, onNotice: (messa
       setInterruptedReasoning(items => Object.fromEntries(Object.entries(items).filter(([id]) => id !== requestId)))
       // Never discard the retry ID for a failed or uncertain turn. Completed
       // turns remain idempotent on the server if this cleanup is interrupted.
-      try { sessionStorage.setItem(PENDING_KEY, JSON.stringify(pendingRequests().filter(item => item.requestId !== request.requestId))) } catch { /* Retaining a completed ID is safe. */ }
+      try { await pendingStore.remove([request.requestId]) } catch { /* Retaining a completed ID is safe. */ }
+      if (!isCurrent()) return false
       setOutgoing(items => items.filter(item => item.requestId !== request.requestId))
       const operations = result.operations.filter(operation => operation.requestId === result.requestId && !operation.undoneAt)
       if (operations.length) notice.current(operations.at(-1)!.summary)
@@ -259,6 +291,7 @@ export function useXixiConversation(onTasksChanged: () => void, onNotice: (messa
       }
       return false
     } finally {
+      scheduleTimeout.clearTimeout(progressTimer)
       if (activeTransport.current === transport) {
         activeTransport.current = null
         activeRequest.current = null
@@ -266,12 +299,12 @@ export function useXixiConversation(onTasksChanged: () => void, onNotice: (messa
         if (mounted.current) { setSending(false); setStream(null); setResponsePhase('idle') }
       }
     }
-  }, [conversation, refreshStatus, acceptRetractions, interruptedReasoning])
+  }, [conversation, refreshStatus, acceptRetractions, interruptedReasoning, pendingStore])
 
   const retryMessage = useCallback(async (requestId: string) => {
     const request = outgoing.find(item => item.requestId === requestId)
     if (!request || request.conversationId !== conversation?.conversationId) return false
-    return send(request.text, request.context, request.attachments)
+    return send(request.text, request.context, request.attachments, requestId)
   }, [outgoing, conversation?.conversationId, send])
 
   const retractMessage = useCallback(async (entry: ChatMessage) => {
@@ -288,7 +321,8 @@ export function useXixiConversation(onTasksChanged: () => void, onNotice: (messa
       if (!mounted.current) return false
       if (entry.requestId) {
         cancelledRequests.current.add(entry.requestId)
-        try { sessionStorage.setItem(PENDING_KEY, JSON.stringify(pendingRequests().filter(item => item.requestId !== entry.requestId))) } catch { /* The server also rejects retries of withdrawn turns. */ }
+        try { await pendingStore.remove([entry.requestId]) } catch { /* The server also rejects retries of withdrawn turns. */ }
+        if (!mounted.current) return false
         setOutgoing(items => items.filter(item => item.requestId !== entry.requestId))
         setInterruptedReasoning(items => Object.fromEntries(Object.entries(items).filter(([id]) => id !== entry.requestId)))
         if (activeRequest.current === entry.requestId) {
@@ -308,7 +342,7 @@ export function useXixiConversation(onTasksChanged: () => void, onNotice: (messa
       retractInFlight.current = false
       if (mounted.current) setRetracting(null)
     }
-  }, [conversation])
+  }, [conversation, pendingStore])
 
   const newTopic = useCallback(async () => {
     if (busy.current || retractInFlight.current) return false
@@ -445,7 +479,8 @@ export function useXixiConversation(onTasksChanged: () => void, onNotice: (messa
       const next = await localApi<ConversationState>('/conversations/delete', { conversationId: id })
       if (!mounted.current) return false
       setTopics(items => items.filter(item => item.id !== id))
-      try { sessionStorage.setItem(PENDING_KEY, JSON.stringify(pendingRequests().filter(item => item.conversationId !== id))) } catch { /* Deleted conversations cannot accept a retry on the server. */ }
+      try { await pendingStore.removeConversation(id) } catch { /* Deleted conversations cannot accept a retry on the server. */ }
+      if (!mounted.current) return false
       setOutgoing(items => items.filter(item => item.conversationId !== id))
       setInterruptedReasoning(items => Object.fromEntries(Object.entries(items).filter(([, draft]) => draft.conversationId !== id)))
       if (currentId === id) {
@@ -466,7 +501,7 @@ export function useXixiConversation(onTasksChanged: () => void, onNotice: (messa
       busy.current = false
       if (mounted.current) setChangingTopic(false)
     }
-  }, [acceptRetractions, loadTopics])
+  }, [acceptRetractions, loadTopics, pendingStore])
 
   const loadOlder = useCallback(async () => {
     if (readingOlder.current || !conversation?.hasOlder || conversation.oldestSeq == null) return false
@@ -507,12 +542,12 @@ export function useXixiConversation(onTasksChanged: () => void, onNotice: (messa
       const index = messages.findIndex(entry => entry.role === 'user' && entry.requestId === item.requestId)
       if (index >= 0) {
         if (!messages[index].retractedAt) messages[index] = { ...messages[index], delivery: item.delivery }
-        } else messages.push({ id: `optimistic:${item.requestId}`, seq: item.seq ?? Math.max(0, ...messages.map(entry => entry.seq)) + 1, role: 'user', content: item.text, ...(item.attachments?.length ? { attachments: item.attachments } : {}), createdAt: item.createdAt ?? '', requestId: item.requestId, taskId: item.context.taskId, delivery: item.delivery })
+      } else messages.push({ id: `optimistic:${item.requestId}`, seq: item.seq ?? Math.max(0, ...messages.map(entry => entry.seq)) + 1, role: 'user', content: item.text, ...(item.attachments?.length ? { attachments: item.attachments } : {}), createdAt: item.createdAt ?? '', requestId: item.requestId, taskId: item.context.taskId, ...(item.context.taskId && isReceiptEstimateRequest(item.text) ? { inputKind: 'receipt-estimate' as const } : {}), delivery: item.delivery })
     }
     return { ...conversation, messages: messages.sort((a, b) => a.seq - b.seq) }
   }, [conversation, outgoing])
 
-  return { conversation: visibleConversation, stream, interruptedReasoning, status, loading, loadError, error, sending, responsePhase, changingTopic, undoing, retracting, topics, topicsLoading, topicsError, topicActionError, clearTopicActionError: () => setTopicActionError(''), olderLoading, olderError, busy: sending || changingTopic || Boolean(undoing) || Boolean(retracting), send, retryMessage, retractMessage, undo, newTopic, refresh, refreshStatus, markRead, loadTopics, selectTopic, renameTopic, deleteTopic, loadOlder }
+  return { conversation: visibleConversation, stream, interruptedReasoning, status, loading, loadError, error, sending, preparingSend, responsePhase, changingTopic, undoing, retracting, topics, topicsLoading, topicsError, topicActionError, clearTopicActionError: () => setTopicActionError(''), olderLoading, olderError, busy: preparingSend || sending || changingTopic || Boolean(undoing) || Boolean(retracting), send, retryMessage, retractMessage, undo, newTopic, refresh, refreshStatus, markRead, loadTopics, selectTopic, renameTopic, deleteTopic, loadOlder }
 }
 
 function message(reason: unknown, fallback: string) { return reason instanceof Error ? reason.message : fallback }

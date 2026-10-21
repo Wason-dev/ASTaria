@@ -1,4 +1,6 @@
 import type { ChatResult, ChatStreamActivity, ChatStreamDraft, ChatStreamEvent, SavedReasoning } from './types'
+import { isSourceMetadataList, uniqueSourceMetadata } from './sourceMetadata'
+import { isContextUsage } from './contextUsage'
 
 const interrupted = () => new Error('回复连接已中断，正在核对已保存的内容，可用原消息重试')
 
@@ -8,6 +10,9 @@ export function isChatResult(value: unknown): value is ChatResult {
   return typeof result.requestId === 'string' && typeof result.conversationId === 'string'
     && (result.status === 'completed' || result.status === 'failed')
     && Array.isArray(result.messages) && Array.isArray(result.operations)
+    && (result.contextUsage == null || isContextUsage(result.contextUsage))
+    && result.messages.every(message => message && typeof message === 'object'
+      && (message.sources === undefined || (message.role === 'assistant' && isSourceMetadataList(message.sources))))
 }
 
 function parseEvent(data: string): ChatStreamEvent | null {
@@ -19,6 +24,11 @@ function parseEvent(data: string): ChatStreamEvent | null {
     return { type: 'result', result: value.result }
   }
   if (value.type === 'error' && typeof value.error === 'string') return { type: 'error', error: value.error }
+  if (value.type === 'context-usage') return isContextUsage(value.usage) ? { type: 'context-usage', usage: value.usage } : null
+  if (value.type === 'sources') {
+    if (!isSourceMetadataList(value.sources)) throw interrupted()
+    return { type: 'sources', sources: uniqueSourceMetadata(value.sources) }
+  }
   if (value.type === 'phase' && (value.phase === 'thinking' || value.phase === 'replying' || value.phase === 'executing')) return { type: 'phase', phase: value.phase }
   if (value.type === 'activity' && value.activity && typeof value.activity === 'object' && !Array.isArray(value.activity)) {
     const activity = value.activity as Record<string, unknown>
@@ -33,6 +43,8 @@ function parseEvent(data: string): ChatStreamEvent | null {
   }
   if (typeof value.round === 'number' && Number.isInteger(value.round) && value.round >= 0) {
     if (value.type === 'round') return { type: 'round', round: value.round }
+    if (value.type === 'thinking-title' && typeof value.title === 'string' && value.title.trim()
+      && Array.from(value.title).length <= 24 && !/[<>`\u0000-\u001f]/u.test(value.title)) return { type: 'thinking-title', round: value.round, title: value.title.trim() }
     if ((value.type === 'reasoning' || value.type === 'content') && typeof value.delta === 'string') return { type: value.type, round: value.round, delta: value.delta }
   }
   // Unknown events (including tool payloads) never enter the presentation layer.
@@ -49,7 +61,11 @@ export function restoreChatReasoning(draft: ChatStreamDraft, saved: SavedReasoni
 
 /** Keep the provider's reasoning across tools; temporary prose is not a receipt. */
 export function advanceChatStream(draft: ChatStreamDraft, event: ChatStreamEvent): ChatStreamDraft {
-  if (event.type === 'phase') return { ...draft, phase: event.phase }
+  if (event.type === 'context-usage') return { ...draft, contextUsage: event.usage }
+  if (event.type === 'sources') return { ...draft, sources: uniqueSourceMetadata(event.sources) }
+  if (event.type === 'phase') return { ...draft, phase: event.phase, ...(event.phase !== 'thinking' ? { thinkingTitle: undefined } : {}) }
+  if (event.type === 'thinking-title') return event.round === draft.round && draft.phase === 'thinking' && !draft.content
+    ? { ...draft, thinkingTitle: event.title } : draft
   if (event.type === 'activity') {
     const previous = draft.activities ?? []
     const activities = [...previous.filter(item => item.id !== event.activity.id), event.activity].slice(-12)
@@ -58,7 +74,7 @@ export function advanceChatStream(draft: ChatStreamDraft, event: ChatStreamEvent
   if (event.type !== 'round' && event.type !== 'reasoning' && event.type !== 'content') return draft
   if (event.round < draft.round) return draft
   const next = event.round > draft.round
-    ? { ...draft, round: event.round, content: '', phase: 'thinking' as const }
+    ? { ...draft, round: event.round, content: '', thinkingTitle: undefined, phase: 'thinking' as const }
     : draft
   if (event.type === 'reasoning') {
     if (!event.delta) return next
@@ -71,8 +87,40 @@ export function advanceChatStream(draft: ChatStreamDraft, event: ChatStreamEvent
     const reasoningContent = next.reasoningContent + (!exists && next.reasoningContent ? '\n\n' : '') + event.delta
     return { ...next, reasoningRounds, reasoningContent, phase: 'thinking' }
   }
-  if (event.type === 'content') return { ...next, content: next.content + event.delta, phase: 'replying' }
+  if (event.type === 'content') return { ...next, content: next.content + event.delta, thinkingTitle: undefined, phase: 'replying' }
   return next
+}
+
+/** A visible reply means the model has left its private reasoning phase. */
+export function streamHasVisibleProgress(draft: ChatStreamDraft) {
+  return Boolean(draft.content.trim() || draft.activities?.some(item => item.state === 'done' || item.state === 'failed'))
+}
+
+/** Accept only complete, explicitly marked progress lines. Ordinary thoughts
+ * and unfinished chunks must never become a title by truncating their prose. */
+export function reasoningHeadline(content: string, fallback = '正在思考') {
+  let at = content.lastIndexOf('【进度】')
+  while (at >= 0) {
+    const lineStart = content.lastIndexOf('\n', at - 1) + 1
+    const end = content.indexOf('\n', at)
+    if (!content.slice(lineStart, at).trim() && end >= 0) {
+      const title = content.slice(at + 4, end).trim()
+      if (title && Array.from(title).length <= 24 && !/[<>`\u0000-\u001f]/u.test(title)) return title
+    }
+    if (at === 0) break
+    at = content.lastIndexOf('【进度】', at - 1)
+  }
+  return fallback
+}
+
+/** Progress belongs to the current thinking round, never to a saved reply or
+ * an earlier tool round. First reply text immediately removes this title. */
+export function chatThinkingHeadline(draft: ChatStreamDraft) {
+  if (draft.phase !== 'thinking' || draft.content) return null
+  const current = draft.reasoningRounds?.length
+    ? draft.reasoningRounds.find(item => item.round === draft.round)?.content ?? ''
+    : draft.reasoningContent
+  return reasoningHeadline(current, draft.thinkingTitle || '正在思考')
 }
 
 /** Accept only a complete terminal event; EOF must never turn a draft into a reply. */

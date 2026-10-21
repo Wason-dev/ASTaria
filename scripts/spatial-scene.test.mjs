@@ -69,9 +69,9 @@ test('frozen camera presets project to the expected desktop and mobile CSS cente
   // Expected values use the frozen P0 viewport contract, in CSS pixels.
   const fixtures = [
     [camera, 1440, 900, 936, 441, 61.76470588235294],
-    [camera, 390, 844, 206.7, 371.36, 42.81159420289855],
+    [camera, 390, 844, 214.89, 371.36, 42.81159420289855],
     [interstellar, 1440, 900, 1411.2, 441, 180.88235294117646],
-    [interstellar, 390, 844, 232.44, 371.36, 125.37681159420289],
+    [interstellar, 390, 844, 258.648, 371.36, 125.37681159420289],
   ]
   for (const [preset, width, height, cx, cy, unit] of fixtures) {
     const projection = sceneProjection(preset, width, height)

@@ -7,6 +7,7 @@ import { dayExceptionLabel } from './exceptionLabels'
 import type { PlanBlock, PlannerState, Routine } from './types'
 import { usePeriodMotion } from './usePeriodMotion'
 import { planBlockCompleted } from './completion'
+import { DayTimeline } from './DayTimeline'
 
 type Props = {
   state: PlannerState; tasks: Task[]; selected: string; anchor: Date; now: Date; direction: number; mode?: 'week' | 'day'
@@ -61,19 +62,24 @@ function placeSlots(slots: Slot[]): PlacedSlot[] {
   return result
 }
 
-export function TimetableBoard({ state, tasks, selected, anchor, now, direction, mode = 'week', onSelect, onRoutine, onTask }: Props) {
+export function TimetableBoard(props: Props) {
+  if (props.mode === 'day') return <DayTimeline state={props.state} tasks={props.tasks} selected={props.selected} now={props.now} direction={props.direction} onRoutine={props.onRoutine} onTask={props.onTask} />
+  return <WeekTimetableBoard {...props} />
+}
+
+function WeekTimetableBoard({ state, tasks, selected, anchor, now, direction, mode = 'week', onSelect, onRoutine, onTask }: Props) {
   const root = useRef<HTMLDivElement>(null), keyboardDate = useRef<string | null>(null)
   const today = localDay(now), monday = shiftDay(anchor, -((anchor.getDay() + 6) % 7)), weekKey = mode === 'day' ? selected : localDay(monday)
-  const dates = mode === 'day' ? [new Date(`${selected}T12:00:00`)] : Array.from({ length: 7 }, (_, i) => shiftDay(monday, i))
+  const dates = useMemo(() => mode === 'day' ? [new Date(`${selected}T12:00:00`)] : Array.from({ length: 7 }, (_, i) => shiftDay(monday, i)), [anchor, selected, mode])
   const taskMap = useMemo(() => new Map(tasks.filter(task => !task.deletedAt && task.status !== 'dropped').map(task => [task.id, task])), [tasks])
-  const days = dates.map(date => {
+  const days = useMemo(() => dates.map(date => {
     const day = localDay(date), routines = routinesForDay(state, day), blocks = blocksForDay(state, tasks, day)
     const slots: Slot[] = [
       ...visibleTimetableRoutines(routines).map((routine, index) => ({ key: `routine:${routine.id}:${index}`, start: minuteOf(routine.start), end: minuteOf(routine.end), kind: routine.kind, routine })),
       ...blocks.map(block => ({ key: `plan:${block.id}`, start: minuteOf(block.start), end: minuteOf(block.end), kind: 'plan' as const, block, task: taskMap.get(block.taskId) })),
     ].filter(slot => Number.isFinite(slot.start) && Number.isFinite(slot.end) && slot.end > slot.start)
     return { date, day, slots: placeSlots(slots), routines, capacity: dayCapacity(state, tasks, day, now) }
-  })
+  }), [dates, state, tasks, taskMap, now])
   const startMinute = Math.max(0, Math.floor(Math.min(420, ...days.flatMap(day => day.slots.map(slot => slot.start))) / 60) * 60)
   const endMinute = Math.min(1440, Math.ceil(Math.max(1320, ...days.flatMap(day => day.slots.map(slot => slot.end))) / 60) * 60)
   const duration = endMinute - startMinute, hours = Array.from({ length: duration / 60 + 1 }, (_, index) => startMinute + index * 60)

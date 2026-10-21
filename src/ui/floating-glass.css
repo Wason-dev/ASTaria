@@ -1,0 +1,7 @@
+.floating-glass-outline { position:absolute; inset:0; border:0; border-radius:inherit; box-shadow:inset 0 0 0 1px rgb(255 255 255 / .12); pointer-events:none }
+:is(.floating-glass-dialog,.xixi-settings)[data-theme=light] .floating-glass-outline { box-shadow:inset 0 0 0 1px rgb(65 70 80 / .16) }
+:is(.floating-glass-dialog,.adaptive-select-dialog) .home-glass-surface { box-shadow:none }
+:is(.floating-glass-dialog,.adaptive-select-dialog) .home-glass-surface::after { display:none }
+@keyframes floating-content-in { from { opacity:0; transform:translateY(9px) } to { opacity:1; transform:none } }
+@keyframes floating-outline-in { from { opacity:0 } to { opacity:1 } }
+@keyframes floating-material-in { from { background-color:transparent; box-shadow:none } }

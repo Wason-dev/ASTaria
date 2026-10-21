@@ -1,4 +1,4 @@
-import { lstat, mkdir, readdir, readFile, realpath, rename, unlink, open, access } from 'node:fs/promises'
+import { lstat, mkdir, readdir, realpath, rename, unlink, open, access } from 'node:fs/promises'
 import { constants } from 'node:fs'
 import { isAbsolute, join, relative, sep } from 'node:path'
 import { createHash, randomBytes } from 'node:crypto'
@@ -8,18 +8,34 @@ const keyId = key => createHash('sha256').update(key).digest('hex')
 const hex = value => /^[a-f0-9]{32}$/u.test(value)
 const inside = (path, base) => { const rel = relative(base, path); return rel === '' || !isAbsolute(rel) && rel !== '..' && !rel.startsWith(`..${sep}`) }
 const filename = op => `${String(op.sequence).padStart(12, '0')}-${op.operationId}.op`
+const MAX_SYNC_FILES = 20000
+const accepted = new Set(['applied', 'duplicate', 'kept-local'])
+const statFingerprint = (path, info) => JSON.stringify([path, ...['dev', 'ino', 'size', 'mtimeNs', 'ctimeNs'].map(field => String(info[field]))])
 
 async function directory(path, create = false) {
   if (create) await mkdir(path, { recursive: true, mode: 0o700 })
   const info = await lstat(path)
   if (!info.isDirectory() || info.isSymbolicLink()) throw new Error('同步目录无效或包含符号链接')
 }
-async function file(path, limit = MAX_OPERATION_BYTES * 2) {
-  const info = await lstat(path)
-  if (!info.isFile() || info.isSymbolicLink() || info.size > limit) throw new Error('同步文件无效或过大')
-  const value = await readFile(path)
-  if (value.length > limit) throw new Error('同步文件过大')
-  return value
+async function fileStat(path, limit = MAX_OPERATION_BYTES * 2) {
+  const info = await lstat(path, { bigint: true })
+  if (!info.isFile() || info.isSymbolicLink() || info.size > BigInt(limit)) throw new Error('同步文件无效或过大')
+  return info
+}
+async function file(path, limit = MAX_OPERATION_BYTES * 2, info, read = handle => handle.readFile()) {
+  const expected = statFingerprint(path, info ?? await fileStat(path, limit))
+  const handle = await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0))
+  try {
+    const opened = await handle.stat({ bigint: true })
+    if (!opened.isFile() || statFingerprint(path, opened) !== expected) throw new Error('同步文件在检查期间发生变化，请重试')
+    const value = await read(handle, path)
+    if (value.length > limit) throw new Error('同步文件过大')
+    // Cache only the identity of the bytes we actually authenticated. A replaced
+    // path or a write during this read must not become a successful cache entry.
+    if (statFingerprint(path, await handle.stat({ bigint: true })) !== expected
+      || statFingerprint(path, await fileStat(path, limit)) !== expected) throw new Error('同步文件在检查期间发生变化，请重试')
+    return value
+  } finally { await handle.close() }
 }
 async function atomicWrite(path, bytes) {
   const temp = `${path}.${randomBytes(8).toString('hex')}.partial`
@@ -28,8 +44,15 @@ async function atomicWrite(path, bytes) {
   try { await rename(temp, path) } finally { await unlink(temp).catch(error => { if (error.code !== 'ENOENT') throw error }) }
 }
 
-export function createFolderSync({ store, secrets, dataDirectory, selectDirectory, saveKey, onApplied = () => {} }) {
+export function createFolderSync({ store, secrets, dataDirectory, selectDirectory, saveKey, onApplied = () => {} }, {
+  readOperation = handle => handle.readFile(), fingerprintOperation = statFingerprint,
+} = {}) {
   let working, mutation, timer, mutating = false, stopped = false, message = store.config() ? '同步已配置，等待检查目录' : '尚未设置同步'
+  // These IO hooks allow isolated tests to count reads and simulate a filesystem
+  // retaining metadata; real lstat and descriptor checks always remain active.
+  const verifiedFiles = new Map()
+  let cacheScope, fullRecheckRequested = false
+  const clearCache = () => { verifiedFiles.clear(); cacheScope = undefined }
   const exclusive = action => async (...args) => {
     if (mutating || stopped) throw new Error('同步正在处理，请稍后重试')
     mutating = true
@@ -43,6 +66,7 @@ export function createFolderSync({ store, secrets, dataDirectory, selectDirector
   }
   async function rootFor(selected) {
     if (!isAbsolute(selected)) throw new Error('请选择完整的同步目录')
+    await directory(selected)
     const root = await realpath(selected), local = await realpath(dataDirectory)
     if (inside(root, local) || inside(local, root)) throw new Error('同步目录必须与 ASTaria 本机数据目录分开')
     await directory(root)
@@ -56,6 +80,7 @@ export function createFolderSync({ store, secrets, dataDirectory, selectDirector
     return value
   }
   async function configure({ mode, joinKey, create = false, directory: selected }) {
+    clearCache()
     if (store.config()) throw new Error('请先断开当前同步组')
     if (!['shared', 'syncthing'].includes(mode)) throw new Error('请选择同步方式')
     if (!secrets.available()) throw new Error('当前系统凭据存储不可用')
@@ -85,13 +110,16 @@ export function createFolderSync({ store, secrets, dataDirectory, selectDirector
     await run(true)
     return status()
   }
-  async function scan() {
+  async function scan(fullRecheck) {
+    if (fullRecheck) clearCache()
     const cfg = store.config()
-    if (!cfg) { message = '尚未设置同步'; return }
+    if (!cfg) { clearCache(); message = '尚未设置同步'; return }
     if (cfg.paused) { message = '同步已暂停，本机变更继续排队'; return }
     const key = readKey(), root = await rootFor(cfg.directory), group = await marker(root)
     if (cfg.mode === 'syncthing') await directory(join(root, '.stfolder'))
     if (group.groupId !== cfg.groupId || group.keyId !== keyId(key)) throw new Error('同步目录或密钥发生变化，请检查所选目录')
+    const scope = JSON.stringify([root, cfg.directory, cfg.groupId, group.keyId, cfg.deviceId, cfg.mode])
+    if (cacheScope !== scope) { clearCache(); cacheScope = scope }
     const devices = join(root, '.astaria-sync', 'devices')
     await directory(devices, true)
     const own = join(devices, cfg.deviceId)
@@ -110,7 +138,7 @@ export function createFolderSync({ store, secrets, dataDirectory, selectDirector
       store.exported(operation.operationId)
     }
     let count = 0, applied = false
-    const issues = []
+    const issues = [], visited = new Set()
     for (const entry of (await readdir(devices)).sort()) {
       if (!hex(entry)) continue
       await directory(join(devices, entry))
@@ -119,14 +147,22 @@ export function createFolderSync({ store, secrets, dataDirectory, selectDirector
       for (const name of (await readdir(operations)).sort()) {
         if (name.endsWith('.partial')) { issues.push('有文件尚未完整落地，稍后重试'); continue }
         if (!/^\d{12,16}-[a-f0-9]{32}\.op$/u.test(name)) { issues.push('有无法识别的文件，请检查同步工具的冲突副本'); continue }
-        if (++count > 20000) throw new Error('同步文件超过单轮检查上限，请先暂停并联系维护者')
+        if (++count > MAX_SYNC_FILES) throw new Error('同步文件超过单轮检查上限，请先暂停并联系维护者')
+        const path = join(operations, name)
+        visited.add(path)
         try {
-          const op = decryptSyncOperation(await file(join(operations, name)), key)
+          const info = await fileStat(path), fingerprint = fingerprintOperation(path, info)
+          if (verifiedFiles.has(path) && verifiedFiles.get(path) === fingerprint) continue
+          verifiedFiles.delete(path)
+          const op = decryptSyncOperation(await file(path, MAX_OPERATION_BYTES * 2, info, readOperation), key)
           if (op.deviceId !== entry || filename(op) !== name) throw new Error('文件名称与操作身份不一致')
-          if (store.receive(op) === 'applied') applied = true
-        } catch (error) { issues.push(`${entry.slice(0, 8)}/${name}：${error.message}`) }
+          const result = store.receive(op)
+          if (result === 'applied') applied = true
+          if (!stopped && accepted.has(result) && verifiedFiles.size < MAX_SYNC_FILES) verifiedFiles.set(path, fingerprint)
+        } catch (error) { verifiedFiles.delete(path); issues.push(`${entry.slice(0, 8)}/${name}：${error.message}`) }
       }
     }
+    for (const path of verifiedFiles.keys()) if (!visited.has(path)) verifiedFiles.delete(path)
     // A missing predecessor may have arrived after a previously queued file.
     for (const row of store.pending()) if (store.receive(JSON.parse(row.document)) === 'applied') applied = true
     if (applied) onApplied()
@@ -134,17 +170,30 @@ export function createFolderSync({ store, secrets, dataDirectory, selectDirector
     store.checked()
     message = store.status().conflicts.length ? '有待处理操作，请查看原因' : '本机目录已检查；其他设备送达取决于文件传输'
   }
-  function run(internal = false) {
-    if (stopped || mutating && !internal) return working ?? Promise.resolve()
-    return working ??= scan().catch(error => { message = `同步未完成：${error.code === 'EACCES' || error.code === 'EPERM' ? '目录只读或权限不足' : error.code === 'ENOENT' ? '目录或文件暂未落地，请检查挂载与同步工具' : error.message}` }).finally(() => { working = null })
+  function run(options = false) {
+    // Boolean true keeps its existing meaning: an exclusive action's own scan.
+    const internal = options === true, fullRecheck = options?.fullRecheck === true
+    if (stopped) return working ?? Promise.resolve()
+    if (mutating && !internal) {
+      if (fullRecheck) return mutation.catch(() => {}).then(() => run(options))
+      return working ?? Promise.resolve()
+    }
+    fullRecheckRequested ||= fullRecheck
+    return working ??= (async () => {
+      do {
+        const full = fullRecheckRequested; fullRecheckRequested = false
+        try { await scan(full) }
+        catch (error) { message = `同步未完成：${error.code === 'EACCES' || error.code === 'EPERM' ? '目录只读或权限不足' : error.code === 'ENOENT' ? '目录或文件暂未落地，请检查挂载与同步工具' : error.message}` }
+      } while (!stopped && fullRecheckRequested)
+    })().finally(() => { working = null })
   }
   const status = () => ({ available: secrets.available(), ...store.status(), busy: Boolean(working) || mutating, message })
   return {
     status, configure: exclusive(configure), run,
     start: () => { timer = setInterval(() => { void run() }, 30000); timer.unref?.(); void run() },
-    close: async () => { stopped = true; clearInterval(timer); await Promise.allSettled([working, mutation]) },
+    close: async () => { stopped = true; clearCache(); fullRecheckRequested = false; clearInterval(timer); await Promise.allSettled([working, mutation]); clearCache() },
     pause: exclusive(async paused => { store.pause(paused); await run(true); return status() }),
-    disconnect: exclusive(async () => { store.disconnect(); secrets.remove('sync-key'); message = '已断开，本机数据与共享目录保留'; return status() }),
+    disconnect: exclusive(async () => { clearCache(); store.disconnect(); secrets.remove('sync-key'); message = '已断开，本机数据与共享目录保留'; return status() }),
     exportKey: exclusive(async () => {
       const cfg = store.config(); if (!cfg) throw new Error('尚未配置同步')
       await saveKey(readKey().toString('hex'), path => !inside(path, cfg.directory))
@@ -172,7 +221,7 @@ export async function handleSyncRequest(sync, req, res) {
       if (path === '/api/sync/configure') {
         if (!value || typeof value !== 'object' || Object.keys(value).some(k => !['mode', 'create', 'joinKey'].includes(k)) || typeof value.create !== 'boolean') throw new Error('同步配置无效')
         result = await sync.configure(value)
-      } else if (path === '/api/sync/check') { await sync.run(); result = sync.status() }
+      } else if (path === '/api/sync/check') { await sync.run({ fullRecheck: true }); result = sync.status() }
       else if (path === '/api/sync/pause' && typeof value.paused === 'boolean') result = await sync.pause(value.paused)
       else if (path === '/api/sync/disconnect' && value.confirmed === true) result = await sync.disconnect()
       else if (path === '/api/sync/export-key') result = await sync.exportKey()

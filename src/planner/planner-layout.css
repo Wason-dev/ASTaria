@@ -75,6 +75,11 @@
 /* The daily briefing comes first; the board uses the complete row below. */
 .planner .pl-container,.planner[data-chat-open=true] .pl-container { width:min(var(--pl-width),calc(100% - 2 * var(--home-left))) }
 .planner .pl-overview { height:auto; margin:0 0 14px; min-height:220px }
+.planner[data-mode=day] .pl-overview { min-height:0; margin-bottom:10px }
+.planner[data-mode=day] .pl-overview-grid { grid-template-columns:minmax(180px,.55fr) minmax(0,2.45fr); gap:18px; }
+.planner[data-mode=day] .pl-overview-summary { display:block; }
+.planner[data-mode=day] .pl-layout { margin-top:0; }
+.planner[data-mode=day] .pl-layout > .pl-board { grid-column:1/-1; }
 .planner .pl-overview>.pl-glass-content { padding:18px 20px; min-height:0; height:auto }
 .planner .pl-overview-grid { display:grid; grid-template-columns:minmax(210px,.82fr) minmax(0,1.5fr) minmax(210px,1fr); gap:22px; height:auto; min-height:0; padding:0; overflow:visible; max-height:none; align-items:start }
 .planner .pl-overview-grid[data-view=timetable] { grid-template-columns:minmax(210px,1fr) minmax(0,1.25fr) minmax(0,.95fr) minmax(0,.95fr) }
@@ -155,6 +160,10 @@
 .planner .pl-mode-frame { min-width:0; animation:pl-mode-enter 300ms var(--pl-motion-ease) both }
 .planner .pl-timetable-board[data-mode=day] :is(.pl-timetable-heading,.pl-timetable-grid) { grid-template-columns:42px minmax(0,1fr); min-width:0 }
 .planner .pl-timetable-board[data-mode=day] .pl-timetable-scroll { overflow:visible }
+.planner .pl-timetable-board[data-mode=day] { width:100%; min-width:0 }
+.planner .pl-timetable-board[data-mode=day] .pl-timetable-page { min-height:0; overflow:visible }
+.planner .pl-timetable-board[data-mode=day] .pl-period-window { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); align-items:stretch }
+.planner .pl-timetable-board[data-mode=day] .pl-slot { min-height:74px }
 .planner .pl-timetable-board[data-mode=day] .pl-period-window { min-width:0 }
 .planner .pl-timetable-board[data-mode=day] .pl-timetable-date { flex-direction:row; justify-content:flex-start; gap:12px; padding:10px 12px }
 .planner .pl-timetable-board[data-mode=day] .pl-timetable-date strong { font-size:20px }

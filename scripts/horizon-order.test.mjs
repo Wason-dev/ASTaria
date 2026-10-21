@@ -89,7 +89,7 @@ const reversed = groups => [...groups.filter(group => group.day === 0).reverse()
 /** Swap the two same-day groups without reversing their members. */
 const swapped = groups => [...groups.filter(group => group.day === 0).reverse(), ...groups.filter(group => group.day !== 0)]
 /** The candidate the local packer produces for the reversed draft, in submitted order. */
-const CANDIDATE = [['physics', DATE, '15:00', '15:40'], ['math-b', DATE, '16:00', '16:20'], ['math-a', DATE, '16:20', '16:50'], ['reading', TOMORROW, '11:00', '11:25']]
+const CANDIDATE = [['physics', DATE, '10:30', '11:10'], ['math-b', DATE, '11:10', '11:30'], ['math-a', DATE, '11:30', '12:00'], ['reading', TOMORROW, '11:00', '11:25']]
 /** Blocks whose placement or saved grouping metadata changed, which is what a receipt counts. */
 const changedBlocks = (before, after) => after.blocks.filter(block => {
   const previous = before.blocks.find(item => item.id === block.id)
@@ -262,14 +262,14 @@ test('groups may split, merge and invent new titled groups while an old title st
     'math-a': ['horizon-group-combined', '联合理科'], physics: ['horizon-group-combined', '联合理科'],
     'math-b': ['horizon-group-tail', '数学尾段'], reading: [reading.id, '读完这本书'],
   })
-  // Times did not move: this transaction only persisted the new grouping.
-  assert.deepEqual(placementsOf(f.db.getPlanner()), placementsOf(before))
+  // Changed membership reflows this date into the earliest usable windows.
+  assert.deepEqual(['math-a', 'physics', 'math-b'].map(id => {
+    const block = f.db.getPlanner().blocks.find(item => item.id === id)
+    return [id, block.start, block.end]
+  }), [['math-a', '09:30', '10:00'], ['physics', '10:30', '11:10'], ['math-b', '11:10', '11:30']])
   const after = f.db.getPlanner(), changed = changedBlocks(before, after)
   assert.equal(changed.length, 4)
-  assert.ok(changed.every(block => {
-    const previous = before.blocks.find(item => item.id === block.id)
-    return ['date', 'start', 'end'].every(key => previous[key] === block[key])
-  }))
+  assert.ok(changed.every(block => minutesOf(block) === minutesOf(before.blocks.find(item => item.id === block.id))))
   assert.match(result.summary, /已按新顺序调整 4 段日程/)
   // Saved membership wins on the next read, and the omitted old title is kept.
   const next = svc.list({ date: DATE })

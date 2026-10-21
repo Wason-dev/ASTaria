@@ -7,14 +7,26 @@
     --p0-muted: #55616b;
     --p0-line: #41465026;
     --p0-accent: #927443;
+    --light-scene-rgb: 252 253 255;
+    --light-glass-rgb: 250 251 252;
     --home-menu-shadow: 0 6px 18px #252d3914;
   }
   /* A UI wash lifts the light scene without changing its renderer or optics.
      It sits before the home controls, so glass still samples the scene below. */
-  .p0 .home-workspace[data-page=home][data-theme=light][data-effect-preview=false]::before { content: ''; position: absolute; inset: 0; background: rgb(252 253 255 / .56); pointer-events: none }
+  .p0 .home-workspace[data-page=home][data-theme=light][data-effect-preview=false]::before { content: ''; position: absolute; inset: 0; background: rgb(var(--light-scene-rgb) / .56); pointer-events: none }
+  /* The light source belongs to the shared scene, not the departing page.
+     Covering free time must leave this same veil under the real camera flight. */
+  .p0 .home-workspace[data-page=free-time][data-theme=light]::before { content: ''; position: absolute; inset: 0; background: rgb(var(--light-scene-rgb) / .65); pointer-events: none }
+  .p0 .home-workspace[data-page=schedule][data-theme=light]:has(.mobile-schedule-workspace)::before { content: ''; position: absolute; inset: 0; background: rgb(var(--light-scene-rgb) / .6); pointer-events: none }
+  .p0 .home-workspace[data-theme=light] .free-time-background { background: transparent }
+  .p0 .home-workspace[data-theme=light] .m-calendar-body { box-shadow: 0 8px 28px rgb(37 45 57 / .3) }
+  /* Outrank mobile's fixed .82 workspace fill, so the actual material wins. */
+  .p0 .home-workspace[data-theme=light] .mobile-schedule-workspace .mobile-schedule-panel .home-glass-surface { background: rgb(var(--light-glass-rgb) / var(--glass-tint)) }
   .p0:has(.home-workspace[data-page=home][data-theme=light]) .p0-whisper { visibility: visible }
+  .p0:has(.home-workspace[data-theme=light]) .p0-whisper { color: #626b75 }
   .p0 .home-workspace[data-theme=light] :is(.home-scene-ui,.home-menu,.home-notification,.home-task-dialog) .home-glass-surface { background: rgb(250 251 252 / var(--glass-tint)) }
-  .p0 .home-workspace[data-theme=light] :is(.home-morph,.home-notification) { box-shadow: 0 8px 28px #252d391c }
+  .p0 .home-workspace[data-theme=light] .home-morph { box-shadow:0 8px 28px #252d391c }
+  .p0 .home-workspace[data-theme=light] .home-notification { box-shadow:0 8px 28px #252d391c }
   .p0 .home-workspace[data-theme=light] :is(.home-xixi,.home-agenda,.home-xixi textarea,.home-task-dialog) { text-shadow: none }
   .p0 .home-workspace[data-theme=light] .home-launch:hover { color: #806233 }
   .p0 .home-workspace[data-theme=light] .home-menu button[aria-current] { background: #ffffff70; color: #806233 }
@@ -37,11 +49,6 @@
   .p0 .home-workspace[data-theme=light] .home-xixi .xixi-markdown pre code { background: none }
   .p0 .home-workspace[data-theme=light] .home-xixi :is(.xixi-send-error,.xixi-topic-error) { color: #965944 }
   .p0 .home-workspace[data-theme=light] .home-xixi .xixi-message[data-delivery=failed] .xixi-delivery { color: #896934 }
-  .p0 .home-workspace[data-theme=light] .home-xixi .xixi-topic-popover { background: linear-gradient(135deg,#ffffffc7,#f7f8faf0); color: #303941; border-color: #8f7d5d30; box-shadow: inset 0 1px #ffffffc7,0 10px 24px #252d391c }
-  .p0 .home-workspace[data-theme=light] .home-xixi .xixi-topic-popover :is(.xixi-topic-new,.xixi-topic-confirm-delete) { color: #806337 }
-  .p0 .home-workspace[data-theme=light] .home-xixi .xixi-topic-popover time { color: #65717c }
-  .p0 .home-workspace[data-theme=light] .home-xixi .xixi-topic-edit input { background: #ffffff70; border-color: #92744366 }
-  .p0 .home-workspace[data-theme=light] .home-xixi .xixi-topic-popover :is(button,input):focus-visible { outline-color: #927443 }
 
   .p0 .home-workspace[data-theme=light] .home-day-highlight { background: #ffffff91; box-shadow: inset 0 0 0 1px #a587524d }
   .p0 .home-workspace[data-theme=light] .home-month-grid button[aria-pressed=true] { color: #806233 }

@@ -7,6 +7,8 @@ export type Routine = {
   weekCycle?: 'weekly' | 'odd' | 'even'
   /** Monday of school week 1, explicit for alternating schedules. */
   weekAnchor?: string
+  /** Verified timetable information; separate from the packing checklist. */
+  courseInfo?: { period: string; teacher: string; classGroup: string; note: string }
   /** Present only on the read projection of a single-date fixed event. */
   sourceDate?: string
 }

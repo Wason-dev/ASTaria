@@ -10,6 +10,10 @@ test('Windows uses native glass by default and permits explicit detailed refract
   assert.equal(supportsGlassRefraction(windows, 'detailed'), true)
   assert.equal(supportsGlassRefraction('Mozilla/5.0 (Macintosh) Chrome/150.0'), true)
   assert.equal(supportsGlassRefraction('Mozilla/5.0 (Macintosh) Safari/605.1', 'detailed'), false)
+  const android = 'Mozilla/5.0 (Linux; Android 12; wv) AppleWebKit/537.36 Chrome/110.0.0.0 Mobile Safari/537.36'
+  assert.equal(supportsGlassRefraction(android), false)
+  assert.equal(supportsGlassRefraction(android, 'detailed'), true)
+  assert.equal(supportsGlassRefraction('Mozilla/5.0 (iPhone) AppleWebKit/605.1.15 Mobile Safari/604.1'), false)
 })
 
 test('glass rendering upgrades old preferences and persists separately from black-hole quality', () => {

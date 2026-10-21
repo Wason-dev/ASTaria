@@ -6,6 +6,8 @@ import { VitePWA } from 'vite-plugin-pwa'
 import { localServicePlugin } from './server/index.mjs'
 
 export default defineConfig(({ mode }) => ({
+  build: { outDir: mode === 'mobile' ? 'dist-mobile' : 'dist' },
+  worker: { format: 'es' },
   plugins: [
     localServicePlugin(),
     react(),
@@ -15,8 +17,8 @@ export default defineConfig(({ mode }) => ({
       registerType: 'autoUpdate',
       // Design previews must not reopen an older cached build. Publish the
       // retirement worker for existing registrations without registering anew.
-      injectRegister: ['design-preview', 'desktop'].includes(mode) ? false : 'auto',
-      selfDestroying: ['design-preview', 'desktop'].includes(mode),
+      injectRegister: ['design-preview', 'desktop', 'mobile'].includes(mode) ? false : 'auto',
+      selfDestroying: ['design-preview', 'desktop', 'mobile'].includes(mode),
       includeAssets: ['favicon.png', 'apple-touch-icon.png', 'astaria-icon-1024.png'],
       manifest: {
         name: 'ASTaria',
@@ -34,7 +36,7 @@ export default defineConfig(({ mode }) => ({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest}'],
+        globPatterns: ['**/*.{js,css,html,svg,png,ico,woff,woff2,ttf,webmanifest}'],
         navigateFallback: 'index.html',
         cleanupOutdatedCaches: true,
       },

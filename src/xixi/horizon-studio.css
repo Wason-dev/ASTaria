@@ -111,6 +111,7 @@
 .horizon-fixed li strong { font-weight:400; color:#d9cdb8 }
 .horizon-studio .orbit-error { left:50%; right:auto; translate:-50% 0; width:min(680px,90vw); max-height:100px; overflow:auto; bottom:188px; margin:0; line-height:1.8; text-align:center; opacity:var(--orbit-reveal) }
 .horizon-studio .orbit-error span { display:block; color:#aa9b81 }
+.horizon-studio .orbit-error>p { margin:0 }
 
 .horizon-progress { position:absolute; z-index:5; bottom:102px; left:50%; translate:-50% 0; width:min(540px,calc(100vw - 48px)); max-height:var(--horizon-progress-height,130px); display:flex; flex-direction:column; box-sizing:border-box; padding:0 12px; background:transparent; pointer-events:auto; opacity:var(--horizon-ui-reveal,var(--orbit-reveal)); text-shadow:0 1px 8px #000; }
 .horizon-progress-line { flex:none; display:flex; align-items:center; gap:10px; color:#ded1b9; font-size:12px; line-height:1.65; letter-spacing:.04em }
@@ -150,3 +151,16 @@
 
 /* The editor shares the live scene; only the inactive reading layer retires. */
 .horizon-studio>div[inert] :is(.orbit-heading,.horizon-day-heading,.orbit-hit-layer,.orbit-footer,.orbit-caption,.horizon-browse,.orbit-error,.horizon-progress,.horizon-group-detail) { opacity:0; pointer-events:none; transition:opacity 180ms ease }
+
+/* Arrangement choices occupy the existing feedback space, with no new glass layer. */
+.horizon-studio[data-choosing=true] :is(.orbit-hit-layer,.orbit-caption,.horizon-browse) { opacity:0; pointer-events:none }
+.horizon-scheduling-question { max-height:min(280px,45dvh); padding:10px 12px 0; overflow:auto; overscroll-behavior:contain; border-top:1px solid #d1b17a26; scrollbar-width:thin; scrollbar-color:#b39b6659 transparent }
+.horizon-scheduling-question>span { color:#d5bd93; font-size:11px; letter-spacing:.06em }
+.horizon-scheduling-question>p { margin:8px 0 12px; color:#d4d0c9; font-size:12px; line-height:1.8; white-space:pre-line; overflow-wrap:anywhere }
+.horizon-scheduling-question>small { display:block; margin-top:6px; color:#b9b6af; font-size:10px; line-height:1.6 }
+.horizon-scheduling-question .xixi-quick-options { display:flex; flex-wrap:wrap; gap:8px; padding-bottom:6px }
+.p0 .horizon-scheduling-question .xixi-quick-options button { min-height:36px; padding:8px 12px; border:1px solid #d1b17a30; border-radius:10px; color:#ded1b9; background:#080a0e38; font-size:11px; line-height:1.5 }
+.p0 .horizon-scheduling-question .xixi-quick-options button:is(:hover,:focus-visible) { border-color:#d5bd9380; color:#f3e1bc }
+.p0 .horizon-scheduling-question .xixi-quick-options button:focus-visible { outline:1px solid #d5bd93; outline-offset:2px }
+@media(pointer:coarse) { .p0 .horizon-scheduling-question .xixi-quick-options button { min-height:44px } }
+@media(forced-colors:active) { .horizon-scheduling-question { border-color:CanvasText } .p0 .horizon-scheduling-question .xixi-quick-options button { border-color:ButtonText; color:ButtonText } }

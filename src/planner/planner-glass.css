@@ -1,15 +1,18 @@
 /* The outer panes sample the scene. Inner plates use translucent, bevelled
    surfaces so scrolling does not stack dozens of live backdrop filters. */
 .planner {
-  --pl-plate: linear-gradient(125deg, #ffffff08, transparent 38%, #ffffff03 76%, #ffffff07), rgb(8 10 14 / var(--pl-inner-tint));
-  --pl-plate-hover: linear-gradient(125deg, #ffffff0c, transparent 42%, #d5bb8b08), rgb(8 10 14 / var(--pl-inner-tint));
+  /* Inner plates use the same quiet grid as the planner background. A flat
+     fill keeps the center from becoming a second light source; the material
+     is carried by the outer surface and its restrained rim. */
+  --pl-plate: repeating-linear-gradient(to right, #e1ded50d 0 1px, transparent 1px 28px), repeating-linear-gradient(to bottom, #e1ded50d 0 1px, transparent 1px 28px), rgb(8 10 14 / var(--pl-inner-tint));
+  --pl-plate-hover: repeating-linear-gradient(to right, #e1ded514 0 1px, transparent 1px 28px), repeating-linear-gradient(to bottom, #e1ded514 0 1px, transparent 1px 28px), rgb(8 10 14 / calc(var(--pl-inner-tint) + .025));
   --pl-plate-line: #e1ded526;
   --pl-plate-shadow: inset 0 1px 0 rgb(255 255 255 / calc(var(--pl-rim) * .3)), inset 0 -1px 0 #ffffff06, 0 3px 10px #00000012;
   --pl-ease: cubic-bezier(.22,.72,.22,1);
 }
 .planner[data-theme=light] {
-  --pl-plate: linear-gradient(125deg, #ffffff24, transparent 42%, #ffffff10), rgb(250 251 252 / var(--pl-inner-tint));
-  --pl-plate-hover: linear-gradient(125deg, #ffffff38, transparent 42%, #d5bb8b0c), rgb(250 251 252 / var(--pl-inner-tint));
+  --pl-plate: repeating-linear-gradient(to right, #7891a414 0 1px, transparent 1px 28px), repeating-linear-gradient(to bottom, #7891a414 0 1px, transparent 1px 28px), rgb(250 251 252 / var(--pl-inner-tint));
+  --pl-plate-hover: repeating-linear-gradient(to right, #7891a41b 0 1px, transparent 1px 28px), repeating-linear-gradient(to bottom, #7891a41b 0 1px, transparent 1px 28px), rgb(250 251 252 / calc(var(--pl-inner-tint) + .035));
   --pl-plate-line: #4146501c;
   --pl-plate-shadow: inset 0 1px 0 rgb(255 255 255 / calc(var(--pl-rim) * .9)), inset 0 -1px 0 #35414a08, 0 3px 10px #252d3909;
 }
@@ -18,15 +21,28 @@
 .planner[data-theme=dark] { --pl-ink:#eeeae3; --pl-body:#d4d0c9; --pl-muted:#bcc0c7; --pl-line:#e1ded526; --pl-gold:#d5bb8b; --pl-well:#080a0e14 }
 .planner[data-theme=light] { --pl-ink:#30343a; --pl-body:#55616b; --pl-muted:#626b75; --pl-line:#4146501c; --pl-gold:#a58752; --pl-well:#fafbfc18 }
 .planner[data-theme=dark] .pl-background { background:rgb(0 0 0 / calc(var(--pl-bg-opacity) * .68)) }
-.planner[data-theme=light] .pl-background { background:rgb(252 253 255 / var(--pl-bg-opacity)) }
+.planner[data-theme=light] .pl-background { background:rgb(var(--light-scene-rgb,252 253 255) / var(--pl-bg-opacity)) }
 .planner .pl-background::after { content:''; position:absolute; inset:0; pointer-events:none; background-image:linear-gradient(to right,#c3c9d510 1px,transparent 1px),linear-gradient(to bottom,#c3c9d510 1px,transparent 1px); background-size:36px 36px; opacity:.65 }
 .planner[data-theme=light] .pl-background::after { background-image:linear-gradient(to right,#7891a414 1px,transparent 1px),linear-gradient(to bottom,#7891a414 1px,transparent 1px) }
 .p0 .planner[data-theme=dark] .pl-glass .home-glass-surface { background:rgb(8 10 14 / var(--glass-tint)) }
-.p0 .planner[data-theme=light] .pl-glass .home-glass-surface { background:rgb(250 251 252 / var(--glass-tint)) }
+.p0 .planner[data-theme=light] .pl-glass .home-glass-surface { background:rgb(var(--light-glass-rgb,250 251 252) / var(--glass-tint)) }
 .planner .pl-container { margin:max(12px,calc(var(--pl-top) - 76px)) auto 24px }
 .planner .pl-glass { border-color:transparent; box-shadow:0 8px 28px rgb(0 0 0 / var(--pl-shadow)) }
 .planner[data-theme=light] .pl-glass { box-shadow:0 8px 28px rgb(37 45 57 / var(--pl-shadow)) }
 .planner[data-theme] .pl-glass-content { text-shadow:none }
+
+/* Planner dialogs and the import family share one material contract. Keep the
+   grid in the material layer so it stays behind content, and remove the broad
+   reflection that made the middle of each panel glow independently. */
+.planner .pl-dialog > .home-glass-measure .home-glass-surface {
+  background-color:rgb(8 10 14 / var(--glass-tint));
+  background-image:repeating-linear-gradient(to right, #c3c9d50d 0 1px, transparent 1px 28px), repeating-linear-gradient(to bottom, #c3c9d50d 0 1px, transparent 1px 28px);
+}
+.planner[data-theme=light] .pl-dialog > .home-glass-measure .home-glass-surface {
+  background-color:rgb(250 251 252 / var(--glass-tint));
+  background-image:repeating-linear-gradient(to right, #7891a414 0 1px, transparent 1px 28px), repeating-linear-gradient(to bottom, #7891a414 0 1px, transparent 1px 28px);
+}
+.planner .pl-dialog > .home-glass-measure .home-glass-surface::before { display:none }
 .planner .pl-page-header h2 { font-size:calc(var(--pl-font) + 12px); font-weight:450; letter-spacing:-.025em }
 .planner .pl-eyebrow { font-size:calc(var(--pl-font) - 2px); letter-spacing:.08em }
 .planner .pl-life-section h4 { color:var(--pl-body) }

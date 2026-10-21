@@ -1,5 +1,5 @@
 import type { FreeTimeGoal, Wish } from '../xixi/companionTypes'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import type { Task, TaskStatus } from '../domain/task'
 import type { SceneCamera } from '../spatial/scene'
@@ -12,11 +12,11 @@ import { HomeStatus } from './HomeStatus'
 import { HomeAgenda } from './HomeAgenda'
 import { HomeDeadlinePicker } from './HomeDeadlinePicker'
 import { useLocalTime } from './useLocalTime'
-import { Workbench } from '../workbench/Workbench'
 import { useAppearance } from '../workbench/appearance'
 import { useXixiConversation } from '../xixi/useXixiConversation'
 import { ConversationLog } from '../xixi/ConversationLog'
 import { ConversationMenu } from '../xixi/ConversationMenu'
+import { ContextMeter } from '../xixi/ContextMeter'
 import { ChatAttachmentPicker, ChatAttachmentPreview } from '../xixi/ChatAttachmentPicker'
 import { useChatAttachment } from '../xixi/useChatAttachment'
 import { ChatImageDropProvider } from '../xixi/ChatImageDrop'
@@ -24,23 +24,27 @@ import type { ChatAttachment } from '../xixi/types'
 import { useChatSubmitKey } from '../xixi/useChatSubmitKey'
 import { restoreWithdrawnDraft } from '../xixi/draft'
 import { selectCurrentTask } from './currentTask'
-import { LocalSettings } from '../xixi/LocalSettings'
 import { notifyLocalDataChange } from '../stores/migration'
 import { localApi } from '../xixi/api'
 import { localDay } from './agenda'
-import { PlannerWorkspace } from '../planner/PlannerWorkspace'
 import type { PlannerPage } from '../planner/PlannerWorkspace'
 import type { ResponseEffectSettings, ResponsePhase } from '../prototype/responseEffects'
 import type { RenderProfile, RenderScene, RenderQuality } from '../prototype/renderProfile'
 import { usePreferences, notificationsAllowed } from '../xixi/preferences'
-import { OrbitStudio } from '../xixi/OrbitStudio'
-import { FreeTimePanel } from '../xixi/FreeTimePanel'
 import { useXixiNotice } from '../xixi/useXixiNotice'
 import { BlackHoleEntry } from './BlackHoleEntry'
 import { FirstRunGuide } from './FirstRunGuide'
+import { TimetableImport } from '../planner/TimetableImport'
+import { IcsTimetableImport } from '../planner/IcsTimetableImport'
 import { ScenarioReceiptDialog } from '../xixi/ScenarioReceiptDialog'
 import { HOME_GLASS } from './glass'
 import { chatCameraProgress, chatInteractionPhase, CHAT_COLLAPSED_PROGRESS, CHAT_READY_PROGRESS } from './chatMotion'
+const Workbench = lazy(() => import('../workbench/Workbench').then(module => ({ default: module.Workbench })))
+const LocalSettings = lazy(() => import('../xixi/LocalSettings').then(module => ({ default: module.LocalSettings })))
+const PlannerWorkspace = lazy(() => import('../planner/PlannerWorkspace').then(module => ({ default: module.PlannerWorkspace })))
+const MobileScheduleWorkspace = lazy(() => import('../../mobile/ui/MobileScheduleWorkspace').then(module => ({ default: module.MobileScheduleWorkspace })))
+const OrbitStudio = lazy(() => import('../xixi/OrbitStudio').then(module => ({ default: module.OrbitStudio })))
+const FreeTimePanel = lazy(() => import('../xixi/FreeTimePanel').then(module => ({ default: module.FreeTimePanel })))
 import './home.css'
 import './retained-pages.css'
 import './scrollbars.css'
@@ -61,6 +65,7 @@ type WorkspacePage = 'home' | 'workbench' | 'settings' | 'companion' | 'free-tim
 function readDraft(key = DRAFT_KEY) { try { return sessionStorage.getItem(key) ?? '' } catch { return '' } }
 
 export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onResponseEffect, onResponsePhase, onRenderProfile, sceneUnavailable }: Props) {
+  const mobile = Boolean(document.documentElement.dataset.mobile)
   const data = useSpatialTasks()
   const now = useLocalTime()
   const today = localDay(now)
@@ -73,6 +78,8 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
   }, [today])
   const [page, setPage] = useState<WorkspacePage>('home')
   const [showFirstRun, setShowFirstRun] = useState(false)
+  const [importingTimetable, setImportingTimetable] = useState(false)
+  const [importingIcs, setImportingIcs] = useState(false)
   const [firstRunTheme, setFirstRunTheme] = useState<'dark' | 'light' | null>(null)
   useEffect(() => {
     let mounted = true
@@ -82,6 +89,10 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
     return () => { mounted = false }
   }, [])
   const [freeTimeMounted, setFreeTimeMounted] = useState(false)
+  const [workbenchMounted, setWorkbenchMounted] = useState(false)
+  const [scheduleMounted, setScheduleMounted] = useState(false)
+  useEffect(() => { if (page === 'workbench') setWorkbenchMounted(true) }, [page])
+  useEffect(() => { if (page === 'schedule') setScheduleMounted(true) }, [page])
   useEffect(() => { if (page === 'free-time') setFreeTimeMounted(true) }, [page])
   const appearance = useAppearance()
   const preferences = usePreferences()
@@ -99,7 +110,8 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
   }, [visibleTheme, onThemeChange])
   const [notification, setNotification] = useState('')
   const proactiveNotice = useXixiNotice(preferences.value, preferences.loaded)
-  useEffect(() => { if (!notification) return; const timer = setTimeout(() => setNotification(''), 12000); return () => clearTimeout(timer) }, [notification])
+  // Keep notices available until the strings transition has fully closed.
+  useEffect(() => { if (!notification || stringsOpen) return; const timer = setTimeout(() => setNotification(''), 12000); return () => clearTimeout(timer) }, [notification, stringsOpen])
   const chat = useXixiConversation(() => { data.retry(); notifyLocalDataChange() }, setNotification)
   useEffect(() => { onResponseEffect(preferences.value.effect) }, [preferences.value.effect, onResponseEffect])
   useEffect(() => { onRenderProfile(preferences.value.render?.profile ?? 'full', page === 'home' ? 'home' : 'workspace', preferences.value.render?.quality) }, [preferences.value.render?.profile, preferences.value.render?.quality, page, onRenderProfile])
@@ -149,8 +161,6 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
   const [draftWarning, setDraftWarning] = useState('')
   const image = useChatAttachment(data.saving || data.loading || Boolean(data.loadError) || chat.busy || chat.loading)
   const { attachment, setAttachment } = image
-  const [saveError, setSaveError] = useState('')
-  const [savedIds, setSavedIds] = useState<string[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [layout, setLayout] = useState({ width: innerWidth, height: innerHeight, taskBottom: innerHeight * .43 + 49 })
   const root = useRef<HTMLDivElement>(null)
@@ -193,7 +203,7 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
     if (launch.current) { launch.current.style.opacity = String(Math.max(0, 1 - amount * 4)); launch.current.style.visibility = amount > .35 ? 'hidden' : 'visible' }
     if (deck.current) { deck.current.style.opacity = String(Math.max(0, Math.min(1, (amount - .45) / .55))); deck.current.style.visibility = amount > .35 ? 'visible' : 'hidden' }
   }, [sceneUnavailable, cameraMissing, chatOpen, layout, compact])
-  const camera = useSceneCamera(readCamera, `${page}:${chatOpen}:${stringsOpen}`, animateSceneUI, chatInteractionPhase)
+  const camera = useSceneCamera(readCamera, `${page}:${chatOpen}:${stringsOpen}:${layout.width}:${layout.height}`, animateSceneUI, chatInteractionPhase)
   const progress = sceneUnavailable || cameraMissing ? Number(chatOpen) : chatCameraProgress(camera)
 
   useEffect(() => {
@@ -202,19 +212,22 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
 
   const currentTask = useMemo(() => selectCurrentTask(data.tasks), [data.tasks])
   const selectedTask = data.tasks.find(task => task.id === selectedId)
-  const receipts = savedIds.map(id => data.tasks.find(task => task.id === id)).filter((task): task is Task => Boolean(task))
 
   useEffect(() => {
     const measure = () => {
       if (!root.current || !current.current) return
       const box = root.current.getBoundingClientRect()
-      setLayout({ width: box.width, height: box.height, taskBottom: current.current.getBoundingClientRect().bottom - box.top })
+      const height = mobile ? Number.parseFloat(document.documentElement.style.getPropertyValue('--m-visible-height')) || box.height : box.height
+      const taskBottom = current.current.getBoundingClientRect().bottom - box.top
+      setLayout(previous => previous.width === box.width && previous.height === height && previous.taskBottom === taskBottom
+        ? previous : { width: box.width, height, taskBottom })
     }
     const observer = new ResizeObserver(measure)
     if (root.current) observer.observe(root.current)
     if (current.current) observer.observe(current.current)
-    return () => observer.disconnect()
-  }, [])
+    document.addEventListener('astaria-mobile-viewport-change', measure)
+    return () => { observer.disconnect(); document.removeEventListener('astaria-mobile-viewport-change', measure) }
+  }, [mobile])
   useEffect(() => () => clearTimeout(menuTimer.current), [])
   useEffect(() => {
     const list = menuList.current
@@ -351,24 +364,9 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
     setDraft(readDraft())
     if (returnToWishes) changePage('free-time')
   }
-  const capture = async () => {
-    if (!draft.trim() || data.saving || data.loading || data.loadError || chat.busy) return
-    setSaveError('')
-    const lines = draft.trim().split(/\r?\n/)
-    const title = lines[0].trim()
-    if (title.length > 160) { setSaveError('第一行作为事项名称，请控制在 160 字以内'); return }
-    try {
-      const task = await data.create({ title, notes: lines.slice(1).join('\n') })
-      setSavedIds(ids => [...ids, task.id])
-      setDraft('')
-      stopInputPulse()
-      compose.current?.focus()
-    } catch (reason) { setSaveError(reason instanceof Error ? reason.message : '保存失败，请保留原文后重试') }
-  }
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     if (image.isReading() || (!draft.trim() && !attachment) || data.saving || data.loading || data.loadError || chat.busy) return
-    setSaveError('')
     const sent = draft
     const revision = draftRevision.current
     const accepted = await chat.send(sent, { page: 'home', ...(clarifyingWish ? { wishId: clarifyingWish.id } : {}), ...(refiningPlan ? { freeTimeGoalId: refiningPlan.id } : {}), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }, attachment ? [attachment] : undefined)
@@ -432,9 +430,10 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
   const radius = 19 + (15 - 19) * progress
   const chatVisible = progress > .35
 
-  return <GlassRenderingContext.Provider value={preferences.value.render?.glass ?? 'auto'}><div ref={root} className="home-workspace" data-spatial-ui data-string-covered={stringCovered} data-theme={visibleTheme} data-chat-open={chatOpen} data-page={page} data-grid={preferences.value.grid} data-card-edges={preferences.value.cardEdges ?? 'both'} data-motion={preferences.value.effect.motion} data-effect-preview={previewPhase !== null}>
+  return <GlassRenderingContext.Provider value={preferences.value.render?.glass ?? 'auto'}><div ref={root} className="home-workspace" data-spatial-ui data-import-open={importingTimetable || importingIcs} data-string-covered={stringCovered} data-theme={visibleTheme} data-glass-tone={preferences.value.glassTone ?? 'light'} data-chat-open={chatOpen} data-page={page} data-grid={preferences.value.grid} data-card-edges={preferences.value.cardEdges ?? 'both'} data-motion={preferences.value.effect.motion} data-effect-preview={previewPhase !== null}>
+    {mobile && <div className="mobile-workspace-scene" aria-hidden="true" />}
     <ChatImageDropProvider blocked={showFirstRun || stringsOpen || settingsOpen || previewPhase !== null || Boolean(selectedId) || Boolean(receiptScenarioId) || chat.busy || chat.loading || data.saving || data.loading || Boolean(data.loadError)}
-      onBlocked={() => setNotification('请先结束当前操作，再添加图片')}
+      onBlocked={() => setNotification('请先结束当前操作，再添加图片或文档')}
       onFiles={files => { changePage('home', true); void image.selectFiles(files) }}>
     <nav ref={nav} className="home-nav" aria-label="ASTaria 导航" data-menu-open={menuOpen} inert={previewPhase !== null} aria-hidden={previewPhase !== null}
       onPointerEnter={event => { if (event.pointerType !== 'touch') { clearTimeout(menuTimer.current); menuOpenedByHover.current = !menuOpen; setMenuOpen(true) } }}
@@ -459,7 +458,7 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
         <svg className="home-nav-hint" viewBox="0 0 10 10" aria-hidden="true"><path d="m3.5 2 3 3-3 3" /></svg>
       </button>
       <div id="home-menu" className="home-menu" data-open={menuOpen} inert={!menuOpen} aria-hidden={!menuOpen}>
-        <GlassSamplingContext.Provider value={menuOpen}><MeasuredGlassSurface radius={13} settleResize /></GlassSamplingContext.Provider>
+        <GlassSamplingContext.Provider value={menuOpen}><MeasuredGlassSurface radius={13} settleResize material={homeGlass} /></GlassSamplingContext.Provider>
         <ul ref={menuList} className="home-menu-list" onFocusCapture={event => {
           const list = event.currentTarget, target = event.target as HTMLElement
           const listBox = list.getBoundingClientRect(), targetBox = target.getBoundingClientRect()
@@ -482,7 +481,7 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
         </ul>
       </div>
     </nav>
-    <HomeStatus now={now} showClock={!sceneUnavailable} notification={notificationsAllowed(preferences.value.notifications, now) ? notification || proactiveNotice : notification || '免打扰 · 变更记录已保留'} onNotification={() => {
+    <HomeStatus now={now} showClock={!sceneUnavailable && !mobile} showNotification={!stringsOpen} notification={notificationsAllowed(preferences.value.notifications, now) ? notification || proactiveNotice : notification || '免打扰 · 变更记录已保留'} onNotification={() => {
       if (proactiveNotice.startsWith('有未读变更') || notification) { openSettings(); setSettingsTab('通知') }
       else changePage('free-time')
     }} />
@@ -520,11 +519,9 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
           <strong>析熙</strong>
         </div><div className="xixi-header-actions"><ConversationMenu chat={chat} />{compact && <button ref={informationToggle} className="home-information-toggle" onClick={() => setInformationActive(true)} aria-controls="home-agenda">日程 →</button>}</div></header>
         <ConversationLog chat={chat} active={page === 'home' && chatOpen && progress >= CHAT_READY_PROGRESS && (!compact || !informationActive)} onSettings={openSettings}
-          context={{ page: 'home', ...(clarifyingWish ? { wishId: clarifyingWish.id } : {}), ...(refiningPlan ? { freeTimeGoalId: refiningPlan.id } : {}), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }} onSent={sent => { setDraft(value => value.trim() === sent ? '' : value); setAttachment(null) }} onRetracted={restoreDraft}>
-          {receipts.map(task => <div className="home-receipt" key={task.id}><span>已记为事项</span><button onClick={() => openTask(task.id)}>{task.title}</button></div>)}
-        </ConversationLog>
+          context={{ page: 'home', ...(clarifyingWish ? { wishId: clarifyingWish.id } : {}), ...(refiningPlan ? { freeTimeGoalId: refiningPlan.id } : {}), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }} onSent={sent => { setDraft(value => value.trim() === sent ? '' : value); setAttachment(null) }} onRetracted={restoreDraft} />
         <form onSubmit={event => void submit(event)}>
-          <label className="p0-sr-only" htmlFor="home-compose">写下你的事情，发送给析熙，或手动记为事项</label>
+          <label className="p0-sr-only" htmlFor="home-compose">写下你的事情，发送给析熙</label>
           <div className="home-input-shell" data-pulsing={inputPulse !== null}>
           {inputPulse !== null && <span key={inputPulse} className="home-input-flash" aria-hidden="true" onAnimationEnd={event => {
             if (event.target === event.currentTarget) setInputPulse(current => current === inputPulse ? null : current)
@@ -542,13 +539,13 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
               setDraft(value)
             }} onBlur={stopInputPulse} {...submitKeys} />
           </div>
-          <ChatAttachmentPreview attachment={attachment} error={image.error} reading={image.reading} onRemove={() => setAttachment(null)} disabled={data.saving || chat.busy} />
-          <div className="home-compose-actions"><button className="xixi-text-button xixi-manual" type="button" disabled={data.saving || chat.busy || data.loading || Boolean(data.loadError) || !draft.trim()} onClick={() => void capture()}>{data.saving ? '正在保存' : '只记为事项'}</button><div className="xixi-send-actions">
+          <ChatAttachmentPreview attachment={attachment} error={image.error} reading={image.reading} readingLabel={image.readingLabel} onRemove={() => setAttachment(null)} disabled={data.saving || chat.busy} />
+          <div className="home-compose-actions"><div className="xixi-compose-tools"><ContextMeter key={chat.conversation?.conversationId} chat={chat} /></div><div className="xixi-send-actions">
             <ChatAttachmentPicker id="home-image-upload" onFiles={files => { void image.selectFiles(files) }} disabled={data.saving || data.loading || Boolean(data.loadError) || chat.busy || chat.loading} />
             <button className="home-capture" type="submit" disabled={image.reading || data.saving || data.loading || Boolean(data.loadError) || chat.busy || chat.loading || (!draft.trim() && !attachment)}>{chat.sending ? '正在想' : '发给析熙'}</button>
           </div></div>
           {chat.error && <p className="xixi-send-error" role="alert">{chat.error}{!chat.status?.configured && <button type="button" className="xixi-text-button" onClick={openSettings}>打开设置</button>}</p>}
-          {(saveError || draftWarning || data.loadError) && <p className="home-form-error" role="alert">{saveError || draftWarning || data.loadError}{data.loadError && <button type="button" onClick={data.retry}>重试读取</button>}</p>}
+          {(draftWarning || data.loadError) && <p className="home-form-error" role="alert">{draftWarning || data.loadError}{data.loadError && <button type="button" onClick={data.retry}>重试读取</button>}</p>}
         </form>
       </section>
       <HomeAgenda tasks={data.tasks} now={now} loading={data.loading} error={data.loadError}
@@ -563,12 +560,16 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
     </div>
     </div>
     </GlassSamplingContext.Provider>
-    <Workbench active={page === 'workbench'} appearance={appearance} data={data} now={now} onCapture={() => changePage('home', true)} onNotice={setNotification} chat={chat} onSettings={openSettings} />
-    <PlannerWorkspace active={page === 'schedule'} tasks={data.tasks} tasksLoading={data.loading} tasksError={data.loadError} now={now} appearance={appearance} onNotice={setNotification} onRefresh={data.retry} />
-    {(freeTimeMounted || page === 'free-time') && <FreeTimePanel onClarifyWish={clarifyWish} onRefinePlan={refinePlan} active={page === 'free-time' && !stringCovered} today={today} theme={preferences.value.theme} grid={preferences.value.grid} glass={preferences.value.glass} onOpenStrings={() => openStrings()} stringsEnabled={!showFirstRun} onChanged={freeTimeChanged} onNotice={setNotification} />}
-    {settingsOpen && <LocalSettings initialTab={settingsTab} onClose={closeSettings} onSaved={chat.refreshStatus} onPreviewEffect={previewEffect} onPreviewPhaseChange={changePreviewPhase} onStopPreview={stopPreview} previewPhase={previewPhase} />}
-    {stringsOpen && <OrbitStudio preview={stringsPreview} onPreviewDayChange={() => setPreviewDayChanged(true)} onReveal={() => setStringCovered(false)} onClose={closeStrings} onSaved={message => { data.retry(); void chat.refresh(); setNotification(message) }} />}
-    {showFirstRun && preferences.loaded && <FirstRunGuide preferences={preferences.value} previewOpen={stringsPreview} previewComplete={previewReturned && previewDayChanged} onStartHorizon={() => { setPreviewReturned(false); setPreviewDayChanged(false); openStrings(true) }} onPreviewThemeChange={setFirstRunTheme} onTourPageChange={next => changePage(next)} onDone={() => { setShowFirstRun(false); void chat.refreshStatus() }} />}
+    <Suspense fallback={null}>{(!mobile || workbenchMounted || page === 'workbench') && <Workbench active={page === 'workbench'} appearance={appearance} data={data} now={now} onCapture={() => changePage('home', true)} onNotice={setNotification} chat={chat} onSettings={openSettings} />}</Suspense>
+    <Suspense fallback={null}>{mobile ? (scheduleMounted || page === 'schedule') && <MobileScheduleWorkspace active={page === 'schedule'} tasks={data.tasks} now={now} preferences={preferences.value} onRefresh={data.retry} onChat={text => {
+      draftRevision.current += 1; setDraft(value => value.trim() ? `${value}\n${text}` : text); changePage('home', true)
+    }} /> : <PlannerWorkspace active={page === 'schedule'} tasks={data.tasks} tasksLoading={data.loading} tasksError={data.loadError} now={now} appearance={appearance} onNotice={setNotification} onRefresh={data.retry} />}</Suspense>
+    <Suspense fallback={null}>{(freeTimeMounted || page === 'free-time') && <FreeTimePanel onClarifyWish={clarifyWish} onRefinePlan={refinePlan} active={page === 'free-time' && !stringCovered} today={today} theme={preferences.value.theme} grid={preferences.value.grid} glass={preferences.value.glass} onOpenStrings={() => openStrings()} stringsEnabled={!showFirstRun} onChanged={freeTimeChanged} onNotice={setNotification} />}</Suspense>
+    <Suspense fallback={null}>{settingsOpen && <LocalSettings initialTab={settingsTab} onClose={closeSettings} onSaved={chat.refreshStatus} onPreviewEffect={previewEffect} onPreviewPhaseChange={changePreviewPhase} onStopPreview={stopPreview} previewPhase={previewPhase} />}</Suspense>
+    <Suspense fallback={null}>{stringsOpen && <OrbitStudio preview={stringsPreview} onPreviewDayChange={() => setPreviewDayChanged(true)} onReveal={() => setStringCovered(false)} onClose={closeStrings} onSaved={message => { data.retry(); void chat.refresh(); setNotification(message) }} />}</Suspense>
+    {showFirstRun && preferences.loaded && <FirstRunGuide preferences={preferences.value} previewOpen={stringsPreview || importingTimetable || importingIcs || settingsOpen} previewComplete={previewReturned && previewDayChanged} onStartHorizon={() => { setPreviewReturned(false); setPreviewDayChanged(false); openStrings(true) }} onImportTimetable={() => setImportingTimetable(true)} onImportIcs={() => setImportingIcs(true)} onOpenModelSettings={openSettings} onPreviewThemeChange={setFirstRunTheme} onTourPageChange={next => changePage(next)} onDone={() => { setShowFirstRun(false); void chat.refreshStatus() }} />}
+    {importingTimetable && <TimetableImport onClose={() => setImportingTimetable(false)} onSaved={(_state, operation) => { notifyLocalDataChange(); data.retry(); setNotification(operation?.undoneAt ? '已撤销本次课表导入' : '课表已导入，可继续快捷设置') }} />}
+    {importingIcs && <IcsTimetableImport onClose={() => setImportingIcs(false)} onSaved={() => { notifyLocalDataChange(); data.retry(); setNotification('ICS 课程已导入，可继续快捷设置') }} />}
     {selectedId && <TaskDialog task={selectedTask} saving={data.saving} onClose={closeTask} onStatus={data.setStatus} />}
     {receiptScenarioId && <ScenarioReceiptDialog scenarioId={receiptScenarioId} tasks={data.tasks} tasksLoading={data.loading} tasksError={data.loadError} onChanged={freeTimeChanged} onClose={() => setReceiptScenarioId(null)} onNotice={setNotification} />}
   </ChatImageDropProvider></div></GlassRenderingContext.Provider>

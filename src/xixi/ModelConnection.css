@@ -1,10 +1,23 @@
-.xixi-model-modes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:12px 0}
-:is(.p0,.app-shell) .xixi-settings .xixi-model-modes button{display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:left;padding:10px 12px;background:transparent}
+.xixi-model-modes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:12px 0}
+.xixi-model-cloud-row>.adaptive-select{max-width:70%;min-width:0}
+.xixi-model-fields .adaptive-select{display:flex;width:100%;margin-top:5px}
+.xixi-model-engine label>.adaptive-select{width:60%;min-width:0}
+.xixi-model-modes[data-mobile=true]{grid-template-columns:minmax(0,1fr)}
+:is(.p0,.app-shell) .xixi-settings .xixi-model-modes button{display:flex;align-items:center;justify-content:center;gap:8px;min-width:0;text-align:center;padding:10px 8px;background:transparent}
 .xixi-model-modes strong{font-size:12px;font-weight:500}.xixi-model-modes span{font-size:10px;color:var(--settings-muted)}
-:is(.p0,.app-shell) .xixi-settings .xixi-model-modes button[aria-pressed=true]{border-color:#d8bb7970;background:#d8bb7917;color:var(--settings-accent)}
+:is(.p0,.app-shell) .xixi-settings .xixi-model-modes button[aria-pressed=true]{border-color:color-mix(in srgb,var(--settings-accent) 45%,transparent);background:color-mix(in srgb,var(--settings-accent) 9%,transparent);color:var(--settings-accent)}
 .xixi-model-fields{display:grid;grid-template-columns:minmax(110px,.65fr) minmax(0,1.8fr);gap:10px}
 :is(.p0,.app-shell) .xixi-settings .xixi-model-fields label{margin-top:2px}
 .xixi-model-fields :is(input,select){width:100%;margin-top:5px}
+.xixi-model-compatible-fields{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.xixi-model-compatible-fields>label{min-width:0}
+.xixi-model-compatible-note{display:block;margin-top:5px;line-height:1.7;overflow-wrap:anywhere}
+.xixi-model-compatible-note a{color:var(--settings-accent);text-underline-offset:3px}
+.xixi-model-compatible-key{margin-top:10px;padding-top:1px;border-top:1px solid var(--settings-line)}
+.xixi-model-compatible-key>button{margin-top:7px}
+.xixi-model-connection :is(summary,a):focus-visible{outline:2px solid var(--settings-accent);outline-offset:3px;border-radius:4px}
+:is(.p0,.app-shell) .xixi-settings #xixi-compatible-address-note[data-invalid=true]{color:var(--settings-ink)}
+:is(.p0,.app-shell) .xixi-settings #xixi-compatible-url[aria-invalid=true]{border-color:var(--settings-accent)}
 .xixi-model-address-note,.xixi-model-list-note{display:block;margin-top:3px;line-height:1.6;overflow-wrap:anywhere}
 :is(.p0,.app-shell) .xixi-settings .xixi-model-address-note[data-invalid=true]{color:#e1ab93}
 .xixi-model-input-action{display:flex;align-items:center;gap:8px;min-width:0}.xixi-model-input-action input{flex:1;min-width:0}.xixi-model-input-action button{flex:none;white-space:nowrap}
@@ -44,4 +57,8 @@
   :is(.p0,.app-shell) .xixi-settings .xixi-model-cloud-row select{padding:6px 9px}
   .xixi-model-cloud-row{padding-bottom:6px}.xixi-model-thinking-row{padding-top:6px}
   .xixi-model-stream,.xixi-model-context-budget{margin-top:6px;padding-top:6px}.xixi-model-actions{margin-top:8px}
+}
+@media(forced-colors:active){
+  :is(.p0,.app-shell) .xixi-settings .xixi-model-modes button[aria-pressed=true]{border-color:Highlight;color:Highlight}
+  .xixi-model-connection :is(summary,a):focus-visible{outline-color:Highlight}
 }

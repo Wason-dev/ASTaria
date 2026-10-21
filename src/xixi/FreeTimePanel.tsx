@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useId, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { agendaDate, localDay } from '../home/agenda'
 import { GlassSamplingContext, MeasuredGlassSurface } from '../home/GlassSurface'
@@ -86,14 +86,23 @@ function LongPlanProgress({ goal, plan }: { goal: FreeTimeGoal; plan: PlanProgre
   </>
 }
 
-function Pane({ children, className = '', blur = 0, settleResize = false }: { children: ReactNode; className?: string; blur?: number; settleResize?: boolean }) {
-  return <section className={`free-time-pane ${className}`}><MeasuredGlassSurface radius={20} settleResize={settleResize} material={{ transmission: 100, blur, rim: 40, shadow: 30 }} /><div className="free-time-pane-content">{children}</div></section>
+function PaneGlass({ blur = 0, settleResize = false }: { blur?: number; settleResize?: boolean }) {
+  return <MeasuredGlassSurface radius={20} settleResize={settleResize} material={{ transmission: 100, blur, rim: 40, shadow: 30 }} />
+}
+
+function Pane({ children, className = '', blur = 0, settleResize = false, surface = true }: { children: ReactNode; className?: string; blur?: number; settleResize?: boolean; surface?: boolean }) {
+  return <section className={`free-time-pane ${className}`}>{surface && <PaneGlass blur={blur} settleResize={settleResize} />}<div className="free-time-pane-content">{children}</div></section>
 }
 
 // Retain editors across navigation without rerendering them for every camera
 // frame or starting another preference poll/clock behind the destination page.
 export const FreeTimePanel = memo(function FreeTimePanel({ onClarifyWish, onRefinePlan, onChanged, onNotice, active = true, onOpenStrings, stringsEnabled = true, today, theme, grid, glass }: Props) {
   const id = useId()
+  const [mobile] = useState(() => document.documentElement.hasAttribute('data-mobile'))
+  const [mobileView, setMobileView] = useState<'goals' | 'plans' | 'wishes'>('goals')
+  const [mobileTarget, setMobileTarget] = useState(mobileView)
+  const [mobilePhase, setMobilePhase] = useState<'idle' | 'exit' | 'prepare' | 'enter'>('idle')
+  const mobileContent = useRef<HTMLDivElement>(null)
   const heading = useRef<HTMLHeadingElement>(null)
   const [state, setState] = useState<CompanionState | null>(null)
   const [loading, setLoading] = useState(true)
@@ -118,6 +127,52 @@ export const FreeTimePanel = memo(function FreeTimePanel({ onClarifyWish, onRefi
   const [shortfalls, setShortfalls] = useState<PlanResult['shortfalls']>([])
   const [latestOperation, setLatestOperation] = useState<string | null>(null)
   const [removing, setRemoving] = useState<string | null>(null)
+  useLayoutEffect(() => {
+    const media = matchMedia('(prefers-reduced-motion: reduce)')
+    const commit = () => {
+      setMobileView(mobileTarget)
+      if (mobileTarget === 'wishes') setTab('considering')
+      else if (mobileTarget === 'goals') setTab('goals')
+    }
+    const finish = () => { commit(); setMobilePhase('idle') }
+    const reduced = () => media.matches || Boolean(mobileContent.current?.closest('[data-motion=reduced]'))
+    if (!mobile || !active || document.hidden || reduced()) { finish(); return }
+
+    // CSS transitions continue from the current painted opacity/translation on
+    // reversal. Keep the old content mounted until its actual exit completes;
+    // changing a target during exit only changes the eventual destination.
+    let cancelled = false
+    let frame = 0
+    const content = () => [...mobileContent.current?.querySelectorAll<HTMLElement>('.free-time-pane-content') ?? []]
+    const afterMotion = (done: () => void) => {
+      const animations = content().flatMap(element => element.getAnimations())
+      void Promise.allSettled(animations.map(animation => animation.finished)).then(() => { if (!cancelled) done() })
+    }
+    if (mobileView !== mobileTarget) {
+      if (mobilePhase === 'prepare') commit() // Already invisible: do not flash an intermediate destination.
+      else if (mobilePhase !== 'exit') setMobilePhase('exit')
+      else afterMotion(() => { commit(); setMobilePhase('prepare') })
+    } else if (mobilePhase === 'exit') setMobilePhase('enter') // Cancel an exit without jumping to opacity 1.
+    else if (mobilePhase === 'prepare') {
+      // Establish the incoming content's original 4px entry pose before making
+      // it visible. This is one bounded frame, never a retained animation loop.
+      content().forEach(element => { void getComputedStyle(element).opacity })
+      frame = requestAnimationFrame(() => setMobilePhase('enter'))
+    } else if (mobilePhase === 'enter') afterMotion(() => setMobilePhase('idle'))
+    else return
+
+    const onReduced = () => { if (document.hidden || reduced()) finish() }
+    media.addEventListener('change', onReduced)
+    document.addEventListener('visibilitychange', onReduced)
+    const motionHost = mobileContent.current?.closest('[data-motion]')
+    const observer = new MutationObserver(onReduced)
+    if (motionHost) observer.observe(motionHost, { attributes: true, attributeFilter: ['data-motion'] })
+    return () => {
+      cancelled = true; cancelAnimationFrame(frame); observer.disconnect()
+      media.removeEventListener('change', onReduced)
+      document.removeEventListener('visibilitychange', onReduced)
+    }
+  }, [mobileTarget, mobileView, mobilePhase, active, mobile])
   const refresh = useCallback(async () => {
     const revision = ++readRevision.current
     const next = await localApi<CompanionState>(`/companion?date=${today}&days=7`)
@@ -272,17 +327,20 @@ export const FreeTimePanel = memo(function FreeTimePanel({ onClarifyWish, onRefi
   const sessionPages = Math.max(1, Math.ceil(shownSessions.length / 4))
   const currentPlanPage = Math.min(planPage, sessionPages - 1)
   const opportunity = state?.opportunities.find(item => item.kind === 'wish' && item.date === date)
-  const migratedWish = (wish: Wish) => { setWishEditing(null); setEditing({ wish, draft: { ...EMPTY_DRAFT, title: wish.content.slice(0, 160), sessionMin: String(Math.min(wish.minutes, 20)), sessionMax: String(Math.max(wish.minutes, 40)), targetNote: wish.clarification?.firstStep ?? (wish.evidence !== wish.content ? wish.evidence : '') } }) }
+  const migratedWish = (wish: Wish) => { setWishEditing(null); if (mobile) setMobileTarget('goals'); else setTab('goals'); setEditing({ wish, draft: { ...EMPTY_DRAFT, title: wish.content.slice(0, 160), sessionMin: String(Math.min(wish.minutes, 20)), sessionMax: String(Math.max(wish.minutes, 40)), targetNote: wish.clarification?.firstStep ?? (wish.evidence !== wish.content ? wish.evidence : '') } }) }
 
-  return <GlassSamplingContext.Provider value={active}><section className="free-time-page" data-active={active} data-theme={theme} data-grid={grid} aria-labelledby={`${id}-title`} aria-hidden={!active} inert={!active}>
+  return <GlassSamplingContext.Provider value={active}><section className="free-time-page" data-mobile-view={mobileView} data-active={active} data-theme={theme} data-grid={grid} aria-labelledby={`${id}-title`} aria-hidden={!active} inert={!active}>
     <div className="free-time-background" aria-hidden="true" />
     <div className="free-time-viewport workspace-page-viewport"><div className="free-time-container workspace-page-container">
-      <WorkspaceHeading className="free-time-header" title="余时" description="想推进的事，在合适的空档继续" titleId={`${id}-title`} headingRef={heading}><dl className="workspace-metrics free-time-metrics"><div><dt>自动安排中</dt><dd>{goals.filter(isScheduling).length}<small> 项</small></dd></div><div><dt>未来七天已安排</dt><dd>{minutesLabel(weekMinutes).split(/(\d+)/).filter(Boolean).map((part, index) => /\d/.test(part) ? <span key={index}>{part}</span> : <small key={index}>{part}</small>)}</dd></div><div><dt>最低频率待满足</dt><dd>{remaining}<small> 次</small></dd></div></dl></WorkspaceHeading>
+      <WorkspaceHeading className="free-time-header" title="余时" description="想推进的事，在合适的空档继续" titleId={`${id}-title`} headingRef={heading}><dl className="workspace-metrics free-time-metrics"><div><dt>自动安排中</dt><dd>{goals.filter(isScheduling).length}<small> 项</small></dd></div><div><dt>未来七天已安排</dt><dd>{minutesLabel(weekMinutes).split(/(\d+)/).filter(Boolean).map((part, index) => /\d/.test(part) ? <span key={index}>{part}</span> : <small key={index}>{part}</small>)}</dd></div><div><dt>最低频率待满足</dt><dd>{remaining}<small> 次</small></dd></div></dl>
+        <nav className="free-time-mobile-views free-time-tabs" aria-label="余时页面">{([['goals','目标'],['plans','已安排'],['wishes','心愿']] as const).map(([value,label]) => <button key={value} type="button" aria-pressed={mobileTarget === value} onClick={() => setMobileTarget(value)}>{label}</button>)}</nav>
+      </WorkspaceHeading>
       <StringInvitation onEnter={onOpenStrings} glass={glass} disabled={!stringsEnabled} />
+      <div ref={mobileContent} className="free-time-mobile-content" data-view-phase={mobilePhase} inert={mobile && (mobilePhase !== 'idle' || mobileView !== mobileTarget)}>
       <Pane className="free-time-wish-entry" blur={glass === 'soft' ? 6 : 0} settleResize>
         <div className="free-time-wish-heading"><div className="free-time-wish-copy"><h3>把心愿聊清楚</h3><p>有个想法，还不知道从哪里开始？和析熙一起理清第一步。</p></div><button ref={wishTrigger} className="free-time-secondary" type="button" disabled={busy} aria-expanded={wishOpen} aria-controls={`${id}-wish-start`} onClick={() => {
           if (wishOpen) closeWish()
-          else { setWishOpen(true); setEditing(null); setWishEditing(null) }
+          else { setWishOpen(true); if (!document.documentElement.hasAttribute('data-mobile')) { setEditing(null); setWishEditing(null) } }
         }}>{wishOpen ? '收起' : '＋ 聊聊一个心愿'}</button></div>
         <div id={`${id}-wish-start`} className="free-time-wish-reveal" data-open={wishOpen} aria-hidden={!wishOpen} inert={!wishOpen}>
           <div className="free-time-wish-clip"><form className="free-time-wish-start" onSubmit={event => { event.preventDefault(); void startWish() }}>
@@ -291,10 +349,13 @@ export const FreeTimePanel = memo(function FreeTimePanel({ onClarifyWish, onRefi
           </form></div>
         </div>
       </Pane>
-      <div className="free-time-layout">
-        <Pane className="free-time-goals" blur={glass === 'soft' ? 6 : 0}><header className="free-time-pane-heading"><div className="free-time-tabs" role="group" aria-label="余时目标分类"><button type="button" aria-pressed={tab === 'goals'} onClick={() => { setTab('goals'); setEditing(null); setWishEditing(null) }}>目标 <small>{goals.length}</small></button><button type="button" aria-pressed={tab === 'considering'} onClick={() => { setTab('considering'); setEditing(null); setWishEditing(null) }}>待考虑 <small>{wishes.length}</small></button></div><button className="free-time-primary" type="button" onClick={() => { setWishEditing(null); setEditing({ draft: EMPTY_DRAFT }) }} disabled={busy}>＋ 添加目标</button></header>
-          {wishEditing ? <WishEditor key={wishEditing.id} wish={wishEditing} busy={busy} onCancel={() => setWishEditing(null)} onSave={saveWish} /> : editing ? <GoalEditor key={editing.goal?.id ?? editing.wish?.id ?? 'new'} editing={editing} busy={busy} onCancel={() => setEditing(null)} onSave={save} /> : <>
-            <label className="free-time-search"><span className="p0-sr-only">搜索余时目标</span><input type="search" value={filter} onChange={event => setFilter(event.target.value)} placeholder={tab === 'goals' ? '搜索目标' : '搜索想做的事'} /></label>
+      <div className={`free-time-layout${mobile ? ' free-time-pane' : ''}`}>
+        {mobile && <PaneGlass blur={glass === 'soft' ? 6 : 0} />}
+        <Pane className="free-time-goals" surface={!mobile} blur={glass === 'soft' ? 6 : 0}><header className="free-time-pane-heading"><h3 className="free-time-mobile-panel-title">{tab === 'goals' ? '目标' : '待考虑'}</h3><div className="free-time-tabs" role="group" aria-label="余时目标分类"><button type="button" aria-pressed={tab === 'goals'} onClick={() => { setTab('goals'); setEditing(null); setWishEditing(null) }}>目标 <small>{goals.length}</small></button><button type="button" aria-pressed={tab === 'considering'} onClick={() => { setTab('considering'); setEditing(null); setWishEditing(null) }}>待考虑 <small>{wishes.length}</small></button></div><button className="free-time-primary free-time-add-goal" type="button" onClick={() => { setTab('goals'); setEditing({ draft: EMPTY_DRAFT }) }} disabled={busy}>＋ 添加目标</button></header>
+          {wishEditing && <div hidden={tab !== 'considering'}><WishEditor key={wishEditing.id} wish={wishEditing} busy={busy} onCancel={() => setWishEditing(null)} onSave={saveWish} /></div>}
+          {editing && <div hidden={tab !== 'goals'}><GoalEditor key={editing.goal?.id ?? editing.wish?.id ?? 'new'} editing={editing} busy={busy} onCancel={() => setEditing(null)} onSave={save} /></div>}
+          <div className="free-time-goal-browser" hidden={tab === 'goals' ? Boolean(editing) : Boolean(wishEditing)}>
+            <label className="free-time-search" data-empty={(tab === 'goals' ? goals.length : wishes.length) === 0 && !filter}><span className="p0-sr-only">搜索余时目标</span><input type="search" value={filter} onChange={event => setFilter(event.target.value)} placeholder={tab === 'goals' ? '搜索目标' : '搜索想做的事'} /></label>
             {tab === 'considering' && <p className="free-time-note">原来的牵挂都在这里。选「加入自动安排」后，析熙才会为它留出时间。</p>}
             <div className="free-time-list-region">{loading && !state ? <Empty title="正在读取目标" /> : !state ? <Empty title="余时暂时无法读取" detail="请用下方重试重新连接本机服务。" /> : total === 0 ? <Empty title={filter ? '没有匹配的目标' : tab === 'goals' ? '给想做的事一点时间' : '暂时没有待考虑的事'} detail={filter ? '试试别的关键词。' : tab === 'goals' ? '单词、数学复习、FRC 学习，都可以从这里开始。' : '聊天中提到的愿望可以先留在这里，准备好后再加入安排。'} /> : tab === 'goals' ? <ul className="free-time-goal-list">{visibleGoals.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE).map(goal => {
               const item = progress.find(value => value.goalId === goal.id)
@@ -304,9 +365,9 @@ export const FreeTimePanel = memo(function FreeTimePanel({ onClarifyWish, onRefi
               return <li key={goal.id} data-status={goalState} data-priority={goal.priority}><div className="free-time-goal-title"><strong>{goal.title}</strong><span>{goalState === 'active' ? PRIORITIES[goal.priority] : FREE_TIME_STATUS_LABEL[goalState]}</span></div><div className="free-time-goal-meta"><span>{goal.minPerWeek ? `每周至少 ${goal.minPerWeek} 次` : '不设最低频率'}</span><span>{goal.sessionMin}–{goal.sessionMax} 分钟 / 次</span></div>{plan && <LongPlanProgress goal={goal} plan={plan} />}{(goal.targetNote || goal.targetDate) && <p className="free-time-goal-note">{goal.targetDate && `${dayLabel(goal.targetDate)} · `}{goal.targetNote || '阶段目标日期'}</p>}{lastFeedback?.nextStep && <p className="free-time-goal-note">下次继续：{lastFeedback.nextStep}</p>}<footer><span>{item ? `已安排 ${item.scheduledCount} 次${item.completedCount ? ` · 已完成 ${item.completedCount} 次` : ''}` : '还没有安排'}</span><div className="free-time-goal-actions"><button className="free-time-primary" type="button" disabled={busy} onClick={() => edit(goal)}>调整 <span aria-hidden="true">↗</span></button>{plan && <button className="free-time-secondary" type="button" disabled={busy} onClick={() => onRefinePlan(goal)}>交给析熙细化</button>}<button className="free-time-secondary" type="button" disabled={busy} onClick={() => void (goalState === 'active' ? updateStatus(goal, 'paused') : resumeGoal(goal))}>{goalState === 'active' ? '暂停' : '恢复并安排'}</button>{removing === goal.id ? <><span className="free-time-remove-note">取消未开始、未固定的安排</span><button className="free-time-secondary free-time-remove-confirm" type="button" disabled={busy} onClick={() => void updateStatus(goal, 'deleted')}>确认移除</button><button className="free-time-secondary" type="button" onClick={() => setRemoving(null)}>保留</button></> : <button className="free-time-secondary" type="button" disabled={busy} onClick={() => setRemoving(goal.id)}>移除</button>}</div></footer></li>
             })}</ul> : <ul className="free-time-goal-list">{visibleWishes.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE).map(wish => <li key={wish.id}><div className="free-time-goal-title"><strong>{wish.content}</strong><span>{wish.status === 'paused' ? '已暂停' : wish.status === 'expired' ? '已到期' : '待考虑'}</span></div>{wish.clarification?.motivation && <p className="free-time-goal-note">想做到：{wish.clarification.motivation}</p>}{wish.clarification?.firstStep && <p className="free-time-goal-note">第一小步：{wish.clarification.firstStep}</p>}{wish.items.length > 0 && <p className="free-time-goal-note">准备：{wish.items.join('、')}</p>}<footer><span>{minutesLabel(wish.minutes)}</span><div className="free-time-goal-actions"><button className="free-time-secondary" type="button" disabled={busy} onClick={() => setWishEditing(wish)}>修改</button><button className="free-time-secondary" type="button" disabled={busy} onClick={() => onClarifyWish(wish)}>聊清楚</button>{wish.status !== 'expired' && <button className="free-time-secondary" type="button" disabled={busy} onClick={() => void updateWishStatus(wish)}>{wish.status === 'paused' ? '恢复留意' : '暂停留意'}</button>}<button className="free-time-primary" type="button" disabled={busy} onClick={() => migratedWish(wish)}>加入自动安排 <span aria-hidden="true">↗</span></button></div></footer></li>)}</ul>}</div>
             <Pagination page={currentPage} pages={pages} count={total} onPage={setPage} />
-          </>}
+          </div>
         </Pane>
-        <Pane className="free-time-plan" blur={glass === 'soft' ? 6 : 0}><header className="free-time-pane-heading"><div><h3>安排与留白</h3><p>学习有落点，也留一点喘息。</p></div><div className="free-time-tabs" role="group" aria-label="查看时间范围"><button type="button" aria-pressed={period === 'today'} onClick={() => { setPeriod('today'); setDate(today) }}>今天</button><button type="button" aria-pressed={period === 'week'} onClick={() => setPeriod('week')}>未来七天</button></div></header>
+        <Pane className="free-time-plan" surface={!mobile} blur={glass === 'soft' ? 6 : 0}><header className="free-time-pane-heading"><div><h3>安排与留白</h3><p>学习有落点，也留一点喘息。</p></div><div className="free-time-tabs" role="group" aria-label="查看时间范围"><button type="button" aria-pressed={period === 'today'} onClick={() => { setPeriod('today'); setDate(today) }}>今天</button><button type="button" aria-pressed={period === 'week'} onClick={() => setPeriod('week')}>未来七天</button></div></header>
           {period === 'week' && <nav className="free-time-week" aria-label="查看每天的余时">{state?.timeline.map(day => <button key={day.date} type="button" aria-pressed={date === day.date} onClick={() => setDate(day.date)}><span>{dayLabel(day.date, true)}</span><strong>{Number(day.date.slice(-2))}</strong><small>{sessions.filter(session => session.date === day.date).length || '—'}</small></button>)}</nav>}
           <div className="free-time-day-heading"><strong>{dayLabel(date)}</strong><span>{shownDay ? `尚有 ${minutesLabel(shownDay.freeMin)} 留白` : '正在读取可用时段'}</span></div>
           <div className="free-time-plan-region">{shownSessions.length ? <ol className="free-time-sessions">{shownSessions.slice(currentPlanPage * 4, (currentPlanPage + 1) * 4).map(session => {
@@ -319,6 +380,7 @@ export const FreeTimePanel = memo(function FreeTimePanel({ onClarifyWish, onRefi
           <footer className="free-time-plan-actions"><span>{latestOperation ? <button type="button" disabled={busy} onClick={() => void undoSchedule()}>撤销这次排程</button> : '课程、已占用时段与固定安排优先保留'}</span><button className="free-time-primary" type="button" disabled={busy || loading || !state || !goals.length} onClick={() => void reschedule()}>{busy ? '正在安排…' : '安排余时'}<span aria-hidden="true">↗</span></button></footer>
         </Pane>
       </div>
+      </div>
       <div className="free-time-feedback" aria-live="polite">{error ? <p role="alert">{error}<button type="button" disabled={busy} onClick={() => { setError(''); void refresh().catch(reason => setError(errorText(reason))) }}>重新读取</button></p> : <p>{notice || '加入目标即允许在空余时间安排；可以随时暂停或固定时段。'}</p>}</div>
     </div></div>
   </section></GlassSamplingContext.Provider>
@@ -327,7 +389,7 @@ export const FreeTimePanel = memo(function FreeTimePanel({ onClarifyWish, onRefi
 function Empty({ title, detail }: { title: string; detail?: string }) { return <div className="free-time-empty"><strong>{title}</strong>{detail && <span>{detail}</span>}</div> }
 function minuteValue(time: string) { const [hour, minute] = time.split(':').map(Number); return hour * 60 + minute }
 function Pagination({ page, pages, count, onPage }: { page: number; pages: number; count: number; onPage: (page: number) => void }) {
-  return <nav className="free-time-pagination" aria-label="列表翻页"><span>共 {count} 项</span><div><button type="button" aria-label="上一页" disabled={page === 0} onClick={() => onPage(page - 1)}>←</button><span>{page + 1} / {pages}</span><button type="button" aria-label="下一页" disabled={page >= pages - 1} onClick={() => onPage(page + 1)}>→</button></div></nav>
+  return <nav className="free-time-pagination" data-pages={pages} aria-label="列表翻页"><span>共 {count} 项</span><div><button type="button" aria-label="上一页" disabled={page === 0} onClick={() => onPage(page - 1)}>←</button><span>{page + 1} / {pages}</span><button type="button" aria-label="下一页" disabled={page >= pages - 1} onClick={() => onPage(page + 1)}>→</button></div></nav>
 }
 function GoalEditor({ editing, busy, onCancel, onSave }: { editing: Editing; busy: boolean; onCancel: () => void; onSave: (draft: Draft) => Promise<void> }) {
   const id = useId()

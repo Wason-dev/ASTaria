@@ -1,4 +1,24 @@
 .xixi-settings{--settings-ink:#eeeae3;--settings-muted:#aaa9a3;--settings-line:#ffffff12;--settings-control:#ffffff06;--settings-accent:#d8bb79;position:absolute;inset:0;z-index:2;width:100%;height:100%;color:var(--settings-ink);font-size:13px;line-height:1.65;pointer-events:auto;isolation:isolate}
+.xixi-settings [hidden]{display:none!important}
+.xixi-settings[data-select-open=true]>.xixi-settings-scroll{pointer-events:none}
+.xixi-settings[data-mobile-view] .xixi-settings-content{grid-template-columns:minmax(0,1fr)}
+.xixi-settings[data-mobile-view] .xixi-appearance-columns{grid-template-columns:minmax(0,1fr)}
+:is(.p0,.app-shell) .home-workspace .xixi-settings[data-mobile-view] header.xixi-settings-page-header{justify-content:flex-start;align-items:center;gap:10px;min-height:44px}
+:is(.p0,.app-shell) .xixi-settings[data-mobile-view] button.xixi-settings-mobile-back{display:grid;place-items:center;order:-1;flex:none;width:44px;height:44px;min-height:44px;padding:12px;border-color:transparent;border-radius:50%;background:transparent;color:var(--settings-muted)}
+.xixi-settings-mobile-back svg,.xixi-settings-directory-entry svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.1;stroke-linecap:round;stroke-linejoin:round}
+.xixi-settings-directory{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:repeat(6,minmax(54px,1fr));flex:1;min-height:324px;border-top:1px solid var(--settings-line)}
+.xixi-settings[data-mobile-view] .xixi-settings-panel{height:max(380px,calc(var(--m-visible-height,var(--m-layout-height,100dvh)) - 200px - var(--safe-area-inset-top,0px)));overflow:hidden;overflow:clip}
+.xixi-settings[data-mobile-view] .xixi-settings-shell{display:flex;flex-direction:column;height:100%;box-sizing:border-box}
+html[data-mobile] .p0 .home-workspace .xixi-settings[data-mobile-view] .xixi-settings-scroll{overflow:hidden}
+.xixi-settings[data-mobile-view] .xixi-settings-content{flex:1;min-height:0;align-content:start;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
+.xixi-settings[data-mobile-view] .xixi-settings-feedback{flex:none}
+:is(.p0,.app-shell) .xixi-settings[data-mobile-view] button.xixi-settings-directory-entry{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;height:auto;min-width:0;min-height:54px;margin:1px 0;padding:10px 12px;border:1px solid transparent;border-bottom-color:var(--settings-line);border-radius:12px;background:transparent;text-align:left;overflow:hidden;transition:background .2s,border-color .2s,color .2s}
+:is(.p0,.app-shell) .xixi-settings[data-mobile-view] button.xixi-settings-directory-entry:is(:hover,:focus-visible){border-color:color-mix(in srgb,var(--settings-accent) 32%,var(--settings-line));background:color-mix(in srgb,var(--settings-control) 80%,transparent)}
+:is(.p0,.app-shell) .xixi-settings[data-mobile-view] button.xixi-settings-directory-entry:first-child{border-top-left-radius:14px;border-top-right-radius:14px}
+:is(.p0,.app-shell) .xixi-settings[data-mobile-view] button.xixi-settings-directory-entry:last-child{border-bottom-left-radius:14px;border-bottom-right-radius:14px}
+:is(.p0,.app-shell) .xixi-settings[data-navigation-phase]:not([data-navigation-phase=idle]) :is(button.xixi-settings-directory-entry,button.xixi-settings-mobile-back):disabled{opacity:1}
+.xixi-settings-directory-copy{display:flex;align-items:center;gap:12px;min-width:0}.xixi-settings-directory-entry strong{font-size:13px;font-weight:400;white-space:nowrap}.xixi-settings-directory-icon{display:grid;place-items:center;flex:none;width:30px;height:30px;border:1px solid var(--settings-line);border-radius:8px;background:var(--settings-control);color:var(--settings-muted)}.xixi-settings-directory-icon svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.25;stroke-linecap:round;stroke-linejoin:round}.xixi-settings-directory-arrow{display:flex;align-items:center;flex:none;color:var(--settings-muted)}
+.xixi-settings .xixi-setting-row .adaptive-select{max-width:100%;min-width:0}
 .xixi-settings[data-theme=light]{--settings-ink:#30343a;--settings-muted:#626b75;--settings-line:#4146501c;--settings-control:#fafbfc80;--settings-accent:#917139}
 .xixi-settings-background{position:absolute;inset:0;pointer-events:none;background:#0006;transition:opacity .24s ease}
 .xixi-settings[data-theme=light] .xixi-settings-background{background:#fcfdff99}
@@ -7,7 +27,7 @@
 .xixi-settings[data-grid=false] .xixi-settings-background::after{display:none}
 .xixi-settings-scroll{position:absolute;inset:64px 0 0;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable;padding:12px 32px 24px;box-sizing:border-box;scrollbar-width:thin;scrollbar-color:#d5bb8b50 transparent;opacity:1;visibility:visible;transition:opacity .24s ease,visibility 0s}
 .xixi-settings-container{max-width:1440px;margin:0 auto}
-.xixi-settings-page-header,.xixi-settings-shell{animation:settings-page-in .32s ease both}
+.xixi-settings-page-header,.xixi-settings-shell{animation:settings-page-in .32s ease backwards}
 .xixi-settings-page-header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:14px}
 .xixi-settings-page-header>div{display:flex;align-items:baseline;gap:18px;min-width:0}
 .xixi-settings-page-header>div>span{font-size:10px;letter-spacing:.13em;color:var(--settings-muted)}
@@ -25,27 +45,27 @@
 :is(.p0,.app-shell) .xixi-settings button{font:inherit;font-size:11px;border:1px solid var(--settings-line);background:var(--settings-control);color:var(--settings-ink);border-radius:12px;padding:7px 11px;cursor:pointer;transition:background .2s,border-color .2s,transform .2s;line-height:1.5}
 :is(.p0,.app-shell) .xixi-settings button:hover{background:#d8bb791c;border-color:#d8bb7960}
 :is(.p0,.app-shell) .xixi-settings button:focus-visible,:is(.p0,.app-shell) .xixi-settings :is(input,select,textarea):focus-visible{outline:2px solid var(--settings-accent);outline-offset:3px}
+:is(.p0,.app-shell) .xixi-settings :is(.xixi-settings-tabs button,.xixi-settings-directory-entry):focus-visible{outline:1px solid var(--settings-accent);outline-offset:-3px}
 :is(.p0,.app-shell) .xixi-settings button:disabled{opacity:.4;cursor:default}
-:is(.p0,.app-shell) .xixi-settings .xixi-settings-close{display:flex;align-items:center;gap:6px;flex:none;background:transparent;border-color:transparent}
-.xixi-settings-close svg{display:block;width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}
 :is(.p0,.app-shell) .xixi-settings-tabs button{white-space:nowrap;border-color:transparent;background:transparent;color:var(--settings-muted)}
 :is(.p0,.app-shell) .xixi-settings-tabs button[aria-current=page]{color:var(--settings-accent);border-color:#d8bb794f;background:#d8bb7914}
-.xixi-settings-content{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px 36px;align-items:start;overflow:visible;min-width:0;animation:settings-content-in .23s ease both}
+.xixi-settings-content{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px 36px;align-items:start;overflow:visible;min-width:0;animation:settings-content-in .23s ease backwards}
+.xixi-settings[data-mobile-view] .xixi-settings-content{animation:none}
 .xixi-settings-content>section{min-width:0;padding:14px 0 0}
 .xixi-settings-content>section:only-child{grid-column:1/-1}
 .xixi-settings-content[data-section="外观与动画"]{gap:10px 32px}
 .xixi-settings-content[data-section="外观与动画"]>section{padding-top:6px}
 .xixi-settings-content[data-section="外观与动画"] .xixi-setting-row{padding:10px 0}
 .xixi-settings-content>.xixi-render-section{grid-column:1/-1}
-.xixi-appearance-columns{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:32px;align-items:stretch;padding-top:6px;min-width:0}
-.xixi-appearance-space{display:grid;gap:16px;min-width:0}
+.xixi-appearance-columns{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:32px;align-items:start;padding-top:6px;min-width:0}
+.xixi-appearance-space{display:grid;align-content:start;gap:16px;min-width:0}
 .xixi-appearance-space>section{min-width:0}
 .xixi-appearance-space>.xixi-horizon-settings{padding-top:12px;border-top:1px solid var(--settings-line)}
 .xixi-appearance-space .xixi-horizon-setting{display:grid;gap:2px;padding:6px 0}
 .xixi-appearance-space .xixi-horizon-setting-control{width:100%;max-width:none}
 .xixi-appearance-response{display:flex;flex-direction:column;min-width:0}
 .xixi-appearance-response>.xixi-effect-options{margin:0 0 12px}
-.xixi-appearance-response-controls{display:flex;flex:1;flex-direction:column;justify-content:space-between}
+.xixi-appearance-response-controls{display:flex;flex-direction:column}
 .xixi-appearance-preview{grid-column:1/-1;justify-content:flex-end;margin-top:2px;font-size:10px;color:var(--settings-muted)}
 .xixi-settings .xixi-render-options{grid-template-columns:repeat(5,minmax(0,1fr));margin:10px 0 6px}
 :is(.p0,.app-shell) .xixi-settings .xixi-render-options button{min-height:60px;padding:10px 12px}
@@ -74,6 +94,12 @@
 :is(.p0,.app-shell) .xixi-settings .xixi-personality-options button{min-width:36px;padding:5px 10px;border-color:transparent;border-radius:10px;background:transparent}
 :is(.p0,.app-shell) .xixi-settings .xixi-personality-options button[aria-pressed=true]{color:var(--settings-accent);border-color:#d8bb7960;background:#d8bb791c;box-shadow:inset 0 0 0 1px #d8bb7912}
 .xixi-inline-form{display:flex;align-items:center;gap:6px;font-size:11px;flex-wrap:wrap}
+.xixi-binary-brightness{display:grid;gap:6px;width:230px;max-width:100%}
+.xixi-settings-range-control{display:flex;align-items:center;gap:10px;min-width:0}
+.xixi-settings-range-control>output{flex:none;width:4.5ch;color:var(--settings-muted);font-size:11px;font-variant-numeric:tabular-nums;text-align:right}
+:is(.p0,.app-shell) .xixi-settings .xixi-settings-range-control>input[type=range]{flex:1;min-width:0;accent-color:var(--settings-accent);height:22px;margin:0;padding:0;border:0;border-radius:12px;background:transparent;cursor:pointer}
+:is(.p0,.app-shell) .xixi-settings .xixi-settings-range-control>input[type=range]:disabled{opacity:.4;cursor:default}
+.xixi-binary-brightness .xixi-inline-form{justify-content:flex-end}
 :is(.p0,.app-shell) .xixi-settings .xixi-inline-form input{width:75px;padding:6px;font-size:12px}
 :is(.p0,.app-shell) .xixi-settings .xixi-inline-form input[type=time]{width:99px}
 .xixi-setting-row:has(input[type=time]){flex-wrap:wrap;gap:8px}.xixi-setting-row:has(input[type=time])>div:first-child{flex-basis:100%}.xixi-setting-row:has(input[type=time])>div:last-child{max-width:100%}
@@ -138,8 +164,8 @@
 .xixi-settings[data-previewing=true] .xixi-settings-scroll{opacity:0;visibility:hidden;pointer-events:none;transition:opacity .24s ease,visibility 0s .24s}
 .xixi-settings[data-previewing=true] .xixi-settings-background{opacity:0}
 .xixi-settings[data-previewing=true] .xixi-preview-dock{opacity:1;visibility:visible;pointer-events:auto;transform:none;transition:opacity .24s ease,transform .24s ease,visibility 0s}
-.xixi-settings[data-closing=true] .home-glass-surface{backdrop-filter:none!important;-webkit-backdrop-filter:none!important;box-shadow:none!important;opacity:0;transition:none}
-.xixi-settings[data-closing=true]{pointer-events:none}.xixi-settings[data-closing=true] .xixi-settings-background{opacity:0;transition:none}.xixi-settings[data-closing=true] :is(.xixi-settings-page-header,.xixi-settings-shell){animation:settings-page-out .18s ease both}
+.xixi-settings[data-closing=true] .home-glass-surface{backdrop-filter:none!important;-webkit-backdrop-filter:none!important;box-shadow:none!important;opacity:0;transition:opacity .18s ease}
+.xixi-settings[data-closing=true]{pointer-events:none}.xixi-settings[data-closing=true] .xixi-settings-background{opacity:0;transition:opacity .18s ease}.xixi-settings[data-closing=true] :is(.xixi-settings-page-header,.xixi-settings-shell){animation:settings-page-out .18s ease both}
 .xixi-settings-scroll::-webkit-scrollbar,.xixi-settings-tabs::-webkit-scrollbar{width:7px;height:5px}.xixi-settings-scroll::-webkit-scrollbar-thumb,.xixi-settings-tabs::-webkit-scrollbar-thumb{background:#d5bb8b50;border:2px solid transparent;background-clip:padding-box;border-radius:8px}
 @keyframes settings-page-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 @keyframes settings-page-out{to{opacity:0;transform:translateY(6px)}}

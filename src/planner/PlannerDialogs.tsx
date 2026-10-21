@@ -7,11 +7,15 @@ import { agendaDate, localDay } from '../home/agenda'
 import { taskStore } from '../stores/taskStore'
 import { notifyLocalDataChange } from '../stores/migration'
 import { localApi } from '../xixi/api'
+import { usePreferences } from '../xixi/preferences'
+import { FloatingGlassDialog } from '../ui/FloatingGlassDialog'
 import { deadlineShortcuts } from '../xixi/deadlineShortcuts'
 import { PlannerIcon as Icon } from './PlannerIcon'
 import { weeklyRoutineSource } from './model'
 import { freeTimeCompletionAction, isFreeTimeSessionTask, planBlockCompleted } from './completion'
 import type { DayEvent, PlanBlock, PlannerAction, PlannerState, Routine, TaskPreparation } from './types'
+import './planner.css'
+import './home-activity-dialog.css'
 
 type Act = (action: PlannerAction, expectedRevision?: number) => Promise<PlannerState>
 export const EMPTY_DETAILS: TaskPreparation = { items: [], preparation: '', needsSubmission: false, submittedAt: null }
@@ -20,37 +24,45 @@ const explain = (reason: unknown) => reason instanceof Error ? reason.message : 
 
 export function PlannerDialog({ title, onClose, busy = false, closeRequested = false, className = '', children }: { title: string; onClose: () => void; busy?: boolean; closeRequested?: boolean; className?: string; children: ReactNode }) {
   const sampling = useContext(GlassSamplingContext)
+  const { value: preferences } = usePreferences()
   const element = useRef<HTMLDialogElement>(null)
-  const opener = useRef<HTMLElement | null>(null)
+  // Capture before the parent's modal flag hides the launching foreground.
+  const [opener] = useState(() => document.activeElement instanceof HTMLElement ? document.activeElement : null)
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-  const scrollTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const [closing, setClosing] = useState(false)
-  const [scrolling, setScrolling] = useState(false)
   useEffect(() => {
-    opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    element.current?.showModal()
-    const body = element.current?.querySelector<HTMLElement>('.pl-dialog-body')
-    if (body) {
-      const onScroll = () => {
-        setScrolling(true)
-        clearTimeout(scrollTimer.current)
-        scrollTimer.current = setTimeout(() => setScrolling(false), 140)
-      }
-      body.addEventListener('scroll', onScroll, { passive: true })
-      return () => { body.removeEventListener('scroll', onScroll); clearTimeout(timer.current); clearTimeout(scrollTimer.current); element.current?.close(); const target = opener.current; if (target?.isConnected && !target.closest('[inert]')) target.focus({ preventScroll: true }) }
+    const dialog = element.current
+    const fallback = dialog?.closest('.planner')?.querySelector<HTMLElement>(dialog.matches('.pl-routine-editor,.pl-routine-browser') ? '.pl-header-actions [aria-label="每周安排"]' : '.workspace-heading-title')
+    dialog?.showModal()
+    return () => {
+      clearTimeout(timer.current); dialog?.close()
+      // Parent foreground coverage is removed in the same commit. Focus only
+      // after that boundary is visible again, including zero-duration exits.
+      queueMicrotask(() => {
+        const visible = (target: HTMLElement | null | undefined) => Boolean(target?.isConnected && !target.closest('[inert]') && getComputedStyle(target).visibility === 'visible' && getComputedStyle(target).display !== 'none')
+        const target = visible(opener) && !opener!.matches('body,html') ? opener : fallback
+        if (visible(target)) target!.focus({ preventScroll: true })
+        // Inert/visibility of the launching pane can settle after React's
+        // passive cleanup; retry after that actual frame, never steal focus
+        // from a newly opened foreground dialog.
+        else requestAnimationFrame(() => {
+          if (document.querySelector('dialog[open]')) return
+          const next = visible(opener) && !opener!.matches('body,html') ? opener : fallback
+          if (visible(next)) next!.focus({ preventScroll: true })
+        })
+      })
     }
-    return () => { clearTimeout(timer.current); clearTimeout(scrollTimer.current); element.current?.close(); const target = opener.current; if (target?.isConnected && !target.closest('[inert]')) target.focus({ preventScroll: true }) }
   }, [])
   const close = () => {
     if (busy || closing) return
     setClosing(true)
-    timer.current = setTimeout(onClose, matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 180)
+    timer.current = setTimeout(onClose, preferences.effect.motion === 'reduced' || matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 180)
   }
   useEffect(() => { if (closeRequested && !busy && !closing) close() }, [closeRequested, busy, closing])
-  return <GlassSamplingContext.Provider value={sampling && !closing}><dialog className={`pl-dialog${className ? ` ${className}` : ''}`} ref={element} data-closing={closing} data-scrolling={scrolling} aria-label={title} onCancel={event => { event.preventDefault(); close() }} onKeyDown={event => event.stopPropagation()}>
-    <MeasuredGlassSurface radius={22} material={{ transmission: 20, blur: 6, rim: 40, shadow: 30 }} />
-    <header className="pl-dialog-header"><h2>{title}</h2><button type="button" className="pl-icon-button" onClick={close} disabled={busy} aria-label={`关闭${title}`}><Icon name="close" /></button></header>
-    <div className="pl-dialog-body">{children}</div>
+  return <GlassSamplingContext.Provider value={sampling && !closing}><dialog className={`pl-dialog${className ? ` ${className}` : ''}`} ref={element} data-closing={closing} data-theme={preferences.theme} data-glass={preferences.glass} data-reduced-motion={preferences.effect.motion === 'reduced'} aria-label={title} onCancel={event => { event.preventDefault(); close() }} onKeyDown={event => event.stopPropagation()}>
+    <MeasuredGlassSurface radius={22} material={{ transmission: preferences.theme === 'light' ? preferences.glass === 'soft' ? 14 : 18 : preferences.glass === 'soft' ? 24 : 30, blur: preferences.glass === 'soft' ? 6 : 0, rim: 44, shadow: 30, reflection: 0 }} />
+    <header className="pl-dialog-header"><h2>{title}</h2><button type="button" className="pl-icon-button" onClick={close} disabled={busy || closing} aria-label={`关闭${title}`}><Icon name="close" /></button></header>
+    <div className="pl-dialog-body" inert={closing}>{children}</div>
   </dialog></GlassSamplingContext.Provider>
 }
 
@@ -82,16 +94,16 @@ export function RoutineDialog({ routine, source, initialWeekday, initialCycle, s
     try { const saved = await act({ type: 'delete-routine', id: draft.id }, baseRevision); setBaseRevision(saved.revision); onNotice('已移除这项每周安排'); setFinished(true) }
     catch (reason) { setError(explain(reason)) } finally { setBusy(false) }
   }
-  return <PlannerDialog title={routine ? '编辑每周安排' : '添加每周安排'} onClose={onClose} busy={busy} closeRequested={finished}>
+  return <PlannerDialog className="pl-routine-editor" title={routine ? '编辑每周安排' : '添加每周安排'} onClose={onClose} busy={busy} closeRequested={finished}>
     {source && <p className="pl-muted pl-routine-scope" role="note">{source.date} 临时按周{['日','一','二','三','四','五','六'][source.weekday]}课表。这里修改来源的每周安排，影响下方选中的重复星期；今天及以后的相关调课日会同步，过去的记录保留。</p>}
     {missing ? <div className="pl-stale" role="alert"><p>这项安排已被移除或改到了其他星期。这里保留原记录，可以前往每周安排编辑现在的课表。</p><button type="button" className="pl-secondary" onClick={onBrowseRoutines}>查看每周安排</button></div>
       : stale && <div className="pl-stale" role="alert"><p>日程已有新修改，请先载入最新内容再保存</p><button className="pl-secondary" onClick={reload}>载入最新内容 · 替换草稿</button></div>}
-    <form className="pl-form" onSubmit={save}><fieldset disabled={busy || stale || missing}>
+    <form className="pl-form" onSubmit={save}><fieldset className="pl-routine-fields" disabled={busy || stale || missing}>
       <label>名称<input required maxLength={100} value={draft.title} placeholder="例如 物理课、晚自习、通勤" onChange={e => setDraft({ ...draft, title: e.target.value })} /></label>
       <label>这段时间用来<select value={draft.kind} onChange={e => setDraft({ ...draft, kind: e.target.value as Routine['kind'] })}><option value="class">课程或固定活动 · 占用时间</option><option value="available">空课或自习 · 可以安排任务</option><option value="break">吃饭、休息或通勤 · 留给自己</option></select></label>
       <div className="pl-form-pair"><label>开始<input required type="time" value={draft.start} onChange={e => setDraft({ ...draft, start: e.target.value })} /></label><label>结束<input required type="time" value={draft.end} onChange={e => setDraft({ ...draft, end: e.target.value })} /></label></div>
       <div><span className="pl-label">每周重复</span><div className="pl-weekday-picks" role="group" aria-label="重复星期">{[1,2,3,4,5,6,0].map(day => <button key={day} type="button" aria-pressed={draft.weekdays.includes(day)} onClick={() => setDraft({ ...draft, weekdays: draft.weekdays.includes(day) ? draft.weekdays.filter(d => d !== day) : [...draft.weekdays, day] })}>{['日','一','二','三','四','五','六'][day]}</button>)}</div></div>
-      <div className="pl-form-pair"><label>重复周次<select aria-label="重复周次" value={draft.weekCycle ?? 'weekly'} onChange={e => {
+      <div className="pl-form-pair pl-routine-cycle"><label>重复周次<select aria-label="重复周次" value={draft.weekCycle ?? 'weekly'} onChange={e => {
         const cycle = e.target.value as Routine['weekCycle']
         if (cycle === 'weekly') { const { weekCycle: _cycle, weekAnchor: _anchor, ...weekly } = draft; setDraft(weekly) }
         else setDraft({ ...draft, weekCycle: cycle, weekAnchor: state.firstWeekMonday ?? draft.weekAnchor ?? weekStart(localDay(new Date())) })
@@ -100,7 +112,8 @@ export function RoutineDialog({ routine, source, initialWeekday, initialCycle, s
       {draft.weekCycle && draft.weekCycle !== 'weekly' && <p className="pl-muted">周次按你设定的第1周连续计算，跨年也不会重置。单日调课使用目标日期所在周的单双周课表。</p>}
       <label>地点<input maxLength={100} value={draft.location} placeholder="可留空" onChange={e => setDraft({ ...draft, location: e.target.value })} /></label>
       <label>需要携带<input maxLength={500} value={items} placeholder="例如 电脑、充电器，用顿号分隔" onChange={e => setItems(e.target.value)} /></label>
-      <label className="pl-checkbox"><input type="checkbox" checked={draft.enabled} onChange={e => setDraft({ ...draft, enabled: e.target.checked })} />启用这项安排</label>
+      {draft.courseInfo && <details><summary>课程信息</summary>{(['period', 'classGroup', 'note'] as const).map(key => <label key={key}>{{ period: '节次', classGroup: '分组', note: '备注' }[key]}<input maxLength={key === 'note' ? 500 : key === 'period' ? 80 : 160} value={draft.courseInfo?.[key] ?? ''} onChange={event => setDraft({ ...draft, courseInfo: { ...draft.courseInfo!, [key]: event.target.value } })} /></label>)}</details>}
+      <button type="button" className="pl-setting-switch" role="switch" aria-label="启用这项安排" aria-checked={draft.enabled} onClick={() => setDraft({ ...draft, enabled: !draft.enabled })}><span>启用这项安排</span><span className="pl-switch-track" aria-hidden="true"><i /></span></button>
       <p className="pl-muted">空课和晚自习计入可支配时间，固定活动与休息会从中扣除</p>
       {error && <p className="pl-error" role="alert">{error}</p>}
       <footer>{routine && <button className="pl-delete" type="button" onClick={() => void remove()}>{deleting ? '确认移除' : '移除'}</button>}<button className="pl-primary" type="submit">{busy ? '保存中' : '保存安排'}</button></footer>
@@ -108,7 +121,7 @@ export function RoutineDialog({ routine, source, initialWeekday, initialCycle, s
   </PlannerDialog>
 }
 
-export function DayEventDialog({ event, state, act, onClose, onNotice }: { event: DayEvent; state: PlannerState; act: Act; onClose: () => void; onNotice: (text: string) => void }) {
+export function DayEventDialog({ event, state, act, onClose, onNotice, homeAnchor }: { event: DayEvent; state: PlannerState; act: Act; onClose: () => void; onNotice: (text: string) => void; homeAnchor?: HTMLElement | null }) {
   const original = state.dayEvents?.find(item => item.id === event.id)
   const [draft, setDraft] = useState<DayEvent>(original ?? event)
   const [items, setItems] = useState(draft.items.join('、'))
@@ -137,7 +150,7 @@ export function DayEventDialog({ event, state, act, onClose, onNotice }: { event
       setBaseRevision(saved.revision); onNotice('已移除这项单日活动'); setFinished(true)
     } catch (reason) { setError(explain(reason)) } finally { setBusy(false) }
   }
-  return <PlannerDialog title="编辑单日活动" onClose={onClose} busy={busy} closeRequested={finished}>
+  const fields = <>
     <p className="pl-muted">这项活动只安排在所选日期，并占用这段时间。</p>
     {missing ? <p className="pl-stale" role="alert">这项单日活动已被移除，请关闭后查看最新日程。</p>
       : stale && <div className="pl-stale" role="alert"><p>日程已有新修改，请先载入最新内容再保存</p><button type="button" className="pl-secondary" onClick={reload}>载入最新内容 · 替换草稿</button></div>}
@@ -150,7 +163,10 @@ export function DayEventDialog({ event, state, act, onClose, onNotice }: { event
       {error && <p className="pl-error" role="alert">{error}</p>}
       <footer><button className="pl-delete" type="button" onClick={() => void remove()}>{deleting ? '确认移除' : '移除'}</button><button className="pl-primary" type="submit">{busy ? '保存中' : '保存活动'}</button></footer>
     </fieldset></form>
-  </PlannerDialog>
+  </>
+  return homeAnchor
+    ? <FloatingGlassDialog anchor={homeAnchor} title="编辑单日活动" className="home-activity-dialog" width={600} placement="center" onClose={onClose} busy={busy} closeRequested={finished}>{fields}</FloatingGlassDialog>
+    : <PlannerDialog title="编辑单日活动" onClose={onClose} busy={busy} closeRequested={finished}>{fields}</PlannerDialog>
 }
 
 export function TaskPlanDialog({ task, state, selected, initialBlockId, act, onClose, onNotice, onRefresh }: { task: Task; state: PlannerState; selected: string; initialBlockId?: string; act: Act; onClose: () => void; onNotice: (text: string) => void; onRefresh: () => Promise<void> }) {
@@ -233,7 +249,7 @@ export function TaskPlanDialog({ task, state, selected, initialBlockId, act, onC
       <h3><Icon name="bag" /> 出门前准备</h3>
       <label>要带的东西<input value={items} maxLength={500} placeholder="例如 电脑、充电器、纸质报告" onChange={e => setItems(e.target.value)} /></label>
       <label>提前做的一步<textarea rows={2} maxLength={500} value={preparation} placeholder="例如 今晚打印报告，电脑充电" onChange={e => setPreparation(e.target.value)} /></label>
-      <label className="pl-checkbox"><input type="checkbox" checked={needsSubmission} onChange={e => setNeedsSubmission(e.target.checked)} />完成后还需要提交</label>
+      <button type="button" className="pl-setting-switch" role="switch" aria-label="完成后还需要提交" aria-checked={needsSubmission} onClick={() => setNeedsSubmission(!needsSubmission)}><span>完成后还需要提交</span><span className="pl-switch-track" aria-hidden="true"><i /></span></button>
       <footer><button className="pl-secondary" type="submit">保存准备信息</button></footer>
     </fieldset></form>
     {details.needsSubmission && <div className="pl-submission"><span>{details.submittedAt ? '已确认提交' : task.status === 'done' ? '已经做完，提交待确认' : '做完后记得确认提交'}</span><button className="pl-secondary" disabled={busy || stale} onClick={() => void execute({ type: 'save-details', taskId: task.id, details: { ...details, submittedAt: details.submittedAt ? null : new Date().toISOString() } }, details.submittedAt ? '已撤回提交确认' : '已确认提交')}><Icon name={details.submittedAt ? 'undo' : 'check'} />{details.submittedAt ? '撤回' : '已提交'}</button></div>}
@@ -257,7 +273,7 @@ export function TaskPlanDialog({ task, state, selected, initialBlockId, act, onC
     }}><fieldset disabled={busy || stale || locked || sessionAction?.completed}>
       <label>日期<input type="date" required value={editing.date} onChange={e => setEditing({ ...editing, date: e.target.value })} /></label>
       <div className="pl-form-pair"><label>开始<input type="time" required value={editing.start} onChange={e => setEditing({ ...editing, start: e.target.value })} /></label><label>结束<input type="time" required value={editing.end} onChange={e => setEditing({ ...editing, end: e.target.value })} /></label></div>
-      <label className="pl-checkbox"><input type="checkbox" checked={editing.locked} onChange={e => setEditing({ ...editing, locked: e.target.checked })} />锁定这段时间</label>
+      <button type="button" className="pl-setting-switch" role="switch" aria-label="锁定这段时间" aria-checked={editing.locked} onClick={() => setEditing({ ...editing, locked: !editing.locked })}><span>锁定这段时间</span><span className="pl-switch-track" aria-hidden="true"><i /></span></button>
       <footer><button className="pl-primary" type="submit">{currentBlock ? '更新时段' : '添加时段'}</button></footer>
     </fieldset></form>}
     {removingTask ? <section className="pl-task-delete-confirm" aria-label="确认删除事项">

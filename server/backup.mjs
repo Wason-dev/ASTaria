@@ -1,11 +1,12 @@
-import { createHash } from 'node:crypto'
-import { validateModelSettings } from './modelSettings.mjs'
+import { sha256Hex } from './portable.mjs'
+import { validateModelSettings } from './modelSettingsCore.mjs'
 import { validateRouteJudgment } from './routeAnalysis.mjs'
 import { planWeeksValue } from './freeTimePlan.mjs'
 import { ValidationError, knownKeys, identifier, text, object, choice, dateTime, day, clockTime, taskInput, questionOptions, executionNotice, validateMemory } from './validation.mjs'
 import { dayEventValue, validateDayEvents, validateDayExceptions, horizonGroupValue } from './planner.mjs'
 import { BACKUP_MAX_BYTES, BACKUP_EXPORT_TOO_LARGE, BACKUP_IMPORT_TOO_LARGE, backupByteLength, serializeBackup } from '../src/xixi/backupLimits.ts'
 import { normalizeChatAttachments } from './chatAttachments.mjs'
+import { isSourceMetadataList } from '../src/xixi/sourceMetadata.ts'
 
 const columns = {
   areas: ['id', 'document'], tasks: ['id', 'document'], events: ['id', 'document'], availability: ['id', 'document'], assignments: ['id', 'document'],
@@ -16,7 +17,7 @@ const columns = {
 const documentTables = new Set(['areas', 'tasks', 'events', 'availability', 'assignments', 'memories', 'operations', 'turns', 'summaries'])
 const stateAllowed = key => ['activeConversation', 'deepseekModel', 'planner-v1', 'planner-v1-weekend-defaults-v1', 'companion-v1', 'preferences:app', 'preferences:model-connection', 'preferences:free-time-daily'].includes(key) || /^(task-undo-version:|generated-area:|deleted-conversation:|deleted-request:)/u.test(key)
 const fail = message => { throw new ValidationError(message) }
-const checksum = tables => createHash('sha256').update(JSON.stringify(tables)).digest('hex')
+const checksum = tables => sha256Hex(JSON.stringify(tables))
 const integer = (value, min = 0, max = Number.MAX_SAFE_INTEGER) => { if (!Number.isSafeInteger(value) || value < min || value > max) fail('备份数字无效'); return value }
 const array = (value, max = 10000) => { if (!Array.isArray(value) || value.length > max) fail('备份列表无效'); return value }
 const bool = value => { if (typeof value !== 'boolean') fail('备份开关无效') }
@@ -157,7 +158,7 @@ export function validateCompanionState(value) {
 
 function validateDocument(table, document) {
   if (table === 'messages') {
-    knownKeys(document, ['id', 'conversationId', 'role', 'content', 'attachments', 'requestId', 'taskId', 'toolCallId', 'toolCalls', 'reasoningContent', 'question', 'executionNotice', 'sourceMessageIds', 'createdAt', 'excludeFromContext', 'retractedAt', 'contextRetractedAt'])
+    knownKeys(document, ['id', 'conversationId', 'role', 'content', 'attachments', 'requestId', 'taskId', 'toolCallId', 'toolCalls', 'reasoningContent', 'question', 'executionNotice', 'sources', 'sourceMessageIds', 'createdAt', 'excludeFromContext', 'retractedAt', 'contextRetractedAt'])
     identifier(document.conversationId); choice(document.role, ['user', 'assistant', 'tool'], '消息角色'); stamp(document.createdAt); bool(document.excludeFromContext)
     const attachments = normalizeChatAttachments(document.attachments)
     for (const key of ['requestId', 'taskId', 'toolCallId']) if (document[key] !== undefined) identifier(document[key])
@@ -165,6 +166,7 @@ function validateDocument(table, document) {
     if (document.sourceMessageIds !== undefined) ids(document.sourceMessageIds)
     if (document.reasoningContent !== undefined) { choice(document.role, ['assistant'], '思考内容角色'); text(document.reasoningContent, '思考内容', 2000000, { empty: true }) }
     if (document.question !== undefined) questionOptions(document.question)
+    if (document.sources !== undefined && (document.role !== 'assistant' || document.toolCalls?.length || !isSourceMetadataList(document.sources))) fail('备份网页来源元数据无效')
     if (document.executionNotice !== undefined) {
       choice(document.role, ['assistant'], '执行提示角色')
       if (document.toolCalls?.length) fail('执行提示不能附在工具调用中')

@@ -21,7 +21,7 @@ const nearCamera = (a, b, epsilon = 1e-9) => {
 // as the black-hole shader, then use the geodesic model for capture/escape.
 function screenImpact(camera, aspect, x, y) {
   const narrow = aspect < .8
-  const cx = narrow ? .5 + (camera.centerX - .5) * .2 : camera.centerX
+  const cx = narrow ? .5 + (camera.centerX - .5) * .34 : camera.centerX
   const cy = narrow ? .5 + (camera.centerY - .5) * 6 : camera.centerY
   const scale = (narrow ? 13.8 : 10.2) / camera.zoom
   const imageRadius = Math.hypot((x - cx) * aspect, y - cy) * scale

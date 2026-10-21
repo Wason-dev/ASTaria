@@ -1,3 +1,4 @@
+import { pageIsHidden, PAGE_ACTIVITY_EVENT } from '../stores/pageActivity.ts'
 import type { OrbitDay, OrbitGroup } from './orbitGroups'
 import { moveOrbitGroup } from './orbitGroups'
 import { springStep } from './orbitMotion'
@@ -122,7 +123,8 @@ export class HorizonCanvas {
     this.observer = new ResizeObserver(this.resize)
     this.observer.observe(canvas)
     document.addEventListener('visibilitychange', this.visibility)
-    if (!document.hidden) this.frame = requestAnimationFrame(this.render)
+    document.addEventListener(PAGE_ACTIVITY_EVENT, this.visibility)
+    if (!pageIsHidden()) this.frame = requestAnimationFrame(this.render)
   }
 
   destroy() {
@@ -130,18 +132,22 @@ export class HorizonCanvas {
     this.disposed = true
     cancelAnimationFrame(this.frame); this.frame = 0
     this.observer.disconnect()
-    document.removeEventListener('visibilitychange', this.visibility)
+    document.removeEventListener('visibilitychange', this.visibility); document.removeEventListener(PAGE_ACTIVITY_EVENT, this.visibility)
     this.releaseAtmosphere(); this.samples = []; this.motions.clear()
+    this.canvas.width = 0; this.canvas.height = 0
     setStringFlightEdgePull({ angle: 0, displacement: 0, spread: .1 })
   }
 
   private resize = () => {
     if (this.disposed) return
     const rect = this.canvas.getBoundingClientRect()
-    this.width = Math.max(1, rect.width); this.height = Math.max(1, rect.height)
-    this.ratio = clamp(finite(globalThis.devicePixelRatio, 1), 1, 1.6)
-    this.canvas.width = Math.round(this.width * this.ratio)
-    this.canvas.height = Math.round(this.height * this.ratio)
+    const width = Math.max(1, rect.width), height = Math.max(1, rect.height)
+    const ratio = clamp(finite(globalThis.devicePixelRatio, 1), 1, 1.6)
+    if (width === this.width && height === this.height && ratio === this.ratio) return
+    this.width = width; this.height = height; this.ratio = ratio
+    const pixelWidth = Math.round(width * ratio), pixelHeight = Math.round(height * ratio)
+    if (this.canvas.width !== pixelWidth) this.canvas.width = pixelWidth
+    if (this.canvas.height !== pixelHeight) this.canvas.height = pixelHeight
     this.sampledProjectionKey = ''
     this.releaseAtmosphere()
   }
@@ -149,7 +155,7 @@ export class HorizonCanvas {
   private visibility = () => {
     if (this.disposed) return
     cancelAnimationFrame(this.frame); this.frame = 0; this.last = 0
-    if (!document.hidden) this.frame = requestAnimationFrame(this.render)
+    if (!pageIsHidden()) this.frame = requestAnimationFrame(this.render)
   }
 
   private sampleCurve(projection: HorizonProjection, state: HorizonVisual, dt: number) {
@@ -312,7 +318,7 @@ export class HorizonCanvas {
     c.restore()
   }
 
-  private groups(state: HorizonVisual, projection: HorizonProjection, dt: number) {
+  private groups(state: HorizonVisual, projection: HorizonProjection, dt: number, draw = true) {
     const sameDayPreview = state.dragging && state.dropTarget?.day === state.day
     const preview = sameDayPreview
       ? moveOrbitGroup(state.groups, state.dragging!.id, state.day, state.dropTarget!.index) : state.groups
@@ -355,7 +361,7 @@ export class HorizonCanvas {
       motion.dragging = dragging
       positions.set(group.id, { ...motion.center, t: visibleT, day: target.day, index: target.index, angle: motion.angle.value })
       const visibility = this.groupVisibility ** 2 * (3 - 2 * this.groupVisibility)
-      this.groupStrand(motion, anchor, visibleT, state, (dragging ? 1 : dayEase) * visibility)
+      if (draw) this.groupStrand(motion, anchor, visibleT, state, (dragging ? 1 : dayEase) * visibility)
     }
     const live = new Set(rendered.map(group => group.id))
     for (const id of this.motions.keys()) if (!live.has(id)) this.motions.delete(id)
@@ -363,7 +369,7 @@ export class HorizonCanvas {
   }
 
   /** A moving highlight follows the existing curved limb; its cycle is not progress. */
-  private workScan(state: HorizonVisual, projection: HorizonProjection, dt: number) {
+  private workScan(state: HorizonVisual, projection: HorizonProjection, dt: number, draw = true) {
     this.workLight = state.reduced ? Number(Boolean(state.working)) : clamp(this.workLight + (state.working ? 1 : -1) * dt * 3)
     if (this.workLight <= 0) return
     if (!state.reduced) this.workTime += dt
@@ -373,6 +379,7 @@ export class HorizonCanvas {
     const target = matched.length ? matched.reduce((sum, value) => sum + value, 0) / matched.length
       : state.reduced ? .5 : .5 + .34 * Math.sin(this.workTime * .6)
     this.workFocus = state.reduced ? spring(target) : springStep(this.workFocus, target, dt, 5, 1)
+    if (!draw) return
     const center = this.workFocus.value, span = matched.length ? .07 : .11
     const a = this.point(center - span), b = this.point(center + span)
     const c = this.context, gradient = c.createLinearGradient(a.x, a.y, b.x, b.y)
@@ -423,7 +430,7 @@ export class HorizonCanvas {
 
   private render = (stamp: number) => {
     this.frame = 0
-    if (this.disposed || document.hidden) return
+    if (this.disposed || pageIsHidden()) return
     const state = this.getState(), dt = this.last ? clamp((stamp - this.last) / 1000, 0, .05) : 1 / 60
     this.last = stamp
     if (state.day !== this.previousDay) {
@@ -442,7 +449,12 @@ export class HorizonCanvas {
     c.setTransform(this.ratio, 0, 0, this.ratio, 0, 0)
     c.globalAlpha = 1; c.globalCompositeOperation = 'source-over'
     c.clearRect(0, 0, this.width, this.height)
-    this.ribbon(state, projection); this.groups(state, projection, dt); this.workScan(state, projection, dt)
-    if (!this.disposed && !document.hidden) this.frame = requestAnimationFrame(this.render)
+    const visible = state.reveal > 0
+    // Continue the camera pull, clocks and springs under the zero-opacity
+    // entry/exit layer. Only its unobservable strokes and gradients are skipped.
+    if (visible) this.ribbon(state, projection)
+    else this.glowImage(projection, clamp(state.tuning.thickness, 4, 80))
+    this.groups(state, projection, dt, visible); this.workScan(state, projection, dt, visible)
+    if (!this.disposed && !pageIsHidden()) this.frame = requestAnimationFrame(this.render)
   }
 }

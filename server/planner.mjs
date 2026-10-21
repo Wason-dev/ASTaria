@@ -1,6 +1,6 @@
 import { routineOccursOn, weekStart } from '../src/planner/weekCycle.ts'
 import { holidayRoutinesForDay } from '../src/planner/model.ts'
-import { createHash } from 'node:crypto'
+import { sha256Hex } from './portable.mjs'
 import { ValidationError, knownKeys, text, identifier, choice, day, dateTime, clockTime } from './validation.mjs'
 
 const STATE_KEY = 'planner-v1'
@@ -57,7 +57,12 @@ export function validateDayEvents(events) {
   if (new Set(values.map(event => event.id)).size !== values.length) fail('单日活动标识不可重复')
 }
 function routineValue(input) {
-  knownKeys(input, ['id', 'title', 'kind', 'weekdays', 'start', 'end', 'location', 'items', 'enabled', 'weekCycle', 'weekAnchor'], '固定安排')
+  knownKeys(input, ['id', 'title', 'kind', 'weekdays', 'start', 'end', 'location', 'items', 'enabled', 'weekCycle', 'weekAnchor', 'courseInfo'], '固定安排')
+  let courseInfo
+  if (input.courseInfo !== undefined) {
+    knownKeys(input.courseInfo, ['period', 'teacher', 'classGroup', 'note'], '课程信息')
+    courseInfo = Object.fromEntries(Object.entries({ period: 80, teacher: 160, classGroup: 160, note: 500 }).map(([key, limit]) => [key, text(input.courseInfo[key], '课程信息', limit, { empty: true })]))
+  }
   timeRange(input.start, input.end)
   const cycle = choice(input.weekCycle, ['weekly', 'odd', 'even'], '重复周次', 'weekly')
   if (cycle !== 'weekly' && (!input.weekAnchor || weekStart(input.weekAnchor) !== input.weekAnchor)) fail('隔周安排需要明确第1周的周一日期')
@@ -66,6 +71,7 @@ function routineValue(input) {
   return {
     id: identifier(input.id), title: text(input.title, '安排名称', 160), kind: choice(input.kind, ['class', 'available', 'break'], '安排类型'),
     ...(cycle !== 'weekly' ? { weekCycle: cycle, weekAnchor: input.weekAnchor } : {}),
+    ...(courseInfo ? { courseInfo } : {}),
     weekdays: [...input.weekdays].sort((a, b) => a - b), start: input.start, end: input.end,
     location: text(input.location, '地点', 160, { empty: true }), items: strings(input.items, '携带物品'), enabled: boolean(input.enabled, '启用状态'),
   }
@@ -98,7 +104,7 @@ function weekdayReplacementValue(input) {
 }
 function weekdayRoutineId(originalId, weekday, usedIds) {
   // The bounded digest supports even a maximum-length original identifier.
-  const base = `weekday-${weekday}-${createHash('sha256').update(originalId).digest('hex').slice(0, 24)}`
+  const base = `weekday-${weekday}-${sha256Hex(originalId).slice(0, 24)}`
   let id = base, suffix = 0
   while (usedIds.has(id)) id = `${base}-${++suffix}`
   usedIds.add(id)
@@ -257,9 +263,37 @@ export function createPlannerStore({ db, transaction, getTask, listTasks, now = 
   }
   function validateRoutineOccupancy(routine, state) {
     if (!routine.enabled || routine.kind === 'available') return
-    if (state.blocks.some(block => !state.dayOverrides?.[block.date] && !state.dayExceptions?.[block.date] && routineOccursOn(routine, block.date) && occupiesTime(getTask(block.taskId)) && fixedConflicts(routine, block))) fail('固定安排与已有任务时间重叠，请先调整任务安排', 409)
+    const instant = now().getTime()
+    for (const block of state.blocks) {
+      const exception = state.dayExceptions?.[block.date]
+      // Restored dates use the weekly timetable; other exceptions and legacy
+      // templates have their own dated schedules instead.
+      if (exception ? exception.kind !== 'restored' : state.dayOverrides?.[block.date]) continue
+      if (!routineOccursOn(routine, block.date) || !fixedConflicts(routine, block)) continue
+      // History remains intact, but an overlap that has already ended cannot
+      // prevent a new weekly schedule, even if the task itself is still running.
+      const overlapEnd = routine.end < block.end ? routine.end : block.end
+      if (localInstant(block.date, overlapEnd) <= instant) continue
+      const task = getTask(block.taskId)
+      if (occupiesTime(task)) fail(`固定安排与已有任务时间重叠：${block.date} ${block.start}–${block.end}「${task.title}」。请先调整任务安排`, 409)
+    }
   }
-  function validateBlock(block, state, { restoring = false } = {}) {
+  function syncFixedConflicts(state, date, range, instant, block) {
+    const exception = state.dayExceptions?.[date]
+    // Restored dates use the periodic timetable. Dated snapshots and events
+    // are historical facts and keep their full conflict checks during sync.
+    const weekly = exception ? exception.kind === 'restored' : !state.dayOverrides?.[date]
+    const conflicts = (routine, periodic) => {
+      // Explicit blocks keep their clock overlap check before resolving dated
+      // routine instants, including unrelated clocks in a DST transition.
+      if (!routine.enabled || routine.kind === 'available' || block && !fixedConflicts(routine, block)) return false
+      const fixed = { start: localInstant(date, routine.start), end: localInstant(date, routine.end) }
+      return overlaps(range, fixed) && (!periodic || Math.min(range.end, fixed.end) > instant)
+    }
+    return datedRoutines(state, date).some(routine => conflicts(routine, weekly))
+      || (state.dayEvents ?? []).some(event => event.date === date && conflicts({ ...event, kind: 'class', enabled: true }, false))
+  }
+  function validateBlock(block, state, { restoring = false, syncInstant } = {}) {
     const task = requireTask(block.taskId, !restoring)
     // A done block is still a record of occupied time. Dropped history remains
     // non-occupying, so restoring it does not introduce an active conflict.
@@ -272,7 +306,10 @@ export function createPlannerStore({ db, transaction, getTask, listTasks, now = 
     }
     const range = blockRange(block), deadline = dueLimit(task.due)
     if (deadline !== null && Number.isFinite(deadline) && range.end > deadline) fail('安排结束时间超过了任务截止时间', 409)
-    if (routinesOn(state, block.date).some(routine => fixedConflicts(routine, block))) fail('这个时间已有课程、休息或固定活动', 409)
+    // Only sync may retain an ended periodic overlap; ordinary placement and
+    // restore validation continue to check the complete routine occupancy.
+    if (syncInstant === undefined ? routinesOn(state, block.date).some(routine => fixedConflicts(routine, block))
+      : syncFixedConflicts(state, block.date, range, syncInstant, block)) fail('这个时间已有课程、休息或固定活动', 409)
     if (state.blocks.some(other => other.id !== block.id && occupiesTime(getTask(other.taskId)) && overlaps(blockRange(other), range))) fail('这个时间已有其他任务安排', 409)
     const plannedTasks = new Set(state.blocks.filter(other => other.id !== block.id).map(other => other.taskId))
     plannedTasks.add(block.taskId)
@@ -636,7 +673,8 @@ export function createPlannerStore({ db, transaction, getTask, listTasks, now = 
   function validateSyncState() {
     const state = getPlanner()
     validateState(state)
-    for (const block of state.blocks) validateBlock(block, state, { restoring: true })
+    const instant = now().getTime()
+    for (const block of state.blocks) validateBlock(block, state, { restoring: true, syncInstant: instant })
     // A task's explicit startAt also occupies time when it has no planner block.
     const planned = new Set(state.blocks.map(block => block.taskId))
     const implicit = listTasks().filter(task => !planned.has(task.id)).map(task => ({ task, range: taskRange(task) }))
@@ -649,8 +687,7 @@ export function createPlannerStore({ db, transaction, getTask, listTasks, now = 
       cursor.setHours(0, 0, 0, 0)
       while (cursor.getTime() < range.end) {
         const date = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}-${String(cursor.getDate()).padStart(2, '0')}`
-        if (routinesOn(state, date).some(routine => routine.enabled && routine.kind !== 'available'
-          && overlaps(range, { start: localInstant(date, routine.start), end: localInstant(date, routine.end) }))) fail('事项的开始时间与课程、休息或固定活动冲突', 409)
+        if (syncFixedConflicts(state, date, range, instant)) fail('事项的开始时间与课程、休息或固定活动冲突', 409)
         cursor.setDate(cursor.getDate() + 1)
       }
     }

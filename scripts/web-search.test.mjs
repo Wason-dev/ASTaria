@@ -96,7 +96,8 @@ test('a complete URL is fetched directly without a DeepSeek search request or ke
     pageFetcher: async (url, options) => { pages.push([url, options.signal]); return { content: 'ASTaria 仓库正文', fetchedAt: '2026-10-09T00:00:00.000Z', fetchStatus: 'ok' } },
   })
   const result = await search.search('https://github.com/Wason-dev/ASTaria')
-  assert.deepEqual(pages, [['https://github.com/Wason-dev/ASTaria', undefined]])
+  assert.deepEqual(pages.map(([url]) => url), ['https://github.com/Wason-dev/ASTaria'])
+  assert.ok(pages[0][1] instanceof AbortSignal)
   assert.deepEqual(result.sources, [{ title: 'https://github.com/Wason-dev/ASTaria', url: 'https://github.com/Wason-dev/ASTaria', snippet: '', publishedAt: null,
     source: 'github.com', content: 'ASTaria 仓库正文', fetchedAt: '2026-10-09T00:00:00.000Z', fetchStatus: 'ok' }])
 })
@@ -118,26 +119,34 @@ test('one page fetch failure is reported per source without losing verified page
   assert.deepEqual(result.sources.map(source => source.fetchStatus), ['ok', 'failed'])
   assert.equal(result.sources[1].content, '')
   assert.ok(Number.isFinite(Date.parse(result.sources[1].fetchedAt)))
-  assert.deepEqual(seen, [controller.signal, controller.signal])
+  assert.equal(seen.length, 2)
+  controller.abort()
+  assert.ok(seen.every(signal => signal.aborted), 'caller cancellation reaches both page requests')
 })
 
-test('assistant visibly refuses to verify a date when search pages have no body', async t => {
+test('an empty page stays unverified even when the model invents a date, without replacing its prose', async t => {
   const db = createDatabase(':memory:')
   t.after(() => db.close())
   saveModelSettings(db, local({ enabled: true, maxUses: 2 }))
   let calls = 0
   const xixi = createXixi({ db,
     webSearch: { search: async () => ({ sources: [{ title: '10月5日开始', url: 'https://example.com/a', content: '', fetchStatus: 'empty', fetchedAt: '2026-10-03T01:00:00.000Z' }], truncated: false, notice: '外部资料' }) },
-    complete: async () => {
+    complete: async payload => {
       calls += 1
+      if (calls === 2) {
+        const state = payload.messages.find(message => message.role === 'system' && message.content.startsWith('本轮网页读取的结构化状态：'))
+        assert.match(state.content, /"status":"unverified"/u)
+        assert.match(state.content, /"fetchStatus":"empty"/u)
+        assert.match(state.content, /不能编造已访问、已核验或阅读全文/u)
+      }
       return calls === 1 ? { choices: [{ message: { role: 'assistant', content: '', tool_calls: [{ id: 'search', type: 'function', function: { name: 'web_search', arguments: JSON.stringify({ query: '日期' }) } }] } }] }
         : reply('日期确定是10月5日')
     },
   })
   const result = await xixi.chat({ requestId: randomUUID(), conversationId: 'main', text: '查日期', context: { page: 'home', timezone: 'Asia/Shanghai' } })
-  assert.match(result.messages.at(-1).content, /无法核实具体日期/u)
-  assert.doesNotMatch(result.messages.at(-1).content, /日期确定/u)
-  assert.match(result.messages.at(-1).content, /正文为空/u)
+  assert.equal(result.messages.at(-1).content, '日期确定是10月5日', 'model mistakes must not be hidden by replacing every response')
+  assert.deepEqual(result.messages.at(-1).sources, [{ title: '10月5日开始', url: 'https://example.com/a', fetchStatus: 'empty', fetchedAt: '2026-10-03T01:00:00.000Z' }])
+  assert.doesNotMatch(result.messages.at(-1).content, /来源核验/u)
 })
 
 test('search refuses disabled or unconfigured cloud channels without a request', async () => {

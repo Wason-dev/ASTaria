@@ -229,3 +229,51 @@
   .free-time-wish-start { grid-template-columns:minmax(0,1fr); gap:16px; padding-top:20px }
   .free-time-wish-aside { padding-top:0; gap:16px }
 }
+
+.free-time-mobile-views { display:none }
+.free-time-mobile-panel-title { display:none }
+.free-time-mobile-content,.free-time-goal-browser:not([hidden]) { display:contents }
+
+/* The mobile header reuses WorkspaceHeading and the existing pill controls. */
+html[data-mobile] .p0 .home-workspace .free-time-page header.free-time-header {
+  flex-wrap:nowrap; align-items:center; min-height:40px; gap:8px;
+  padding:0; margin:0;
+}
+html[data-mobile] .free-time-page .free-time-header .workspace-heading-description { display:none }
+html[data-mobile] .free-time-page .free-time-header .free-time-mobile-views {
+  flex:none; width:auto; max-width:none; margin:0; gap:2px;
+}
+html[data-mobile] .p0 .free-time-header .free-time-mobile-views button { min-height:34px; padding:6px 10px; font-weight:400; }
+html[data-mobile] .free-time-page .free-time-mobile-content {
+  display:flex; flex-direction:column; gap:var(--ft-pane-gap); min-width:0;
+}
+html[data-mobile] .free-time-page .free-time-goals .free-time-pane-heading { flex-wrap:nowrap; gap:8px; }
+html[data-mobile] .free-time-mobile-panel-title { display:block; font-weight:400; }
+html[data-mobile] .free-time-page .free-time-goals .free-time-add-goal { margin-left:auto; white-space:nowrap; }
+html[data-mobile] .free-time-page[data-mobile-view=wishes] .free-time-add-goal { display:none }
+html[data-mobile] .free-time-page .free-time-goal-browser:not([hidden]) { display:flex; flex-direction:column; }
+html[data-mobile] .free-time-page .free-time-search[data-empty=true],
+html[data-mobile] .free-time-page .free-time-pagination[data-pages="1"] > div { display:none }
+html[data-mobile] .free-time-page .free-time-plan .free-time-pane-heading { flex-wrap:nowrap; align-items:center; gap:8px; }
+html[data-mobile] .free-time-page .free-time-plan .free-time-pane-heading p { display:none }
+html[data-mobile] .free-time-page .free-time-pane-heading h3 { font-weight:400; white-space:nowrap; }
+html[data-mobile] .free-time-page .free-time-wish-heading { grid-template-columns:minmax(0,1fr) auto; gap:8px; }
+html[data-mobile] .free-time-page .free-time-wish-copy { display:contents }
+html[data-mobile] .free-time-page .free-time-wish-heading h3 { font-size:14px; font-weight:400; }
+html[data-mobile] .free-time-page .free-time-wish-heading p { grid-column:1 / -1; grid-row:2; }
+html[data-mobile] .free-time-page .free-time-wish-heading > button { grid-column:2; grid-row:1; white-space:nowrap; padding-inline:8px; }
+/* Reuse free-time-content-in's 4px / 180ms content motion. Transitions can
+   reverse from the painted frame; replayed keyframes would jump to an endpoint.
+   The original Pane glass now stays on the shared layout, outside this motion.
+   Do not restart page-arrival animations when a retained tab becomes visible. */
+html[data-mobile] .free-time-page .free-time-mobile-content .free-time-pane-content {
+  animation:none; opacity:1; transform:none; transition:opacity 180ms ease,transform 180ms ease;
+}
+html[data-mobile] .free-time-page .free-time-mobile-content .home-glass-surface,
+html[data-mobile] .free-time-page .free-time-mobile-content .home-glass-surface::after { animation:none; }
+html[data-mobile] .free-time-page .free-time-mobile-content[data-view-phase=exit] .free-time-pane-content {
+  opacity:0; transform:translateY(-4px); transition-duration:140ms;
+}
+html[data-mobile] .free-time-page .free-time-mobile-content[data-view-phase=prepare] .free-time-pane-content {
+  opacity:0; transform:translateY(4px); transition:none;
+}

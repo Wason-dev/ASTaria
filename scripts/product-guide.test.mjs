@@ -51,9 +51,11 @@ test('the assistant receives the same DDL and estimate options as the actual rec
   assert.deepEqual(estimate.minuteShortcuts, ESTIMATE_SHORTCUTS)
   assert.equal(parseReceiptEstimate(String(estimate.customMin)), estimate.customMin)
   assert.equal(parseReceiptEstimate(String(estimate.customMax)), estimate.customMax)
-  assert.equal(saving.requiresChat, false)
   assert.equal(saving.updatesExistingTask, true)
-  assert.equal(saving.reschedulesCalendar, false)
+  assert.equal(saving.deadline.requiresChat, false)
+  assert.equal(saving.deadline.reschedulesCalendar, false)
+  assert.equal(saving.estimate.requiresChat, true)
+  assert.equal(saving.estimate.reschedulesCalendar, true)
 })
 
 test('a later message sees current user settings and task edits without leaking connection details', async t => {

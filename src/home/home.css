@@ -2,7 +2,21 @@
 .home-workspace :is(button, textarea, .home-menu, dialog) { pointer-events: auto }
 .p0 .home-black-hole-entry { position: absolute; z-index: 0; box-sizing: border-box; border: 1px solid transparent; border-radius: 50%; padding: 0; opacity: 0; pointer-events: none !important; cursor: pointer; transition: opacity 180ms ease, border-color 180ms ease, box-shadow 180ms ease; }
 .home-current, .home-morph { z-index: 1; }
-.home-workspace[data-string-covered=true] > .home-scene-ui { opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 760ms cubic-bezier(.2,.7,.2,1), visibility 0s 760ms; }
+/* An opacity animation on this ancestor creates a new backdrop root. Keep it
+   opaque so returning glass samples the scene from its first visible frame. */
+.home-scene-ui { position:absolute; inset:0; opacity:1; visibility:visible; transition:visibility 0s }
+.home-workspace:not([data-page=home]) > .home-scene-ui { visibility:hidden; pointer-events:none; transition:visibility 0s 200ms }
+.home-workspace[data-string-covered=true] > .home-scene-ui { visibility:hidden; pointer-events:none; transition:visibility 0s 760ms }
+.home-workspace:not([data-page=home]) > .home-scene-ui > :is(.home-current,.home-morph),
+.home-workspace[data-string-covered=true] > .home-scene-ui > :is(.home-current,.home-morph) { opacity:0!important; transition:opacity 200ms ease }
+.home-workspace[data-page=home][data-string-covered=false] > .home-scene-ui > .home-current,
+.home-workspace[data-page=home][data-string-covered=false] .home-launch { animation:home-content-return 360ms cubic-bezier(.16,.8,.25,1) backwards }
+.home-workspace[data-page=home][data-string-covered=false] .home-morph > .home-glass-surface { animation:home-task-tint-in 350ms cubic-bezier(.16,.8,.25,1) backwards }
+@keyframes home-content-return { from { opacity:0 } }
+.home-workspace[data-motion=reduced] .home-scene-ui,
+.home-workspace[data-motion=reduced] .home-scene-ui > :is(.home-current,.home-morph) { transition:none }
+.home-workspace[data-motion=reduced] .home-scene-ui :is(.home-current,.home-launch,.home-glass-surface) { animation:none }
+@media(prefers-reduced-motion:reduce) { .home-scene-ui :is(.home-current,.home-launch,.home-glass-surface) { animation:none!important } }
 .p0:has(.home-workspace[data-string-covered=true]) > .p0-whisper { opacity: 0; transition: opacity 760ms cubic-bezier(.2,.7,.2,1); }
 .home-black-hole-entry[data-visible=true] { pointer-events: auto !important; }
 .home-black-hole-entry[data-visible=true]:hover, .home-black-hole-entry[data-visible=true]:focus-visible { opacity: 1; border-color: rgb(224 177 92 / .34); box-shadow: 0 0 0 5px rgb(224 177 92 / .06), 0 0 18px rgb(224 177 92 / .14); outline: none; }
@@ -44,9 +58,12 @@
 .home-current { position: absolute; left: var(--home-left); top: 43%; width: min(270px, calc(100% - 44px)) }
 .home-current > span { display: block; font-size: 11px; line-height: 1.6; color: var(--p0-muted); letter-spacing: .12em; margin-bottom: 9px }
 .p0 .home-current-title { display: block; max-width: 100%; text-align: left; font-size: 14px; line-height: 1.6; padding: 0; letter-spacing: .035em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
-.home-morph { position: absolute; left: var(--home-left); box-shadow: 0 6px 18px rgba(0, 0, 0, .6) }
+/* The direct SVG sampling leaf must share the morph's rounded clip, including
+   the collapsed pill; border-radius on that filtered leaf alone is not enough. */
+.home-morph { position: absolute; left: var(--home-left); overflow:hidden; overflow:clip; box-shadow:0 6px 18px rgba(0, 0, 0, .6) }
 .home-glass-definitions { position: absolute; pointer-events: none }
 .home-glass-measure { position: absolute; inset: 0; border-radius: inherit; overflow: hidden; pointer-events: none }
+.home-glass-backdrop { position: absolute; inset: 0; border-radius: inherit; pointer-events: none }
 .home-glass-surface { position: absolute; inset: 0; border-radius: inherit; pointer-events: none; background: rgba(8, 10, 14, var(--glass-tint)); box-shadow: inset 0 1px 1px rgb(255 255 255 / calc(var(--glass-rim) * .24)), inset 0 -1px 2px rgb(255 255 255 / calc(var(--glass-rim) * .07)) }
 .home-glass-surface::before { content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none; opacity:var(--glass-reflection,0); background:linear-gradient(115deg,transparent 12%,#ffffff18 28%,#fff8 38%,#ffffff0c 49%,transparent 64%); }
 .home-glass-surface::after { content: ''; position: absolute; inset: 0; border-radius: inherit; padding: 1px; background: linear-gradient(125deg, rgb(255 255 255 / calc(var(--glass-rim) * .9)), rgb(255 255 255 / calc(var(--glass-rim) * .07)) 34%, rgb(255 255 255 / calc(var(--glass-rim) * .24)) 70%, rgb(255 255 255 / calc(var(--glass-rim) * .9))); mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); mask-composite: exclude }
@@ -68,9 +85,6 @@
 .home-collapse:is(:hover, :focus-visible) circle { fill: #ffffff17; stroke: #ffffff55 }
 .home-conversation { flex: 1; min-height: 40px; overflow: auto; scrollbar-width: thin; padding: 14px 0; display: flex; flex-direction: column; gap: 12px; pointer-events: auto; overscroll-behavior: contain }
 .home-greeting { margin: auto 0 5px; font-size: 12px; color: #d4d0c9 }
-.home-receipt { font-size: 12px; overflow-wrap: anywhere; flex-shrink: 0 }
-.home-receipt > span { display: block; color: var(--p0-muted); font-size: 10px; margin-bottom: 3px }
-.p0 .home-receipt button { text-align: left; padding: 0; line-height: 1.6 }
 .home-xixi form { flex-shrink: 0; border-top: 1px solid var(--p0-line); padding-top: 10px }
 .home-input-shell { position: relative; isolation: isolate; border-radius: 10px; margin-bottom: 14px; background: #080a0e0a; box-shadow: inset 0 0 0 1px #ffffff12; transition: box-shadow 180ms ease }
 .home-input-shell:focus-within { box-shadow: inset 0 0 0 1px #ffffff24 }
@@ -102,7 +116,9 @@
 .home-task-dialog[data-closing=true] { pointer-events: none; animation: home-task-dialog-out 180ms ease both }
 .home-task-dialog[data-closing=true] .home-task-content { animation: none }
 .home-task-dialog .home-glass-surface { animation: home-task-tint-in 220ms both }
-.home-task-dialog[data-closing=true] .home-glass-surface { animation: none; -webkit-backdrop-filter: none !important; backdrop-filter: none !important }
+.home-task-dialog[data-closing=true]:not([data-layered-exit=true]) .home-glass-surface { animation: none; -webkit-backdrop-filter: none !important; backdrop-filter: none !important }
+.home-task-dialog[data-closing=true]:not([data-layered-exit=true]) .home-glass-backdrop { -webkit-backdrop-filter: none !important; backdrop-filter: none !important }
+.home-task-dialog[data-closing=true][data-layered-exit=true] .home-glass-surface { animation:none }
 .home-task-dialog::backdrop { background: rgb(0 0 0 / .22); animation: home-task-backdrop-in 220ms ease both }
 .home-task-dialog[data-closing=true]::backdrop { animation: home-task-backdrop-out 180ms ease both }
 .home-task-dialog header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--p0-line) }
@@ -126,11 +142,11 @@
 @keyframes home-task-backdrop-in { from { opacity: 0 } to { opacity: 1 } }
 @keyframes home-task-backdrop-out { to { opacity: 0 } }
 @media (max-width: 600px) {
-  .home-nav { --home-brand-width: 72px; --home-menu-gap: 8px; --home-clock-space: 42px; top: 18px }
+  .home-nav { --home-brand-width: 72px; --home-menu-gap: 8px; --home-clock-space: 42px; top: 10px }
   .home-nav[data-menu-open=true] { --home-brand-width: 28px }
   .home-nav[data-menu-open=true] .home-brand-wordmark { opacity: 0; transform: translateY(-50%) translateX(-4px) scale(.88) }
   .home-nav[data-menu-open=true] .home-brand-mark { opacity: 1; transform: translateY(-50%) scale(1) }
-  .p0 .home-menu button { padding-inline: 6px }
+  .p0 .home-menu button { min-height: 40px; padding-block: 7px; padding-inline: 6px }
   .home-clock { top: 20px; flex-direction: column; align-items: flex-end; gap: 0; width: 42px; font-size: 10px; line-height: 14px; letter-spacing: .035em }
   .home-clock-date { display: none }
   .home-clock-short-date { display: block }
@@ -165,10 +181,11 @@
   .home-xixi textarea { min-height: 38px; height: 42px }
 }
 .home-workspace[data-grid=false] :is(.wb-background,.pl-background)::after{display:none}
+.home-workspace[data-page=settings] > .home-notification { visibility:hidden; opacity:0; pointer-events:none }
 .home-workspace[data-motion=reduced] :is(.wb-enter,.pl-period-page,.home-input-flash){animation-duration:1ms!important;transition-duration:1ms!important}
 .p0 .home-notification-content{border:0;background:transparent;color:inherit;font:inherit;cursor:pointer;width:100%;text-align:left}
 .home-workspace[data-page=settings]>:is(.home-nav,.home-clock){transition:opacity .24s ease,visibility 0s,width 280ms cubic-bezier(.2,.7,.2,1)}
 .home-workspace[data-effect-preview=true]>:is(.home-scene-ui,.workbench,.planner,.home-nav,.home-clock,.home-notification){visibility:hidden!important;opacity:0!important;pointer-events:none!important}
 .home-workspace[data-effect-preview=true]>:is(.home-nav,.home-clock){transition:opacity .24s ease,visibility 0s .24s,width 280ms cubic-bezier(.2,.7,.2,1)}
-.home-workspace[data-effect-preview=true]>:is(.home-scene-ui,.workbench,.planner) .home-glass-surface{backdrop-filter:none!important;-webkit-backdrop-filter:none!important;box-shadow:none!important}
+.home-workspace[data-effect-preview=true]>:is(.home-scene-ui,.workbench,.planner) :is(.home-glass-backdrop,.home-glass-surface){backdrop-filter:none!important;-webkit-backdrop-filter:none!important;box-shadow:none!important}
 @media(prefers-reduced-motion:reduce){.home-workspace[data-page=settings]>:is(.home-nav,.home-clock){transition:none}}

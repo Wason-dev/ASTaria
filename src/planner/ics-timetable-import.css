@@ -1,0 +1,44 @@
+.ics-import { --ics-ink: var(--import-ink); --ics-muted: var(--import-muted); --ics-line: var(--import-line); --ics-gold: var(--import-gold); --ics-well: var(--import-well) }
+.ics-import-muted { color: var(--ics-muted); font-size: 13px }
+.ics-import-upload { max-width: 600px; margin: 0 auto }
+.ics-import-upload .import-drop { min-height: 220px; margin: 22px 0 14px }
+.ics-import-help { margin-top: 14px; border-top: 1px solid var(--ics-line) }
+.ics-import-help p { padding: 6px 0 }
+.ics-import-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 20px }
+.ics-import-tools { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin: 14px 0 10px }
+.ics-import-tools > span { margin-left: auto; font-size: 11px }
+.ics-import-tools button { font-size: 11px }
+/* The body owns vertical scrolling. Only the fixed-column table scrolls across. */
+.ics-import-table-hint { display: none }
+.ics-import-table-scroll { overflow-x: auto; border-block: 1px solid var(--ics-line); margin-bottom: 10px }
+.ics-import table { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 840px; table-layout: fixed }
+.ics-import th { text-align: left; font-weight: 400; color: var(--ics-muted); padding: 7px 4px; font-size: 11px }
+.ics-import td { padding: 7px 4px; vertical-align: top; border-top: 1px solid var(--ics-line) }
+.ics-import th:first-child { width: 42px }
+.ics-import th:nth-child(2) { width: 190px }
+.ics-import th:nth-child(3) { width: 142px }
+.ics-import th:nth-child(4), .ics-import th:nth-child(5) { width: 102px }
+.ics-import tr[data-selected=true] { background: color-mix(in srgb, var(--ics-gold) 7%, transparent) }
+.ics-import td:is(:nth-child(3), :nth-child(4), :nth-child(5)) { font-variant-numeric: tabular-nums }
+.ics-import td > input { font-size: 12px; padding: 4px 6px }
+.ics-import .ics-import-pick { display: grid; place-items: center; width: 30px; min-height: 34px; padding: 5px; border-radius: 999px }
+.ics-import-pick svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; opacity: 0; transition: opacity 160ms ease }
+.ics-import .ics-import-pick[aria-pressed=true] { color: var(--ics-gold); border-color: var(--ics-gold); background: color-mix(in srgb, var(--ics-gold) 8%, transparent) }
+.ics-import-pick[aria-pressed=true] svg { opacity: 1 }
+.ics-import td details { margin-top: 4px; color: var(--ics-muted); overflow-wrap: anywhere }
+.ics-import td summary { font-size: 11px; padding-block: 2px }
+.ics-import td details p { white-space: pre-wrap; font-size: 11px }
+.ics-import-receipt { padding-top: 12px }
+.ics-import-receipt h3 { color: var(--ics-gold) }
+.ics-import-receipt ul { list-style: none; margin: 20px 0 0; padding: 0 }
+.ics-import-receipt li { display: flex; gap: 16px; padding: 10px 0; border-top: 1px solid var(--ics-line); overflow-wrap: anywhere }
+.ics-import-receipt time { flex: none; color: var(--ics-muted); font-size: 12px; font-variant-numeric: tabular-nums }
+@media (max-width: 700px) {
+  .ics-import-upload .import-drop { min-height: 190px }
+  .ics-import-tools > span { width: 100%; margin: 0 }
+  .ics-import-table-hint { display: block; padding-bottom: 8px }
+  .ics-import td > input { font-size: 14px }
+  .ics-import-receipt li { flex-direction: column; gap: 4px }
+}
+@supports (-webkit-touch-callout: none) { @media (max-width: 700px) { .ics-import td > input { font-size: 16px } } }
+@media (pointer: coarse) { .ics-import .ics-import-pick { width: 38px; min-height: 44px } }

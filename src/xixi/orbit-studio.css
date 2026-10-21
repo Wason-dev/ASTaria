@@ -118,3 +118,26 @@
 .orbit-studio[data-look=minimal] .orbit-days small { color:#75776f }
 .orbit-studio[data-look=minimal] .orbit-group-tether { opacity:.5 }
 @media(max-width:520px) { .orbit-heading p { max-width:170px; line-height:1.6 } .orbit-tuning-toggle svg,.orbit-tuning-toggle>span { display:none } .orbit-tuning-controls { margin-top:10px } }
+
+/* A modal stays in the workspace's DOM/theme even when promoted to the top
+   layer. Keep its canvas and camera intact; only its daylight UI changes. */
+@media (forced-colors: none) {
+  .p0 .home-workspace[data-theme=light] .horizon-studio { color:var(--p0-fg); color-scheme:light }
+  .p0 .home-workspace[data-theme=light] .horizon-studio :is(.orbit-heading h1,.orbit-heading p,.horizon-day-copy p,.horizon-day-copy>span,.orbit-group-caption,.orbit-group-caption small,.horizon-group-order,.horizon-detail-heading>small,.horizon-detail-heading h2,.horizon-task,.horizon-task-caption>small,.horizon-task-caption>span,.horizon-detail-hint,.horizon-browse>span,.orbit-caption p,.horizon-preview-note,.horizon-fixed li,.horizon-fixed li span,.horizon-fixed li small,.horizon-progress,.horizon-progress-elapsed,.horizon-progress-context,.horizon-progress-trail,.horizon-progress-trail li,.horizon-activity-source,.horizon-progress-trail small,.horizon-progress-note,.horizon-scheduling-question>p,.horizon-scheduling-question>small,.orbit-error) { color:var(--p0-fg); text-shadow:none }
+  .p0 .home-workspace[data-theme=light] .horizon-studio :is(.horizon-task-caption,.orbit-group-caption,.horizon-progress) { text-shadow:none }
+  /* Small footer copy crosses the shadow: preserve full text contrast there. */
+  .p0 .home-workspace[data-theme=light] .horizon-studio .orbit-caption { opacity:var(--horizon-ui-reveal,var(--orbit-reveal)) }
+  .p0 .home-workspace[data-theme=light] .horizon-studio[data-expanded=true] .orbit-caption,
+  .p0 .home-workspace[data-theme=light] .horizon-studio[data-choosing=true] .orbit-caption,
+  .p0 .home-workspace[data-theme=light] .horizon-studio>div[inert] .orbit-caption { opacity:0 }
+  .p0 .home-workspace[data-theme=light] .horizon-studio :is(.horizon-day-heading nav button,.horizon-group-controls button,.horizon-fixed>button,.orbit-cancel,.horizon-progress-expand,.horizon-detail-back,.horizon-browse button) { color:var(--p0-fg) }
+  .p0 .home-workspace[data-theme=light] .horizon-studio :is(.horizon-day-heading nav button[aria-pressed=true],.horizon-day-heading nav button[data-target=true],.orbit-group[data-dragged=true] .orbit-group-caption,.horizon-task[data-dragged=true]) { color:var(--p0-fg) }
+  .p0 .home-workspace[data-theme=light] .horizon-studio .horizon-day-heading nav button::after,
+  .p0 .home-workspace[data-theme=light] .horizon-studio .horizon-progress-light { background:var(--p0-accent) }
+  .p0 .home-workspace[data-theme=light] .horizon-studio :is(.horizon-detail-back,.horizon-browse button,.horizon-group-controls button,.horizon-fixed>button) { border-color:var(--p0-line) }
+  .p0 .home-workspace[data-theme=light] .horizon-studio button:enabled:is(:hover,:focus-visible) { color:var(--p0-fg); border-color:var(--p0-accent) }
+  .p0 .home-workspace[data-theme=light] .horizon-studio button:focus-visible { outline-color:var(--p0-fg) }
+  .p0 .home-workspace[data-theme=light] .horizon-studio .horizon-fixed ul { background:rgb(var(--light-glass-rgb) / .96); border-color:var(--p0-line); box-shadow:0 8px 28px #252d391c }
+  .p0 .home-workspace[data-theme=light] .horizon-studio .horizon-scheduling-question .xixi-quick-options button { color:var(--p0-fg); background:rgb(var(--light-glass-rgb) / .7); border-color:var(--p0-line) }
+  .p0 .home-workspace[data-theme=light] .horizon-studio :is(.horizon-fixed li strong,.horizon-progress-line,.horizon-progress-context>span,.horizon-progress-trail li>span,.orbit-error span) { color:var(--p0-fg) }
+}

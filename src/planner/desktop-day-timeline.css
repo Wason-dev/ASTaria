@@ -1,0 +1,51 @@
+.pl-desktop-day { min-width:0; color:var(--pl-ink); font-size:var(--pl-font,13px); line-height:1.6; font-variant-numeric:tabular-nums }
+.pl-desktop-day * { box-sizing:border-box }
+.pl-desktop-day-frame { min-width:0 }
+.pl-desktop-day-exception { margin:0 0 8px; color:var(--pl-gold); font-size:11px }
+.pl-desktop-day-ruler { position:relative; height:30px; margin:0 3px; color:var(--pl-muted); font-size:calc(var(--pl-font,13px) - 3px) }
+.pl-desktop-day-ruler > span { position:absolute; top:0; transform:translateX(-50%); white-space:nowrap }
+.pl-desktop-day-ruler > span[data-edge=start] { transform:none }
+.pl-desktop-day-ruler > span[data-edge=end] { transform:translateX(-100%) }
+.pl-desktop-day-strip { position:relative; height:max(var(--pl-day-height,168px),calc(var(--pl-font,13px) * 13)); min-width:0; margin-bottom:8px }
+.pl-desktop-day-strip[data-ready=false] { visibility:hidden }
+.pl-desktop-day-grid { position:absolute; inset:0; pointer-events:none }
+.pl-desktop-day-grid i { position:absolute; inset-block:0; width:1px; background:var(--pl-line); opacity:.45 }
+.p0 .pl-desktop-day-cell { position:absolute; display:flex; flex-direction:column; gap:5px; min-width:0; min-height:0; margin:0; padding:10px 7px; border:3px solid transparent; border-radius:12px; background:var(--pl-plate,var(--pl-well)); background-clip:padding-box; color:var(--pl-ink); font:inherit; text-align:left; overflow:hidden; box-shadow:inset 0 0 0 1px var(--pl-line); transition:background-color 180ms,border-color 180ms }
+.p0 button.pl-desktop-day-cell { cursor:pointer }
+.pl-desktop-day-cell strong { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:4; overflow:hidden; font-size:calc(var(--pl-font,13px) - 1px); font-weight:400; line-height:1.55; overflow-wrap:anywhere }
+.pl-desktop-day-kind,.pl-desktop-day-meta { color:var(--pl-muted); font-size:calc(var(--pl-font,13px) - 3px); line-height:1.6; overflow-wrap:anywhere }
+.pl-desktop-day-kind { font-size:9px; letter-spacing:.05em }
+.pl-desktop-day-time { display:flex; flex-wrap:wrap; align-items:center; column-gap:3px; row-gap:0; color:var(--pl-muted); font-size:calc(var(--pl-font,13px) - 3px); line-height:1.5 }
+.pl-desktop-day-time time { white-space:nowrap }
+.pl-desktop-day-cell[data-narrow=true] { padding-inline:5px }
+.pl-desktop-day-cell[data-narrow=true] .pl-desktop-day-time { flex-direction:column; align-items:flex-start }
+.pl-desktop-day-cell[data-narrow=true] .pl-desktop-day-time > span { display:none }
+.pl-desktop-day-cell[data-kind=free] { background:transparent; box-shadow:inset 0 0 0 1px var(--pl-line) }
+.pl-desktop-day-cell[data-kind=free] strong { color:var(--pl-muted); font-size:11px }
+.pl-desktop-day-cell[data-slim=true] { padding:7px 1px; justify-content:center; align-items:center; box-shadow:none }
+.pl-desktop-day-cell[data-slim=true] :is(.pl-desktop-day-kind,.pl-desktop-day-time,.pl-desktop-day-meta) { display:none }
+.pl-desktop-day-cell[data-slim=true] strong { font-size:9px; white-space:nowrap; writing-mode:horizontal-tb }
+.pl-desktop-day-cell[data-kind=task] { box-shadow:inset 2px 0 0 color-mix(in srgb,var(--pl-gold) 60%,transparent),inset 0 0 0 1px var(--pl-line) }
+.pl-desktop-day-cell[data-done=true] strong { text-decoration:line-through; text-decoration-color:var(--pl-muted) }
+.pl-desktop-day-warning { color:var(--pl-gold); font-size:calc(var(--pl-font,13px) - 3px) }
+.pl-desktop-day-now { position:absolute; inset-block:0; width:1px; border-left:1px dashed var(--pl-gold); pointer-events:none; opacity:.8 }
+.pl-desktop-day-empty { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; gap:14px; color:var(--pl-muted); font-size:calc(var(--pl-font,13px) - 1px) }
+.pl-desktop-day-measure { height:0 }
+.pl-desktop-day-cell[data-micro=true] strong { display:none }
+.pl-desktop-day-cell[data-stacked=true] .pl-desktop-day-kind { display:none }
+.pl-desktop-day-cell[data-stacked=true] strong { -webkit-line-clamp:2 }
+.pl-desktop-day-sources { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:10px 0; color:var(--pl-muted); font-size:11px; animation:pl-day-enter 180ms var(--pl-motion-ease) both }
+.pl-desktop-day-sources .pl-text-button { width:auto; padding:4px 8px }
+.pl-desktop-day-reminders { margin-top:12px; border-top:1px solid var(--pl-line); padding-top:8px }
+.pl-desktop-day-reminders summary { display:flex; align-items:center; gap:8px; width:fit-content; min-height:30px; cursor:pointer; color:var(--pl-muted); font-size:11px }
+.pl-desktop-day-reminders summary::before { content:'›'; transform:rotate(0deg); font-size:16px }
+.pl-desktop-day-reminders[open] summary::before { transform:rotate(90deg) }
+.pl-desktop-day-reminder-list { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr)); gap:8px }
+.pl-desktop-day-reminder-list button { display:flex; flex-direction:column; gap:3px; min-height:44px; padding:8px 10px; border:1px solid var(--pl-line); border-radius:10px; background:var(--pl-plate,var(--pl-well)); text-align:left; color:var(--pl-ink); cursor:pointer }
+.pl-desktop-day-reminder-list strong { font-size:calc(var(--pl-font,13px) - 1px); font-weight:400; overflow-wrap:anywhere }
+.pl-desktop-day-reminder-list span,.pl-desktop-day-note { color:var(--pl-muted); font-size:calc(var(--pl-font,13px) - 3px) }
+.pl-desktop-day-note { margin:8px 0 0 }
+.p0 .pl-desktop-day :is(button,summary):focus-visible { outline:1px solid var(--pl-gold); outline-offset:-3px }
+@media(hover:hover) { .p0 button.pl-desktop-day-cell:hover { background:var(--pl-plate-hover,var(--pl-highlight)); box-shadow:inset 0 0 0 1px var(--pl-gold) } }
+@media(prefers-reduced-motion:reduce) { .pl-desktop-day-cell { transition:none }.pl-desktop-day-sources { animation:none } }
+@media(forced-colors:active) { .p0 .pl-desktop-day-cell { border:1px solid ButtonText }.pl-desktop-day-now { border-color:Highlight } }

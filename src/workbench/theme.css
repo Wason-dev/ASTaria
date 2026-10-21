@@ -83,7 +83,7 @@
   .p0 .workbench[data-theme=dark] .wb-customize footer button { color: var(--wb-body); background: #ffffff0c }
 
   /* Dim the broad hover wash, preserving the pointer-following rim on dark glass. */
-  .p0 .workbench[data-theme=dark] :is(.wb-task,.wb-brief,.wb-focus-main,.wb-xixi,.wb-watch-related button,.wb-ddl-select,.wb-icon-button,.wb-tool,.wb-action,.wb-secondary,.wb-brief-start,.wb-ddl-fold-toggle)::before { background: radial-gradient(circle 120px at var(--wb-pointer-x, 50%) var(--wb-pointer-y, 50%), rgb(255 243 217 / .09), transparent 72%) }
+  .p0 .workbench[data-theme=dark] :is(.wb-task,.wb-brief,.wb-focus-main,.wb-xixi,.wb-watch-related button,.wb-ddl-select,.wb-icon-button,.wb-tool,.wb-action,.wb-secondary,.wb-brief-start,.wb-ddl-fold-toggle,.wb-focus-steps,.wb-briefing-panel)::before { background: radial-gradient(circle 120px at var(--wb-pointer-x, 50%) var(--wb-pointer-y, 50%), rgb(255 243 217 / .09), transparent 72%) }
   .p0 .workbench[data-theme=dark] :is(button,input,textarea):focus-visible { outline-color: #d5bb8bb3 }
 }
 

@@ -1,3 +1,4 @@
+import { pageIsHidden, PAGE_ACTIVITY_EVENT } from '../stores/pageActivity.ts'
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import type { PointerEvent } from 'react'
 import { MeasuredGlassSurface } from '../home/GlassSurface'
@@ -103,7 +104,7 @@ export function HorizonGroupDetail({ group, origin, tuning, reduced, disabled = 
     const transforms = new WeakMap<HTMLButtonElement, string>()
     const draw = (now: number) => {
       frame.current = 0
-      if (document.hidden) return
+      if (pageIsHidden()) return
       const state = latest.current, { width, height } = size.current
       const projection = renderedHorizonProjection(width, height, state.tuning)
       const dt = last ? Math.min(.05, (now - last) / 1000) : 1 / 60; last = now
@@ -141,11 +142,12 @@ export function HorizonGroupDetail({ group, origin, tuning, reduced, disabled = 
     }
     const visibility = () => {
       cancelAnimationFrame(frame.current); frame.current = 0; last = 0
-      if (!document.hidden) frame.current = requestAnimationFrame(draw)
+      if (!pageIsHidden()) frame.current = requestAnimationFrame(draw)
     }
     document.addEventListener('visibilitychange', visibility)
-    if (!document.hidden) frame.current = requestAnimationFrame(draw)
-    return () => { cancelAnimationFrame(frame.current); observer.disconnect(); document.removeEventListener('visibilitychange', visibility) }
+    document.addEventListener(PAGE_ACTIVITY_EVENT, visibility)
+    if (!pageIsHidden()) frame.current = requestAnimationFrame(draw)
+    return () => { cancelAnimationFrame(frame.current); observer.disconnect(); document.removeEventListener('visibilitychange', visibility); document.removeEventListener(PAGE_ACTIVITY_EVENT, visibility) }
   }, [active?.id])
   useEffect(() => () => { clearPageHover(); const held = grab.current; grab.current = null; if (held && shell.current?.hasPointerCapture(held.pointerId)) shell.current.releasePointerCapture(held.pointerId) }, [])
 

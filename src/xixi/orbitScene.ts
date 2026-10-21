@@ -1,3 +1,4 @@
+import { pageIsHidden, PAGE_ACTIVITY_EVENT } from '../stores/pageActivity.ts'
 import type { OrbitDay, OrbitGroup } from './orbitGroups'
 import { moveOrbitGroup } from './orbitGroups'
 import { orbitWave, springStep } from './orbitMotion'
@@ -174,6 +175,7 @@ export class OrbitCanvas {
     this.context = c
     this.observer = new ResizeObserver(this.resize); this.observer.observe(canvas); this.resize()
     document.addEventListener('visibilitychange', this.visibility)
+    document.addEventListener(PAGE_ACTIVITY_EVENT, this.visibility)
     this.frame = requestAnimationFrame(this.draw)
   }
   private resize = () => {
@@ -185,7 +187,7 @@ export class OrbitCanvas {
   }
   private visibility = () => {
     cancelAnimationFrame(this.frame); this.last = 0; this.previousPointer = null
-    if (!document.hidden && !this.disposed) this.frame = requestAnimationFrame(this.draw)
+    if (!pageIsHidden() && !this.disposed) this.frame = requestAnimationFrame(this.draw)
   }
   private sampleRibbons(projection: OrbitProjection, state: OrbitVisual, dt: number) {
     const nearest = state.pointer ? orbitDropTarget(state.pointer, projection, state.groups, '') : null
@@ -541,7 +543,7 @@ export class OrbitCanvas {
   }
   destroy() {
     this.disposed = true; cancelAnimationFrame(this.frame); this.observer.disconnect()
-    document.removeEventListener('visibilitychange', this.visibility)
+    document.removeEventListener('visibilitychange', this.visibility); document.removeEventListener(PAGE_ACTIVITY_EVENT, this.visibility)
     this.background = null; this.priorBackground = null; this.diskTextures = []; this.motions.clear(); this.pulses = []
   }
 }

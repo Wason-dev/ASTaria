@@ -23,6 +23,37 @@ test('preferences persist on the local database, validate values and reject stal
   } finally { db.close() }
 })
 
+test('glass tone is independent from page theme and sampling preference', () => {
+  const db = createDatabase(':memory:')
+  try {
+    const initial = getPreferences(db)
+    assert.equal(initial.glassTone, 'light')
+    const next = { ...initial, theme: 'dark', glass: 'soft', glassTone: 'dark' }
+    assert.deepEqual(savePreferences(db, { expected: initial, value: next }), next)
+    const changed = { ...next, theme: 'light', glass: 'clear', glassTone: 'light' }
+    assert.deepEqual(savePreferences(db, { expected: next, value: changed }), changed)
+    assert.equal(getPreferences(db).glassTone, 'light')
+  } finally { db.close() }
+})
+
+test('legacy glass tone defaults preserve theme, blur and optimistic write checks', () => {
+  const db = createDatabase(':memory:')
+  try {
+    const legacy = { ...getPreferences(db), theme: 'light', glass: 'soft' }
+    delete legacy.glassTone
+    db.setPreference('app', legacy)
+    const migrated = getPreferences(db)
+    assert.deepEqual(migrated, { ...legacy, glassTone: 'light' })
+    const saved = savePreferences(db, { expected: legacy, value: { ...legacy, glassTone: 'dark' } })
+    assert.equal(saved.theme, 'light'); assert.equal(saved.glass, 'soft')
+    assert.throws(() => savePreferences(db, { expected: legacy, value: legacy }), /其他窗口/)
+    for (const invalid of [null, 'white', 0]) {
+      assert.throws(() => savePreferences(db, { expected: saved, value: { ...saved, glassTone: invalid } }), /玻璃深浅/)
+      assert.deepEqual(getPreferences(db), saved)
+    }
+  } finally { db.close() }
+})
+
 test('preferences written before render profiles gain the full visual default', () => {
   const db = createDatabase(':memory:')
   try {
@@ -43,7 +74,7 @@ test('legacy binary preferences gain defaults and remain editable with legacy or
       const migrated = getPreferences(db)
       assert.deepEqual(migrated.effect.binary, DEFAULT_BINARY_EFFECT)
       const next = structuredClone(migrated)
-      next.effect.binary = { enabled: false, density: 0, emberBrightness: 0.03, visibleFraction: 0.005, sparkFrequency: 0, sparkBrightness: 0.2, flowSpeed: 0.4 }
+      next.effect.binary = { enabled: false, brightness: 2, density: 0, emberBrightness: 0.03, visibleFraction: 0.005, sparkFrequency: 0, sparkBrightness: 0.2, flowSpeed: 0.4 }
       assert.deepEqual(savePreferences(db, { expected: useLegacyExpected ? legacy : migrated, value: next }), next)
       assert.deepEqual(getPreferences(db).effect.binary, next.effect.binary)
     }
@@ -56,7 +87,8 @@ test('binary preference validation rejects malformed values without changing sav
     const current = getPreferences(db)
     const invalidValues = [null, [], false, { unknown: 1 }, { enabled: 0 }]
     for (const key of Object.keys(DEFAULT_BINARY_EFFECT).filter(key => key !== 'enabled')) {
-      for (const value of [-0.01, 1.01, NaN, Infinity, '0.1', null]) invalidValues.push({ [key]: value })
+      const outsideRange = key === 'brightness' ? [0.49, 3.01] : [-0.01, 1.01]
+      for (const value of [...outsideRange, NaN, Infinity, '0.1', null]) invalidValues.push({ [key]: value })
     }
     for (const binary of invalidValues) {
       const value = structuredClone(current)
@@ -67,6 +99,37 @@ test('binary preference validation rejects malformed values without changing sav
     const partial = structuredClone(current)
     partial.effect.binary = { enabled: false }
     assert.deepEqual(savePreferences(db, { expected: current, value: partial }).effect.binary, { ...DEFAULT_BINARY_EFFECT, enabled: false })
+  } finally { db.close() }
+})
+
+test('saved digit tuning without brightness gains 125% without changing other preferences', () => {
+  const db = createDatabase(':memory:')
+  try {
+    for (const useLegacyExpected of [true, false]) {
+      const legacy = structuredClone(getPreferences(db))
+      legacy.effect.binary = { enabled: false, density: .3, emberBrightness: .04, visibleFraction: .2, sparkFrequency: 0, sparkBrightness: .6, flowSpeed: .4 }
+      db.setPreference('app', legacy)
+      const migrated = getPreferences(db)
+      assert.deepEqual(migrated, { ...legacy, effect: { ...legacy.effect, binary: { ...legacy.effect.binary, brightness: 1.25 } } })
+      assert.deepEqual(db.getPreference('app'), legacy, 'reading a legacy record does not write it back')
+      const next = structuredClone(migrated)
+      next.effect.binary.brightness = 2.5
+      assert.deepEqual(savePreferences(db, { expected: useLegacyExpected ? legacy : migrated, value: next }), next)
+      assert.deepEqual(getPreferences(db), next)
+    }
+  } finally { db.close() }
+})
+
+test('digit brightness persists its full range and restores the default without changing disk or render settings', () => {
+  const db = createDatabase(':memory:')
+  try {
+    const initial = getPreferences(db)
+    for (const brightness of [.5, .55, 1, 1.25, 2.95, 3, DEFAULT_BINARY_EFFECT.brightness]) {
+      const expected = getPreferences(db)
+      const value = { ...expected, effect: { ...expected.effect, binary: { ...expected.effect.binary, brightness } } }
+      assert.deepEqual(savePreferences(db, { expected, value }), value)
+      assert.deepEqual(getPreferences(db), { ...initial, effect: { ...initial.effect, binary: { ...initial.effect.binary, brightness } } })
+    }
   } finally { db.close() }
 })
 

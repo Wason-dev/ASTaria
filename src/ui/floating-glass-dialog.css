@@ -1,0 +1,29 @@
+/* Same shell, palette and motion as the homepage task/context detail. */
+.p0 dialog.home-task-dialog.floating-glass-dialog { position:fixed; margin:0; inset:auto; box-sizing:border-box; max-width:calc(100vw - 32px); display:flex; flex-direction:column; font-family:inherit; font-size:11px; line-height:1.7; color:var(--p0-fg); text-shadow:0 1px 3px #0008; border:0 }
+.p0 .home-workspace dialog.home-task-dialog.floating-glass-dialog::backdrop { background:rgb(0 0 0 / .22); animation:home-task-backdrop-in 220ms ease both }
+.p0 .home-workspace dialog.home-task-dialog.floating-glass-dialog[data-theme=light]::backdrop { background:#35404b17 }
+.p0 .home-workspace dialog.home-task-dialog.floating-glass-dialog[data-closing=true]::backdrop { animation:home-task-backdrop-out 200ms cubic-bezier(.16,.8,.25,1) both }
+.p0 dialog.floating-glass-dialog[data-closing=true] { animation:none }
+.p0 dialog.floating-glass-dialog:focus { outline:none }
+.floating-glass-dialog > .home-glass-measure { border-radius:19px }
+.floating-glass-dialog .floating-glass-content { position:relative; z-index:4; min-height:0; padding:14px 16px; max-height:calc(100dvh - 34px); box-sizing:border-box }
+.p0 .floating-glass-dialog[data-theme=light] { color:#30343a; --p0-muted:#626b75; --p0-line:#41465026; text-shadow:none; border-color:transparent; box-shadow:0 8px 28px #252d3926 }
+.floating-glass-dialog[data-theme=light] .home-glass-surface { background:rgb(250 251 252 / var(--glass-tint)) }
+.floating-glass-dialog[data-reduced-motion=true], .floating-glass-dialog[data-reduced-motion=true] :is(.home-task-content,.home-glass-surface,.floating-glass-outline) { animation:none!important }
+
+/* Workbench focus baseline: stable optical plane, 9px content travel, 360ms
+   cubic-bezier(.16,.8,.25,1). Never scale the sampler or the text raster. */
+.p0 dialog.floating-glass-dialog[data-layered-exit=true] .floating-glass-content { animation:floating-content-in 360ms cubic-bezier(.16,.8,.25,1) both }
+.p0 dialog.floating-glass-dialog[data-layered-exit=true] .home-glass-surface { animation:floating-material-in 350ms cubic-bezier(.16,.8,.25,1) both }
+.floating-glass-dialog .floating-glass-outline { animation:floating-outline-in 350ms cubic-bezier(.16,.8,.25,1) both }
+.floating-glass-dialog[data-reduced-motion=true]::backdrop { animation:none!important }
+@media(prefers-reduced-motion:reduce) { .floating-glass-dialog :is(.home-task-content,.home-glass-surface,.floating-glass-outline), .floating-glass-dialog::backdrop { animation:none!important } }
+/* Reuse Workbench readability.css's existing pointer glint, only on these
+   previously unlit shells. It changes paint, never the optical sampler. */
+.floating-glass-dialog::before,.floating-glass-dialog::after { content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none; opacity:0; transition:opacity 180ms }
+.floating-glass-dialog::before { z-index:2; background:radial-gradient(circle 120px at var(--wb-pointer-x,50%) var(--wb-pointer-y,50%),rgb(255 243 217 / .09),transparent 72%) }
+.floating-glass-dialog[data-theme=light]::before { background:radial-gradient(circle 120px at var(--wb-pointer-x,50%) var(--wb-pointer-y,50%),rgb(255 255 255 / .30),transparent 72%) }
+.floating-glass-dialog::after { z-index:3; padding:1px; background:radial-gradient(circle 90px at var(--wb-pointer-x,50%) var(--wb-pointer-y,50%),rgb(255 255 255 / .80),rgb(209 181 127 / .42) 35%,transparent 75%); mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0); mask-composite:exclude }
+.floating-glass-dialog[data-hovered=true]:not([data-closing=true])::before,.floating-glass-dialog[data-hovered=true]:not([data-closing=true])::after { opacity:1 }
+.floating-glass-dialog[data-reduced-motion=true]::before,.floating-glass-dialog[data-reduced-motion=true]::after { transition:none }
+@media(prefers-reduced-motion:reduce) { .floating-glass-dialog::before,.floating-glass-dialog::after { transition:none } }

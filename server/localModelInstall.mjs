@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { totalmem } from 'node:os'
 import { LOCAL_DEFAULT, localEndpoint } from './modelSettings.mjs'
 import { ProviderError } from './provider.mjs'
+import { abortSignalTimeout, abortSignalAny } from './abortSignal.mjs'
 import { ValidationError, identifier, knownKeys } from './validation.mjs'
 
 // Ollama's official Qwen3 tags support tools. Actual tool reliability is still
@@ -69,7 +70,7 @@ export function createLocalModelInstaller({ fetcher = fetch, memoryGB = Math.rou
     const baseUrl = localEndpoint(input.baseUrl ?? LOCAL_DEFAULT.baseUrl)
     let runtimeAvailable = false, runtimeVersion = null, present = new Set()
     let message = '请先安装并打开 Ollama，再检测；ASTaria 不会替你安装运行时'
-    const signal = AbortSignal.timeout(10_000)
+    const signal = abortSignalTimeout(10_000)
     try {
       runtimeVersion = await version(baseUrl, signal)
       runtimeAvailable = true
@@ -97,8 +98,8 @@ export function createLocalModelInstaller({ fetcher = fetch, memoryGB = Math.rou
     }
     try {
       const signal = job.controller.signal
-      await version(job.baseUrl, AbortSignal.any([signal, AbortSignal.timeout(10_000)]))
-      const existing = await installed(job.baseUrl, AbortSignal.any([signal, AbortSignal.timeout(10_000)]))
+      await version(job.baseUrl, abortSignalAny([signal, abortSignalTimeout(10_000)]))
+      const existing = await installed(job.baseUrl, abortSignalAny([signal, abortSignalTimeout(10_000)]))
       if (signal.aborted) throw new Error('ABORTED')
       if (existing.has(job.model)) {
         touch(job, { status: 'succeeded', message: '模型已经安装，无需重复下载，可以选择使用并测试工具调用', percent: 100 })
@@ -158,7 +159,7 @@ export function createLocalModelInstaller({ fetcher = fetch, memoryGB = Math.rou
       clearTimeout(idleTimeout)
       if (!succeeded || signal.aborted) throw new Error('INCOMPLETE')
       touch(job, { message: '正在确认模型已安装' })
-      const present = await installed(job.baseUrl, AbortSignal.any([signal, AbortSignal.timeout(10_000)]))
+      const present = await installed(job.baseUrl, abortSignalAny([signal, abortSignalTimeout(10_000)]))
       if (!present.has(job.model) || signal.aborted) throw new Error('NOT_INSTALLED')
       touch(job, { status: 'succeeded', message: '模型已安装，可以选择使用并测试工具调用', percent: 100,
         ...(job.totalBytes ? { completedBytes: job.totalBytes } : {}) })

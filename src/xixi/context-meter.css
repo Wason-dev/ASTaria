@@ -1,0 +1,23 @@
+.xixi-context-meter { position:relative; min-width:0; flex:0 1 auto; color:var(--xixi-muted,var(--p0-muted)); text-shadow:none }
+.p0 .xixi-context-control { display:inline-flex; align-items:center; gap:6px; max-width:100%; min-height:28px; padding:3px 2px; border:0; border-radius:6px; background:transparent; color:inherit; font:inherit; font-size:10px; cursor:pointer; text-align:left }
+.xixi-context-control > span { max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.xixi-context-control svg { width:16px; height:16px; flex:none; fill:none; stroke-width:2.4 }
+.xixi-context-track { stroke:currentColor; opacity:.24 }
+.xixi-context-used { stroke:currentColor; stroke-linecap:butt; transition:stroke-dasharray 240ms ease }
+.xixi-context-control svg[data-near-full=true] { color:var(--xixi-gold,var(--p0-accent)) }
+.p0 .xixi-context-control:focus-visible { outline:1px solid currentColor; outline-offset:-1px }
+.p0 .xixi-context-control:hover { color:var(--xixi-text,var(--p0-fg)) }
+.xixi-context-heading { display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin:12px 0 10px; font-variant-numeric:tabular-nums }
+.xixi-context-heading strong { font-size:13px; font-weight:400 }
+.xixi-context-heading > span { color:var(--p0-muted); font-size:11px }
+.xixi-context-content dl { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:0 0 10px }
+.xixi-context-content dl > div { display:flex; flex-direction:column; gap:2px }
+.xixi-context-content dt,.xixi-context-content small { color:var(--p0-muted); font-size:10px }
+.xixi-context-content dd { margin:0; font-variant-numeric:tabular-nums }
+.xixi-context-content small { display:block; margin-top:5px }
+.xixi-compose-tools { display:flex; align-items:center; flex-wrap:wrap; gap:4px 12px; min-width:0 }
+.home-compose-actions { flex-wrap:wrap }
+.home-compose-actions > .xixi-send-actions { margin-left:auto }
+@media(max-width:500px) { .xixi-context-control > span { max-width:104px }.xixi-compose-tools { gap:3px 7px } }
+@media(prefers-reduced-motion:reduce) { .xixi-context-used { transition:none } }
+.home-workspace[data-motion=reduced] .xixi-context-used { transition:none }

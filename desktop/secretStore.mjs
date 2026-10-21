@@ -1,12 +1,13 @@
 import { mkdirSync, lstatSync, readFileSync, writeFileSync, renameSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
-import { randomBytes } from 'node:crypto'
+import { randomBytes, createHash } from 'node:crypto'
+import { compatibleEndpoint } from '../src/xixi/cloudProviders.ts'
 
 /** Only called in Electron's main process after app.whenReady(). No plaintext fallback. */
 export function createSecretStore({ safeStorage, directory, platform = process.platform }) {
   const available = () => ['darwin', 'win32'].includes(platform) && safeStorage.isEncryptionAvailable()
   const pathFor = name => {
-    if (!['api-key', 'sync-key'].includes(name)) throw new Error('凭据名称无效')
+    if (!['api-key', 'sync-key'].includes(name) && !/^compatible-[a-f0-9]{64}$/u.test(name)) throw new Error('凭据名称无效')
     if (!available()) throw new Error('系统凭据存储不可用，请解锁当前用户后重试')
     mkdirSync(directory, { recursive: true, mode: 0o700 })
     if (lstatSync(directory).isSymbolicLink()) throw new Error('凭据目录不能是符号链接')
@@ -30,6 +31,13 @@ export function createSecretStore({ safeStorage, directory, platform = process.p
   }
   const remove = name => { try { unlinkSync(pathFor(name)) } catch (error) { if (error.code !== 'ENOENT') throw error } }
   return { available, read, write, remove,
+    providerVault: baseUrl => {
+      const name = `compatible-${createHash('sha256').update(compatibleEndpoint(baseUrl)).digest('hex')}`
+      return {
+        status: async () => Boolean(read(name)), read: async () => read(name), remove: async () => remove(name),
+        save: async value => { if (typeof value !== 'string' || !/^[\x21-\x7e]{8,512}$/u.test(value.trim())) throw new Error('请输入有效的 API Key'); write(name, value.trim()) },
+      }
+    },
     apiVault: {
       prepare: async () => { pathFor('api-key') }, status: async () => Boolean(read('api-key')),
       read: async () => read('api-key'), remove: async () => remove('api-key'),

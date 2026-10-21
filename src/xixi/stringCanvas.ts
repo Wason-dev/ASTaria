@@ -1,3 +1,4 @@
+import { pageIsHidden, PAGE_ACTIVITY_EVENT } from '../stores/pageActivity.ts'
 import type { StringItem } from './stringOrder'
 import { stringGeometry } from './stringOrder'
 import { stringRowY, type StringStyle } from './stringStyles'
@@ -49,6 +50,7 @@ export class StringCanvas {
     this.observer.observe(canvas)
     this.resize()
     document.addEventListener('visibilitychange', this.visibility)
+    document.addEventListener(PAGE_ACTIVITY_EVENT, this.visibility)
     this.frame = requestAnimationFrame(this.draw)
   }
 
@@ -100,7 +102,7 @@ export class StringCanvas {
   private visibility = () => {
     cancelAnimationFrame(this.frame)
     this.previous = 0
-    if (!document.hidden && !this.disposed) this.frame = requestAnimationFrame(this.draw)
+    if (!pageIsHidden() && !this.disposed) this.frame = requestAnimationFrame(this.draw)
   }
 
   pulse(x: number, row = 1, strength = 1) {
@@ -325,7 +327,7 @@ export class StringCanvas {
   }
 
   private draw = (now: number) => {
-    if (this.disposed || document.hidden) return
+    if (this.disposed || pageIsHidden()) return
     this.frame = requestAnimationFrame(this.draw)
     const state = this.read()
     const changingStyle = state.style !== this.style || now - this.styleChanged < 650
@@ -440,7 +442,7 @@ export class StringCanvas {
 
   destroy() {
     this.disposed = true; cancelAnimationFrame(this.frame)
-    this.observer.disconnect(); document.removeEventListener('visibilitychange', this.visibility)
+    this.observer.disconnect(); document.removeEventListener('visibilitychange', this.visibility); document.removeEventListener(PAGE_ACTIVITY_EVENT, this.visibility)
     this.positions.clear(); this.background = null
   }
 }

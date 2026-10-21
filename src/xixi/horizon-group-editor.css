@@ -1,11 +1,12 @@
 .horizon-editor-layer { position:absolute; inset:0; z-index:12; display:grid; place-items:center; padding:74px 32px 42px; box-sizing:border-box; pointer-events:auto; background:transparent; opacity:var(--horizon-ui-reveal,1) }
 /* Keep the live backdrop available during arrival and after the animation ends. */
-.horizon-group-editor { position:relative; isolation:isolate; width:min(880px,100%); max-height:100%; display:flex; flex-direction:column; box-sizing:border-box; border:1px solid #ffffff24; border-radius:20px; overflow:hidden; background:transparent; color:#eeebe4; transition:border-color 220ms; animation:horizon-editor-arrive .32s ease }
+.horizon-group-editor { position:relative; isolation:isolate; width:min(880px,100%); height:min(680px,100%); max-height:100%; display:flex; flex-direction:column; box-sizing:border-box; border:1px solid #ffffff24; border-radius:20px; overflow:hidden; background:transparent; color:#eeebe4; transition:border-color 220ms; animation:horizon-editor-arrive .32s ease }
 .horizon-group-editor:hover { border-color:#d5bd8a66 }
 .horizon-group-editor>.home-glass-measure { position:absolute; inset:0; z-index:0; pointer-events:none }
 .horizon-group-editor>:not(.home-glass-measure) { position:relative; z-index:1 }
 .horizon-group-editor .home-glass-surface { background:transparent }
 .horizon-editor-heading { display:flex; flex:none; align-items:center; justify-content:space-between; gap:24px; padding:25px 28px 20px }
+.horizon-editor-heading>div { min-width:0 }
 .horizon-editor-heading small { display:block; color:#aaa9a3; font-size:10px; letter-spacing:.17em }
 .horizon-editor-heading h2 { margin:8px 0 9px; color:#f0ede5; font-size:19px; font-weight:400; letter-spacing:.1em }
 .horizon-editor-heading p { margin:0; color:#adaca6; font-size:11px; line-height:1.7 }
@@ -17,7 +18,9 @@
 .p0 .horizon-editor-days button[aria-pressed=true] { color:#f0ede5 }
 .horizon-editor-days button[aria-pressed=true]::after { opacity:1 }
 .horizon-editor-days button[aria-pressed=true] small { color:#c0beb7 }
-.horizon-editor-scroll { flex:1; min-height:0; overflow:auto; overscroll-behavior:contain; scrollbar-color:#ffffff40 transparent; scrollbar-width:thin; padding:8px 28px 20px }
+/* Only the content moves; the viewport and measured glass keep their geometry. */
+.horizon-editor-scroll { flex:1; min-height:0; overflow-x:hidden; overflow-y:auto; overscroll-behavior:contain; scrollbar-gutter:stable; scrollbar-color:#ffffff40 transparent; scrollbar-width:thin; padding:8px 28px 20px }
+.horizon-editor-content { min-width:0 }
 .horizon-editor-group { margin-top:12px; padding:16px 0 5px; border:0; border-radius:0; background:transparent; outline-offset:3px }
 .horizon-editor-group+.horizon-editor-group { border-top:1px solid #ffffff20 }
 .horizon-editor-group:focus { outline:1px solid #d5bd8a66 }
@@ -59,7 +62,7 @@
   .horizon-editor-heading h2 { font-size:17px }
   .horizon-editor-heading p { max-width:250px }
   .horizon-editor-days { padding:0 14px }
-  .p0 .horizon-editor-days button { min-width:92px; padding:11px }
+  .p0 .horizon-editor-days button { flex:1; min-width:0; gap:8px; padding:11px 8px }
   .horizon-editor-scroll { padding:3px 14px 14px }
   .horizon-editor-group { padding:12px 0 3px }
   .horizon-editor-count { margin-left:auto }
@@ -70,3 +73,4 @@
 }
 @media(max-height:560px) { .horizon-editor-layer { padding:16px 24px } .horizon-editor-heading { padding:14px 24px 10px } .horizon-editor-heading h2 { margin:5px 0 } .horizon-editor-heading p { display:none } }
 @media(prefers-reduced-motion:reduce) { .horizon-group-editor { animation:none } }
+.horizon-group-editor[data-reduced=true] { animation:none }

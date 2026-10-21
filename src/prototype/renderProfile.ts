@@ -26,14 +26,14 @@ export function normalizeRenderProfile(value: unknown): RenderProfile {
   return typeof value === 'string' && Object.hasOwn(RENDER_PROFILES, value) ? value as RenderProfile : 'full'
 }
 
-export function resolveRenderProfile(profile: RenderProfile, scene: RenderScene, cameraTransition = false): RenderProfileConfig {
+export function resolveRenderProfile(profile: RenderProfile, scene: RenderScene, presentationTransition = false): RenderProfileConfig {
   const config = RENDER_PROFILES[normalizeRenderProfile(profile)]
   // Beta12 caps workspace ambient rendering at 30 FPS to save power.
   // Homepage/chat keep the selected rate; lower profiles are never upgraded.
-  // A moving camera retains the selected home cadence until it settles. The
-  // destination page alone must not slow a transition already in progress.
-  // Product contract: docs/POWER_AND_RENDERING_DECISIONS.md P11/P12.
-  return { ...config, frameRate: scene === 'home' || cameraTransition ? config.frameRate : Math.min(config.frameRate, 30) }
+  // Camera springs and external horizon flights retain the selected home
+  // cadence until they settle; a destination page must not slow the journey.
+  // Product contract: docs/POWER_AND_RENDERING_DECISIONS.md P11/P12/P13.
+  return { ...config, frameRate: scene === 'home' || presentationTransition ? config.frameRate : Math.min(config.frameRate, 30) }
 }
 
 /** Keep a stable cadence across display refresh rates instead of waiting a full

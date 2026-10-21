@@ -1,3 +1,4 @@
+import { observePageActivity, pageIsVisible } from '../stores/pageActivity.ts'
 import { useEffect, useState } from 'react'
 
 /** One local clock keeps the header and daily agenda in sync across midnight. */
@@ -7,18 +8,18 @@ export function useLocalTime() {
     let timer: ReturnType<typeof setTimeout>
     const refresh = () => {
       clearTimeout(timer)
-      if (document.visibilityState !== 'visible') return
+      if (!pageIsVisible()) return
       const date = new Date()
       setNow(date)
       timer = setTimeout(refresh, 60_000 - date.getTime() % 60_000)
     }
     const resume = () => { refresh() }
     refresh()
-    document.addEventListener('visibilitychange', resume)
+    const unobserve = observePageActivity(resume)
     window.addEventListener('focus', refresh)
     return () => {
       clearTimeout(timer)
-      document.removeEventListener('visibilitychange', resume)
+      unobserve()
       window.removeEventListener('focus', refresh)
     }
   }, [])

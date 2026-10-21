@@ -1,0 +1,58 @@
+.adaptive-select { position:relative; display:inline-flex; max-width:100%; min-width:0; vertical-align:middle; font:inherit; }
+.adaptive-select select.adaptive-select-native { position:absolute!important; width:1px!important; height:1px!important; min-width:0!important; min-height:0!important; margin:-1px!important; padding:0!important; border:0!important; overflow:hidden!important; clip-path:inset(50%)!important; pointer-events:none!important; }
+:is(.p0,.app-shell) .xixi-settings button.adaptive-select-trigger,
+.adaptive-select button.adaptive-select-trigger { display:inline-flex; align-items:center; justify-content:space-between; gap:9px; width:100%; min-width:0; min-height:36px; padding:9px 11px; border:1px solid var(--settings-line,#ffffff12); border-radius:999px; background:var(--settings-control,#ffffff06); color:var(--settings-ink,#eeeae3); font:inherit; font-size:12px; line-height:1.5; text-align:start; }
+.adaptive-select-trigger>span { min-width:0; overflow-wrap:anywhere; }
+.adaptive-select-trigger>svg { flex:none; width:12px; height:12px; fill:none; stroke:currentColor; stroke-width:1.1; stroke-linecap:round; stroke-linejoin:round; opacity:.7; }
+.adaptive-select-trigger:disabled { opacity:.4; cursor:default; }
+/* Reuse HomeWorkspace TaskDialog's .home-task-dialog shell: 19px radius,
+   1px neutral rim, transparent material and 0 8px 28px shadow (home.css/theme.css).
+   Only the compact chooser's anchored geometry and menu rows differ. */
+.p0 .home-task-dialog.adaptive-select-dialog,
+.app-shell .home-task-dialog.adaptive-select-dialog { position:fixed; inset:auto; margin:0; width:260px; max-width:calc(100vw - 32px); max-height:360px; box-sizing:border-box; padding:6px; border:0; color:var(--settings-ink,#eeeae3); font:inherit; font-size:13px; font-weight:400; line-height:1.6; text-shadow:none; }
+.adaptive-select-dialog[open] { display:flex; flex-direction:column; gap:0; }
+.adaptive-select-dialog:focus { outline:none; }
+.p0 .home-workspace dialog.home-task-dialog.adaptive-select-dialog::backdrop,
+.app-shell dialog.home-task-dialog.adaptive-select-dialog::backdrop { background:rgb(0 0 0 / .22); animation:home-task-backdrop-in 180ms cubic-bezier(.16,.8,.25,1) both; }
+.p0 .home-workspace .xixi-settings[data-theme=light] dialog.home-task-dialog.adaptive-select-dialog::backdrop { background:#35404b17 }
+.p0 .home-workspace dialog.home-task-dialog.adaptive-select-dialog[data-phase=exiting]::backdrop { animation:home-task-backdrop-out 140ms cubic-bezier(.16,.8,.25,1) both }
+.adaptive-select-dialog[data-reduced-motion=true]::backdrop { animation:none!important }
+.adaptive-select-dialog>.home-glass-measure { position:absolute; inset:0; border-radius:inherit; pointer-events:none; }
+:is(.p0,.app-shell) .xixi-settings .adaptive-select-dialog .home-glass-surface { background:rgb(8 10 14 / var(--glass-tint)); animation:none; }
+:is(.p0,.app-shell) .xixi-settings[data-theme=light] .adaptive-select-dialog .home-glass-surface { background:rgb(250 251 252 / var(--glass-tint)); }
+.adaptive-select-dialog>:is(.adaptive-select-title,.adaptive-select-options,.adaptive-select-done) { position:relative; z-index:1; }
+/* Match the focus curve without fading or translating the backdrop ancestor. */
+:is(.p0,.app-shell) .xixi-settings .adaptive-select-dialog .home-glass-surface { animation:floating-material-in 180ms cubic-bezier(.16,.8,.25,1) both }
+.adaptive-select-dialog>.floating-glass-outline { animation:floating-outline-in 180ms cubic-bezier(.16,.8,.25,1) both }
+.adaptive-select-dialog>:is(.adaptive-select-title,.adaptive-select-options,.adaptive-select-done) { animation:floating-content-in 180ms cubic-bezier(.16,.8,.25,1) both }
+.adaptive-select-dialog[data-reduced-motion=true] :is(.home-glass-surface,.floating-glass-outline,.adaptive-select-title,.adaptive-select-options,.adaptive-select-done) { animation:none!important }
+@media(prefers-reduced-motion:reduce) { .adaptive-select-dialog :is(.home-glass-surface,.floating-glass-outline,.adaptive-select-title,.adaptive-select-options,.adaptive-select-done) { animation:none!important } }
+.adaptive-select-title { flex:none; padding:6px 10px 8px; color:var(--settings-muted,#b9b6af); font:inherit; font-size:13px; font-weight:400; }
+.adaptive-select-options { min-height:0; overflow-y:auto; overscroll-behavior:contain; scrollbar-width:thin; scrollbar-color:var(--settings-line,#d5bb8b50) transparent; }
+.adaptive-select-options>div+div { margin-top:2px; }
+:is(.p0,.app-shell) .xixi-settings .adaptive-select-dialog .adaptive-select-options button,
+.adaptive-select-dialog .adaptive-select-options button { display:flex; align-items:center; justify-content:space-between; gap:12px; width:100%; text-align:start; min-width:0; min-height:44px; padding:10px; font:inherit; font-size:13px; font-weight:400; line-height:1.6; white-space:normal; overflow-wrap:anywhere; color:inherit; border:1px solid transparent; border-radius:8px; background:transparent; box-shadow:none; outline:none; }
+.adaptive-select-options button>span { min-width:0; }
+.adaptive-select-options button>svg { flex:none; width:14px; height:14px; fill:none; stroke:var(--settings-accent,#d5bb8b); stroke-width:1.2; stroke-linecap:round; stroke-linejoin:round; }
+:is(.p0,.app-shell) .xixi-settings .adaptive-select-options button[aria-selected=true],
+.adaptive-select-options button[aria-selected=true] { background:color-mix(in srgb,var(--settings-accent,#d5bb8b) 10%,transparent); }
+/* aria-activedescendant makes the actual active row the keyboard indicator,
+   reusing settings' warm gold; no listbox rectangle or extra selected frame. */
+:is(.p0,.app-shell) .xixi-settings .adaptive-select-options:focus-within button[data-active=true],
+.adaptive-select-options:focus-within button[data-active=true] { background:color-mix(in srgb,var(--settings-accent,#d5bb8b) 19%,transparent); }
+:is(.p0,.app-shell) .xixi-settings .adaptive-select-options:focus-visible,
+.adaptive-select-dialog .adaptive-select-options:focus-visible,
+:is(.p0,.app-shell) .xixi-settings .adaptive-select-options button:focus-visible { outline:none; box-shadow:none; }
+.adaptive-select-options button:disabled { opacity:.4; cursor:default; }
+.adaptive-select-options .adaptive-select-group { margin:8px 10px 4px; font-size:11px; color:var(--settings-muted,#b9b6af); }
+.adaptive-select button:focus-visible,
+.adaptive-select-dialog button:not([role=option]):focus-visible { outline:1px solid var(--settings-accent,#d5bb8b); outline-offset:2px; }
+html[data-mobile] .p0 .adaptive-select-trigger { font-size:14px; min-height:44px; }
+html[data-mobile=ios] .p0 .adaptive-select-trigger { font-size:16px; }
+@media(forced-colors:active) {
+  .adaptive-select-trigger,.adaptive-select-dialog,.adaptive-select-dialog button { border-color:ButtonText; }
+  .adaptive-select-options button[aria-selected=true] { color:Highlight; }
+  .adaptive-select-options:focus-within button[data-active=true] { outline:2px solid Highlight!important; outline-offset:-3px; }
+}
+/* A transition guard must not dim its outgoing contents. */
+:is(.p0,.app-shell) .xixi-settings .adaptive-select-dialog button:disabled:not([data-option-disabled=true]) { opacity:1; }

@@ -2,7 +2,7 @@
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
-import { chmod, copyFile, lstat, mkdir, mkdtemp, open, readFile, readdir, realpath, rename, rm, writeFile } from 'node:fs/promises'
+import { chmod, copyFile, lstat, mkdir, mkdtemp, open, readFile, readdir, realpath, rename, rm, utimes, writeFile } from 'node:fs/promises'
 import { dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { generateNotices } from './third-party-notices.mjs'
@@ -12,9 +12,9 @@ import { copyMacBundle } from './copy-mac-bundle.mjs'
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const NAME = 'ASTaria', BUNDLE_ID = 'dev.wason.ASTaria', ARCH = 'arm64'
 const SOURCE_EXTENSIONS = new Set(['.mjs', '.cjs', '.js', '.jsx', '.ts', '.tsx', '.css', '.md', '.m', '.h', '.svg', '.png', '.jpg', '.jpeg', '.webp', '.avif', '.woff', '.woff2', '.wasm'])
-const ASSET_EXTENSIONS = new Set([...SOURCE_EXTENSIONS, '.json', '.html', '.txt', '.webmanifest', '.ico', '.icns', '.gif', '.mp3', '.mp4', '.mov', '.ogg', '.wav'])
+const ASSET_EXTENSIONS = new Set([...SOURCE_EXTENSIONS, '.ttf', '.json', '.html', '.txt', '.webmanifest', '.ico', '.icns', '.gif', '.mp3', '.mp4', '.mov', '.ogg', '.wav'])
 const EXCLUDED_NAMES = new Set(['node_modules', 'data', 'userdata', 'user-data', 'logs', 'backups', 'coverage', 'cache', 'caches', 'tmp', 'temp', 'test-results', 'playwright-report'])
-const USAGE = 'node scripts/package-desktop.mjs --runtime /path/to/Electron.app --out /path/to/output'
+const USAGE = 'node scripts/package-desktop.mjs --runtime /path/to/Electron.app --out /path/to/output [--icon /path/to/icon.png]'
 
 function fail(message) { throw new Error(message) }
 function run(command, args, options = {}) {
@@ -35,11 +35,11 @@ function argumentsFor(argv) {
   const result = {}
   for (let index = 0; index < argv.length; index += 2) {
     const option = argv[index], value = argv[index + 1]
-    if (!['--runtime', '--out'].includes(option) || !value || value.startsWith('--') || result[option]) fail(`Expected unique --runtime and --out arguments.\n${USAGE}`)
+    if (!['--runtime', '--out', '--icon'].includes(option) || !value || value.startsWith('--') || result[option]) fail(`Expected unique --runtime, --out and optional --icon arguments.\n${USAGE}`)
     result[option] = resolve(value)
   }
   if (!result['--runtime'] || !result['--out']) fail(`Both --runtime and --out are required.\n${USAGE}`)
-  return { runtime: result['--runtime'], out: result['--out'] }
+  return { runtime: result['--runtime'], out: result['--out'], icon: result['--icon'] }
 }
 export function bundleVersionFor(version) {
   const match = /^(\d+)\.(\d+)\.(\d+)(?:-(alpha|beta|rc)\.(\d+)(?:\.(\d+))?)?(?:\+[0-9A-Za-z.-]+)?$/u.exec(version)
@@ -165,6 +165,8 @@ async function main() {
   const pkg = JSON.parse(await readFile(join(ROOT, 'package.json'), 'utf8'))
   if (typeof pkg.version !== 'string' || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/u.test(pkg.version)) fail('package.json must contain a valid, path-safe semantic version.')
   const version = pkg.version, numericVersion = version.split(/[+-]/u)[0], bundleVersion = bundleVersionFor(version)
+  const icon = args.icon ?? join(ROOT, 'public/astaria-icon-1024.png')
+  await requirePath(icon, 'file')
   const stem = `${NAME}-${version}-mac-${ARCH}`, release = join(args.out, stem)
   // Refuse an existing version before doing any work; failed partial builds
   // remain separately named and are never silently removed or overwritten.
@@ -238,7 +240,8 @@ async function main() {
       LSUIElement: true, LSMinimumSystemVersion: '13.0' }, scratch)
 
 
-    await createIcns(join(ROOT, 'public/astaria-icon-1024.png'), join(resources, 'ASTaria.icns'), scratch)
+    await createIcns(icon, join(resources, 'ASTaria.icns'), scratch)
+    buildInfo.desktopIcon = { source: args.icon ? 'explicit-png' : 'default', sha256: await sha256(icon) }
     await mkdir(join(reminderApp, 'Contents', 'Resources'))
     await copyFile(join(resources, 'ASTaria.icns'), join(reminderApp, 'Contents', 'Resources', 'ASTaria.icns'))
     const info = { ...runtimeInfo, CFBundleName: NAME, CFBundleDisplayName: NAME, CFBundleIdentifier: BUNDLE_ID,
@@ -265,13 +268,18 @@ async function main() {
     for (const path of bundles.sort((a, b) => b.split(sep).length - a.split(sep).length)) sign(path, path.endsWith('.app') && path !== reminderApp)
     buildInfo.nativeHelpers = { keychainSha256: await sha256(helper) }
     await writeFile(join(payload, 'build-info.json'), `${JSON.stringify(buildInfo, null, 2)}\n`)
+    // The cloned runtime can carry a 1980 outer-bundle mtime. Bump the rebuilt
+    // bundle so LaunchServices can invalidate an icon cached at this path when
+    // a local candidate is replaced without a marketing-version change.
+    const bundleUpdatedAt = new Date()
+    await utimes(app, bundleUpdatedAt, bundleUpdatedAt)
     sign(app, true)
     run('/usr/bin/codesign', ['--verify', '--deep', '--strict', '--verbose=2', app])
     if (run('/usr/bin/lipo', ['-archs', helper]) !== ARCH) fail('The compiled Keychain helper is not arm64.')
 
     // scratch is a fresh directory owned solely by this invocation.
     await rm(scratch, { recursive: true })
-    await copyFile(join(ROOT, 'docs', 'INSTALL.md'), join(staging, 'install.txt'))
+    await copyFile(join(ROOT, 'install.txt'), join(staging, 'install.txt'))
     const archiveName = `${stem}.zip`, archive = join(staging, archiveName)
     run('/usr/bin/ditto', ['-c', '-k', '--sequesterRsrc', '--keepParent', app, archive])
     const digest = await sha256(archive)

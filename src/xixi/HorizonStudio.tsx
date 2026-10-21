@@ -8,17 +8,21 @@ import { localDay } from '../home/agenda'
 import { notifyLocalDataChange } from '../stores/migration'
 import { LocalApiError, localApi } from './api'
 import { horizonDate, horizonDraft, horizonPage } from './horizonOrder'
-import type { HorizonSnapshot } from './horizonOrder'
+import type { HorizonSnapshot, HorizonSchedulingQuestion } from './horizonOrder'
 import { advanceHorizonActivity, advanceHorizonProgress, horizonOrderApi, horizonProgressCopy } from './horizonProgress'
 import type { HorizonProgress } from './horizonProgress'
 import { horizonGroupingApi } from './horizonGroupingApi'
 import { HorizonGroupEditor } from './HorizonGroupEditor'
 import { groupMinutes, moveOrbitGroup, moveOrbitTask, orbitDayGroups } from './orbitGroups'
 import type { OrbitDay, OrbitGroup } from './orbitGroups'
-import { HorizonCanvas, horizonDropIndex, horizonPoint, horizonProjection } from './horizonScene'
+import { HorizonCanvas, horizonDropIndex, horizonProjection } from './horizonScene'
 import type { HorizonPoint, HorizonProjection, HorizonVisual } from './horizonScene'
+import { createHorizonPositionStyles } from './horizonPositionStyles'
 import { readHorizonTuning } from './horizonTuning'
 import { HorizonGroupDetail } from './HorizonGroupDetail'
+import { HorizonDeadlineDialog } from './HorizonDeadlineDialog'
+import { horizonDeadlineConflicts, rebaseHorizonDraft } from './horizonDeadline'
+import { deadlineParts } from './deadlineShortcuts'
 import { orbitTransitionDuration, orbitTransitionFrame } from './orbitTransition'
 import './orbit-studio.css'
 import './horizon-studio.css'
@@ -36,6 +40,7 @@ const dateLabel = (base: string, day: OrbitDay) => {
 export function HorizonStudio({ onReveal, onClose, onSaved, preview = false, onPreviewDayChange }: Props) {
   const dialog = useRef<HTMLDialogElement>(null), canvas = useRef<HTMLCanvasElement>(null)
   const buttons = useRef(new Map<string, HTMLButtonElement>()), destinations = useRef(new Map<OrbitDay, HTMLButtonElement>())
+  const [positionStyles] = useState(() => createHorizonPositionStyles(buttons.current))
   const positions = useRef(new Map<string, HorizonPoint>())
   const [tuning] = useState(readHorizonTuning)
   const geometry = useRef<HorizonProjection>(horizonProjection(innerWidth, innerHeight, tuning))
@@ -48,6 +53,9 @@ export function HorizonStudio({ onReveal, onClose, onSaved, preview = false, onP
   const [showActivities, setShowActivities] = useState(false)
   const [suggesting, setSuggesting] = useState(false), [groupEditor, setGroupEditor] = useState(false)
   const [groupingNote, setGroupingNote] = useState('')
+  const [schedulingQuestion, setSchedulingQuestion] = useState<HorizonSchedulingQuestion | null>(null)
+  const questionPanel = useRef<HTMLElement | null>(null)
+  const fragmentPolicy = useRef<'whole' | 'split' | undefined>(undefined)
   const [manualDirty, setManualDirty] = useState(false)
   const suggestion = useRef<AbortController | null>(null), suggestionVersion = useRef(0)
   const submission = useRef<AbortController | null>(null), submissionStarted = useRef(0)
@@ -59,6 +67,7 @@ export function HorizonStudio({ onReveal, onClose, onSaved, preview = false, onP
   const [expanded, setExpanded] = useState<string | null>(null), [draggedId, setDraggedId] = useState<string | null>(null)
   const [dropDay, setDropDay] = useState<OrbitDay | null>(null), [phase, setPhase] = useState<'entering' | 'ready' | 'leaving'>('entering')
   const [announcement, setAnnouncement] = useState(''), [error, setError] = useState('')
+  const [deadlineEditor, setDeadlineEditor] = useState<{ anchor: HTMLElement; taskId: string; title: string; targetDate: string } | null>(null)
   const grab = useRef<Grab | null>(null), frame = useRef(0), flight = useRef(0), leaving = useRef(false)
   const uiEntering = useRef(false)
   const uiTween = useRef<ReturnType<typeof gsap.to> | null>(null)
@@ -75,11 +84,15 @@ export function HorizonStudio({ onReveal, onClose, onSaved, preview = false, onP
   const currentGroups = view.all, active = currentGroups.find(group => group.id === expanded)
   const baseDate = snapshot?.date ?? localDay(new Date())
   const fixed = snapshot?.items.filter(item => !item.movable && item.date === horizonDate(baseDate, day)) ?? []
-  const editable = !preview && phase === 'ready' && !loading && !processing && !groupEditor && !refreshNeeded && !uncertain && Boolean(snapshot)
+  const editable = !preview && phase === 'ready' && !loading && !processing && !groupEditor && !deadlineEditor && !refreshNeeded && !uncertain && !schedulingQuestion && Boolean(snapshot)
+  const deadlineConflicts = horizonDeadlineConflicts(snapshot, groups)
   const changed = Boolean(snapshot && JSON.stringify(horizonDraft(groups)) !== JSON.stringify(horizonDraft(snapshot.groups)))
   const needsReschedule = snapshot?.items.some(item => item.movable && item.needsReschedule) ?? false
   const previousActivities = progressCopy.activities.slice(0, -1)
   const recentActivities = showActivities ? previousActivities : previousActivities.slice(-1)
+  const draftSignature = JSON.stringify(horizonDraft(groups))
+  useEffect(() => { setSchedulingQuestion(null); fragmentPolicy.current = undefined }, [draftSignature, snapshot?.snapshotKey])
+  useEffect(() => { if (schedulingQuestion) questionPanel.current?.querySelector('button')?.focus({ preventScroll: true }) }, [schedulingQuestion])
 
   useEffect(() => {
     if (!processing) return
@@ -221,41 +234,11 @@ export function HorizonStudio({ onReveal, onClose, onSaved, preview = false, onP
     try {
       renderer = new HorizonCanvas(canvas.current, () => visual.current, (next, projection) => {
         positions.current = next; geometry.current = projection
-        const browseY = Math.min((projection.apexY + projection.height) / 2, projection.height - 180)
-        const browsePosition = `${Math.round(browseY)}px`
-        if (dialog.current?.style.getPropertyValue('--horizon-browse-y') !== browsePosition) dialog.current?.style.setProperty('--horizon-browse-y', browsePosition)
-        const progressEdge = .5 - Math.min(540, projection.width - 48) / projection.width / 2
-        const progressCeiling = horizonPoint(projection, progressEdge).y + 20
-        dialog.current?.style.setProperty('--horizon-progress-height', `${Math.max(100, Math.min(180, projection.height - 102 - progressCeiling))}px`)
-        const labelWidth = Math.min(158, Math.max(100, projection.width * .68 / Math.max(1, next.size) - 18))
-        const heldId = visual.current.dragging?.id, held = heldId ? next.get(heldId) : undefined
-        for (const [id, button] of buttons.current) {
-          const p = next.get(id)
-          if (!p) { button.style.visibility = 'hidden'; continue }
-          // Paging leaves room for every name. Keep each one tethered to its
-          // strand during a swap instead of collision detection moving it up
-          // an entire row. Neighbours quietly yield to the lifted strand.
-          const name = { x: Math.max(labelWidth / 2 + 14, Math.min(projection.width - labelWidth / 2 - 14, p.x)), y: p.y - 76 }
-          button.style.visibility = 'visible'
-          button.style.transform = `translate3d(${p.x - 40}px,${p.y - 24}px,0)`
-          const caption = button.querySelector<HTMLElement>('.orbit-group-caption')
-          if (caption) {
-            const distance = held && heldId !== id ? Math.hypot((p.x - held.x) / (labelWidth + 20), (p.y - held.y) / 70) : 1
-            const separation = Math.min(1, distance)
-            caption.style.opacity = String(.18 + .82 * separation * separation * (3 - 2 * separation))
-            caption.style.width = `${labelWidth}px`; caption.style.transform = `translate3d(${name.x - p.x}px,${name.y - p.y}px,0) translateX(-50%)`
-          }
-          const tether = button.querySelector<HTMLElement>('.orbit-group-tether')
-          if (tether) {
-            const dx = name.x - p.x, dy = name.y - p.y + 29
-            tether.style.height = `${Math.max(0, Math.hypot(dx, dy) - 13)}px`
-            tether.style.transform = `rotate(${-Math.atan2(dx, dy)}rad)`
-          }
-        }
+        positionStyles.update(dialog.current, next, projection, visual.current.dragging?.id)
       })
     } catch (reason) { setError(reason instanceof Error ? reason.message : '暂时无法绘制地平线'); return }
     return () => renderer.destroy()
-  }, [])
+  }, [positionStyles])
 
   const selectDay = (next: OrbitDay) => {
     if (phase !== 'ready' || processing || groupEditor || grab.current) return
@@ -321,21 +304,37 @@ export function HorizonStudio({ onReveal, onClose, onSaved, preview = false, onP
       setAnnouncement(`${group.title}移到${DAYS[nextDay]}`)
     } else { focusAfterMove.current = group.id; setPage(Math.floor(Math.max(0, Math.min(currentGroups.length - 1, index + direction)) / pageSize)); setGroups(items => moveOrbitGroup(items, group.id, day, index + direction)); setManualDirty(true); setAnnouncement(`${group.title}已调整顺序`) }
   }
-  const choose = async () => {
+  const dismissSchedulingQuestion = () => {
+    setSchedulingQuestion(null); fragmentPolicy.current = undefined
+    requestAnimationFrame(() => dialog.current?.querySelector<HTMLButtonElement>('.orbit-select')?.focus())
+  }
+  const choose = async (choice?: 'whole' | 'split') => {
     if (saving.current || suggesting || groupEditor || loading || phase !== 'ready') return
     if (!snapshot || refreshNeeded) { await refresh(); return }
     if (!changed && !uncertain && !needsReschedule) { close(); return }
-    const draft = horizonDraft(groupsRef.current), signature = JSON.stringify(draft)
+    if (deadlineConflicts.length) {
+      const blocked = deadlineConflicts[0]
+      setError(`「${blocked.title}」不能移到截止时间 DDL ${deadlineParts(blocked.due).date} 之后`)
+      return
+    }
+    if (choice) fragmentPolicy.current = choice
+    const draft = horizonDraft(groupsRef.current), signature = JSON.stringify({ draft, fragmentPolicy: fragmentPolicy.current })
     if (operation.current.draft !== signature) operation.current = { id: crypto.randomUUID(), draft: signature }
-    saving.current = true; setBusy(true); setError(''); setGroupingNote(''); setExpanded(null); setShowFixed(false); release()
+    saving.current = true; setBusy(true); setError(''); setGroupingNote(''); setSchedulingQuestion(null); setExpanded(null); setShowFixed(false); release()
     submissionStarted.current = performance.now(); setElapsed(0); setShowActivities(false); setProgress({ phase: 'submitting', completed: [], activities: [] })
     const controller = new AbortController(); submission.current = controller
     try {
       const result = await horizonOrderApi({ date: snapshot.date, groups: draft,
-        expectedRevision: snapshot.revision, snapshotKey: snapshot.snapshotKey, requestId: operation.current.id },
+        expectedRevision: snapshot.revision, snapshotKey: snapshot.snapshotKey, requestId: operation.current.id,
+        ...(fragmentPolicy.current ? { fragmentPolicy: fragmentPolicy.current } : {}) },
       next => { if (mounted.current) setProgress(current => advanceHorizonProgress(current, next)) }, controller.signal,
       activity => { if (mounted.current) setProgress(current => advanceHorizonActivity(current, activity)) })
       if (!mounted.current) return
+      if (result.schedulingQuestion) {
+        setSchedulingQuestion(result.schedulingQuestion)
+        setUncertain(false)
+        return
+      }
       notifyLocalDataChange(); callbacks.current.onSaved(result.summary)
       saving.current = false; setBusy(false); close()
     } catch (reason) {
@@ -347,9 +346,9 @@ export function HorizonStudio({ onReveal, onClose, onSaved, preview = false, onP
       }
     } finally { saving.current = false; submission.current = null; if (mounted.current) setBusy(false) }
   }
-  return <dialog ref={dialog} className="orbit-studio horizon-studio" data-phase={phase} data-busy={processing} data-dragging={Boolean(draggedId)} data-expanded={Boolean(active)} data-reduced={reduced} data-editing={groupEditor} tabIndex={-1}
+  return <dialog ref={dialog} className="orbit-studio horizon-studio" data-phase={phase} data-busy={processing} data-choosing={Boolean(schedulingQuestion)} data-dragging={Boolean(draggedId)} data-expanded={Boolean(active)} data-reduced={reduced} data-editing={groupEditor} tabIndex={-1}
     aria-label="弦轨事件视界" aria-describedby="horizon-instructions"
-    onCancel={event => { event.preventDefault(); if (saving.current) return; if (groupEditor) setGroupEditor(false); else if (grab.current) release(); else if (active) setExpanded(null); else close() }}
+    onCancel={event => { event.preventDefault(); if (saving.current) return; if (groupEditor) setGroupEditor(false); else if (schedulingQuestion) dismissSchedulingQuestion(); else if (grab.current) release(); else if (active) setExpanded(null); else close() }}
     onPointerMove={move} onPointerUp={event => finish(event)} onPointerCancel={event => finish(event, true)} onLostPointerCapture={event => finish(event, true)}
     onPointerLeave={() => { if (!grab.current) visual.current.pointer = null }} onKeyDown={event => event.stopPropagation()}>
     <div inert={groupEditor} aria-hidden={groupEditor || undefined}>
@@ -359,14 +358,14 @@ export function HorizonStudio({ onReveal, onClose, onSaved, preview = false, onP
       <GlassSamplingContext value={Boolean(draggedId)}><nav aria-label="选择哪一天" data-dropping={Boolean(draggedId)}>{([0, 1, 2] as const).map(value => <button type="button" key={value}
         ref={node => { if (node && value !== day) destinations.current.set(value, node); else destinations.current.delete(value) }}
         data-drop={Boolean(draggedId) && value !== day} data-target={Boolean(draggedId) && dropDay === value && value !== day}
-        aria-pressed={day === value} disabled={phase !== 'ready' || processing || groupEditor || Boolean(draggedId)} onClick={() => selectDay(value)}>
+        aria-pressed={day === value} disabled={phase !== 'ready' || processing || groupEditor || Boolean(draggedId) || Boolean(schedulingQuestion)} onClick={() => selectDay(value)}>
         <MeasuredGlassSurface radius={18} material={{ transmission:100, blur:0, rim:40, shadow:0, reflection:10 }} /><span>{DAYS[value]}</span>
       </button>)}</nav></GlassSamplingContext>
       <div key={day} className="horizon-day-copy"><p>{dateLabel(baseDate, day)}</p><span>{loading ? '正在读取你的安排' : suggesting ? '析熙正在建议怎样分组 · 可以随时改为手动' : busy ? progressCopy.current : !snapshot ? '暂时无法读取安排' : currentGroups.length ? `${currentGroups.length} 组事情，沿着光依次展开` : '这一天没有待重排的安排'}</span></div>
     </div>
     <div className="orbit-hit-layer" inert={Boolean(active) || !editable} aria-label={`${DAYS[day]}的任务组`}>
       {view.visible.map((group, index) => <button key={group.id} type="button" className="orbit-group" data-group-id={group.id} data-day={group.day} data-active={expanded === group.id} data-dragged={draggedId === group.id} data-working={group.tasks.some(task => workingIds.includes(task.id))}
-        ref={node => { if (node) buttons.current.set(group.id, node); else buttons.current.delete(group.id) }} disabled={!editable}
+        ref={positionStyles.buttonRef(group.id)} disabled={!editable}
         aria-label={`${DAYS[day]}，${group.title}，${group.tasks.length}项；方向键排序，Alt加方向键换天，回车展开`} aria-expanded={expanded === group.id}
         onPointerDown={event => start(event, group)} onKeyDown={event => keyboard(event, group)} onClick={event => { if (editable && event.detail === 0) setExpanded(value => value === group.id ? null : group.id) }}>
         <i className="orbit-group-tether" aria-hidden="true" /><span className="orbit-group-caption"><span className="horizon-group-order">{String(view.offset + index + 1).padStart(2, '0')}{group.tasks.some(task => task.needsReschedule) && <span className="horizon-reschedule">待重新安排</span>}</span><strong>{group.title}</strong><small>{group.tasks.length} 项 · {groupMinutes(group)} 分钟</small></span>
@@ -386,21 +385,46 @@ export function HorizonStudio({ onReveal, onClose, onSaved, preview = false, onP
       {recentActivities.length > 0 && <ol className="horizon-progress-trail" aria-label="具体活动轨迹">{recentActivities.map(activity => <li key={`${activity.source}:${activity.id}`} data-state={activity.state} data-source={activity.source}><span aria-hidden="true">{activity.state === 'done' ? '✓' : activity.source === 'model' ? '◇' : '·'}</span><div><span className="horizon-activity-source">{activity.source === 'model' ? '模型建议' : '本地'}</span><span>{activity.title}</span>{showActivities && activity.detail && <small>{activity.detail}</small>}</div></li>)}</ol>}
       {progressCopy.activities.length > 2 && <button type="button" className="horizon-progress-expand" aria-expanded={showActivities} onClick={() => setShowActivities(value => !value)}>{showActivities ? '收起活动轨迹' : `查看 ${progressCopy.activities.length} 条活动`}</button>}
       {progressCopy.reassurance && !showActivities && <p className="horizon-progress-note">{suggesting ? '仍在等待分组建议，可以直接选择「调整分组」' : progressCopy.reassurance}</p>}
+    </section> : schedulingQuestion ? <section ref={questionPanel} className="horizon-progress horizon-scheduling-question" aria-label="析熙的安排选项">
+      <span>析熙</span><p role="status">{schedulingQuestion.prompt}</p>
+      <div className="xixi-quick-options" role="group" aria-label="选择事项安排方式">{schedulingQuestion.options.map(option => <button type="button" key={option.value}
+        onClick={() => { if (option.value === 'cancel') dismissSchedulingQuestion(); else void choose(option.value) }}>{option.label}</button>)}</div>
+      <small>选择前不更改日程；分段保留完整时长，每段至少 15 分钟。</small>
     </section> : !preview && <div className="orbit-caption"><p>{draggedId ? dropDay !== null && dropDay !== day ? `松手，放到${DAYS[dropDay]}` : '沿光带排序 · 拖到顶部日期换天' : uncertain ? '保存结果待核对，请重试完成' : groupingNote || (needsReschedule ? '有未完成事项错过原时段 · 完成为它们重新找空档' : changed ? '完成后保存新顺序 · 取消保留原安排' : currentGroups.length ? '拖动光带或组名排序 · 点击展开' : '')}</p></div>}
     <footer className="orbit-footer">{preview ? <p className="horizon-preview-note">切换上方日期，查看不同日的安排。预览不会修改日程。</p> : <div className="horizon-tools"><div className="horizon-group-controls">
       <button type="button" title={manualDirty ? '先完成当前手动调整，再请求新的智能分组' : '请析熙按事项内容与关联重新建议分组'} disabled={loading || busy || suggesting || manualDirty || uncertain || refreshNeeded || !snapshot || phase !== 'ready' || groupEditor} onClick={() => { if (snapshot && !manualDirty) void suggestGroups(snapshot, true) }}>智能整理</button>
-      <button type="button" disabled={loading || busy || uncertain || refreshNeeded || !snapshot || phase !== 'ready' || groupEditor} onClick={() => { cancelSuggestion(); setGroupingNote(''); setExpanded(null); setGroupEditor(true) }}>调整分组</button>
+      <button type="button" disabled={loading || busy || uncertain || refreshNeeded || !snapshot || phase !== 'ready' || groupEditor || Boolean(schedulingQuestion)} onClick={() => { cancelSuggestion(); setGroupingNote(''); setExpanded(null); setGroupEditor(true) }}>调整分组</button>
       {suggesting && <button type="button" onClick={() => { cancelSuggestion(); setGroupingNote('已停止等待，当前分组保留') }}>停止等待</button>}
     </div><div className="horizon-fixed">
       {fixed.length > 0 && <button type="button" aria-expanded={showFixed} disabled={processing || phase !== 'ready' || groupEditor} onClick={() => setShowFixed(value => !value)}>{fixed.length} 项固定安排</button>}
       {showFixed && <ul>{fixed.map(item => <li key={item.id}><span>{item.start}–{item.end}</span><strong>{item.title}</strong><small>{item.reason ?? '保持原安排'}</small></li>)}</ul>}
     </div></div>}
-      <div className="orbit-actions"><button type="button" className="orbit-cancel" onClick={close} disabled={busy || phase === 'leaving' || groupEditor}>{preview ? '返回引导' : uncertain ? '返回' : '取消'}</button>{!preview && <button type="button" className="orbit-select" onClick={() => void choose()} disabled={processing || groupEditor || loading || phase !== 'ready' || Boolean(draggedId)}>{busy ? '安排中' : refreshNeeded || !snapshot ? '重新读取' : uncertain ? '重试完成' : '完成'}</button>}</div>
+      <div className="orbit-actions"><button type="button" className="orbit-cancel" onClick={close} disabled={busy || phase === 'leaving' || groupEditor}>{preview ? '返回引导' : uncertain ? '返回' : '取消'}</button>{!preview && <button type="button" className="orbit-select" onClick={() => void choose()} disabled={processing || groupEditor || loading || phase !== 'ready' || Boolean(draggedId) || Boolean(schedulingQuestion)}>{busy ? '安排中' : refreshNeeded || !snapshot ? '重新读取' : uncertain ? '重试完成' : '完成'}</button>}</div>
     </footer>
-    {error && <p className="orbit-error" role="alert">{error}{refreshNeeded && <span>重新读取会以最新日程替换当前草稿</span>}</p>}
+    {error && <div className="orbit-error"><p role="alert">{error}</p>{refreshNeeded && <span>重新读取会以最新日程替换当前草稿</span>}
+      {!refreshNeeded && !uncertain && !processing && deadlineConflicts.length > 0 && <div className="horizon-deadline-actions">{deadlineConflicts.map(item => <button type="button" key={item.taskId}
+        onClick={event => setDeadlineEditor({ anchor: event.currentTarget, taskId: item.taskId, title: item.title, targetDate: item.targetDate })}>
+        {deadlineConflicts.length === 1 ? '更改 DDL' : `更改「${item.title}」的 DDL`}
+      </button>)}</div>}
+    </div>}
     <p className="p0-sr-only" id="horizon-instructions">一条地平线呈现一天，顶部切换今天、明天、后天。组名常驻。拖动组调整顺序，拖到顶部日期移动到另一天末尾。方向键调整顺序，Alt加方向键换天。点开组，事项沿地平线展开，可以拖动或用方向键调整内部顺序。Escape取消拖动或收拢组。任务多时可翻页查看；拖到左右翻页按钮或使用方向键可跨页移动。完成后析熙根据所选日期和顺序重新安排具体时间，取消不提交。外观在设置中调整。</p>
     <span className="p0-sr-only" role="status">{announcement}</span>
     </div>
     {groupEditor && <HorizonGroupEditor groups={groups} disabled={busy} onClose={() => setGroupEditor(false)} onChange={next => { cancelSuggestion(); setGroups(next); setManualDirty(true); setPage(0); setGroupingNote('分组已调整，完成后才会保存') }} />}
+    {deadlineEditor && <HorizonDeadlineDialog {...deadlineEditor} onClose={() => {
+      setDeadlineEditor(null)
+      requestAnimationFrame(() => dialog.current?.querySelector<HTMLButtonElement>('.orbit-select')?.focus({ preventScroll: true }))
+    }} onSaved={async () => {
+      const next = await localApi<HorizonSnapshot>('/companion/horizon-order')
+      if (!mounted.current || leaving.current) return
+      const draft = snapshot && rebaseHorizonDraft(snapshot, next, groupsRef.current)
+      if (!draft) {
+        setRefreshNeeded(true); setError('DDL 已保存；日程中的事项已有变化，请重新读取后核对分组。')
+        return
+      }
+      setSnapshot(next); setGroups(draft); setError(''); setRefreshNeeded(false); setUncertain(false)
+      setGroupingNote('DDL 已保存，分组顺序已保留；点击「完成」后检查冲突并排程')
+      operation.current = { id: crypto.randomUUID(), draft: '' }
+    }} />}
   </dialog>
 }

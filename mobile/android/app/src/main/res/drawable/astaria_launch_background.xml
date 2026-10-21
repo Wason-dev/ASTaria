@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/astaria_launch_background" />
+        </shape>
+    </item>
+    <item android:drawable="@drawable/astaria_splash_icon"
+        android:width="192dp" android:height="192dp" android:gravity="center" />
+</layer-list>

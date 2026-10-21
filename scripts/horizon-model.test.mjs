@@ -71,9 +71,9 @@ const request = (svc, change = groups => groups) => {
 const reversed = groups => [...groups.filter(group => group.day === 0).reverse().map(group => ({ ...group, itemIds: [...group.itemIds].reverse() })), ...groups.filter(group => group.day !== 0)]
 /** The verified local candidate for the reversed draft, addressed by the submitted index. */
 const CANDIDATE = [
-  { id: 'physics', title: '物理复习', date: DATE, minutes: 40, start: '15:00', original: [DATE, '15:00'] },
-  { id: 'math-b', title: '数学练习', date: DATE, minutes: 20, start: '16:00', original: [DATE, '16:00'] },
-  { id: 'math-a', title: '数学练习', date: DATE, minutes: 30, start: '16:20', original: [DATE, '14:00'] },
+  { id: 'physics', title: '物理复习', date: DATE, minutes: 40, start: '10:30', original: [DATE, '15:00'] },
+  { id: 'math-b', title: '数学练习', date: DATE, minutes: 20, start: '11:10', original: [DATE, '16:00'] },
+  { id: 'math-a', title: '数学练习', date: DATE, minutes: 30, start: '11:30', original: [DATE, '14:00'] },
   { id: 'reading', title: '读一章', date: TOMORROW, minutes: 25, start: '11:00', original: [TOMORROW, '11:00'] },
 ]
 const completion = value => ({ choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: JSON.stringify(value) } }] })
@@ -146,7 +146,7 @@ test('one fine-tune receives the ordered local candidate and a valid change land
   // The change keeps the local date and duration of the addressed item.
   const placed = id => f.db.getPlanner().blocks.find(block => block.id === id)
   assert.deepEqual(['physics', 'math-b', 'math-a', 'reading'].map(id => [id, placed(id).date, placed(id).start, placed(id).end]), [
-    ['physics', DATE, '15:00', '15:40'], ['math-b', DATE, '16:00', '16:20'], ['math-a', DATE, '16:40', '17:10'], ['reading', TOMORROW, '11:30', '11:55'],
+    ['physics', DATE, '10:30', '11:10'], ['math-b', DATE, '11:10', '11:30'], ['math-a', DATE, '16:40', '17:10'], ['reading', TOMORROW, '11:30', '11:55'],
   ])
   assert.equal(result.operation.undoable, true)
   assert.equal(f.db.listOperations().length, 1)
@@ -274,9 +274,9 @@ test('optional updates become public review activity without changing the change
   assert.equal(f.db.getPlanner().blocks.find(block => block.id === 'math-a').end, '17:10')
   assert.ok(result.operation)
   assert.equal(f.db.listOperations().length, 1)
-  // An untouched session keeps its time and only gains the submitted grouping metadata.
-  const physics = f.db.getPlanner().blocks.find(block => block.id === 'physics'), original = before.blocks.find(block => block.id === 'physics')
-  assert.deepEqual([physics.date, physics.start, physics.end], [original.date, original.start, original.end])
+  // The model keeps this seed item in its earliest fitting window.
+  const physics = f.db.getPlanner().blocks.find(block => block.id === 'physics')
+  assert.deepEqual([physics.date, physics.start, physics.end], [DATE, '10:30', '11:10'])
   assert.equal(physics.horizonGroupTitle, '物理')
 })
 

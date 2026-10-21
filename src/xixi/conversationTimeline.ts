@@ -4,7 +4,7 @@ import { sameSnapshot } from '../stores/sameSnapshot.ts'
 export type ConversationRow = { message: ChatMessage; operations: Operation[]; companionActions: CompanionAction[] }
 
 /** Receipts belong to their request, even while replying or after a withdrawal. */
-export function conversationTimeline(conversation: ConversationState | null): ConversationRow[] {
+export function conversationTimeline(conversation: ConversationState | null, previous: ConversationRow[] = []): ConversationRow[] {
   const rows = (conversation?.messages ?? []).filter(message => message.role !== 'tool' && !(message.role === 'assistant' && message.retractedAt))
     .map(message => ({ message, operations: [] as Operation[], companionActions: [] as CompanionAction[] }))
   const anchors = new Map<string, ConversationRow>()
@@ -16,7 +16,30 @@ export function conversationTimeline(conversation: ConversationState | null): Co
   // to the latest reply: they become visible when their own turn is loaded.
   for (const operation of new Map((conversation?.operations ?? []).map(item => [item.id, item])).values()) anchors.get(operation.requestId)?.operations.push(operation)
   for (const action of new Map((conversation?.companionActions ?? []).map(item => [item.id, item])).values()) anchors.get(action.requestId)?.companionActions.push(action)
-  return rows
+  // Reuse unchanged rows across receipt updates and history pagination. Compare
+  // complete snapshots: equal IDs or text lengths do not imply equal content.
+  // The caller owns the previous committed result; no global history is kept.
+  if (!previous.length) return rows
+  const prior = new Map(previous.map(row => [row.message.id, row]))
+  const shared = rows.map(row => {
+    const old = prior.get(row.message.id)
+    if (!old) return row
+    if (sameSnapshot(old.message, row.message)) row.message = old.message
+    row.operations = shareItems(old.operations, row.operations)
+    row.companionActions = shareItems(old.companionActions, row.companionActions)
+    return row.message === old.message && row.operations === old.operations && row.companionActions === old.companionActions ? old : row
+  })
+  return shared.length === previous.length && shared.every((row, index) => row === previous[index]) ? previous : shared
+}
+
+function shareItems<T extends { id: string }>(previous: T[], next: T[]): T[] {
+  if (!previous.length && !next.length) return previous
+  const prior = new Map(previous.map(item => [item.id, item]))
+  const shared = next.map(item => {
+    const old = prior.get(item.id)
+    return old && sameSnapshot(old, item) ? old : item
+  })
+  return shared.length === previous.length && shared.every((item, index) => item === previous[index]) ? previous : shared
 }
 
 export function mergeConversation(current: ConversationState | null, next: ConversationState): ConversationState {

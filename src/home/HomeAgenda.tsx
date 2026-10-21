@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, KeyboardEvent } from 'react'
+import { collectionProgress, taskEntries } from '../domain/taskCollections'
+import type { TaskCollection } from '../domain/taskCollections'
+import { CollectionIcon, useTaskCollections } from '../ui/TaskCollectionDialog'
 import type { Task } from '../domain/task'
 import { TaskCardStack } from '../ui/TaskCardStack'
 import { DayEventDialog } from '../planner/PlannerDialogs'
@@ -22,6 +25,7 @@ type MonthMotion = { month: string; previous: string | null; direction: 'next' |
 export function HomeAgenda({ tasks, now, loading, error, active, compact, onRetry, onTask, onChat }: Props) {
   const planner = usePlanner(active)
   const [editingEvent, setEditingEvent] = useState<DayEvent | null>(null)
+  const eventOpener = useRef<HTMLButtonElement | null>(null)
   const [eventNotice, setEventNotice] = useState('')
   const deadlinePicker = useHomeDeadlinePicker()
   const draft = deadlinePicker?.draft
@@ -53,6 +57,11 @@ export function HomeAgenda({ tasks, now, loading, error, active, compact, onRetr
   const focusDay = useRef<string | null>(null)
   const scroll = useRef<HTMLDivElement>(null)
   const taskPlans = useMemo(() => agendaPlanIndex(planner.state?.blocks ?? []), [planner.state?.blocks])
+  const collections = useTaskCollections(tasks, now, onTask, task => {
+    const plan = taskPlans.get(task.id)?.[0]
+    return plan ? `${plan.date.slice(5).replace('-', '/')} ${plan.start}–${plan.end}` : '待安排'
+  }, task => { const plan = taskPlans.get(task.id)?.[0]; return plan ? `${plan.date}T${plan.start}` : task.startAt ?? '9999' })
+  const collectionProps = { allTasks: tasks, onCollection: collections.open }
   const selectedItems = useMemo(() => agendaItems(tasks, overviewDay, today, taskPlans), [tasks, overviewDay, today, taskPlans])
   const todayItems = useMemo(() => agendaItems(tasks, today, today, taskPlans), [tasks, today, taskPlans])
   const deadlines = useMemo(() => deadlineItems(tasks), [tasks])
@@ -190,46 +199,54 @@ export function HomeAgenda({ tasks, now, loading, error, active, compact, onRetr
       {loading ? <p className="home-agenda-empty" role="status">正在读取事项</p> : error ? <p className="home-agenda-error" role="alert">读取失败 <button onClick={onRetry}>重试</button></p>
         : planner.error ? <p className="home-agenda-error" role="alert">事项安排读取失败 <button type="button" disabled={planner.loading} onClick={() => void planner.refresh()}>重试</button></p>
           : !planner.state ? <p className="home-agenda-empty" role="status">正在读取事项安排</p>
-            : <AgendaSection key={overviewDay} animate={dayMotion.revision > 0} title={`${shortDate.format(selectedDate)} · 事项`} name="selected" tasks={selectedItems} empty="这天暂无已安排事项" onTask={onTask} label={task => dayTaskLabel(task, overviewDay, taskPlans)} />}
+            : <AgendaSection {...collectionProps} key={overviewDay} animate={dayMotion.revision > 0} title={`${shortDate.format(selectedDate)} · 事项`} name="selected" tasks={selectedItems} empty="这天暂无已安排事项" onTask={onTask} label={task => dayTaskLabel(task, overviewDay, taskPlans)} />}
       <section key={`events:${overviewDay}`} className={`home-agenda-section${dayMotion.revision > 0 ? ' home-day-content-enter' : ''}`} data-agenda-section="events" data-empty={eventsReadable && selectedEvents.length === 0} aria-label={`${shortDate.format(selectedDate)} · 活动`}>
         <h3>{shortDate.format(selectedDate)} · 活动{eventsReadable && <span>{selectedEvents.length}</span>}</h3>
         {planner.error ? <p className="home-agenda-error" role="alert">活动读取失败 <button type="button" disabled={planner.loading} onClick={() => void planner.refresh()}>重试</button></p>
           : !planner.state ? <p className="home-agenda-empty" role="status">正在读取活动</p>
             : selectedEvents.length ? <ul className="home-agenda-list">{selectedEvents.map(event => <li key={event.id}>
-              <button type="button" disabled={planner.saving} style={{ '--task-state-color': 'var(--xixi-gold)' } as CSSProperties} aria-label={`编辑单日活动，${event.title}，${event.date}，${event.start}–${event.end}${event.location ? `，${event.location}` : ''}`} onClick={() => { setEventNotice(''); setEditingEvent(event) }}>
+              <button type="button" disabled={planner.saving} style={{ '--task-state-color': 'var(--xixi-gold)' } as CSSProperties} aria-label={`编辑单日活动，${event.title}，${event.date}，${event.start}–${event.end}${event.location ? `，${event.location}` : ''}`} onClick={click => { eventOpener.current = click.currentTarget; setEventNotice(''); setEditingEvent(event) }}>
                 <span>{event.title}</span><small>{event.start}–{event.end}{event.location && ` · ${event.location}`}</small>
               </button>
             </li>)}</ul> : <p className="home-agenda-empty">这天暂无活动</p>}
       </section>
+      {collections.notice}
       {eventNotice && <p className="home-agenda-empty" role="status">{eventNotice}</p>}
       {readable && <>
-        {eventsReadable && <AgendaSection title="今日待办" name="today" tasks={todayItems} empty="今天暂无已安排待办" onTask={onTask} label={task => dayTaskLabel(task, today, taskPlans)} />}
-        <AgendaSection title="DDL" name="deadlines" tasks={deadlines} empty="暂无截止事项" onTask={onTask} label={task => deadlineLabel(task, now)} overdue={task => isOverdue(task, now)} />
+        {eventsReadable && overviewDay !== today && <AgendaSection {...collectionProps} title="今日待办" name="today" tasks={todayItems} empty="今天暂无已安排待办" onTask={onTask} label={task => dayTaskLabel(task, today, taskPlans)} />}
+        <AgendaSection {...collectionProps} title="DDL" name="deadlines" tasks={deadlines} empty="暂无截止事项" onTask={onTask} label={task => deadlineLabel(task, now)} overdue={task => isOverdue(task, now)} />
         {eventsReadable && undated.length > 0 && <section className="home-agenda-undated" aria-label="未定日期"><h3>未定日期 <span>{undated.length}</span></h3>
-          <TaskCardStack compact label="未定日期" items={undated.map(task => ({ id: task.id, title: task.title, meta: task.estimateMin ? `${task.estimateMin} 分钟 · 待安排` : '用时待估 · 待安排' }))} onOpen={onTask} empty="暂无待安排事项" />
+          <TaskCardStack compact label="未定日期" items={taskEntries(undated, tasks).map(entry => entry.kind === 'collection' ? { id: entry.id, title: entry.name, meta: collectionProgress(entry) } : { id: entry.id, title: entry.task.title, meta: entry.task.estimateMin ? `${entry.task.estimateMin} 分钟 · 待安排` : '用时待估 · 待安排' })} onOpen={id => { const entry = taskEntries(undated, tasks).find(entry => entry.id === id); if (entry?.kind === 'collection' && document.activeElement instanceof HTMLElement) collections.open(entry, document.activeElement); else onTask(id) }} empty="暂无待安排事项" />
         </section>}
       </>}
       </div></div>
     </div>
-    {active && !presentedDraft && editingEvent && planner.state && <DayEventDialog key={editingEvent.id} event={editingEvent} state={planner.state} act={planner.act} onClose={() => setEditingEvent(null)} onNotice={setEventNotice} />}
+    {active && !presentedDraft && editingEvent && planner.state && <DayEventDialog key={editingEvent.id} event={editingEvent} state={planner.state} act={planner.act} onClose={() => setEditingEvent(null)} onNotice={setEventNotice} homeAnchor={eventOpener.current} />}
+    {collections.dialog}
   </aside>
 }
 
-function AgendaSection({ title, name, tasks, empty, onTask, label, overdue, animate = false }: {
+function AgendaSection({ title, name, tasks, allTasks, onCollection, empty, onTask, label, overdue, animate = false }: {
+  allTasks: Task[]; onCollection: (group: TaskCollection, anchor: HTMLElement) => void
   title: string; name: string; tasks: Task[]; empty: string; onTask: (id: string) => void; label: (task: Task) => string; overdue?: (task: Task) => boolean; animate?: boolean
 }) {
   return <section className={`home-agenda-section${animate ? ' home-day-content-enter' : ''}`} data-agenda-section={name} data-empty={tasks.length === 0} aria-label={title}>
-    <h3>{title}<span>{tasks.length}</span></h3>
-    {tasks.length ? <AgendaList tasks={tasks} onTask={onTask} label={label} overdue={overdue} /> : <p className="home-agenda-empty">{empty}</p>}
+    <h3>{title}<span>{taskEntries(tasks, allTasks).length}</span></h3>
+    {tasks.length ? <AgendaList isDeadline={name === 'deadlines'} allTasks={allTasks} onCollection={onCollection} tasks={tasks} onTask={onTask} label={label} overdue={overdue} /> : <p className="home-agenda-empty">{empty}</p>}
   </section>
 }
 
-function AgendaList({ tasks, onTask, label, overdue }: {
-  tasks: Task[]; onTask: (id: string) => void; label: (task: Task) => string; overdue?: (task: Task) => boolean
+function AgendaList({ tasks, allTasks, onCollection, onTask, label, overdue, isDeadline }: {
+  isDeadline: boolean; tasks: Task[]; allTasks: Task[]; onCollection: (group: TaskCollection, anchor: HTMLElement) => void
+  onTask: (id: string) => void; label: (task: Task) => string; overdue?: (task: Task) => boolean
 }) {
-  return <ul className="home-agenda-list">{tasks.map(task => <li key={task.id}>
-    <button onClick={() => onTask(task.id)} title={`${task.title} · ${STATUS_LABELS[task.status]}`} aria-label={`${task.title}，${STATUS_LABELS[task.status]}，${label(task)}`} data-task-status={task.status} data-overdue={overdue?.(task)}>
-      <span>{task.title}</span><small>{label(task)}</small>
+  return <ul className="home-agenda-list">{taskEntries(tasks, allTasks).map(entry => entry.kind === 'collection' ? <li key={entry.id}>
+    <button type="button" data-task-collection={entry.id} onClick={event => onCollection(entry, event.currentTarget)} data-overdue={entry.visible.some(task => overdue?.(task))} aria-label={`${entry.name}，${collectionProgress(entry)}，查看集合`}>
+      <span className="home-collection-title"><CollectionIcon />{entry.name}</span><small>{collectionProgress(entry)}{isDeadline ? ` · ${label(entry.visible[0])}` : ` · 本日 ${entry.visible.length} 项`}</small>
+    </button>
+  </li> : <li key={entry.id}>
+    <button onClick={() => onTask(entry.task.id)} title={`${entry.task.title} · ${STATUS_LABELS[entry.task.status]}`} aria-label={`${entry.task.title}，${STATUS_LABELS[entry.task.status]}，${label(entry.task)}`} data-task-status={entry.task.status} data-overdue={overdue?.(entry.task)}>
+      <span>{entry.task.title}</span><small>{label(entry.task)}</small>
     </button>
   </li>)}</ul>
 }

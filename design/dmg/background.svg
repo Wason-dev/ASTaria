@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="560" viewBox="0 0 900 560">
+  <rect width="900" height="560" fill="#080a0e"/>
+  <g fill="#eeeae3" opacity=".22"><circle cx="49" cy="53" r=".8"/><circle cx="850" cy="77" r="1"/><circle cx="787" cy="43" r=".6"/><circle cx="828" cy="374" r=".7"/><circle cx="64" cy="344" r="1"/><circle cx="725" cy="142" r=".6"/><circle cx="164" cy="101" r=".6"/></g>
+  <g font-family="Inter,Helvetica Neue,PingFang SC,sans-serif">
+    <text x="54" y="59" fill="#eeeae3" font-size="18" font-weight="500">ASTaria</text>
+    <text x="846" y="58" text-anchor="end" fill="#b9b6af" font-size="11">让时间有引力</text>
+    <text x="450" y="121" text-anchor="middle" fill="#eeeae3" font-size="27" font-weight="400">拖入 Applications，完成安装</text>
+    <text x="450" y="150" text-anchor="middle" fill="#b9b6af" font-size="13">把左侧 ASTaria 拖到右侧文件夹</text>
+    <path d="M397 261 H499 M486 251 L499 261 L486 271" fill="none" stroke="#d5bb8b" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="450" y="322" text-anchor="middle" fill="#d5bb8b" font-size="11">拖拽安装</text>
+    <g fill="#e7e3dc"><rect x="230" y="312" width="88" height="24" rx="8"/><rect x="572" y="312" width="108" height="24" rx="8"/><rect x="685" y="514" width="158" height="24" rx="8"/></g>
+    <path d="M70 376 H830" stroke="#e1ded5" stroke-opacity=".13"/>
+    <text x="70" y="412" fill="#d5bb8b" font-size="12">01</text><text x="105" y="412" fill="#eeeae3" font-size="14">拖拽完成后，从「应用程序」打开 ASTaria。</text>
+    <text x="70" y="446" fill="#d5bb8b" font-size="12">02</text><text x="105" y="446" fill="#eeeae3" font-size="14">离线记录无需密钥；使用析熙时，可连接 API 或本地模型。</text>
+    <text x="70" y="480" fill="#d5bb8b" font-size="12">03</text><text x="105" y="480" fill="#eeeae3" font-size="14">确认已能打开后，在 Finder 侧栏推出此安装磁盘。</text>
+    <text x="70" y="526" fill="#b9b6af" font-size="11">首次打开遇到系统提示时，请核对下载来源，或查看右侧完整说明。</text>
+  </g>
+</svg>

@@ -200,7 +200,7 @@ test('binary settings normalize independently, retain explicit zero values and o
   }
   const normalized = normalizeResponseEffect({ binary })
   assert.deepEqual(normalized.binary, {
-    enabled: false, density: 0, emberBrightness: 0, visibleFraction: 1,
+    enabled: false, brightness: 1.25, density: 0, emberBrightness: 0, visibleFraction: 1,
     sparkFrequency: DEFAULT_BINARY_EFFECT.sparkFrequency,
     sparkBrightness: DEFAULT_BINARY_EFFECT.sparkBrightness, flowSpeed: 0,
   })
@@ -214,4 +214,41 @@ test('binary settings normalize independently, retain explicit zero values and o
   const first = normalizeResponseEffect()
   first.binary.density = 0
   assert.equal(normalizeResponseEffect().binary.density, DEFAULT_BINARY_EFFECT.density)
+})
+
+test('digit brightness migrates, clamps and rejects non-finite client values independently', () => {
+  assert.equal(DEFAULT_BINARY_EFFECT.brightness, 1.25)
+  for (const brightness of [undefined, null, NaN, Infinity, -Infinity, '2', false]) {
+    assert.equal(normalizeResponseEffect({ binary: { brightness } }).binary.brightness, 1.25)
+  }
+  for (const [brightness, expected] of [[-1, .5], [0, .5], [.5, .5], [.55, .55], [1.25, 1.25], [3, 3], [10, 3]]) {
+    assert.deepEqual(normalizeResponseEffect({ binary: { brightness } }), {
+      ...DEFAULT_RESPONSE_EFFECT, binary: { ...DEFAULT_BINARY_EFFECT, brightness: expected },
+    })
+  }
+})
+
+test('digit brightness preserves response strength, timing, fade and explicit disable at every gain', () => {
+  for (const brightness of [.5, 1.25, 3]) {
+    for (const exit of ['replying', 'idle']) {
+      const baseline = new ResponseEffectController(), tuned = new ResponseEffectController()
+      tuned.setSettings({ ...DEFAULT_RESPONSE_EFFECT, binary: { ...DEFAULT_BINARY_EFFECT, brightness } })
+      const compare = seconds => {
+        const before = run(baseline, seconds), after = run(tuned, seconds)
+        assert.deepEqual(after, { ...before, settings: { ...before.settings, binary: { ...before.settings.binary, brightness } } })
+        assert.equal(tuned.needsFrame(false), baseline.needsFrame(false))
+        return after
+      }
+      baseline.setPhase('thinking'); tuned.setPhase('thinking')
+      assert.equal(compare(3).binaryAmount, 1)
+      baseline.setPhase(exit); tuned.setPhase(exit)
+      assert.ok(compare(.4).binaryAmount > 0)
+      assert.equal(compare(1).binaryAmount, 0)
+      tuned.setPhase('thinking')
+      run(tuned, 2)
+      tuned.setSettings({ ...DEFAULT_RESPONSE_EFFECT, style: 'off', binary: { ...DEFAULT_BINARY_EFFECT, brightness, enabled: false } })
+      assert.equal(tuned.getSnapshot().binaryAmount, 0)
+      assert.equal(tuned.needsFrame(false), false)
+    }
+  }
 })

@@ -92,9 +92,10 @@ export function glassDisplacement(width: number, height: number, radius: number)
   if (cached) return cached
   const canvas = document.createElement('canvas')
   canvas.width = w; canvas.height = h
-  // This canvas only uploads CPU pixels and immediately encodes them. Keep it
-  // on the readback-friendly path so PNG encoding cannot stall the scene GPU.
-  const context = canvas.getContext('2d', { willReadFrequently: true })
+  // This canvas uploads opaque CPU pixels once and encodes once; it never
+  // repeatedly reads the scene. A readback hint forces a costly CPU surface
+  // allocation on Chromium. Keep the normal upload path and the same RGBA.
+  const context = canvas.getContext('2d')
   if (!context) return ''
   const pixels = context.createImageData(w, h)
   const r = Math.min(radius, w / 2, h / 2)

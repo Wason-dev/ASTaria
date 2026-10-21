@@ -2,7 +2,12 @@ import type { OrbitDay, OrbitGroup } from './orbitGroups'
 import type { StringSnapshot } from './stringOrder'
 
 export type HorizonSnapshot = StringSnapshot & { days: 3; groups: OrbitGroup[]; groupingSaved?: boolean }
-export type HorizonResult = HorizonSnapshot & { summary: string; operation: { id: string } | null; replayed?: boolean }
+export type HorizonSchedulingQuestion = {
+  prompt: string; sourceId: string; snapshotKey: string
+  options: Array<{ value: 'whole' | 'split' | 'cancel'; label: string }>
+}
+export type HorizonResult = HorizonSnapshot & { summary: string; operation: { id: string } | null; replayed?: boolean;
+  schedulingQuestion?: HorizonSchedulingQuestion }
 
 /** Keep block identities: one task may have several independently scheduled parts. */
 export function horizonDraft(groups: readonly OrbitGroup[]) {

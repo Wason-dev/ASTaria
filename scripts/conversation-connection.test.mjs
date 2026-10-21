@@ -3,7 +3,8 @@ import test from 'node:test'
 import { registerHooks, stripTypeScriptTypes } from 'node:module'
 
 // Execute the real conversation hook with deterministic hook scheduling and
-// mocked HTTP. No provider calls, user storage or browser dependencies.
+// mocked HTTP and the real pending-request helper with an injected memory
+// adapter. No provider calls, user storage or browser dependencies.
 const runtimeKey = '__astariaConnectionTestHooks'
 const reactStub = `export const ${['useState', 'useRef', 'useMemo', 'useCallback', 'useEffect'].map(name => `${name} = (...args) => globalThis.${runtimeKey}.${name}(...args)`).join(', ')};`
 const root = new URL('../src/xixi/', import.meta.url).href
@@ -23,6 +24,7 @@ const loader = registerHooks({
   },
 })
 const { useXixiConversation } = await import('../src/xixi/useXixiConversation.ts')
+const { createPendingChatRequestStore } = await import('../src/xixi/pendingChatRequest.ts')
 loader.deregister()
 const tick = () => new Promise(resolve => setImmediate(resolve))
 const context = { page: 'home', timezone: 'Asia/Shanghai' }
@@ -36,6 +38,13 @@ async function fixture(t) {
   globalThis.window = { setInterval: () => 0 }
   globalThis.document = Object.assign(new EventTarget(), { visibilityState: 'visible' })
   globalThis.sessionStorage = { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value) }
+  const committed = new Map()
+  const records = scope => { if (!committed.has(scope)) committed.set(scope, new Map()); return committed.get(scope) }
+  const pendingStore = createPendingChatRequestStore({ session: globalThis.sessionStorage, adapter: {
+    async list(scope) { return [...records(scope).values()].map(value => structuredClone(value)) },
+    async put(scope, request) { records(scope).set(request.requestId, structuredClone(request)) },
+    async remove(scope, ids) { for (const id of ids) records(scope).delete(id) },
+  } })
   const slots = [], effects = []
   let cursor = 0
   const memo = (factory, deps) => {
@@ -66,6 +75,9 @@ async function fixture(t) {
     if (url.startsWith('/api/conversation')) return Response.json({ conversationId: 'main', messages: [], operations: [] })
     if (url === '/api/chat') {
       const request = JSON.parse(init.body)
+      const saved = (await pendingStore.list()).find(item => item.requestId === request.requestId)
+      assert.ok(saved, 'the pending request must commit before the chat API is called')
+      assert.deepEqual({ requestId: saved.requestId, conversationId: saved.conversationId, text: saved.text, context: saved.context }, request)
       sent.push(request)
       if (chatError) return Response.json({ error: chatError }, { status: 502 })
       return Response.json({ ...request, status: 'completed', messages: [], operations: [] })
@@ -74,7 +86,7 @@ async function fixture(t) {
   })
   const render = () => {
     cursor = 0
-    const value = useXixiConversation(() => {}, () => {})
+    const value = useXixiConversation(() => {}, () => {}, pendingStore)
     for (const effect of effects.splice(0)) { const cleanup = effect(); if (cleanup) cleanups.push(cleanup) }
     return value
   }
@@ -86,7 +98,7 @@ async function fixture(t) {
     }
   })
   render(); await tick()
-  return { render, reads, sent, setStatus: value => { status = value }, failChat: value => { chatError = value } }
+  return { render, reads, sent, pendingStore, setStatus: value => { status = value }, failChat: value => { chatError = value } }
 }
 
 test('switching back to configured API clears the old connection prompt without restarting or losing the draft', async t => {
@@ -100,6 +112,7 @@ test('switching back to configured API clears the old connection prompt without 
   assert.equal(f.render().status.provider, 'deepseek')
   assert.equal(await f.render().send('保留这条草稿', context), true)
   assert.equal(f.sent[0].text, '保留这条草稿')
+  assert.deepEqual(await f.pendingStore.list(), [], 'completed requests clean their temporary record')
 })
 
 test('a delayed local-mode status response cannot replace the newly saved API status', async t => {
@@ -142,9 +155,13 @@ test('connection refresh preserves unrelated send errors and failed messages', a
   assert.equal(await f.render().send('重试内容', context), false)
   const before = f.render()
   assert.equal(before.error, '模型暂时限流，请稍后重试')
+  const pending = await f.pendingStore.list()
+  assert.equal(pending.length, 1)
+  assert.equal(pending[0].requestId, f.sent[0].requestId)
   await before.refreshStatus()
   assert.equal(f.render().error, before.error)
   assert.deepEqual(f.render().conversation.messages, before.conversation.messages)
+  assert.deepEqual(await f.pendingStore.list(), pending, 'status refresh retains the failed request and its retry ID')
 })
 
 test('an unconfigured model remains blocked after a fresh status check', async t => {

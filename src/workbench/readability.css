@@ -12,22 +12,22 @@
 .workbench .wb-task-detail { color: #55616b }
 
 /* B: a small pointer-following edge glint, with C's restrained reading wash. */
-.workbench :is(.wb-task,.wb-brief,.wb-focus-main,.wb-xixi,.wb-watch-related button,.wb-ddl-select,.wb-icon-button,.wb-tool,.wb-action,.wb-secondary,.wb-brief-start,.wb-ddl-fold-toggle)::before {
+.workbench :is(.wb-task,.wb-brief,.wb-focus-main,.wb-xixi,.wb-watch-related button,.wb-ddl-select,.wb-icon-button,.wb-tool,.wb-action,.wb-secondary,.wb-brief-start,.wb-ddl-fold-toggle,.wb-focus-steps,.wb-briefing-panel)::before {
   content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0; z-index: 2;
   background: radial-gradient(circle 120px at var(--wb-pointer-x, 50%) var(--wb-pointer-y, 50%), rgb(255 255 255 / .30), transparent 72%);
   transition: opacity 180ms ease;
 }
-.workbench :is(.wb-task,.wb-brief,.wb-focus-main,.wb-xixi,.wb-watch-related button,.wb-ddl-select,.wb-icon-button,.wb-tool,.wb-action,.wb-secondary,.wb-brief-start,.wb-ddl-fold-toggle)[data-hovered=true]::before { opacity: 1 }
-.workbench :is(.wb-task,.wb-brief,.wb-focus-main,.wb-xixi,.wb-watch-related button,.wb-ddl-select,.wb-icon-button,.wb-tool,.wb-action,.wb-secondary,.wb-brief-start,.wb-ddl-fold-toggle)::after {
+.workbench :is(.wb-task,.wb-brief,.wb-focus-main,.wb-xixi,.wb-watch-related button,.wb-ddl-select,.wb-icon-button,.wb-tool,.wb-action,.wb-secondary,.wb-brief-start,.wb-ddl-fold-toggle,.wb-focus-steps,.wb-briefing-panel)[data-hovered=true]::before { opacity: 1 }
+.workbench :is(.wb-task,.wb-brief,.wb-focus-main,.wb-xixi,.wb-watch-related button,.wb-ddl-select,.wb-icon-button,.wb-tool,.wb-action,.wb-secondary,.wb-brief-start,.wb-ddl-fold-toggle,.wb-focus-steps,.wb-briefing-panel)::after {
   content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: 3; opacity: 0;
   padding: 1px; background: radial-gradient(circle 90px at var(--wb-pointer-x, 50%) var(--wb-pointer-y, 50%), rgb(255 255 255 / .80), rgb(209 181 127 / .42) 35%, transparent 75%);
   mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); mask-composite: exclude; transition: opacity 180ms ease;
 }
-.workbench :is(.wb-task,.wb-brief,.wb-focus-main,.wb-xixi,.wb-watch-related button,.wb-ddl-select,.wb-icon-button,.wb-tool,.wb-action,.wb-secondary,.wb-brief-start,.wb-ddl-fold-toggle)[data-hovered=true]::after { opacity: 1 }
-.workbench :is(.wb-task,.wb-brief,.wb-focus-main,.wb-xixi,.wb-watch-related button,.wb-ddl-select,.wb-icon-button,.wb-tool,.wb-action,.wb-secondary,.wb-brief-start,.wb-ddl-fold-toggle) { position: relative }
-.workbench :is(.wb-task,.wb-brief,.wb-focus-main,.wb-xixi,.wb-watch-related button,.wb-ddl-select,.wb-icon-button,.wb-tool,.wb-action,.wb-secondary,.wb-brief-start,.wb-ddl-fold-toggle) > :is(.wb-glass-content,.wb-task-body) { position: relative; z-index: 4 }
+.workbench :is(.wb-task,.wb-brief,.wb-focus-main,.wb-xixi,.wb-watch-related button,.wb-ddl-select,.wb-icon-button,.wb-tool,.wb-action,.wb-secondary,.wb-brief-start,.wb-ddl-fold-toggle,.wb-focus-steps,.wb-briefing-panel)[data-hovered=true]::after { opacity: 1 }
+.workbench :is(.wb-task,.wb-brief,.wb-focus-main,.wb-xixi,.wb-watch-related button,.wb-ddl-select,.wb-icon-button,.wb-tool,.wb-action,.wb-secondary,.wb-brief-start,.wb-ddl-fold-toggle,.wb-focus-steps,.wb-briefing-panel) { position: relative }
+.workbench :is(.wb-task,.wb-brief,.wb-focus-main,.wb-xixi,.wb-watch-related button,.wb-ddl-select,.wb-icon-button,.wb-tool,.wb-action,.wb-secondary,.wb-brief-start,.wb-ddl-fold-toggle,.wb-focus-steps,.wb-briefing-panel) > :is(.wb-glass-content,.wb-task-body) { position: relative; z-index: 4 }
 .workbench .wb-ddl-select > * { position: relative; z-index: 4 }
-.workbench :is(.wb-task,.wb-brief,.wb-focus-main,.wb-xixi,.wb-watch-related button,.wb-ddl-select,.wb-icon-button,.wb-tool,.wb-action,.wb-secondary,.wb-brief-start,.wb-ddl-fold-toggle):focus-visible { outline: 1px solid #93784c9c; outline-offset: 2px }
+.workbench :is(.wb-task,.wb-brief,.wb-focus-main,.wb-xixi,.wb-watch-related button,.wb-ddl-select,.wb-icon-button,.wb-tool,.wb-action,.wb-secondary,.wb-brief-start,.wb-ddl-fold-toggle,.wb-focus-steps,.wb-briefing-panel):focus-visible { outline: 1px solid #93784c9c; outline-offset: 2px }
 
 /* Compact icon actions carry their meaning in a tooltip without adding a text row. */
 .workbench .wb-icon-button { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 26px; min-height: 26px; border-radius: 8px; isolation: isolate }
@@ -97,6 +97,8 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .p0 .workbench .wb-reason-toggle.wb-icon-button { transition: none }
-  .workbench :is(.wb-task,.wb-brief,.wb-focus-main,.wb-xixi,.wb-watch-related button,.wb-ddl-select,.wb-icon-button,.wb-tool,.wb-action,.wb-secondary,.wb-brief-start,.wb-ddl-fold-toggle)::before,
-  .workbench :is(.wb-task,.wb-brief,.wb-focus-main,.wb-xixi,.wb-watch-related button,.wb-ddl-select,.wb-icon-button,.wb-tool,.wb-action,.wb-secondary,.wb-brief-start,.wb-ddl-fold-toggle)::after { transition: none }
+  .workbench :is(.wb-task,.wb-brief,.wb-focus-main,.wb-xixi,.wb-watch-related button,.wb-ddl-select,.wb-icon-button,.wb-tool,.wb-action,.wb-secondary,.wb-brief-start,.wb-ddl-fold-toggle,.wb-focus-steps,.wb-briefing-panel)::before,
+  .workbench :is(.wb-task,.wb-brief,.wb-focus-main,.wb-xixi,.wb-watch-related button,.wb-ddl-select,.wb-icon-button,.wb-tool,.wb-action,.wb-secondary,.wb-brief-start,.wb-ddl-fold-toggle,.wb-focus-steps,.wb-briefing-panel)::after { transition: none }
 }
+.home-workspace[data-motion=reduced] .workbench :is(.wb-task,.wb-brief,.wb-focus-main,.wb-xixi,.wb-watch-related button,.wb-ddl-select,.wb-icon-button,.wb-tool,.wb-action,.wb-secondary,.wb-brief-start,.wb-ddl-fold-toggle,.wb-focus-steps,.wb-briefing-panel)::before,
+.home-workspace[data-motion=reduced] .workbench :is(.wb-task,.wb-brief,.wb-focus-main,.wb-xixi,.wb-watch-related button,.wb-ddl-select,.wb-icon-button,.wb-tool,.wb-action,.wb-secondary,.wb-brief-start,.wb-ddl-fold-toggle,.wb-focus-steps,.wb-briefing-panel)::after { transition:none }

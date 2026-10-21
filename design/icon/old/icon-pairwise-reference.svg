@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="三个同半径圆的两两专属交集，中央三重交集留白">
+  <defs>
+    <clipPath id="top"><circle cx="512" cy="294.811578" r="280"/></clipPath>
+    <clipPath id="left"><circle cx="282" cy="693" r="280"/></clipPath>
+    <mask id="without-top" maskUnits="userSpaceOnUse"><path fill="#fff" d="M0 0h1024v1024H0z"/><circle cx="512" cy="294.811578" r="280" fill="#000"/></mask>
+    <mask id="without-left" maskUnits="userSpaceOnUse"><path fill="#fff" d="M0 0h1024v1024H0z"/><circle cx="282" cy="693" r="280" fill="#000"/></mask>
+    <mask id="without-right" maskUnits="userSpaceOnUse"><path fill="#fff" d="M0 0h1024v1024H0z"/><circle cx="742" cy="693" r="280" fill="#000"/></mask>
+  </defs>
+  <path fill="#fff" d="M0 0h1024v1024H0z"/>
+  <g fill="#22252b" transform="rotate(60 512 512)">
+    <g clip-path="url(#top)" mask="url(#without-right)"><circle cx="282" cy="693" r="280"/></g>
+    <g clip-path="url(#top)" mask="url(#without-left)"><circle cx="742" cy="693" r="280"/></g>
+    <g clip-path="url(#left)" mask="url(#without-top)"><circle cx="742" cy="693" r="280"/></g>
+  </g>
+</svg>

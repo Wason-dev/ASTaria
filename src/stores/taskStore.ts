@@ -2,7 +2,7 @@ import type { Area, AreaId, Task, TaskDraft, TaskFilter } from '../domain/task'
 import { localApi } from '../xixi/api'
 import { ensureLocalMigration, notifyLocalDataChange } from './migration'
 
-export type TaskPatch = Omit<Partial<Task>, 'due'> & { due?: string | null }
+export type TaskPatch = Omit<Partial<Task>, 'due' | 'collection'> & { due?: string | null; collection?: string | null }
 
 export interface TaskStore {
   listTasks(filter?: TaskFilter): Promise<Task[]>

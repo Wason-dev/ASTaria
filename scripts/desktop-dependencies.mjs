@@ -1,7 +1,7 @@
 import { cp, lstat, readFile, realpath } from 'node:fs/promises'
 import { join, relative, isAbsolute, sep } from 'node:path'
 
-/** The server's only external runtime dependency, with its locked dependency closure. */
+/** Server runtime dependencies and their locked dependency closures. */
 export async function copyServerDependencies(root, payload) {
   const lock = JSON.parse(await readFile(join(root, 'package-lock.json'), 'utf8'))
   const modules = await realpath(join(root, 'node_modules')), copied = new Set()
@@ -15,11 +15,16 @@ export async function copyServerDependencies(root, payload) {
     copied.add(name)
     await cp(source, join(payload, 'node_modules', name), { recursive: true, dereference: false,
       filter: async path => {
-        if ((await lstat(path)).isSymbolicLink()) throw new Error('Runtime dependencies must not contain symbolic links')
-        return !relative(source, path).split(sep).some(part => part.startsWith('.') || ['node_modules', 'test', 'tests'].includes(part))
+        const info = await lstat(path)
+        if (info.isSymbolicLink()) throw new Error('Runtime dependencies must not contain symbolic links')
+        const parts = relative(source, path).split(sep)
+        if (parts.some(part => part.startsWith('.') || ['node_modules', 'test', 'tests', '__fixtures__', '__snapshots__'].includes(part.toLowerCase()))) return false
+        // Match test-file markers without pruning normal src/dist filenames.
+        return !info.isFile() || !/\.(?:test|spec)\./iu.test(parts.at(-1))
       } })
     for (const dependency of Object.keys(pkg.dependencies ?? {})) await copy(dependency)
   }
   await copy('htmlparser2')
+  await copy('@noble/hashes')
   return [...copied].sort()
 }

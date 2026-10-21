@@ -8,6 +8,12 @@ import { createXixi, HARD_INPUT_UNITS } from '../server/xixi.mjs'
 
 process.env.TZ = 'Asia/Shanghai'
 const DATE = '2026-09-21'
+
+test('allocation-free character counting keeps the exact previous unit budget for all UTF-16 codes and mixed payloads', () => {
+  const original = text => { const cjk=(text.match(/[\u3000-\u9fff\uff00-\uffef]/gu)??[]).length;return Math.ceil(cjk*1.2+(text.length-cjk)/3) }
+  for(let start=0;start<65536;start+=257){const text=String.fromCharCode(...Array.from({length:Math.min(257,65536-start)},(_,i)=>start+i));assert.equal(contextUnits(text),original(text))}
+  for(const text of ['hello数学🌌','\ud800x\udfff','\uff00\uffef\u9fff\u3000','中文'.repeat(10000)])assert.equal(contextUnits(text),original(text))
+})
 const TEXT = '数学缩到21:00–21:30，物理21:30–22:30'
 const reply = content => ({ choices: [{ message: { role: 'assistant', content } }] })
 const call = (name, args) => ({ id: randomUUID(), type: 'function', function: { name, arguments: JSON.stringify(args) } })

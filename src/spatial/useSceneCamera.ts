@@ -1,3 +1,4 @@
+import { pageIsHidden, PAGE_ACTIVITY_EVENT } from '../stores/pageActivity.ts'
 import { useEffect, useRef, useState } from 'react'
 import type { SceneCamera } from './scene'
 import { sameCameraSample } from './cameraSample'
@@ -21,7 +22,7 @@ export function useSceneCamera(readCamera: () => SceneCamera | undefined, revisi
     let sampled: SceneCamera | undefined
     const sample = () => {
       frame = 0
-      if (document.hidden) return
+      if (pageIsHidden()) return
       const next = readCamera()
       if (!next) return
       // A 160 Hz display can sample the same 60 FPS scene more than twice.
@@ -40,16 +41,18 @@ export function useSceneCamera(readCamera: () => SceneCamera | undefined, revisi
     }
     const refresh = () => {
       cancelAnimationFrame(frame)
-      frame = document.hidden ? 0 : requestAnimationFrame(sample)
+      frame = pageIsHidden() ? 0 : requestAnimationFrame(sample)
     }
     const motion = matchMedia('(prefers-reduced-motion: reduce)')
     document.addEventListener('visibilitychange', refresh)
+    document.addEventListener(PAGE_ACTIVITY_EVENT, refresh)
     window.addEventListener('focus', refresh)
     motion.addEventListener('change', refresh)
     frame = requestAnimationFrame(sample)
     return () => {
       cancelAnimationFrame(frame)
       document.removeEventListener('visibilitychange', refresh)
+      document.removeEventListener(PAGE_ACTIVITY_EVENT, refresh)
       window.removeEventListener('focus', refresh)
       motion.removeEventListener('change', refresh)
     }

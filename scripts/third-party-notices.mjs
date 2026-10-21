@@ -71,10 +71,30 @@ export async function generateNotices(root = ROOT) {
     const item = { name: label(record.name || fallback), version: label(record.version || 'unknown'),
       location, lockLicense: declaration(record.license), installedLicense: '', files: [], skipped: [], issues: [] }
     packages.push(item)
+    // PDF.js's optional Node canvas platform tarballs share their parent
+    // package's MIT notice. They are not imported by the browser reader. Keep
+    // their attribution even for other-platform records absent on this host.
+    const canvasPlatform = /^@napi-rs\/canvas-[a-z0-9-]+$/u.test(item.name)
+      && item.version === '1.0.11' && item.lockLicense === 'MIT' && record.optional === true
+      && lock.packages['node_modules/@napi-rs/canvas']?.version === '1.0.11'
+    const pinned = canvasPlatform ? ['napi-rs-canvas-1.0.11-LICENSE.txt', '8802fecf9da4367bc23bcf20b21cc143785fc6c92b152f3fa7fbe6ce08d344d6']
+      : item.name === 'isarray' && item.version === '1.0.0' && item.lockLicense === 'MIT'
+        ? ['isarray-1.0.0-LICENSE.txt', 'b05c56f1c665cd9e57dae61865c8881344d7cba85c7a8cb0d643a6ec03497f9d'] : null
+    if (pinned) {
+      const source = join(root, 'third-party', pinned[0])
+      const info = await lstat(source).catch(error => error.code === 'ENOENT' ? null : Promise.reject(error))
+      const bytes = info?.isFile() && !info.isSymbolicLink() && info.size <= MAX_LICENSE_BYTES ? await readFile(source) : null
+      if (bytes && createHash('sha256').update(bytes).digest('hex') === pinned[1]) item.files.push({
+        name: `LICENSE-${canvasPlatform ? '@napi-rs-canvas-parent-1.0.11' : 'isarray-1.0.0-from-published-README'}`,
+        text: bytes.toString('utf8').trimEnd(),
+      })
+      else item.issues.push('Pinned document-reader dependency notice is missing or differs')
+    }
     let directory
     try { directory = await realpath(join(root, location)) }
     catch (error) {
       if (error.code !== 'ENOENT') throw new Error(`Cannot inspect ${label(location)} (${label(error.code || 'read error')})`)
+      if (canvasPlatform && item.files.length) continue
       item.issues.push('Package is not installed; license text requires verification')
       continue
     }
@@ -91,8 +111,22 @@ export async function generateNotices(root = ROOT) {
       if (manifest.version !== record.version) item.issues.push('Installed package version does not match lockfile; requires verification')
     } catch { item.issues.push('Installed package.json could not be read; requires verification') }
     const result = await licenseFiles(directory)
-    item.files = result.files
+    item.files.push(...result.files)
     item.skipped = result.skipped
+    // remark-math's published tarball omits its monorepo license. Pin the
+    // upstream text at npm's gitHead d5d0660b150810a535bbb07eac6cc96a4510aa24.
+    if (item.name === 'remark-math' && !item.files.some(file => LICENSE_TEXT_NAME.test(basename(file.name)))) {
+      const source = join(root, 'third-party', 'remark-math-6.0.0-LICENSE.txt')
+      const info = await lstat(source).catch(error => error.code === 'ENOENT' ? null : Promise.reject(error))
+      if (item.version !== '6.0.0' || item.lockLicense !== 'MIT' || item.installedLicense !== 'MIT'
+        || !info?.isFile() || info.isSymbolicLink() || info.size > MAX_LICENSE_BYTES) {
+        item.issues.push('Pinned remark-math license is missing or does not match this package')
+      } else {
+        const bytes = await readFile(source)
+        if (createHash('sha256').update(bytes).digest('hex') !== 'cb992262f361a5359e6771c28740d33c7041e15332ae8537fae40538992591a9') item.issues.push('Pinned remark-math license checksum differs')
+        else item.files.push({ name: 'LICENSE-remark-math-6.0.0', text: bytes.toString('utf8').trimEnd() })
+      }
+    }
     if (item.name === 'gsap' && !item.files.some(file => LICENSE_TEXT_NAME.test(basename(file.name)))) {
       if (item.version !== '3.15.0' || item.lockLicense !== GSAP_DECLARATION || item.installedLicense !== GSAP_DECLARATION) {
         item.issues.push('Bundled GSAP terms do not match this package version and license declaration')

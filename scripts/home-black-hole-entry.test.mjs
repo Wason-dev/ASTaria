@@ -17,7 +17,7 @@ test('homepage click target follows the rendered horizon in desktop, portrait, a
   for (const [width, height] of [[1440, 900], [390, 844], [900, 900], [2048, 768]]) {
     const geometry = blackHoleEntryGeometry(camera, width, height)
     const narrow = width / height < .8
-    const center = narrow ? [.5 + (camera.centerX - .5) * .2, .5 + (camera.centerY - .5) * 6]
+    const center = narrow ? [.5 + (camera.centerX - .5) * .34, .5 + (camera.centerY - .5) * 6]
       : [camera.centerX, camera.centerY]
     assert.equal(geometry.cx, center[0] * width)
     assert.equal(geometry.cy, (1 - center[1]) * height)

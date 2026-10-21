@@ -32,9 +32,9 @@ function buildRelease(options = {}) {
     version, tag = `v${version}`, arch = 'arm64', platform = 'darwin', draft = false, releaseFlag = false,
     commit = RELEASE_COMMIT, builtAt = '2026-02-01T00:00:00.000Z', size = 4096, body = '发布说明',
     publishedAt = '2026-02-02T00:00:00.000Z', sha256 = 'd'.repeat(64),
-    dmgState = 'uploaded', manifestState = 'uploaded', dmgUrl, manifestUrl, manifestPatch = {}, releasePatch = {},
+    dmgState = 'uploaded', manifestState = 'uploaded', dmgUrl, manifestUrl, manifestPatch = {}, releasePatch = {}, signing = 'adhoc',
   } = options
-  const stem = `ASTaria-${version}-mac-${arch}-adhoc`
+  const stem = `ASTaria-${version}-mac-${arch}-${signing}`
   const dmgName = `${stem}.dmg`
   const manifestName = `${stem}.manifest.json`
   const dmgAsset = { name: dmgName, state: dmgState, size, browser_download_url: dmgUrl ?? downloadUrl(tag, dmgName) }
@@ -202,6 +202,110 @@ test('selectRelease 让稳定版只匹配稳定发布，测试版可以接收预
   assert.equal(promoted.prerelease, false)
 })
 
+test('v1.0 稳定标签使用 canonical signed 资产与验签清单，并能从 rc 升级', async () => {
+  const current = installed({ version: '1.0.0-rc.2' })
+  const stable = buildRelease({ version: '1.0.0', tag: 'v1.0', signing: 'signed' })
+  const picked = selectRelease([stable.release], current)
+  assert.equal(picked.version, '1.0.0')
+  assert.equal(picked.tag, 'v1.0')
+  assert.equal(picked.prerelease, false)
+  assert.equal(picked.assetName, 'ASTaria-1.0.0-mac-arm64-signed.dmg')
+  assert.equal(picked.downloadUrl, downloadUrl('v1.0', stable.dmgName))
+  assert.equal(picked.manifestUrl, downloadUrl('v1.0', stable.manifestName))
+  assert.equal(validateManifest(stable.manifest, picked, current, testReleaseKeys).version, '1.0.0')
+  const backend = createBackend({ releases: [stable.release], builds: [stable] })
+  const { updates } = startService({ backend, current })
+  const status = await updates.check()
+  assert.equal(status.status, 'available')
+  assert.equal(status.latest.version, '1.0.0')
+  assert.equal(status.latest.sameVersion, false)
+  assert.equal(backend.count(stable.manifestUrl), 1)
+})
+
+test('展示版本 v1.0 只选择稳定发布，过滤更高 beta、rc 和被标记为预览的版本', async () => {
+  const stable = buildRelease({ version: '1.0.1', signing: 'signed' })
+  const previews = [
+    buildRelease({ version: '2.0.0-beta.12.1', releaseFlag: true }),
+    buildRelease({ version: '2.0.0-beta.13', releaseFlag: false }),
+    buildRelease({ version: '2.0.0-rc.1', releaseFlag: false }),
+    buildRelease({ version: '2.0.0', releaseFlag: true }),
+  ]
+  const current = installed({ version: 'v1.0' })
+  const releases = [...previews.map(build => build.release), stable.release]
+  assert.equal(selectRelease(releases, current).version, '1.0.1')
+  assert.equal(selectRelease(previews.map(build => build.release), current), null)
+  const backend = createBackend({ releases, builds: [stable, ...previews] })
+  const { updates } = startService({ backend, current })
+  const status = await updates.check()
+  assert.equal(status.status, 'available')
+  assert.equal(status.latest.version, '1.0.1')
+  assert.deepEqual(backend.calls.map(call => call.url), [RELEASE_API, stable.manifestUrl])
+})
+
+test('selectRelease 在 beta 补丁、rc.2、rc.10 与稳定版之间按 SemVer 选版', () => {
+  const current = installed({ version: '1.0.0-beta.12' })
+  const previews = ['1.0.0-rc.2', '1.0.0-beta.12.1', '1.0.0-rc.10'].map(version =>
+    buildRelease({ version, releaseFlag: true, signing: 'signed' }).release)
+  assert.equal(selectRelease(previews, current).version, '1.0.0-rc.10')
+  assert.equal(selectRelease([...previews].reverse(), current).version, '1.0.0-rc.10')
+  const stable = buildRelease({ version: '1.0.0', tag: 'v1.0', signing: 'signed' })
+  assert.equal(selectRelease([...previews, stable.release], current).version, '1.0.0')
+})
+
+test('macOS 两种架构都优先选择 signed 配套资产，不混用 adhoc 清单且继续验签', () => {
+  for (const arch of ['arm64', 'x64']) {
+    const current = installed({ version: '1.0.0-rc.1', arch })
+    const signed = buildRelease({ version: '1.0.0', arch, signing: 'signed' })
+    const adhoc = buildRelease({ version: '1.0.0', arch })
+    const release = { ...signed.release, assets: [...adhoc.release.assets, ...signed.release.assets] }
+    const picked = selectRelease([release], current)
+    assert.equal(picked.assetName, signed.dmgName)
+    assert.equal(picked.manifestUrl, signed.manifestUrl)
+    assert.equal(validateManifest(signed.manifest, picked, current, testReleaseKeys).version, '1.0.0')
+    assert.throws(() => validateManifest(adhoc.manifest, picked, current, testReleaseKeys), /Invalid build manifest/u)
+    assert.throws(() => validateManifest({ ...signed.manifest, sha256: 'a'.repeat(64) }, picked, current, testReleaseKeys), /发布者签名/u)
+  }
+})
+
+test('signed 安装包或清单缺失、URL、状态、大小不合法时回退完整 adhoc 配套资产', () => {
+  const current = installed({ version: '1.0.0-rc.1' })
+  const signed = buildRelease({ version: '1.0.0', signing: 'signed' })
+  const adhoc = buildRelease({ version: '1.0.0' })
+  const variants = [[], [signed.release.assets[0]], [signed.release.assets[1]]]
+  for (const index of [0, 1]) {
+    for (const patch of [{ state: 'pending' }, { size: 0 }, { size: -1 }, { size: 1.5 }, { size: Number.MAX_SAFE_INTEGER + 1 },
+      { browser_download_url: `https://evil.example/${signed.release.assets[index].name}` },
+      { browser_download_url: downloadUrl('v9.9.9', signed.release.assets[index].name) }]) {
+      variants.push(signed.release.assets.map((asset, assetIndex) => assetIndex === index ? { ...asset, ...patch } : asset))
+    }
+  }
+  for (const assets of variants) {
+    const release = { ...signed.release, assets: [...assets, ...adhoc.release.assets] }
+    const picked = selectRelease([release], current)
+    assert.equal(picked.assetName, adhoc.dmgName)
+    assert.equal(picked.manifestUrl, adhoc.manifestUrl)
+    assert.equal(validateManifest(adhoc.manifest, picked, current, testReleaseKeys).version, '1.0.0')
+  }
+})
+
+test('signed 与 adhoc 缺少同名配套清单时不能交叉关联，更新保持不可安装', async () => {
+  const signed = buildRelease({ version: '1.0.0', signing: 'signed' })
+  const adhoc = buildRelease({ version: '1.0.0' })
+  for (const [packageBuild, manifestBuild] of [[signed, adhoc], [adhoc, signed]]) {
+    const release = { ...signed.release, assets: [packageBuild.release.assets[0], manifestBuild.release.assets[1]] }
+    const current = installed({ version: '1.0.0-rc.1' })
+    const picked = selectRelease([release], current)
+    assert.equal(picked.assetName, packageBuild.dmgName)
+    assert.equal(picked.manifestUrl, null)
+    const backend = createBackend({ releases: [release], builds: [signed, adhoc] })
+    const { updates } = startService({ backend, current })
+    const status = await updates.check()
+    assert.equal(status.status, 'unavailable')
+    assert.equal(status.canInstall, false)
+    assert.deepEqual(backend.calls.map(call => call.url), [RELEASE_API])
+  }
+})
+
 test('selectRelease 只接受与设备架构、tag、状态和大小完全匹配的附件', () => {
   const stable = { version: '1.0.0', arch: 'arm64', platform: 'darwin' }
   const good = buildRelease({ version: '1.1.0' })
@@ -240,10 +344,10 @@ test('macOS 从 Beta12 发现补丁，验证完整 beta.12.1 文件名并继续�
   assert.equal(selectRelease([patch.release, next.release], { ...current, version: patch.version }).version, next.version)
 })
 
-for (const version of ['0.1.0-beta.12', '0.1.0-beta.12.1']) test(`Windows x64 只选择同版本 ${version} setup.exe 与配套发布清单`, () => {
-  const tag = `v${version}`, stem = `ASTaria-${version}-win-x64`
+for (const version of ['0.1.0-beta.12', '0.1.0-beta.12.1', '1.0.0-rc.1', '1.0.0']) test(`Windows x64 只选择同版本 ${version} setup.exe 与配套发布清单`, () => {
+  const tag = version === '1.0.0' ? 'v1.0' : `v${version}`, stem = `ASTaria-${version}-win-x64`
   const setup = `${stem}-setup.exe`, manifest = `${stem}.manifest.json`
-  const release = { tag_name: tag, prerelease: true, assets: [setup, manifest].map(name => ({
+  const release = { tag_name: tag, prerelease: version.includes('-'), assets: [setup, manifest].map(name => ({
     name, state: 'uploaded', size: name === setup ? 8192 : 900, browser_download_url: downloadUrl(tag, name),
   })) }
   const current = { version: '0.1.0-beta.11', arch: 'x64', platform: 'win32' }

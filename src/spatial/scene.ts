@@ -54,7 +54,7 @@ export function createScene(tasks: Task[], camera: SceneCamera, density: Informa
 /** Inverse of the frozen P0 image-plane mapping; uses CSS pixels, never DPR. */
 export function sceneProjection(camera: SceneCamera, width: number, height: number) {
   const mobile = width / height < .8
-  const cx = (mobile ? .5 + (camera.centerX - .5) * .2 : camera.centerX) * width
+  const cx = (mobile ? .5 + (camera.centerX - .5) * .34 : camera.centerX) * width
   const cy = (1 - (mobile ? .5 + (camera.centerY - .5) * 6 : camera.centerY)) * height
   const unit = height * camera.zoom / (mobile ? 13.8 : 10.2)
   const roll = camera.roll * Math.PI / 180

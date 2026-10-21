@@ -14,6 +14,8 @@ import { PlannerOverview } from './PlannerOverview'
 import { RoutineBrowser } from './RoutineBrowser'
 import { PlannerIcon as Icon } from './PlannerIcon'
 import { CreateTaskDialog, DayEventDialog, RoutineDialog, TaskPlanDialog } from './PlannerDialogs'
+import { TimetableImport } from './TimetableImport'
+import { IcsTimetableImport } from './IcsTimetableImport'
 import type { DayEvent, Routine, PlannerAction } from './types'
 import './planner.css'
 import './planner-glass.css'
@@ -40,6 +42,8 @@ export function PlannerWorkspace({ active, initialMode = 'week', tasks, tasksLoa
   const [taskSelection, setTaskSelection] = useState<{ taskId: string; blockId?: string; date?: string } | null>(null)
   const openTask = (taskId: string, blockId?: string, date?: string) => setTaskSelection({ taskId, blockId, date })
   const [creating, setCreating] = useState(false), [routinesOpen, setRoutinesOpen] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [importingIcs, setImportingIcs] = useState(false)
   const [actionError, setActionError] = useState('')
   const heading = useRef<HTMLHeadingElement>(null)
   useEffect(() => {
@@ -77,11 +81,13 @@ export function PlannerWorkspace({ active, initialMode = 'week', tasks, tasksLoa
     setDirection(['month', 'week', 'day'].indexOf(next) >= ['month', 'week', 'day'].indexOf(mode) ? 1 : -1)
     setMode(next); setAnchor(parseDay(selected))
   }
-  return <GlassSamplingContext.Provider value={active}><section ref={root} className="planner" data-mode={mode} data-selected-date={selected} data-layout={layoutMode} data-active={active} data-theme={palette.theme} data-bg-blur={palette.backgroundBlur > 0 ? 'on' : 'off'} style={style} aria-label={title} aria-hidden={!active} inert={!active}>
+  return <GlassSamplingContext.Provider value={active}><section ref={root} className="planner" data-modal-open={Boolean(importing || importingIcs || creating || state && (routine || dayEvent || selectedTask || routinesOpen))} data-mode={mode} data-selected-date={selected} data-layout={layoutMode} data-active={active} data-theme={palette.theme} data-bg-blur={palette.backgroundBlur > 0 ? 'on' : 'off'} style={style} aria-label={title} aria-hidden={!active} inert={!active}>
     <div className="pl-background" /><div className="pl-scroll workspace-page-viewport"><div className="pl-container workspace-page-container">
       <WorkspaceHeading className="pl-page-header" copyClassName="pl-page-title" title={title} description="此刻到接下来，要做的事都有安排" headingRef={heading}>
         <div className="pl-board-toolbar"><div className="pl-period"><button className="pl-icon-button" onClick={() => move(-1)} aria-label={mode === 'month' ? '上个月' : mode === 'week' ? '上一周' : '前一天'}><Icon name="left" /></button><strong aria-live="polite">{periodTitle}</strong><button className="pl-icon-button" onClick={() => move(1)} aria-label={mode === 'month' ? '下个月' : mode === 'week' ? '下一周' : '后一天'}><Icon name="right" /></button></div><div><button className="pl-secondary" onClick={() => select(localDay(now))}>今天</button><div className="pl-segment" role="group" aria-label="日程视图">{(['month','week','day'] as const).map(value => <button key={value} type="button" data-mode={value} aria-pressed={mode === value} onClick={() => changeMode(value)}>{value === 'month' ? '月' : value === 'week' ? '周' : '日'}</button>)}</div></div></div>
         <div className="pl-header-actions">
+          <button className="pl-secondary" aria-label="导入课表" onClick={() => setImporting(true)}>导入课表</button>
+          <button className="pl-secondary" aria-label="导入 ICS" onClick={() => setImportingIcs(true)}>ICS</button>
           <button className="pl-secondary pl-header-edit" aria-label="每周安排" title="每周安排" onClick={() => setRoutinesOpen(true)}><Icon name="edit" /><span>每周安排</span></button>
           <button className="pl-primary pl-header-add" aria-label="记录事项" title="记录事项" onClick={() => setCreating(true)}><Icon name="plus" /><span>记录事项</span></button>
         </div>
@@ -121,5 +127,7 @@ export function PlannerWorkspace({ active, initialMode = 'week', tasks, tasksLoa
     {routinesOpen && state && <RoutineBrowser routines={state.routines} selectedDate={selected} firstWeekMonday={state.firstWeekMonday} onSaveFirstWeek={async date => { await act({ type: 'set-first-week-monday', date }, state.revision); onNotice('共用第1周已保存，任务时段保持不变') }} onClose={() => setRoutinesOpen(false)}
       onEdit={item => { setRoutinesOpen(false); setRoutine({ value: item }) }}
       onAdd={(weekday, initialCycle) => { setRoutinesOpen(false); setRoutine({ value: 'new', initialWeekday: weekday, initialCycle }) }} />}
+    {importing && <TimetableImport onClose={() => setImporting(false)} onSaved={(_state, operation) => { void planner.refresh(); onRefresh(); onNotice(operation?.undoneAt ? '已撤销本次课表导入' : '课表已导入') }} />}
+    {importingIcs && <IcsTimetableImport onClose={() => setImportingIcs(false)} onSaved={() => { void planner.refresh(); onRefresh(); onNotice('ICS 课程已导入') }} />}
   </section></GlassSamplingContext.Provider>
 }

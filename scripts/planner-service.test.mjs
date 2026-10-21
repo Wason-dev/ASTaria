@@ -196,6 +196,7 @@ test('imports merge by stable id, preserve custom/default routines and explicitl
 })
 
 test('overlapping availability and fixed routines remain representable but occupied time rejects new blocks', t => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-09-19T12:00:00').getTime() })
   const { db, edit } = fixture(t), task = db.createTask({ title: '报告' })
   edit({ type: 'save-routine', routine: routine({ id: 'available-extra', kind: 'available', start: '17:00', end: '19:00' }) })
   edit({ type: 'save-routine', routine: routine({ id: 'class-evening', start: '18:00', end: '18:30' }) })

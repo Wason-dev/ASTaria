@@ -4,6 +4,8 @@ import { createHorizonActivityStream } from './horizonActivity.mjs'
 import { ValidationError, knownKeys, identifier, day, clockTime, text } from './validation.mjs'
 import { localDay } from '../src/home/agenda.ts'
 import { dayCapacity, minuteOf } from '../src/planner/model.ts'
+import { horizonRemainingWindows, horizonSchedulingQuestion, splitHorizonPlan, validateHorizonSegments,
+  decorateHorizonSegments, canSplitHorizonItem } from './horizonSegments.mjs'
 
 const fail = (message, status = 400) => { throw new ValidationError(message, status) }
 const datesFrom = date => Array.from({ length: 3 }, (_, index) => {
@@ -12,16 +14,11 @@ const datesFrom = date => Array.from({ length: 3 }, (_, index) => {
   return localDay(value)
 })
 const timeOf = minute => `${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`
-const windowsFor = (snap, date) => {
-  // A new session must start strictly after now, even at an exact minute.
-  const earliest = date === localDay(snap.at) ? snap.at.getHours() * 60 + snap.at.getMinutes() + 1 : 0
-  return dayCapacity(snap.working, snap.capacityTasks, date, snap.at).remaining
-    .map(range => ({ start: Math.max(earliest, Math.ceil(range.start)), end: Math.min(1439, Math.floor(range.end)) }))
-    .filter(range => range.start < range.end).sort((a, b) => a.start - b.start)
-}
+const windowsFor = horizonRemainingWindows
 
 function normalizeInput(raw) {
-  knownKeys(raw, ['date', 'groups', 'expectedRevision', 'snapshotKey', 'requestId'], '弦轨分组排序')
+  knownKeys(raw, ['date', 'groups', 'expectedRevision', 'snapshotKey', 'requestId', 'fragmentPolicy'], '弦轨分组排序')
+  if (raw.fragmentPolicy !== undefined && !['whole', 'split'].includes(raw.fragmentPolicy)) fail('请先选择保留整段或分段安排')
   const date = day(raw.date), requestId = identifier(raw.requestId, '完成请求标识')
   if (!Number.isSafeInteger(raw.expectedRevision) || raw.expectedRevision < 0) fail('日程版本不正确，请重新读取')
   if (typeof raw.snapshotKey !== 'string' || !/^[a-f0-9]{64}$/u.test(raw.snapshotKey)) fail('日程快照标识不正确，请重新读取')
@@ -38,7 +35,8 @@ function normalizeInput(raw) {
   if (orderedIds.length > 3000 || new Set(orderedIds).size !== orderedIds.length) fail('排序包含过多或重复任务段，请重新读取')
   const dates = datesFrom(date)
   const assignedDates = Object.fromEntries(groups.flatMap(group => group.itemIds.map(id => [id, dates[group.day]])))
-  return { date, requestId, expectedRevision: raw.expectedRevision, snapshotKey: raw.snapshotKey, groups, orderedIds, assignedDates }
+  return { date, requestId, expectedRevision: raw.expectedRevision, snapshotKey: raw.snapshotKey, groups, orderedIds, assignedDates,
+    ...(raw.fragmentPolicy ? { fragmentPolicy: raw.fragmentPolicy } : {}) }
 }
 
 function validateChange(input, snap) {
@@ -106,12 +104,14 @@ function validateChange(input, snap) {
     const available = windows.reduce((sum, minutes) => sum + minutes, 0)
     if (required > available) fail(`${date} 的安排需要 ${required} 分钟，但真实空档只有 ${available} 分钟。请把部分组移到另一天，原日程保持不变`)
     const largest = Math.max(0, ...windows)
-    const blocked = work.find(item => item.durationMin > largest)
+    const blocked = work.find(item => item.durationMin > largest &&
+      (input.fragmentPolicy === 'whole' || !canSplitHorizonItem(item, snap)))
     if (blocked) fail(`${date} 的「${blocked.title}」需要连续 ${blocked.durationMin} 分钟，但最长真实空档只有 ${largest} 分钟。请调整这组的日期，原日程保持不变`)
   }
 }
 
 function deterministicPlan(input, snap) {
+  if (input.fragmentPolicy === 'split') return splitHorizonPlan(input, snap)
   const byId = new Map(snap.movable.map(item => [item.id, item]))
   const plans = []
   for (const date of snap.dates) {
@@ -122,6 +122,9 @@ function deterministicPlan(input, snap) {
       continue
     }
     const windows = windowsFor(snap, date)
+    const largest = Math.max(0, ...windows.map(range => range.end - range.start))
+    const blocked = items.find(item => item.durationMin > largest)
+    if (blocked) fail(`${date} 的「${blocked.title}」需要连续 ${blocked.durationMin} 分钟，但最长真实空档只有 ${largest} 分钟。请调整这组的日期，原日程保持不变`, 409)
     // Work backwards first: these latest starts leave space for every later
     // session, so preserving an original time cannot strand the remaining work.
     const latest = new Map()
@@ -142,7 +145,10 @@ function deterministicPlan(input, snap) {
       const minutes = item.durationMin, limit = latest.get(item.id), preferred = minuteOf(item.start)
       const choices = windows.map(range => ({ start: Math.max(range.start, after), end: Math.min(range.end, limit + minutes) }))
         .filter(range => range.start + minutes <= range.end)
-      const original = choices.find(range => preferred >= range.start && preferred + minutes <= range.end)
+      // A later original window must not outrank the first remaining window
+      // that already fits the complete task. Preserve its time only within
+      // that earliest usable window, so unrelated timing does not jump.
+      const original = choices[0] && preferred >= choices[0].start && preferred + minutes <= choices[0].end
       const start = original ? preferred : choices[0]?.start
       if (start === undefined) fail(`${date} 的「${item.title}」没有足够的连续空档，原日程保持不变`, 409)
       const end = start + minutes
@@ -154,15 +160,20 @@ function deterministicPlan(input, snap) {
 }
 
 function refreshElapsedPlan(plans, input, snap, activity) {
-  const reflowDates = input.reflowDates instanceof Set ? input.reflowDates : new Set(snap.dates)
-  const elapsedDates = new Set([...reflowDates].filter(date => plans.some(plan => plan.date === date
-    && new Date(`${plan.date}T${plan.start}:00`).getTime() <= snap.at.getTime())))
+  const reflowDates = new Set(input.reflowDates instanceof Set ? input.reflowDates : snap.dates)
+  const originals = new Map(snap.state.blocks.map(block => [block.id, block]))
   // The clock can cross a planned start while the model is responding. Add
   // only those newly elapsed dates to the reflow set; unrelated dates retain
   // their original placement and do not get needlessly rewritten.
-  for (const plan of plans) if (!reflowDates.has(plan.date)
-    && new Date(`${plan.date}T${plan.start}:00`).getTime() <= snap.at.getTime()) reflowDates.add(plan.date)
-  if (!elapsedDates.size && reflowDates.size === input.reflowDates?.size) return plans
+  for (const plan of plans) {
+    const original = originals.get(plan.sourceId ?? plan.id)
+    const preserved = original?.date === plan.date && original.start === plan.start && original.end === plan.end
+    if (!preserved && !reflowDates.has(plan.date)
+      && new Date(`${plan.date}T${plan.start}:00`).getTime() <= snap.at.getTime()) reflowDates.add(plan.date)
+  }
+  const elapsedDates = [...reflowDates].filter(date => plans.some(plan => plan.date === date
+    && new Date(`${plan.date}T${plan.start}:00`).getTime() <= snap.at.getTime()))
+  if (!elapsedDates.length) return plans
   input.reflowDates = reflowDates
   // A previously valid proposal can age while the provider is responding.
   // Treat its times as preferences, then re-fit the complete order in today's
@@ -188,8 +199,8 @@ function modelRequest(input, snap, prepared) {
     // Short indices and changed start times keep both input and output bounded;
     // IDs, fixed occupancy and repeated snapshots stay on the local side.
     items: prepared.map((plan, index) => {
-      const original = byId.get(plan.id), task = snap.taskMap.get(original.taskId)
-      return { index, title: original.title, date: plan.date, minutes: original.durationMin, start: plan.start,
+      const original = byId.get(plan.sourceId ?? plan.id), task = snap.taskMap.get(original.taskId)
+      return { index, title: original.title, date: plan.date, minutes: minuteOf(plan.end) - minuteOf(plan.start), start: plan.start,
         original: [original.date, original.start], energy: task.energy, ...(task.due ? { due: task.due } : {}) }
     }),
   }
@@ -262,15 +273,17 @@ export function createHorizonOrder({ db, complete, now = () => new Date(), timeo
     days: 3,
     namespace: 'horizon-order',
     includeElapsedToday: true,
-    signature: db => ({ version: 3, areas: db.listAreas().sort((a, b) => a.id.localeCompare(b.id)) }),
+    signature: db => ({ version: 4, areas: db.listAreas().sort((a, b) => a.id.localeCompare(b.id)) }),
     extendView: (snap, db) => ({ groups: groupsFor(snap, db), groupingSaved: hasSavedGroups(snap) }),
     normalizeInput,
     assertDraft: assertGroups,
     validateChange,
     prepare: deterministicPlan,
+    schedulingQuestion: (input, snap) => horizonSchedulingQuestion(input, snap, deterministicPlan),
+    validateSegmentedPlans: validateHorizonSegments,
     modelRequest,
     parseResult: reviewedPlans,
-    decoratePlans: groupPlans,
+    decoratePlans: (plans, input, snap) => input.fragmentPolicy === 'split' ? decorateHorizonSegments(plans, input, snap) : groupPlans(plans, input, snap),
     metadataOnly: (input, snap) => !snap.movable.some(item => item.needsReschedule)
       && input.groups.length === snap.view.groups.length && input.groups.every((group, index) => {
         const original = snap.view.groups[index]

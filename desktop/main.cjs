@@ -6,6 +6,7 @@ const { mkdtempSync, mkdirSync } = require('node:fs')
 const { readFile, writeFile, realpath } = require('node:fs/promises')
 const { watchWindowButtons } = require('./window-buttons.cjs')
 const { createNetFetch } = require('./net-fetch.cjs')
+const { createStartupServices } = require('./startupServices.cjs')
 
 const resourceRoot = path.join(process.resourcesPath, 'app')
 let window
@@ -17,6 +18,7 @@ let updateTimer
 let updates
 let reminders
 let sync
+let startupServices
 const smokeTest = process.argv.includes('--smoke-test')
 function updateWindowTheme() {
   if (process.platform === 'win32' && window && !window.isDestroyed()) {
@@ -88,6 +90,7 @@ async function start() {
     })
   } else {
     service = createLocalService({
+      compatibleVault: secrets.providerVault,
       vault: process.platform === 'win32' ? secrets.apiVault : createKeychain(DATA_DIRECTORY, { binaryPath: path.join(resourceRoot, 'bin/astaria-keychain'), binarySha256: build.nativeHelpers?.keychainSha256 }),
       onMutation: () => { reminders?.schedule(); updateWindowTheme() },
     })
@@ -110,7 +113,6 @@ async function start() {
         if (window && !window.isDestroyed()) void window.webContents.executeJavaScript("window.dispatchEvent(new Event('astaria-local-data-change'))").catch(() => {})
       },
     })
-    sync.start()
     powerMonitor.on('resume', () => { void sync.run() })
   }
   const updateStateFile = path.join(app.getPath('userData'), 'update-check.json')
@@ -142,9 +144,12 @@ async function start() {
     const { createReminderService, nativeReminderRunner } = await import(pathToFileURL(path.join(resourceRoot, 'desktop/reminders.mjs')).href)
     reminders = createReminderService({ stateFile: path.join(app.getPath('userData'), 'system-reminders.json'),
       snapshot: service.reminderSnapshot, run: nativeReminderRunner(path.join(resourceRoot, 'bin/ASTariaReminders.app/Contents/MacOS/astaria-reminders')) })
-    void reminders.initialize()
     powerMonitor.on('resume', () => reminders.schedule())
   }
+  startupServices = createStartupServices({
+    startSync: () => sync?.start(),
+    initializeReminders: () => reminders?.initialize(),
+  })
   const token = randomBytes(32).toString('hex')
   desktopServer = createDesktopServer({ root: path.join(resourceRoot, 'dist'), service, token, updates, reminders, sync, port: smokeTest ? 0 : undefined })
   const url = await desktopServer.listen()
@@ -218,7 +223,12 @@ async function start() {
       externalLink(target)
     }
   })
-  window.once('ready-to-show', () => window?.show())
+  window.once('ready-to-show', () => {
+    window?.show()
+    // first paint precedes these initial scans/helper launches; normal resume,
+    // manual refresh, mutations and the existing 30-second sync period remain.
+    setImmediate(() => { if (!quitting) startupServices?.start() })
+  })
   window.on('closed', () => {
     clearTimeout(updateTimer)
     window = null
@@ -295,6 +305,7 @@ app.on('window-all-closed', () => app.quit())
 app.on('before-quit', event => {
   if (quitting) return
   quitting = true
+  startupServices?.close()
   clearTimeout(updateTimer)
   updates?.close()
   event.preventDefault()

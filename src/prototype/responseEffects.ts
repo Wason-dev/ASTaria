@@ -1,5 +1,6 @@
 export type BinaryEffectSettings = {
   enabled: boolean
+  brightness: number
   density: number
   emberBrightness: number
   visibleFraction: number
@@ -9,7 +10,7 @@ export type BinaryEffectSettings = {
 }
 
 export const DEFAULT_BINARY_EFFECT: Readonly<BinaryEffectSettings> = Object.freeze({
-  enabled: true, density: 0.55, emberBrightness: 0.12, visibleFraction: 0.015,
+  enabled: true, brightness: 1.25, density: 0.55, emberBrightness: 0.12, visibleFraction: 0.015,
   sparkFrequency: 0.08, sparkBrightness: 0.4, flowSpeed: 0.18,
 })
 
@@ -41,6 +42,8 @@ function binaryAmount(value: number | undefined, fallback: number) {
 export function normalizeBinaryEffect(value: Partial<BinaryEffectSettings> | null | undefined): BinaryEffectSettings {
   return {
     enabled: typeof value?.enabled === 'boolean' ? value.enabled : DEFAULT_BINARY_EFFECT.enabled,
+    brightness: typeof value?.brightness === 'number' && Number.isFinite(value.brightness)
+      ? Math.min(3, Math.max(0.5, value.brightness)) : DEFAULT_BINARY_EFFECT.brightness,
     density: binaryAmount(value?.density, DEFAULT_BINARY_EFFECT.density),
     emberBrightness: binaryAmount(value?.emberBrightness, DEFAULT_BINARY_EFFECT.emberBrightness),
     visibleFraction: binaryAmount(value?.visibleFraction, DEFAULT_BINARY_EFFECT.visibleFraction),

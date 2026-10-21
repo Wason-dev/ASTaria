@@ -1,0 +1,10 @@
+.horizon-deadline-dialog { --xixi-line:var(--p0-line); --xixi-muted:var(--p0-muted); --xixi-gold:#c4ad82 }
+.horizon-deadline-title { margin:12px 0; font-size:13px; line-height:1.6; overflow-wrap:anywhere }
+.horizon-deadline-dialog .xixi-deadline-fields { margin-top:12px }
+.horizon-deadline-note { margin:12px 0 0; color:var(--p0-muted); font-size:10px; line-height:1.7 }
+.horizon-deadline-error { color:var(--xixi-gold); margin:8px 0 0; font-size:11px }
+.horizon-deadline-dialog[data-theme=light] { --xixi-gold:#806c48 }
+.horizon-studio .horizon-deadline-actions { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-top:8px }
+.p0 .horizon-studio .horizon-deadline-actions button { padding:5px 12px; border:1px solid #c4ad8250; border-radius:8px; background:#c4ad8209; color:inherit; font-size:11px; transition:background-color 160ms,border-color 160ms }
+.p0 .horizon-studio .horizon-deadline-actions button:hover { background:#c4ad8219; border-color:#c4ad8280 }
+@media(pointer:coarse) { .horizon-deadline-dialog :is(.xixi-deadline-shortcuts,.xixi-deadline-times,.xixi-deadline-actions) button { min-height:44px } }

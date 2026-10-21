@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { cp, copyFile, mkdir, mkdtemp, readFile, readdir, rename, stat, writeFile } from 'node:fs/promises'
+import { cp, copyFile, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
 import { dirname, join, relative, resolve, sep } from 'node:path'
@@ -7,6 +7,9 @@ import { fileURLToPath } from 'node:url'
 import { copyPayload, sourceProvenance } from './package-desktop.mjs'
 import { copyServerDependencies } from './desktop-dependencies.mjs'
 import { generateNotices } from './third-party-notices.mjs'
+import { isCanonicalVersion, versionParts } from '../desktop/version.mjs'
+import { brandWindowsExecutable } from './brand-windows.mjs'
+import { toNsisIcon } from './nsis-icon.mjs'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const run = (exe, args, cwd) => {
@@ -16,9 +19,9 @@ const run = (exe, args, cwd) => {
 }
 const hash = async file => createHash('sha256').update(await readFile(file)).digest('hex')
 
-export async function packageWindows({ runtime, out, makensis, rcedit }) {
+export async function packageWindows({ runtime, out, makensis, rcedit, icon = join(ROOT, 'public', 'astaria.ico') }) {
   const pkg = JSON.parse(await readFile(join(ROOT, 'package.json'), 'utf8'))
-  if (!/^\d+\.\d+\.\d+(?:-beta\.[1-9]\d*(?:\.(?:0|[1-9]\d*))?)?$/u.test(pkg.version)) throw new Error('Invalid package version')
+  if (!isCanonicalVersion(pkg.version)) throw new Error('Invalid package version')
   const stem = `ASTaria-${pkg.version}-win-x64`, release = join(out, stem)
   try { await stat(release); throw new Error('Output already exists') } catch (error) { if (error.code !== 'ENOENT') throw error }
   const binary = await readFile(join(runtime, 'electron.exe'))
@@ -31,15 +34,17 @@ export async function packageWindows({ runtime, out, makensis, rcedit }) {
   await mkdir(out, { recursive: true })
   const stage = await mkdtemp(join(out, '.astaria-windows-')), portable = join(stage, stem)
   await cp(runtime, portable, { recursive: true, errorOnExist: true, force: false })
+  // Remove Electron's example only from this invocation's copied runtime.
+  await rm(join(portable, 'resources', 'default_app.asar'), { force: true })
   await rename(join(portable, 'electron.exe'), join(portable, 'ASTaria.exe'))
   if (rcedit) {
-    const version = pkg.version.split('-')[0]
-    run(rcedit, [join(portable, 'ASTaria.exe'), '--set-icon', join(ROOT, 'public', 'astaria.ico'),
+    const version = versionParts(pkg.version).core.join('.')
+    run(rcedit, [join(portable, 'ASTaria.exe'), '--set-icon', icon,
       '--set-version-string', 'ProductName', 'ASTaria', '--set-version-string', 'FileDescription', 'ASTaria',
       '--set-version-string', 'CompanyName', 'Wason-dev', '--set-version-string', 'OriginalFilename', 'ASTaria.exe',
       '--set-file-version', version, '--set-product-version', version,
       '--set-version-string', 'ProductVersion', pkg.version])
-  }
+  } else await writeFile(join(portable, 'ASTaria.exe'), brandWindowsExecutable(binary, await readFile(icon), pkg.version))
   const payload = join(portable, 'resources', 'app')
   await mkdir(payload)
   for (const name of ['desktop', 'server', 'src']) await copyPayload(join(ROOT, name), join(payload, name))
@@ -53,7 +58,7 @@ export async function packageWindows({ runtime, out, makensis, rcedit }) {
   const build = { schemaVersion: 1, name: 'ASTaria', version: pkg.version, platform: 'win32', arch: 'x64',
     builtAt: new Date().toISOString(), source: sourceProvenance(ROOT), signing: 'unsigned', serverDependencies: dependencies,
     runtimeExeSha256: createHash('sha256').update(binary).digest('hex'), executableSha256: await hash(join(portable, 'ASTaria.exe')),
-    branded: Boolean(rcedit), gsapLicenseSha256: await hash(join(portable, 'GSAP-LICENSE.txt')) }
+    branded: true, brandingTool: rcedit ? 'rcedit' : 'resedit-3.1.0', desktopIconSha256: await hash(icon), gsapLicenseSha256: await hash(join(portable, 'GSAP-LICENSE.txt')) }
   await writeFile(join(payload, 'build-info.json'), JSON.stringify(build, null, 2))
   const archive = `${stem}-portable.zip`
   if (process.platform === 'darwin') run('/usr/bin/ditto', ['-c', '-k', '--keepParent', portable, join(stage, archive)])
@@ -80,8 +85,9 @@ astaria_close_handle:
 System::Call 'kernel32::CloseHandle(p r0)'
 astaria_closed:
 `
-  await copyFile(join(ROOT, 'public', 'astaria.ico'), join(stage, 'astaria.ico'))
-  const nsi = `Unicode true\nIcon "astaria.ico"\nUninstallIcon "astaria.ico"\nName "ASTaria"\nOutFile "${installer}"\nInstallDir "$LOCALAPPDATA\\Programs\\ASTaria"\nRequestExecutionLevel user\nSetCompressor /SOLID lzma\n!include "MUI2.nsh"\n!insertmacro MUI_PAGE_WELCOME\n!insertmacro MUI_PAGE_DIRECTORY\n!insertmacro MUI_PAGE_INSTFILES\n!insertmacro MUI_UNPAGE_CONFIRM\n!insertmacro MUI_UNPAGE_INSTFILES\n!insertmacro MUI_LANGUAGE "SimpChinese"\nSection\n${closeGuard}SetOutPath "$INSTDIR"\nFile /r "${stem}\\*"\nWriteUninstaller "$INSTDIR\\Uninstall.exe"\nCreateShortcut "$SMPROGRAMS\\ASTaria.lnk" "$INSTDIR\\ASTaria.exe"\nWriteRegStr HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\ASTaria" "DisplayName" "ASTaria"\nWriteRegStr HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\ASTaria" "UninstallString" '"$INSTDIR\\Uninstall.exe"'\nSectionEnd\nSection "Uninstall"\n${closeGuard}Delete "$SMPROGRAMS\\ASTaria.lnk"\nDeleteRegKey HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\ASTaria"\n${uninstall.join('\n')}\nSectionEnd\n`
+  await writeFile(join(stage, 'astaria.ico'), toNsisIcon(await readFile(icon)))
+  // MUI sets its own Icon/UninstallIcon; early direct directives get overwritten.
+  const nsi = `Unicode true\n!define MUI_ICON "astaria.ico"\n!define MUI_UNICON "astaria.ico"\nName "ASTaria"\nOutFile "${installer}"\nInstallDir "$LOCALAPPDATA\\Programs\\ASTaria"\nRequestExecutionLevel user\nSetCompressor /SOLID lzma\n!include "MUI2.nsh"\n!insertmacro MUI_PAGE_WELCOME\n!insertmacro MUI_PAGE_DIRECTORY\n!insertmacro MUI_PAGE_INSTFILES\n!insertmacro MUI_UNPAGE_CONFIRM\n!insertmacro MUI_UNPAGE_INSTFILES\n!insertmacro MUI_LANGUAGE "SimpChinese"\nSection\n${closeGuard}SetOutPath "$INSTDIR"\nFile /r "${stem}\\*"\nWriteUninstaller "$INSTDIR\\Uninstall.exe"\nCreateShortcut "$SMPROGRAMS\\ASTaria.lnk" "$INSTDIR\\ASTaria.exe"\nWriteRegStr HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\ASTaria" "DisplayName" "ASTaria"\nWriteRegStr HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\ASTaria" "UninstallString" '"$INSTDIR\\Uninstall.exe"'\nSectionEnd\nSection "Uninstall"\n${closeGuard}Delete "$SMPROGRAMS\\ASTaria.lnk"\nDeleteRegKey HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\ASTaria"\n${uninstall.join('\n')}\nSectionEnd\n`
   await writeFile(join(stage, 'installer.nsi'), `\uFEFF${nsi}`)
   if (makensis) run(makensis, [join(stage, 'installer.nsi')], stage)
   const assets = []
@@ -102,9 +108,9 @@ astaria_closed:
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     const args = process.argv.slice(2), options = {}
-    if (args.length === 1 && args[0] === '--help') { console.log('node scripts/package-windows.mjs --runtime <extracted Electron win32-x64> --out <directory> [--makensis <compiler>] [--rcedit <tool>]'); process.exit(0) }
+    if (args.length === 1 && args[0] === '--help') { console.log('node scripts/package-windows.mjs --runtime <extracted Electron win32-x64> --out <directory> [--makensis <compiler>] [--rcedit <tool>] [--icon <icon.ico>]'); process.exit(0) }
     for (let i = 0; i < args.length; i += 2) {
-      if (!['--runtime', '--out', '--makensis', '--rcedit'].includes(args[i]) || !args[i + 1]) throw new Error('Invalid packaging arguments')
+      if (!['--runtime', '--out', '--makensis', '--rcedit', '--icon'].includes(args[i]) || !args[i + 1]) throw new Error('Invalid packaging arguments')
       options[args[i].slice(2)] = resolve(args[i + 1])
     }
     if (!options.runtime || !options.out) throw new Error('--runtime and --out are required')

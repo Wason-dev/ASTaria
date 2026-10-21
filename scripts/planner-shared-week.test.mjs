@@ -41,6 +41,7 @@ test('new alternating routines use the shared anchor and cannot silently introdu
 })
 
 test('changing shared anchor rejects a new class collision without moving or partially saving any task', t => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date(`${FIRST}T07:00:00`).getTime() })
   const { db, edit } = fixture(t)
   edit({ type: 'save-routine', routine: routine('odd', 'odd') })
   const task = db.createTask({ title: '作业' })

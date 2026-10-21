@@ -124,7 +124,7 @@ export function publishStringFlightProjection(
   if (![width, height, camera.centerX, camera.centerY, camera.zoom, camera.radius].every(Number.isFinite)
     || width <= 0 || height <= 0 || camera.zoom <= 0 || camera.radius <= 1.5) return
   const narrow = width / height < .8
-  const cx = width * (narrow ? .5 + (camera.centerX - .5) * .2 : camera.centerX)
+  const cx = width * (narrow ? .5 + (camera.centerX - .5) * .34 : camera.centerX)
   const cy = height * (1 - (narrow ? .5 + (camera.centerY - .5) * 6 : camera.centerY))
   const radius = height * shadowImageRadius(camera.radius) * camera.zoom / (narrow ? 13.8 : 10.2)
   renderedProjection = { width, height, cx, cy, radius, apexY: cy - radius }

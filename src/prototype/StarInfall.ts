@@ -64,7 +64,7 @@ const vertexShader = `
 
     float aspect = uResolution.x / max(1.0, uResolution.y);
     bool mobile = aspect < 0.8;
-    vec2 center = mobile ? vec2(0.5) + (uCenter - 0.5) * vec2(0.2, 6.0) : uCenter;
+    vec2 center = mobile ? vec2(0.5) + (uCenter - 0.5) * vec2(0.34, 6.0) : uCenter;
     float scale = mobile ? 13.8 : 10.2;
     vec2 screen = rotate(uRoll) * path * uZoom;
     vec2 uv = center + screen / (vec2(aspect, 1.0) * scale);
@@ -153,7 +153,7 @@ const ambientVertexShader = `
     vec2 path = radius * vec2(cos(angle), sin(angle));
     float aspect = uResolution.x / max(1.0, uResolution.y);
     bool mobile = aspect < 0.8;
-    vec2 center = mobile ? vec2(0.5) + (uCenter - 0.5) * vec2(0.2, 6.0) : uCenter;
+    vec2 center = mobile ? vec2(0.5) + (uCenter - 0.5) * vec2(0.34, 6.0) : uCenter;
     float scale = mobile ? 13.8 : 10.2;
     vec2 uv = center + rotate(uRoll) * path * uZoom / (vec2(aspect, 1.0) * scale);
     gl_Position = vec4(uv * 2.0 - 1.0, 0.0, 1.0);

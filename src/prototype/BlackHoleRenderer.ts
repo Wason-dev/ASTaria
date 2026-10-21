@@ -1,6 +1,11 @@
 import * as THREE from 'three'
+import { createGeodesicTexture } from './geodesicSampling'
+import { portraitCameraOffset } from './portraitComposition'
 import { vertexShader, fragmentShader } from './shaders'
 import { createGeodesicLut } from './geodesics'
+import type { GeodesicLut } from './geodesics'
+import { pageIsHidden, PAGE_ACTIVITY_EVENT } from '../stores/pageActivity.ts'
+import { publishSceneFrame } from '../stores/sceneFrames.ts'
 import { SelectiveBloom } from './postprocessing'
 import { createBinaryTypography } from './binaryTypography'
 import { StarInfall } from './StarInfall'
@@ -22,6 +27,12 @@ export { setStringFlight, getStringFlight, getStringFlightMode } from './stringF
 export type Quality = AdaptiveQuality
 export type QualityMode = Quality | 'auto'
 export type CameraView = 'panorama' | 'interstellar'
+
+/** Android auto mode avoids the desktop Ultra allocation on the first frame.
+ * This is an explicit adaptive-quality policy, not a lossless optimization. */
+function initialAutoQuality(): Quality {
+  return typeof document !== 'undefined' && document.documentElement.dataset.mobile === 'android' ? 'high' : 'ultra'
+}
 
 export interface RenderStats {
   fps: number
@@ -90,19 +101,6 @@ let cachedGeodesics: ReturnType<typeof createGeodesicLut> | undefined
 function getGeodesics() {
   cachedGeodesics ??= createGeodesicLut({ cameraRadius: 30, maxImpact: 24, width: 2048, height: 1536 })
   return cachedGeodesics
-}
-
-function createDataTexture(data: Float32Array, width: number, height: number, format: THREE.PixelFormat, floatLinear: boolean) {
-  const pixels = floatLinear ? data : Uint16Array.from(data, (value) => THREE.DataUtils.toHalfFloat(value))
-  const texture = new THREE.DataTexture(pixels, width, height, format, floatLinear ? THREE.FloatType : THREE.HalfFloatType)
-  texture.minFilter = THREE.LinearFilter
-  texture.magFilter = THREE.LinearFilter
-  texture.wrapS = THREE.ClampToEdgeWrapping
-  texture.wrapT = THREE.ClampToEdgeWrapping
-  texture.generateMipmaps = false
-  texture.unpackAlignment = 1
-  texture.needsUpdate = true
-  return texture
 }
 
 // One deterministic catalogue is shared by every tier. Lower tiers draw a prefix.
@@ -215,11 +213,11 @@ export class BlackHoleRenderer {
   private readonly sessionSamples: number[] = []
   private sessionSampleCursor = 0
   private profileInitialized = false
-  private quality: Quality = 'ultra'
+  private quality: Quality = initialAutoQuality()
   private requestedQuality: QualityMode = 'auto'
   private paused = false
   private reducedMotion = false
-  private visibilityPaused = document.hidden
+  private visibilityPaused = pageIsHidden()
   private contextLost = false
   private disposed = false
   private raf = 0
@@ -250,7 +248,7 @@ export class BlackHoleRenderer {
   private activeDpr = 0
   private starTextureDirty = true
 
-  constructor(host: HTMLElement, onStats: ((stats: RenderStats) => void) | undefined, onError: (message: string) => void) {
+  constructor(host: HTMLElement, onStats: ((stats: RenderStats) => void) | undefined, onError: (message: string) => void, preparedGeodesics?: GeodesicLut) {
     this.host = host
     this.onStats = onStats
     this.onError = onError
@@ -276,12 +274,11 @@ export class BlackHoleRenderer {
     canvas.style.display = 'block'
     canvas.setAttribute('aria-label', '实时渲染的黑洞、吸积盘与引力透镜')
     canvas.setAttribute('role', 'img')
-    const geodesics = getGeodesics()
-    // Float linear sampling is an extension even in WebGL 2; half-float linear
-    // filtering is core and provides a portable fallback without black output.
-    const floatLinear = this.renderer.extensions.has('OES_texture_float_linear')
-    this.geodesicsTexture = createDataTexture(geodesics.inverseRadius, geodesics.width, geodesics.height, THREE.RedFormat, floatLinear)
-    this.terminationTexture = createDataTexture(geodesics.termination, geodesics.width, 1, THREE.RGBAFormat, floatLinear)
+    const geodesics = preparedGeodesics ?? getGeodesics()
+    // Retain Float32 path precision on every WebGL2 device. The shader does
+    // interpolation explicitly, independent of optional float-linear support.
+    this.geodesicsTexture = createGeodesicTexture(geodesics.inverseRadius, geodesics.width, geodesics.height, THREE.RedFormat)
+    this.terminationTexture = createGeodesicTexture(geodesics.termination, geodesics.width, 1, THREE.RGBAFormat)
     this.material = new THREE.ShaderMaterial({
       vertexShader,
       fragmentShader,
@@ -297,12 +294,13 @@ export class BlackHoleRenderer {
         uCenter: { value: this.cameraCenter },
         uLens: { value: 1 },
         uDoppler: { value: 1 },
-        uQuality: { value: TIERS.ultra.level },
+        uQuality: { value: TIERS[this.quality].level },
         uStars: { value: this.target.texture },
         uBinaryEnabled: { value: 0 },
         uBinaryTypography: { value: this.binaryTypography },
         uBinaryDensity: { value: DEFAULT_BINARY_EFFECT.density },
         uBinaryBrightness: { value: 0.42 },
+        uBinaryGain: { value: DEFAULT_BINARY_EFFECT.brightness },
         uBinaryVisibleFraction: { value: DEFAULT_BINARY_EFFECT.visibleFraction },
         uBinarySparkFrequency: { value: DEFAULT_BINARY_EFFECT.sparkFrequency },
         uBinarySparkBrightness: { value: DEFAULT_BINARY_EFFECT.sparkBrightness },
@@ -354,6 +352,7 @@ export class BlackHoleRenderer {
     window.addEventListener(STRING_FLIGHT_EVENT, this.handleStringFlight)
     this.decisionEffect.setDetail(getDecisionEffect())
     document.addEventListener('visibilitychange', this.handleVisibility)
+    document.addEventListener(PAGE_ACTIVITY_EVENT, this.handleVisibility)
     window.addEventListener('focus', this.handleForeground)
     window.addEventListener('pageshow', this.handleForeground)
     this.motionQuery.addEventListener('change', this.handleMotion)
@@ -377,13 +376,13 @@ export class BlackHoleRenderer {
   setQuality(mode: QualityMode) {
     this.requestedQuality = mode
     this.adaptiveQuality.reset()
-    this.applyQuality(mode === 'auto' ? 'ultra' : mode)
+    this.applyQuality(mode === 'auto' ? initialAutoQuality() : mode)
     this.publishStats()
   }
 
   setRenderProfile(profile: RenderProfile, scene: RenderScene = 'home', quality?: QualityMode) {
     const next = normalizeRenderProfile(profile)
-    const config = resolveRenderProfile(next, scene, this.cameraIsRunning())
+    const config = resolveRenderProfile(next, scene, this.presentationIsRunning())
     const requested = quality ?? config.quality
     if (this.profileInitialized && this.renderProfile === next && this.renderScene === scene && this.requestedQuality === requested) return
     const initialize = !this.profileInitialized
@@ -398,7 +397,7 @@ export class BlackHoleRenderer {
     if (initialize || cadenceChanged || qualityChanged) {
       if (keepAdaptive) this.adaptiveQuality.resetWindow()
       else this.adaptiveQuality.reset()
-      this.applyQuality(requested === 'auto' ? keepAdaptive ? this.quality : 'ultra' : requested)
+      this.applyQuality(requested === 'auto' ? keepAdaptive ? this.quality : initialAutoQuality() : requested)
       this.cancelFrame()
     }
     this.requestFrame()
@@ -565,6 +564,7 @@ export class BlackHoleRenderer {
     this.stopStatsTimer()
     this.resizeObserver.disconnect()
     document.removeEventListener('visibilitychange', this.handleVisibility)
+    document.removeEventListener(PAGE_ACTIVITY_EVENT, this.handleVisibility)
     window.removeEventListener('focus', this.handleForeground)
     window.removeEventListener('pageshow', this.handleForeground)
     this.motionQuery.removeEventListener('change', this.handleMotion)
@@ -611,6 +611,13 @@ export class BlackHoleRenderer {
       || Math.abs(spring.velocity) > spring.tolerance * 4)
   }
 
+  private presentationIsRunning() {
+    // Horizon entry/retreat scrubs a separate camera transform; its motion does
+    // not change the homepage springs. Only intermediate flight progress is a
+    // transition: the settled edge view must still respect the workspace cap.
+    return this.cameraIsRunning() || (this.stringFlightProgress > 0 && this.stringFlightProgress < 1)
+  }
+
   private setCameraParameter(spring: CameraSpring, value: number) {
     spring.value = value
     spring.target = value
@@ -633,7 +640,8 @@ export class BlackHoleRenderer {
     this.material.uniforms.uZoom.value = this.cameraMotion.zoom.value
     this.material.uniforms.uRoll.value = THREE.MathUtils.degToRad(this.cameraMotion.roll.value)
     this.material.uniforms.uInclination.value = THREE.MathUtils.degToRad(this.cameraMotion.inclination.value)
-    this.cameraCenter.set(this.cameraMotion.centerX.value, this.cameraMotion.centerY.value)
+    const portraitOffset = document.documentElement.dataset.mobile ? portraitCameraOffset(this.cssWidth, this.cssHeight, this.cameraMotion.zoom.value) : 0
+    this.cameraCenter.set(this.cameraMotion.centerX.value + portraitOffset, this.cameraMotion.centerY.value)
   }
 
   private advanceCamera(delta: number) {
@@ -677,7 +685,7 @@ export class BlackHoleRenderer {
   }
 
   private syncFrameBudget() {
-    const { frameRate } = resolveRenderProfile(this.renderProfile, this.renderScene, this.cameraIsRunning())
+    const { frameRate } = resolveRenderProfile(this.renderProfile, this.renderScene, this.presentationIsRunning())
     if (frameRate === this.targetFps) return
     this.targetFps = frameRate
     // Rebase the deadline, not the simulation clock or camera velocity. This
@@ -709,8 +717,9 @@ export class BlackHoleRenderer {
     const uniforms = this.material.uniforms
     uniforms.uBinaryEnabled.value = state.binaryAmount
     uniforms.uBinaryDensity.value = binary.density
-    // A single visible intensity control governs both disk light and digits.
+    // Response intensity stays shared; the independent gain affects digits only.
     uniforms.uBinaryBrightness.value = { gentle: .42, standard: .7, vivid: 1 }[state.settings.intensity]
+    uniforms.uBinaryGain.value = binary.brightness
     uniforms.uBinaryVisibleFraction.value = binary.visibleFraction
     uniforms.uBinarySparkFrequency.value = state.reducedMotion ? 0 : binary.sparkFrequency
     uniforms.uBinarySparkBrightness.value = binary.sparkBrightness
@@ -863,6 +872,7 @@ export class BlackHoleRenderer {
       ? 1 - THREE.MathUtils.smoothstep(this.stringFlightProgress, .05, .5) : 1
     this.bloom.render(this.sceneTarget.texture, this.night, this.pointer, this.pointerStrength * pointerWeight)
     this.renderedFrames++
+    publishSceneFrame()
     if (this.foregroundStartedAt !== null) {
       this.foregroundFirstFrameMs = Math.max(0, performance.now() - this.foregroundStartedAt)
       this.foregroundStartedAt = null
@@ -884,7 +894,7 @@ export class BlackHoleRenderer {
 
   private adaptQuality(elapsed: number) {
     if (this.requestedQuality !== 'auto') return
-    const next = this.adaptiveQuality.sample(elapsed, this.quality, this.cameraIsRunning() || this.springIsRunning(), this.targetFps)
+    const next = this.adaptiveQuality.sample(elapsed, this.quality, this.presentationIsRunning() || this.springIsRunning(), this.targetFps)
     if (next) {
       this.applyQuality(next)
       this.publishStats()
@@ -984,6 +994,7 @@ export class BlackHoleRenderer {
     const wasCovered = this.stringFlightIsCovered()
     this.stringFlightProgress = getStringFlight()
     this.stringFlightMode = getStringFlightMode()
+    this.syncFrameBudget()
     if (wasCovered !== this.stringFlightIsCovered()) {
       // Only a centered passage is covered. An edge arrival keeps the same
       // disk and its ambient clock alive behind the task overlay.
@@ -1005,7 +1016,7 @@ export class BlackHoleRenderer {
   }
 
   private handleVisibility = () => {
-    this.visibilityPaused = document.hidden
+    this.visibilityPaused = pageIsHidden()
     if (this.visibilityPaused && this.decisionEffect.getSnapshot().exiting) {
       this.decisionEffect.advance(DECISION_EXIT_MS / 1000)
       this.syncDecisionEffect(0)
@@ -1020,7 +1031,7 @@ export class BlackHoleRenderer {
   }
 
   private handleForeground = () => {
-    if (document.hidden || this.disposed || this.contextLost) return
+    if (pageIsHidden() || this.disposed || this.contextLost) return
     this.visibilityPaused = false
     this.foregroundStartedAt ??= performance.now()
     this.foregroundFirstFrameMs = null

@@ -1,0 +1,12 @@
+/* The event form keeps Planner's controls, within the homepage detail shell. */
+.home-activity-dialog { --pl-ink:var(--p0-fg); --pl-muted:var(--p0-muted); --pl-line:var(--p0-line); --pl-gold:#d5bb8b; color-scheme:dark }
+.home-activity-dialog[data-theme=light] { --pl-gold:#927443; color-scheme:light }
+.home-activity-dialog .floating-glass-content { padding:16px 20px 20px }
+.home-activity-dialog .pl-muted { margin-top:14px }
+.home-activity-dialog .pl-form { margin-top:12px }
+.home-activity-dialog .pl-form :is(input,textarea) { font-size:12px; background:rgb(255 255 255 / .04) }
+.home-activity-dialog[data-theme=light] .pl-form :is(input,textarea) { background:rgb(255 255 255 / .28) }
+.home-activity-dialog :is(button,input,textarea):focus-visible { outline:1px solid var(--pl-gold); outline-offset:-1px }
+.home-activity-dialog .pl-delete { color:#d6a197 }
+.home-activity-dialog[data-theme=light] :is(.pl-delete,.pl-error) { color:#943d32 }
+@media(max-width:500px) { .home-activity-dialog .floating-glass-content { padding:14px 16px 18px } }

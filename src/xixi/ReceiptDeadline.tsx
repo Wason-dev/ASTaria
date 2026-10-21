@@ -5,15 +5,16 @@ import { taskStore } from '../stores/taskStore'
 import type { TaskPatch } from '../stores/taskStore'
 import type { PlannerState } from '../planner/types'
 import { localApi } from './api'
-import { DEADLINE_TIME_SHORTCUTS, deadlineOnDay, deadlineParts, deadlineShortcuts, plansAfterDeadline } from './deadlineShortcuts'
-import { ESTIMATE_MAX, ESTIMATE_MIN, ESTIMATE_SHORTCUTS, parseReceiptEstimate, receiptScheduledMinutes } from './receiptTaskSettings'
+import { deadlineOnDay, deadlineParts, deadlineShortcuts, plansAfterDeadline } from './deadlineShortcuts'
+import { DeadlineFields } from './DeadlineFields'
+import { ESTIMATE_MAX, ESTIMATE_MIN, ESTIMATE_SHORTCUTS, parseReceiptEstimate } from './receiptTaskSettings'
 import { useHomeDeadlinePicker } from '../home/HomeDeadlinePicker'
 import { localDay } from '../home/agenda'
 import './receipt-deadline.css'
 
-type Props = { task: ReceiptTask; disabled: boolean; multiple?: boolean; onSaved: () => Promise<void> }
+type Props = { task: ReceiptTask; disabled: boolean; multiple?: boolean; onSaved: () => Promise<void>; onEstimate: (task: ReceiptTask, minutes: number) => Promise<boolean> }
 
-export function ReceiptDeadline({ task, disabled, multiple = false, onSaved }: Props) {
+export function ReceiptDeadline({ task, disabled, multiple = false, onSaved, onEstimate }: Props) {
   const id = useId()
   const homePicker = useHomeDeadlinePicker()
   const homeDraft = homePicker?.presentedDraft?.owner === id ? homePicker.presentedDraft : null
@@ -22,8 +23,7 @@ export function ReceiptDeadline({ task, disabled, multiple = false, onSaved }: P
   const updateHomePicker = homePicker?.update
   const [saved, setSaved] = useState<ReceiptTask | null>(null)
   const current = saved?.id === task.id && saved.updatedAt > task.updatedAt ? saved : task
-  // DDL and estimate edits share one version, including before React renders
-  // the result or the conversation refresh catches up.
+  // DDL edits and refreshed chat results share the latest task snapshot.
   const latest = useRef(current)
   if (latest.current.id !== current.id || latest.current.updatedAt <= current.updatedAt) latest.current = current
   const parts = deadlineParts(current.due)
@@ -31,7 +31,7 @@ export function ReceiptDeadline({ task, disabled, multiple = false, onSaved }: P
   const [date, setDate] = useState(parts.date)
   const [time, setTime] = useState(parts.time)
   const [estimate, setEstimate] = useState(String(current.estimateMin ?? ''))
-  const [pending, setPending] = useState(false)
+  const [pending, setPending] = useState<'deadline' | 'estimate' | null>(null)
   const [feedback, setFeedback] = useState('')
   const [error, setError] = useState('')
   const lock = useRef(false)
@@ -42,7 +42,7 @@ export function ReceiptDeadline({ task, disabled, multiple = false, onSaved }: P
   const estimatePicker = useRef<HTMLDivElement>(null)
   useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
   useEffect(() => () => closeHomePicker?.(id, false), [closeHomePicker, id])
-  useEffect(() => { updateHomePicker?.(id, { busy: disabled || pending }) }, [disabled, pending, id, updateHomePicker])
+  useEffect(() => { updateHomePicker?.(id, { busy: disabled || pending !== null }) }, [disabled, pending, id, updateHomePicker])
   useEffect(() => {
     if (expanded !== 'deadline') { setDate(parts.date); setTime(parts.time) }
     if (expanded !== 'estimate') setEstimate(String(current.estimateMin ?? ''))
@@ -55,10 +55,10 @@ export function ReceiptDeadline({ task, disabled, multiple = false, onSaved }: P
     return () => clearTimeout(timer)
   }, [expanded])
 
-  const save = async (patch: TaskPatch, kind: 'deadline' | 'estimate') => {
+  const save = async (patch: TaskPatch) => {
     if (disabled || lock.current) return
     const pickerToken = editingHomeDraft?.token
-    lock.current = true; setPending(true); setError(''); setFeedback('')
+    lock.current = true; setPending('deadline'); setError(''); setFeedback('')
     updateHomePicker?.(id, { busy: true })
     let updated = false
     try {
@@ -70,13 +70,10 @@ export function ReceiptDeadline({ task, disabled, multiple = false, onSaved }: P
       // This read only informs the user. A temporary planner read failure must
       // not roll back, repeat, or disguise an already saved task edit.
       const planner = await localApi<PlannerState>('/planner').catch(() => null)
-      let message = kind === 'deadline' ? result.due ? '截止时间已保存' : '已清除截止时间' : '预估时间已保存'
-      if (planner && kind === 'deadline') {
+      let message = result.due ? '截止时间已保存' : '已清除截止时间'
+      if (planner) {
         const conflicts = plansAfterDeadline(result.due ?? null, result.id, planner.blocks)
         if (conflicts) message += `；已有 ${conflicts} 段安排晚于 DDL，请到日历调整时段`
-      } else if (planner && result.estimateMin !== undefined) {
-        const planned = receiptScheduledMinutes(result.id, planner.blocks)
-        if (planned > 0 && planned !== result.estimateMin) message += `；已排 ${planned} 分钟，日程保持不变`
       }
       if (mounted.current) {
         setFeedback(message)
@@ -95,27 +92,51 @@ export function ReceiptDeadline({ task, disabled, multiple = false, onSaved }: P
       }
       lock.current = false
       if (mounted.current) {
-        setPending(false)
+        setPending(null)
         if (pickerToken !== undefined && homePicker?.isCurrent(id, pickerToken)) {
           updateHomePicker?.(id, { busy: disabled })
           if (updated) closeHomePicker?.(id)
         }
         if (updated) {
-          if (!homePicker) requestAnimationFrame(() => (kind === 'deadline' ? toggle : estimateToggle).current?.focus({ preventScroll: true }))
+          if (!homePicker) requestAnimationFrame(() => toggle.current?.focus({ preventScroll: true }))
         }
       }
     }
   }
   const saveDeadline = (day: string, clock = deadlineParts(latest.current.due).time, token?: number) => {
     if (token !== undefined && !homePicker?.isCurrent(id, token)) return
-    try { void save({ due: deadlineOnDay(day, clock) }, 'deadline') }
+    try { void save({ due: deadlineOnDay(day, clock) }) }
     catch (reason) { setError(reason instanceof Error ? reason.message : '请选择有效的截止日期') }
   }
-  const saveEstimate = (value: string) => {
-    try { void save({ estimateMin: parseReceiptEstimate(value) }, 'estimate') }
-    catch (reason) { setError(reason instanceof Error ? reason.message : '请输入有效的预估时间') }
+  const saveEstimate = async (value: string) => {
+    if (disabled || lock.current) return
+    let minutes: number
+    try { minutes = parseReceiptEstimate(value) }
+    catch (reason) { setError(reason instanceof Error ? reason.message : '请输入有效的预估时间'); return }
+    lock.current = true; setPending('estimate'); setError(''); setFeedback('')
+    let completed = false
+    try {
+      completed = await onEstimate(latest.current, minutes)
+      if (mounted.current) {
+        if (completed) { setExpanded(null); setFeedback('请查看聊天中的处理结果，实际保存以回执为准') }
+        else setError('发送或处理尚未完成，请查看聊天中的提示并重试')
+      }
+    } catch (reason) {
+      if (mounted.current) setError(reason instanceof Error ? reason.message : '发送或处理尚未完成，请查看聊天中的提示并重试')
+    } finally {
+      // Chat may have saved only part of the request, even when it returned
+      // false. Reread receipts without a local estimate write or resend.
+      try { await onSaved() } catch {
+        if (mounted.current && completed) setFeedback('对话暂未刷新，实际保存结果尚待核对，请重试读取聊天')
+      }
+      lock.current = false
+      if (mounted.current) {
+        setPending(null)
+        if (completed) requestAnimationFrame(() => estimateToggle.current?.focus({ preventScroll: true }))
+      }
+    }
   }
-  const busy = disabled || pending || Boolean(homePicker?.draft?.busy)
+  const busy = disabled || pending !== null || Boolean(homePicker?.draft?.busy)
   const formBusy = busy || Boolean(homeDraft && !editingHomeDraft)
   const draftDate = homeDraft?.date ?? date
   const draftTime = homeDraft?.time ?? time
@@ -128,15 +149,11 @@ export function ReceiptDeadline({ task, disabled, multiple = false, onSaved }: P
     // Portal events bubble through the receipt, not the visible calendar pane.
     if (event.key === 'Escape' && homeDraft) { event.preventDefault(); event.stopPropagation(); if (!formBusy && homePicker!.isCurrent(id, homeDraft.token)) homePicker!.close(id) }
   }} onSubmit={event => { event.preventDefault(); if (!formBusy) saveDeadline(draftDate, draftTime, homeDraft?.token) }}>
-    <div className="xixi-deadline-fields">{homeDraft
-      ? <div className="xixi-deadline-selected"><span>截止日期</span><strong>{draftDate.replaceAll('-', ' / ')}</strong></div>
-      : <label htmlFor={`${id}-date`}>截止日期<input id={`${id}-date`} type="date" required value={date} disabled={formBusy} onChange={event => setDate(event.target.value)} /></label>}
-      <label htmlFor={`${id}-time`}>时刻 · 可选<input id={`${id}-time`} type={homeDraft ? 'text' : 'time'} placeholder="HH:MM" maxLength={5} pattern={homeDraft ? '([01][0-9]|2[0-3]):[0-5][0-9]' : undefined} title="24 小时时刻，例如 20:00" value={draftTime} disabled={formBusy} onChange={event => changeTime(event.target.value)} /></label></div>
-    <div className="xixi-deadline-times" role="group" aria-label="快捷选择截止时刻">{[...DEADLINE_TIME_SHORTCUTS, ''].map(value => <button type="button" key={value || 'all-day'} disabled={formBusy} aria-pressed={draftTime === value} onClick={() => changeTime(value)}>{value || '全天'}</button>)}</div>
-    <div className="xixi-deadline-actions">{current.due && <button className="xixi-text-button" type="button" disabled={formBusy} onClick={() => saveDeadline('', '', homeDraft?.token)}>清除 DDL</button>}{homeDraft && <button className="xixi-text-button" type="button" disabled={formBusy} onClick={() => { if (homePicker!.isCurrent(id, homeDraft.token)) homePicker!.close(id) }}>取消</button>}<button type="submit" disabled={formBusy || !draftDate}>{pending ? '正在保存…' : '保存截止时间'}</button></div>
+    <DeadlineFields date={draftDate} time={draftTime} busy={formBusy} onDate={setDate} onTime={changeTime} selectedDate={Boolean(homeDraft)} />
+    <div className="xixi-deadline-actions">{current.due && <button className="xixi-text-button" type="button" disabled={formBusy} onClick={() => saveDeadline('', '', homeDraft?.token)}>清除 DDL</button>}{homeDraft && <button className="xixi-text-button" type="button" disabled={formBusy} onClick={() => { if (homePicker!.isCurrent(id, homeDraft.token)) homePicker!.close(id) }}>取消</button>}<button type="submit" disabled={formBusy || !draftDate}>{pending === 'deadline' ? '正在保存…' : '保存截止时间'}</button></div>
     {homeDraft && error && <p className="xixi-deadline-error" role="alert">{error}</p>}
   </form>
-  return <section className="xixi-receipt-deadline xixi-receipt-task-settings" aria-label={`${current.title}的快捷设置`} aria-busy={pending}>
+  return <section className="xixi-receipt-deadline xixi-receipt-task-settings" aria-label={`${current.title}的快捷设置`} aria-busy={pending !== null}>
     {multiple && <p className="xixi-deadline-task">{current.title}</p>}
     <div className="xixi-receipt-setting-group">
       <div className="xixi-deadline-heading"><span>DDL</span><span>{parts.date ? `${parts.date.replaceAll('-', '/')} ${parts.time || '当天截止'}` : '尚未设置'}</span></div>
@@ -159,14 +176,14 @@ export function ReceiptDeadline({ task, disabled, multiple = false, onSaved }: P
     <div className="xixi-receipt-setting-group">
       <div className="xixi-deadline-heading"><span>预估时间</span><span>{current.estimateMin ? `${current.estimateMin} 分钟` : '尚未设置'}</span></div>
       <div className="xixi-estimate-shortcuts" role="group" aria-label="快捷设置预估时间">
-        {ESTIMATE_SHORTCUTS.map(minutes => <button type="button" key={minutes} disabled={busy} aria-pressed={current.estimateMin === minutes} onClick={() => saveEstimate(String(minutes))}>{minutes}分</button>)}
+        {ESTIMATE_SHORTCUTS.map(minutes => <button type="button" key={minutes} disabled={busy} aria-pressed={current.estimateMin === minutes} onClick={() => void saveEstimate(String(minutes))}>{minutes}分</button>)}
         <button type="button" ref={estimateToggle} disabled={busy} aria-expanded={expanded === 'estimate'} aria-pressed={current.estimateMin !== undefined && !ESTIMATE_SHORTCUTS.some(value => value === current.estimateMin)} aria-controls={`${id}-estimate-picker`} onClick={() => { closeHomePicker?.(id); setEstimate(String(current.estimateMin ?? '')); setExpanded(value => value === 'estimate' ? null : 'estimate') }}>自定义</button>
       </div>
-      <div className="xixi-deadline-reveal" ref={estimatePicker} id={`${id}-estimate-picker`} data-open={expanded === 'estimate'} aria-hidden={expanded !== 'estimate'} inert={expanded !== 'estimate'} onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); setExpanded(null); estimateToggle.current?.focus() } }}><div><form className="xixi-estimate-form" onSubmit={event => { event.preventDefault(); saveEstimate(estimate) }}>
+      <div className="xixi-deadline-reveal" ref={estimatePicker} id={`${id}-estimate-picker`} data-open={expanded === 'estimate'} aria-hidden={expanded !== 'estimate'} inert={expanded !== 'estimate'} onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); if (!busy) { setExpanded(null); estimateToggle.current?.focus() } } }}><div><form className="xixi-estimate-form" onSubmit={event => { event.preventDefault(); if (!busy) void saveEstimate(estimate) }}>
         <label htmlFor={`${id}-estimate`}>分钟<input id={`${id}-estimate`} type="number" min={ESTIMATE_MIN} max={ESTIMATE_MAX} step={1} required inputMode="numeric" value={estimate} disabled={busy} onChange={event => setEstimate(event.target.value)} /></label><button type="submit" disabled={busy || !estimate}>保存预估时间</button>
       </form></div></div>
     </div>
-    {(pending || feedback) && <p className="xixi-deadline-status" role="status">{pending ? '正在保存…' : feedback}</p>}
+    {(pending || feedback) && <p className="xixi-deadline-status" role="status">{pending === 'estimate' ? '正在交给析熙核对安排…' : pending ? '正在保存…' : feedback}</p>}
     {error && <p className="xixi-deadline-error" role="alert">{error}</p>}
   </section>
 }

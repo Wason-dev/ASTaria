@@ -1,6 +1,7 @@
 node_modules
 dist
 dist-ssr
+dist-mobile/
 dev-dist
 *.local
 .DS_Store
@@ -34,3 +35,21 @@ BETA_REVIEW.md
 FIRST_BETA_PLAN.md
 design/icon-generator.html
 design/icon-pairwise-reference.svg
+
+# Native mobile build output, local SDK paths, signing and provisioning.
+mobile/android/.gradle/
+mobile/android/.idea/
+mobile/android/local.properties
+mobile/android/**/build/
+mobile/android/app/src/main/assets/public/
+mobile/android/app/src/main/assets/capacitor*.json
+mobile/ios/App/App/public/
+mobile/ios/App/App/capacitor.config.json
+mobile/ios/App/**/xcuserdata/
+mobile/ios/App/build/
+mobile/ios/DerivedData/
+*.xcuserstate
+*.mobileprovision
+*.p12
+*.jks
+*.keystore

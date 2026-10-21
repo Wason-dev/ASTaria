@@ -1,5 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
+import { collectionProgress, collectionRemaining, taskEntries } from '../domain/taskCollections'
+import type { TaskEntry } from '../domain/taskCollections'
+import { CollectionIcon, useTaskCollections } from '../ui/TaskCollectionDialog'
 import type { Task, TaskStatus } from '../domain/task'
 import type { useSpatialTasks } from '../spatial/useSpatialTasks'
 import { agendaDate, deadlineLabel } from '../home/agenda'
@@ -25,6 +28,7 @@ import { useChatAttachment } from '../xixi/useChatAttachment'
 import { useChatImageDropTarget } from '../xixi/ChatImageDrop'
 import { useGlassHover } from './useGlassHover'
 import { ConversationLog } from '../xixi/ConversationLog'
+import { ContextMeter } from '../xixi/ContextMeter'
 import { restoreWithdrawnDraft } from '../xixi/draft'
 import { ConversationMenu } from '../xixi/ConversationMenu'
 import { TaskHandoff } from '../xixi/CompanionPanel'
@@ -49,7 +53,8 @@ function Glass({ appearance, children, className = '' }: { appearance: Appearanc
 }
 
 export function Workbench(props: Props & { appearance: ReturnType<typeof useAppearance> }) {
-  const { appearance } = props
+  const phone = Boolean(document.documentElement.dataset.mobile)
+  const appearance = { ...props.appearance, value: phone ? { ...props.appearance.value, radius: 20 } : props.appearance.value }
   const hover = useGlassHover(props.active)
   const style = {
     '--wb-width': `${appearance.value.width}px`, '--wb-font': `${appearance.value.font}px`,
@@ -334,6 +339,24 @@ function WorkbenchContent({ active, data, now, onCapture, onNotice, appearance, 
     } catch (reason) { setError(reason instanceof Error ? reason.message : '完成状态尚未撤回，请重试') }
     finally { reopening.current = false; setReopeningId(null) }
   }
+  const collections = useTaskCollections(tasks, now, id => switchTo(id), task => {
+    const schedule = taskSchedule(task, now, scheduleBlocks, completedFreeTimeSessions)
+    return schedule ? scheduleDisplay(schedule, now) : '待安排'
+  }, task => {
+    const schedule = taskSchedule(task, now, scheduleBlocks, completedFreeTimeSessions)
+    return schedule ? `${schedule.date}T${schedule.start}` : task.startAt ?? '9999'
+  })
+  const entries = taskEntries([...groups.available, ...groups.later], tasks)
+  const availableIds = new Set(groups.available.map(task => task.id))
+  const availableEntries = entries.filter(entry => entry.kind === 'task' ? availableIds.has(entry.id) : entry.visible.some(task => availableIds.has(task.id)))
+  const laterEntries = entries.filter(entry => !availableEntries.includes(entry))
+  const renderEntry = (entry: TaskEntry, recommended = false) => entry.kind === 'task' ? renderTask(entry.task, recommended) : <button key={entry.id} type="button" className="wb-task wb-glass wb-task-collection" data-task-id={entry.visible[0].id} data-task-collection={entry.id} data-focus-origin={entry.id} disabled={busy || transitioning} onClick={event => collections.open(entry, event.currentTarget)}>
+    <MeasuredGlassSurface radius={appearance.radius} material={appearance} />
+    <span className="wb-task-body"><span className="wb-task-top"><strong><CollectionIcon />{entry.name}</strong><Icon name="arrow" className="wb-task-arrow" /></span>
+      <span className="wb-task-detail"><span>{collectionProgress(entry)}</span></span>
+      <span className="wb-task-meta"><span>{entry.due ? `截止 ${deadlineLabel(entry.visible[0], now)}` : '未设 DDL'}</span><span>{collectionRemaining(entry)}</span></span>
+    </span>
+  </button>
   const renderTask = (task: Task, recommended = false) => { const schedule = taskSchedule(task, now, scheduleBlocks, completedFreeTimeSessions); return <button key={task.id} className="wb-task wb-glass" data-task-id={task.id} data-recommended={recommended} onClick={() => switchTo(task.id)} disabled={busy || transitioning}>
     <MeasuredGlassSurface radius={appearance.radius} material={appearance} />
     <span className="wb-task-body">
@@ -359,19 +382,24 @@ function WorkbenchContent({ active, data, now, onCapture, onNotice, appearance, 
         <div className="wb-overview-layout">
         <Glass appearance={appearance} className="wb-briefing-panel"><div className="wb-briefing-content">
           {(preview || (!workspaceLoading && !workspaceError)) && <XixiBriefing embedded tasks={tasks} briefing={briefing} appearance={appearance} preview={preview} disabled={busy || transitioning} focusMin={timer.durations.focusMin} restMin={timer.durations.restMin} onSelect={switchTo} onCapture={onCapture} />}
-          <UpcomingDeadlines embedded ref={deadlineHeading} revealTaskId={deadlineReturnId ?? undefined} appearance={appearance} tasks={tasks} now={now} disabled={busy || transitioning} loading={!preview && workspaceLoading} error={preview ? '' : workspaceError} highlighted={false} onSelect={id => switchTo(id)} onRetry={retryWorkspace} focusMin={timer.durations.focusMin} getSpentMs={timer.getSpentMs} scheduledMinutes={scheduledMinutes} />
+          <UpcomingDeadlines embedded ref={deadlineHeading} revealTaskId={deadlineReturnId ?? undefined} appearance={appearance} tasks={tasks} now={now} disabled={busy || transitioning} loading={!preview && workspaceLoading} error={preview ? '' : workspaceError} highlighted={false} onSelect={id => {
+            const group = taskEntries(tasks).find(entry => entry.kind === 'collection' && entry.tasks.some(task => task.id === id))
+            if (group?.kind === 'collection' && document.activeElement instanceof HTMLElement) collections.open(group, document.activeElement)
+            else switchTo(id)
+          }} onRetry={retryWorkspace} focusMin={timer.durations.focusMin} getSpentMs={timer.getSpentMs} scheduledMinutes={scheduledMinutes} />
         </div></Glass>
         <div className="wb-task-sections">
         {!preview && workspaceLoading ? <p role="status" className="wb-empty">正在读取事项与日历安排</p> : !preview && workspaceError ? <div className="wb-empty" role="alert"><p>{workspaceError}</p><button className="wb-action" onClick={retryWorkspace}>重新读取</button></div> : <>
-          <section className="wb-available" aria-labelledby="wb-available-heading"><header className="wb-section-heading"><h3 id="wb-available-heading">现在可以开始 <span>{groups.available.length}</span></h3></header>
-          <div className="wb-task-grid">{groups.available.map((task, index) => renderTask(task, index === 0))}</div>
-          {groups.available.length === 0 && <Glass appearance={appearance} className="wb-empty"><p>{groups.later.length ? '当前没有临近的安排，事项保留在稍后安排中' : '暂时没有待做的事项'}</p><button className="wb-action" onClick={onCapture}>交给析熙</button></Glass>}
+          <section className="wb-available" aria-labelledby="wb-available-heading"><header className="wb-section-heading"><h3 id="wb-available-heading">现在可以开始 <span>{availableEntries.length}</span></h3><button type="button" className="wb-inline-button" disabled={busy || transitioning || !tasks.length} onClick={event => collections.edit(event.currentTarget)}>归类事项</button></header>
+          <div className="wb-task-grid">{availableEntries.map((entry, index) => renderEntry(entry, index === 0))}</div>
+          {availableEntries.length === 0 && <Glass appearance={appearance} className="wb-empty"><p>{groups.later.length ? '当前没有临近的安排，事项保留在稍后安排中' : '暂时没有待做的事项'}</p><button className="wb-action" onClick={onCapture}>交给析熙</button></Glass>}
           {groups.available.length > 0 && <p className="wb-rule-note">已排事项提前 20 分钟出现，原安排结束后仍可继续</p>}
           </section>
-          <section className="wb-later" aria-labelledby="wb-later-heading"><header className="wb-section-heading"><h3 id="wb-later-heading">稍后安排 <span>{groups.later.length}</span></h3><span>临近安排时进入上方</span></header><div className="wb-task-grid">{groups.later.map(task => renderTask(task))}</div>{groups.later.length === 0 && <p className="wb-section-empty">后面的时间，暂时留白</p>}</section>
+          <section className="wb-later" aria-labelledby="wb-later-heading"><header className="wb-section-heading"><h3 id="wb-later-heading">稍后安排 <span>{laterEntries.length}</span></h3><span>临近安排时进入上方</span></header><div className="wb-task-grid">{laterEntries.map(entry => renderEntry(entry))}</div>{laterEntries.length === 0 && <p className="wb-section-empty">后面的时间，暂时留白</p>}</section>
           {appearance.completed && <CompletedTasks tasks={groups.completed} now={now} disabled={busy || transitioning} recentCompletion={recentCompletion} reopeningId={reopeningId} getSpentMs={timer.getSpentMs} onReopen={task => void reopen(task)} />}
         </>}
         </div></div>
+        {collections.notice}
         {error && <p className="wb-error" role="alert">{error}</p>}
         <p className="wb-bottom-note">一次只专注一件事 <span>·</span> 默认 {timer.durations.focusMin} 分钟专注 / {timer.durations.restMin} 分钟休息 <button className="wb-inline-button" aria-expanded={timingOpen} onClick={() => setTimingOpen(value => !value)}>调整时长</button></p>
         <DurationControls timer={timer} open={timingOpen} />
@@ -424,6 +452,7 @@ function WorkbenchContent({ active, data, now, onCapture, onNotice, appearance, 
       </div>
       {preview && <p className="wb-preview-footnote">示例数据仅用于体验界面，不会写入你的事项</p>}
     </div>
+    {collections.dialog}
   </div>
 }
 
@@ -498,8 +527,8 @@ function XixiContext({ task, now, active, preview, appearance, chat, onSettings,
     <form ref={composeForm} className="xixi-compose" onSubmit={event => { event.preventDefault(); void send() }}>
       <label className="p0-sr-only" htmlFor="wb-xixi-input">结合当前事项和析熙对话</label>
       <XixiInput value={draft} onChange={setDraft} disabled={preview || chat.busy} onSubmit={() => void send()} />
-      <ChatAttachmentPreview attachment={attachment} error={image.error} reading={image.reading} onRemove={() => setAttachment(null)} disabled={preview || chat.busy} />
-      <footer><small>{warning || (preview ? '示例草稿不会发送' : 'Enter 发送 · Shift + Enter 换行')}</small><div className="xixi-send-actions">
+      <ChatAttachmentPreview attachment={attachment} error={image.error} reading={image.reading} readingLabel={image.readingLabel} onRemove={() => setAttachment(null)} disabled={preview || chat.busy} />
+      <footer><div className="xixi-compose-tools"><ContextMeter key={chat.conversation?.conversationId} chat={chat} />{warning && <small>{warning}</small>}{preview && <small>示例草稿不会发送</small>}</div><div className="xixi-send-actions">
         <ChatAttachmentPicker id="wb-image-upload" onFiles={files => { void image.selectFiles(files) }} disabled={preview || chat.busy || chat.loading} />
         <button type="submit" className="wb-action xixi-send" disabled={preview || image.reading || chat.busy || chat.loading || (!draft.trim() && !attachment)}>{chat.sending ? '正在想' : '发给析熙'}</button>
       </div></footer>

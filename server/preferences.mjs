@@ -1,12 +1,12 @@
 import { ValidationError, knownKeys, number } from './validation.mjs'
 
 export const DEFAULT_BINARY_EFFECT = Object.freeze({
-  enabled: true, density: 0.55, emberBrightness: 0.12, visibleFraction: 0.015,
+  enabled: true, brightness: 1.25, density: 0.55, emberBrightness: 0.12, visibleFraction: 0.015,
   sparkFrequency: 0.08, sparkBrightness: 0.4, flowSpeed: 0.18,
 })
 
 export const DEFAULT_PREFERENCES = {
-  version: 1, startupPage: 'home', theme: 'dark', grid: true, glass: 'clear', density: 'compact', cardEdges: 'both',
+  version: 1, startupPage: 'home', theme: 'dark', grid: true, glass: 'clear', glassTone: 'light', density: 'compact', cardEdges: 'both',
   effect: { style: 'tide', intensity: 'gentle', motion: 'system', binary: DEFAULT_BINARY_EFFECT },
   render: { profile: 'full', quality: 'auto', glass: 'auto' },
   assistant: { autonomy: 'act', personality: 'medium', useMemory: true, useHistory: true },
@@ -22,6 +22,7 @@ function binaryEffect(value = DEFAULT_BINARY_EFFECT) {
   knownKeys(value, Object.keys(DEFAULT_BINARY_EFFECT), '二进制微光')
   return {
     enabled: bool(value.enabled === undefined ? DEFAULT_BINARY_EFFECT.enabled : value.enabled, '二进制微光'),
+    brightness: number(value.brightness, '思考数字亮度', 0.5, 3, DEFAULT_BINARY_EFFECT.brightness),
     density: number(value.density, '数字密度', 0, 1, DEFAULT_BINARY_EFFECT.density),
     emberBrightness: number(value.emberBrightness, '余烬亮度', 0, 1, DEFAULT_BINARY_EFFECT.emberBrightness),
     visibleFraction: number(value.visibleFraction, '微亮数字比例', 0, 1, DEFAULT_BINARY_EFFECT.visibleFraction),
@@ -39,7 +40,9 @@ export function validatePreferences(value) {
     version: option(value.version, [1], '设置版本'),
     startupPage: ['calendar', 'timetable'].includes(value.startupPage) ? 'schedule' : option(value.startupPage, ['home', 'workbench', 'schedule', 'companion'], '启动页面'),
     theme: option(value.theme, ['dark', 'light'], '外观'), grid: bool(value.grid, '背景网格'),
-    glass: option(value.glass, ['clear', 'soft'], '玻璃'), density: option(value.density, ['compact', 'comfortable'], '信息密度'),
+    glass: option(value.glass, ['clear', 'soft'], '玻璃'),
+    glassTone: option(value.glassTone === undefined ? DEFAULT_PREFERENCES.glassTone : value.glassTone, ['light', 'dark'], '玻璃深浅'),
+    density: option(value.density, ['compact', 'comfortable'], '信息密度'),
     cardEdges: option(value.cardEdges === undefined ? DEFAULT_PREFERENCES.cardEdges : value.cardEdges, ['both', 'left', 'none'], '卡片装饰线'),
     effect: { style: option(value.effect.style, ['tide', 'filaments', 'stardust', 'off'], '回应特效'), intensity: option(value.effect.intensity, ['gentle', 'standard', 'vivid'], '特效强度'), motion: option(value.effect.motion, ['system', 'reduced', 'full'], '动态效果'), binary: binaryEffect(value.effect.binary) },
     render: { profile: render.profile === 'rest' ? 'economy' : option(render.profile, ['full', 'smooth90', 'smooth120', 'balanced', 'economy'], '渲染档位'), quality: option(render.quality ?? ({balanced:'high',economy:'low',rest:'low'}[render.profile] ?? 'ultra'), ['auto','ultra','high','low','safe'], '黑洞画质'), glass: option(render.glass ?? 'auto', ['auto', 'detailed'], '玻璃渲染') },

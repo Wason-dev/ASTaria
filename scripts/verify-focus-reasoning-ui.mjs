@@ -15,7 +15,7 @@ const send = (method, params = {}, session = sessionId) => new Promise((resolve,
   pending.set(id, { resolve, reject })
   ws.send(JSON.stringify({ id, method, params, ...(session ? { sessionId: session } : {}) }))
 })
-const rounds = [{ id: 'first', content: '工具之前的完整思考\t' }, { id: 'second', content: '工具之后的思考\n核对结束' }]
+const rounds = [{ id: 'first', content: '【进度】读取日程\n工具之前的完整思考\t' }, { id: 'second', content: '【进度】核对时间冲突\n工具之后的思考\n核对结束' }]
 const saved = { reasoningContent: rounds.map(item => item.content).join('\n\n'), rounds, status: 'completed' }
 const fixture = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{box-sizing:border-box}body{margin:0}</style><body class="p0" data-night="false" style="--wb-font:13px;--wb-top:88px;background:#f5f4ef">
 <div class="workbench" data-active="true"><div class="wb-scroll" data-focus="true"><div class="wb-focus-layout">
@@ -84,13 +84,19 @@ try {
   await check('live thinking starts collapsed and shows only the current tool', `${collapsed} && !document.querySelector('.xixi-stream-activities') && document.querySelector('.xixi-stream-status')?.textContent.includes('正在核对课程与空档') && document.querySelector('.xixi-stream-status')?.textContent.includes('读取日程')`)
   await mkdir(output, { recursive: true })
   await writeFile(`${output}/current-tool-desktop.png`, Buffer.from((await send('Page.captureScreenshot', { format: 'png' })).data, 'base64'))
+  await evaluate('renderChat({stream:{...draft,phase:"thinking",activities:[]}})')
+  await check('model title replaces only the waiting text', `document.querySelector('.xixi-stream-status strong')?.textContent==='核对时间冲突' && !document.querySelector('.xixi-reasoning-label') && !document.querySelector('.xixi-reasoning-mark')`)
+  await check('thinking title inherits the neutral status color', `(()=>{const e=document.querySelector('.xixi-stream-status');return getComputedStyle(e.querySelector('strong')).color===getComputedStyle(e).color})()`)
+  await evaluate('renderChat({stream:{...draft,phase:"replying",content:"好",activities:[]}})')
+  await check('first reply token removes the thinking title', `document.querySelector('.xixi-stream-status strong')?.textContent==='正在回复' && !document.querySelector('[data-thinking-headline=true]')`)
+  await evaluate('renderChat({stream:{...draft,phase:"thinking",activities:[]}})')
   await evaluate('document.querySelector(".xixi-reasoning-toggle").click()')
   await check('full reasoning remains available on demand', expanded)
   await check('focus reasoning text has visible height and opacity', '(()=>{const e=document.querySelector(".xixi-reasoning-collapse");return e.getBoundingClientRect().height>40&&getComputedStyle(e).opacity==="1"&&!e.inert})()')
   await evaluate('renderChat({stream:{...draft,phase:"replying",content:"核对完成",activities:[{...draft.activities[0],state:"done"}]}})')
   await check('reply phase keeps tool-round thinking expanded', `${expanded} && document.querySelector('.xixi-stream').textContent.includes('工具之前的完整思考')`)
   await evaluate('window.assistant={id:"a1",requestId:"r1",seq:4,role:"assistant",content:"核对完成",createdAt:"",hasSavedReasoning:true};renderChat({sending:false,stream:null,conversation:{...chat.conversation,messages:[user,assistant]}})')
-  await check('live-to-saved remount preserves expansion and retrieves both complete rounds', `${expanded} && !document.querySelector('.xixi-stream') && document.querySelectorAll('.xixi-reasoning-round').length===2`)
+  await check('live-to-saved remount preserves expansion and retrieves both complete rounds', `${expanded} && !document.querySelector('.xixi-stream') && !document.querySelector('.xixi-stream-status') && !document.querySelector('.xixi-reasoning-label') && document.querySelectorAll('.xixi-reasoning-round').length===2`)
   await evaluate('document.querySelector(".xixi-reasoning-copy button").click()')
   await check('copying the completed thinking preserves the exact full transcript', `window.copied === ${JSON.stringify(saved.reasoningContent)}`)
   await evaluate('renderChat({sending:true,stream:draft});')

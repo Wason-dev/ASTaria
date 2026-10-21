@@ -5,6 +5,7 @@ const task = (value: unknown) => record(value) && strings(value, ['id', 'title',
 /** Guard the shared boot/poll payloads before consumers dereference their fields. */
 export function validLocalResponse(path: string, value: unknown): boolean {
   const endpoint = path.replace(/^\/api/, '').split('?')[0]
+  if (endpoint === '/tasks/collection') return record(value) && record(value.operation) && strings(value.operation, ['id', 'summary'])
   if (endpoint === '/tasks') return Array.isArray(value) && value.every(task)
   if (/^\/tasks\/[^/]+$/.test(endpoint) && !['/tasks/delete'].includes(endpoint)) return value === null || task(value)
   if (endpoint === '/areas') return Array.isArray(value) && value.every(item => record(item) && strings(item, ['id', 'name']))

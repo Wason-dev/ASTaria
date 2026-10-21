@@ -15,8 +15,11 @@ export function publicOperation(operation, db, operations = db.listOperations())
   const members = [operation, ...children]
   const created = changes.filter(change => change.table === 'tasks' && change.before === null && change.after)
   const scheduleCount = children.filter(child => !child.undoneAt).reduce((count, child) => count + (child.planChanges ?? []).filter(change => change.after).length, 0)
+  const collection = created[0]?.after?.collection
+  const title = created.length > 1 ? `创建 ${created.length} 项事项${collection && created.every(change => change.after.collection === collection) ? ` · ${collection}` : ''}` : summary
   return {
-    id, requestId, summary: children.length && scheduleCount ? `${summary} · 已安排 ${scheduleCount} 段时间` : scheduleHeading(summary, planChanges),
+    id, requestId, summary: children.length && scheduleCount ? `${title} · 已安排 ${scheduleCount} 段时间` : scheduleHeading(title, planChanges),
+    scheduledCount: scheduleCount,
     createdAt, readAt: members.every(item => item.readAt) ? readAt : null, undoneAt, undoable,
     ...(children.length ? { relatedOperationIds: children.map(child => child.id) } : {}),
     ...(created.length ? { undoLabel: children.length ? '撤销创建与安排' : '撤销创建' } : {}),
@@ -39,7 +42,7 @@ export function publicOperation(operation, db, operations = db.listOperations())
     ].filter(Boolean),
     createdTasks: created.flatMap(change => {
       const task = db.getTask(change.id)
-      return task && !task.deletedAt ? [{ id: task.id, title: task.title, due: task.due, estimateMin: task.estimateMin, updatedAt: task.updatedAt }] : []
+      return task && !task.deletedAt ? [{ id: task.id, title: task.title, collection: task.collection, due: task.due, estimateMin: task.estimateMin, updatedAt: task.updatedAt }] : []
     }),
   }
 }

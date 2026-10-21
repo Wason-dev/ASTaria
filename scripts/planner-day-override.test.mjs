@@ -104,6 +104,7 @@ test('applying the real school day preserves tasks and exposes collisions; later
 })
 
 test('weekly edits ignore overridden dates while keeping ordinary weekday conflict checks', t => {
+  t.mock.timers.enable({ apis: ['Date'], now: now.getTime() })
   const { db, seed, edit } = fixture(t)
   seed(); edit(change)
   const task = db.createTask({ title: '计划' })

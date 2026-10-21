@@ -78,11 +78,22 @@ export function isHorizonResult(value: unknown): value is HorizonResult {
     || !text(value.snapshotKey) || !value.snapshotKey || !text(value.asOf) || !text(value.summary)
     || !(value.operation === null || (record(value.operation) && text(value.operation.id) && value.operation.id.length > 0))
     || !(value.replayed === undefined || typeof value.replayed === 'boolean')
+    || !(value.schedulingQuestion === undefined || (value.operation === null && record(value.schedulingQuestion)
+      && text(value.schedulingQuestion.prompt) && value.schedulingQuestion.prompt.length > 0 && value.schedulingQuestion.prompt.length <= 1000
+      && text(value.schedulingQuestion.sourceId) && text(value.schedulingQuestion.snapshotKey)
+      && value.schedulingQuestion.snapshotKey === value.snapshotKey
+      && Array.isArray(value.schedulingQuestion.options) && value.schedulingQuestion.options.length >= 2 && value.schedulingQuestion.options.length <= 3
+      && new Set(value.schedulingQuestion.options.map(option => record(option) ? option.value : null)).size === value.schedulingQuestion.options.length
+      && value.schedulingQuestion.options.some(option => record(option) && option.value === 'split')
+      && value.schedulingQuestion.options.some(option => record(option) && option.value === 'cancel')
+      && value.schedulingQuestion.options.every(option => record(option) && ['whole', 'split', 'cancel'].includes(String(option.value))
+        && text(option.label) && option.label.length > 0 && option.label.length <= 160)))
     || !Array.isArray(value.items) || !Array.isArray(value.groups)) return false
   return value.items.every(item => record(item) && text(item.id) && text(item.taskId) && text(item.title)
     && text(item.date) && text(item.start) && text(item.end) && finite(item.durationMin)
     && typeof item.movable === 'boolean' && optionalText(item.due) && optionalText(item.reason)
     && (item.needsReschedule === undefined || typeof item.needsReschedule === 'boolean'))
+    && (value.schedulingQuestion === undefined || value.items.some(item => item.id === (value.schedulingQuestion as Record<string, unknown>).sourceId && item.movable))
     && value.groups.every(group => record(group) && text(group.id) && text(group.title)
       && (group.day === 0 || group.day === 1 || group.day === 2) && optionalText(group.project)
       && Array.isArray(group.tasks) && group.tasks.every(task => record(task) && text(task.id) && text(task.title) && finite(task.minutes)

@@ -1,0 +1,4 @@
+{
+  "extends": "./tsconfig.json",
+  "include": ["src", "mobile/runtime", "capacitor.config.ts", "vite.config.ts"]
+}

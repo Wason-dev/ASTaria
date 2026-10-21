@@ -1,0 +1,84 @@
+.tti-dialog { --tti-ink: var(--import-ink); --tti-body: var(--import-body); --tti-muted: var(--import-muted); --tti-line: var(--import-line); --tti-gold: var(--import-gold); --tti-well: var(--import-well); --tti-warning: var(--import-warning) }
+.tti-muted { color: var(--tti-muted); font-size: 13px }
+.tti-file { display: none }
+.tti-source { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 24px; align-items: start; margin: 22px 0 12px }
+.tti-source-image { min-width: 0; display: flex; flex-direction: column; align-items: stretch; gap: 8px }
+.tti-source-image .import-drop { min-height: 240px }
+.tti-dialog .tti-preview { border-radius: 14px; display: grid; justify-items: center; gap: 8px; padding: 10px; width: 100%; font-size: 11px }
+.tti-preview img { display: block; max-width: 100%; height: 220px; object-fit: contain }
+.tti-upload-controls { display: grid; gap: 10px; min-width: 0 }
+.tti-dialog .tti-switch { display: flex; align-items: center; justify-content: space-between; gap: 14px; width: 100%; min-height: 52px; padding: 9px 12px; text-align: left; border: 1px solid var(--tti-line); border-radius: 12px; background: transparent }
+.tti-switch-copy { display: grid; gap: 4px; min-width: 0 }
+.tti-switch-copy strong { font-size: 13px; font-weight: 400 }
+.tti-switch-copy > span { color: var(--tti-muted); font-size: 11px }
+.tti-switch-track { display: block; flex: 0 0 34px; height: 20px; padding: 2px; box-sizing: border-box; border: 1px solid var(--tti-line); background: color-mix(in srgb, var(--tti-muted) 12%, transparent); border-radius: 12px }
+.tti-switch-track > span { display: block; width: 14px; height: 14px; border-radius: 50%; background: var(--tti-muted); transition: transform 180ms ease }
+.tti-switch[aria-checked=true] { border-color: var(--tti-gold); background: color-mix(in srgb, var(--tti-gold) 4%, transparent) }
+.tti-switch[aria-checked=true] .tti-switch-track { background: color-mix(in srgb, var(--tti-gold) 22%, transparent); border-color: var(--tti-gold) }
+.tti-switch[aria-checked=true] .tti-switch-track > span { background: var(--tti-gold); transform: translateX(14px) }
+.tti-help { border-top: 1px solid var(--tti-line); margin-top: 10px }
+.tti-help p { padding: 4px 0 8px }
+.tti-progress { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; align-items: baseline; padding: 8px 0; color: var(--tti-body) }
+.tti-progress strong { font-size: 12px; font-weight: 500; color: var(--tti-gold) }
+.tti-progress span { grid-column: 1; color: var(--tti-muted); font-size: 11px }
+.tti-progress button { grid-column: 2; grid-row: 1 / span 2; align-self: center }
+.tti-model-status { display: grid; gap: 8px; padding: 10px 0; border-top: 1px solid var(--tti-line) }
+.tti-model-status > button { justify-self: start }
+.tti-manual { display: flex; flex-wrap: wrap; align-items: center; gap: 10px }
+.tti-header-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 8px 0 }
+.tti-crops { display: flex; gap: 6px; overflow-x: auto; margin: 8px 0 }
+.tti-crops img { width: 90px; height: 64px; object-fit: contain; border: 1px solid var(--tti-line); border-radius: 6px }
+.tti-draft-tools { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 6px; margin-bottom: 12px }
+.tti-draft-tools button { font-size: 11px; padding-block: 3px; min-height: 30px }
+.tti-tools { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0 8px; align-items: center }
+.tti-tools button { font-size: 11px }
+.tti-count { color: var(--tti-gold); font-variant-numeric: tabular-nums; padding: 8px 0 }
+.tti-code-group { min-width: 0; margin: 14px 0; padding: 10px 0 0; border: 0; border-top: 1px solid var(--tti-line) }
+.tti-code-group legend { padding-right: 10px; font-size: 12px; color: var(--tti-body) }
+.tti-code-chips { display: flex; flex-wrap: wrap; gap: 8px }
+.tti-code-chips button { white-space: pre-wrap; font-variant-numeric: tabular-nums; min-width: 64px }
+.tti-code-chips [aria-pressed=true] { border-color: var(--tti-gold); background: color-mix(in srgb, var(--tti-gold) 10%, transparent); color: var(--tti-gold) }
+.tti-rows { display: grid; gap: 10px; margin: 12px 0 }
+.tti-row { min-width: 0; margin: 0; padding: 12px; border: 1px solid var(--tti-line); border-radius: 12px; background: var(--tti-well) }
+.tti-row:disabled { opacity: .65 }
+.tti-row:disabled button:disabled { opacity: 1 }
+.tti-row[data-uncertain=true] { border-style: dashed }
+.tti-row-title { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 4px }
+.tti-row-title strong { min-width: 0; font-size: 13px; font-weight: 400; overflow-wrap: anywhere; white-space: pre-wrap }
+.tti-row-title button { flex: none; font-size: 11px; min-height: 28px; padding: 2px 8px }
+.tti-row-main { display: grid; grid-template-columns: 80px 100px minmax(0, 2fr) minmax(0, 1fr); gap: 8px }
+.tti-row-times { display: grid; grid-template-columns: minmax(0, 2fr) 110px 110px 85px; gap: 8px; margin-top: 8px }
+.tti-row details > label { margin-top: 8px }
+.tti-row > button { margin-top: 8px }
+.tti-warning { color: var(--tti-warning); padding: 6px 0; font-size: 12px }
+.tti-cell { color: var(--tti-muted); font-size: 11px }
+.tti-unresolved { margin-top: 16px; border-top: 1px solid var(--tti-line); padding-top: 8px }
+.tti-unresolved .tti-row { margin-top: 10px }
+.tti-period-times { margin-top: 12px }
+.tti-period-time { display: grid; grid-template-columns: minmax(60px, 1fr) 110px 110px max-content; align-items: end; gap: 8px; margin: 10px 0 }
+.tti-period-time strong { font-size: 12px; font-weight: 400; padding-block: 7px }
+.tti-anchor { display: grid; grid-template-columns: minmax(0, 230px) minmax(0, 1fr); align-items: end; gap: 16px; margin: 16px 0 8px }
+.tti-existing { margin-top: 14px; border-top: 1px solid var(--tti-line); color: var(--tti-body); font-size: 12px }
+.tti-existing p { padding: 4px 0 }
+.tti-zoom > div { overflow-x: auto; margin-top: 12px }
+.tti-zoom img { display: block; max-width: none }
+.tti-saved { padding-top: 12px }
+.tti-saved h3 { color: var(--tti-gold) }
+.tti-saved-list { margin-top: 20px; border-top: 1px solid var(--tti-line) }
+.tti-saved-list p { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--tti-line) }
+.tti-saved-list strong { font-weight: 400; overflow-wrap: anywhere }
+.tti-saved-list span { color: var(--tti-muted); font-size: 12px; text-align: right }
+.tti-sr { position: absolute; width: 1px; height: 1px; clip-path: inset(50%); overflow: hidden; white-space: nowrap }
+.tti-dialog[data-density=comfortable] .tti-row { padding: 16px }
+@media (max-width: 700px) {
+  .tti-source { grid-template-columns: minmax(0, 1fr); gap: 16px; margin-top: 16px }
+  .tti-source-image .import-drop { min-height: 170px }
+  .tti-preview img { height: 160px }
+  .tti-row-main, .tti-row-times, .tti-period-time, .tti-anchor { grid-template-columns: repeat(2, minmax(0, 1fr)) }
+  .tti-period-time strong, .tti-period-time button, .tti-anchor > p { grid-column: 1 / -1 }
+  .tti-anchor { gap: 8px }
+  .tti-anchor label { grid-column: 1 / -1 }
+  .tti-saved-list p { flex-direction: column; gap: 3px }
+  .tti-saved-list span { text-align: left }
+}
+@media (forced-colors: active) { .tti-row, .tti-switch-track { border-color: ButtonText } .tti-switch[aria-checked=true] .tti-switch-track { background: Highlight } .tti-switch-track > span { background: ButtonText } }

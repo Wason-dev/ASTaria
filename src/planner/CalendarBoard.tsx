@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef } from 'react'
+import { useLayoutEffect, useMemo, useRef } from 'react'
 import type { KeyboardEvent } from 'react'
 import type { Task } from '../domain/task'
 import { agendaDate, localDay, monthDays, shiftDay } from '../home/agenda'
@@ -58,9 +58,16 @@ export function CalendarBoard({ state, tasks, selected, anchor, now, mode, direc
   const keyboardDate = useRef<string | null>(null)
   const today = localDay(now)
   const monday = shiftDay(anchor, -((anchor.getDay() + 6) % 7))
-  const dates = mode === 'month' ? monthDays(anchor) : Array.from({ length: 7 }, (_, i) => shiftDay(monday, i))
+  const dates = useMemo(() => mode === 'month' ? monthDays(anchor) : Array.from({ length: 7 }, (_, i) => shiftDay(monday, i)), [anchor, mode])
   const pageKey = mode === 'month' ? `month-${anchor.getFullYear()}-${anchor.getMonth()}` : `week-${localDay(monday)}`
   const focusDate = dates.some(date => localDay(date) === selected) ? selected : localDay(dates[0])
+  // Activation, loading and hover updates do not change the saved day models.
+  // Keep the clock dependency: today's remaining time and midnight must stay live.
+  const days = useMemo(() => dates.map(date => {
+    const day = localDay(date), entries = entriesForDay(state, tasks, day)
+    const capacity = dayCapacity(state, tasks, day, now)
+    return { date, day, entries, capacity, info: capacityInfo(state, day, localDay(now), capacity), exception: dayExceptionLabel(state, day) }
+  }), [dates, state, tasks, now])
 
   useLayoutEffect(() => {
     if (!keyboardDate.current || keyboardDate.current !== selected) return
@@ -79,11 +86,8 @@ export function CalendarBoard({ state, tasks, selected, anchor, now, mode, direc
 
   const frame = <div className={mode === 'month' ? 'pl-calendar-grid' : 'pl-week-grid'} data-period-key={pageKey}
       aria-label={mode === 'month' ? `${anchor.getFullYear()}年${anchor.getMonth() + 1}月` : `${dateLabel.format(monday)}起的一周`}>
-      {dates.map(date => {
-        const day = localDay(date), entries = entriesForDay(state, tasks, day)
-        const capacity = dayCapacity(state, tasks, day, now), info = capacityInfo(state, day, today, capacity)
+      {days.map(({ date, day, entries, capacity, info, exception }) => {
         const isToday = day === today, outside = date.getMonth() !== anchor.getMonth()
-        const exception = dayExceptionLabel(state, day)
         const ariaLabel = `${dateLabel.format(date)}${isToday ? '，今天' : ''}${exception ? `，${exception}` : ''}，${entries.length} 项，${info.title}`
         const capacityBar = <span className="pl-calendar-capacity" data-known={info.known} title={info.title}>
           <span className="pl-calendar-capacity-track" aria-hidden="true"><span style={{ width: `${capacity.totalMin ? Math.min(100, info.minutes / capacity.totalMin * 100) : 0}%` }} /></span>

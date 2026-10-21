@@ -4,6 +4,7 @@ import { basename, dirname, join, win32 } from 'node:path'
 
 import { RELEASE_KEYS, verifyReleaseManifest } from './releaseTrust.mjs'
 import { verifyAsset } from './updateDownload.mjs'
+import { isCanonicalVersion } from './version.mjs'
 
 export function standardWindowsInstall(executable, localAppData) {
   if (!localAppData || !executable) return false
@@ -14,7 +15,7 @@ const psString = value => `[Text.Encoding]::UTF8.GetString([Convert]::FromBase64
 
 export function windowsInstallScript({ pid, setup, target, staging, resultFile, health, sha256, version, commit }) {
   if (!Number.isSafeInteger(pid) || pid <= 0 || !/^[a-f0-9]{64}$/u.test(sha256)
-    || !/^[a-f0-9]{40,64}$/u.test(commit) || !/^\d+\.\d+\.\d+(?:-beta\.\d+)?$/u.test(version)
+    || !/^[a-f0-9]{40,64}$/u.test(commit) || !isCanonicalVersion(version)
     || [setup, target, staging, resultFile, health].some(value => typeof value !== 'string' || !win32.isAbsolute(value))
     || win32.dirname(health).toLowerCase() !== win32.normalize(staging).toLowerCase()) throw new Error('更新安装参数无效')
   return `$ErrorActionPreference = 'Stop'
@@ -85,6 +86,7 @@ try {
 export async function prepareWindowsUpdate({ executable, localAppData, path, manifest, resultFile, trustedKeys = RELEASE_KEYS }) {
   verifyReleaseManifest(manifest, trustedKeys)
   if (manifest.platform !== 'win32' || manifest.arch !== 'x64' || !path.toLowerCase().endsWith('.exe')
+    || !isCanonicalVersion(manifest.version)
     || manifest.buildInfo?.version !== manifest.version || manifest.buildInfo?.source?.dirty !== false
     || !/^[a-f0-9]{40,64}$/u.test(manifest.buildInfo?.source?.commit ?? '')) throw new Error('Windows 更新清单无效')
   if (!standardWindowsInstall(executable, localAppData)) throw new Error('便携版或非标准安装位置请手动安装更新')
@@ -114,8 +116,8 @@ export async function acknowledgeWindowsUpdate(localAppData, health) {
 }
 
 export async function launchWindowsUpdate(prepared, pid = process.pid, spawnProcess = spawn, files = { writeFile, rm }) {
-  const script = windowsInstallScript({ ...prepared, pid })
   try {
+    const script = windowsInstallScript({ ...prepared, pid })
     const child = spawnProcess('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')],
       { cwd: win32.dirname(prepared.staging), detached: true, stdio: 'ignore', windowsHide: true })
     await new Promise((resolve, reject) => { child.once('spawn', resolve); child.once('error', reject) })

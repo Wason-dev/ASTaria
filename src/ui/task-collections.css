@@ -1,0 +1,50 @@
+.task-collection-icon { width:16px; height:16px; flex:none; vertical-align:middle; color:inherit }
+.task-collection-dialog { --collection-muted:var(--p0-muted,#bcc0c7); --collection-line:var(--p0-line,#e1ded526) }
+.task-collection-dialog .floating-glass-content { display:flex; flex:1 1 auto; flex-direction:column; overflow:hidden }
+.task-collection-dialog .floating-glass-content > :not(.task-collection-list,.task-collection-editor) { flex:none }
+.task-collection-dialog :is(p,ul,form) { margin:0 }
+.task-collection-dialog .task-collection-summary { margin-top:8px; font-size:11px }
+.task-collection-dialog .task-collection-muted { margin:5px 0 10px; color:var(--collection-muted); font-size:10px; line-height:1.6 }
+.task-collection-dialog .task-collection-list { flex:0 1 auto; min-height:0; list-style:none; padding:0; margin:8px 0; max-height:min(360px,45dvh); overflow:auto; overscroll-behavior:contain; scrollbar-width:thin; scrollbar-color:var(--collection-line) transparent; scrollbar-gutter:stable }
+.task-collection-dialog .task-collection-detail-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); grid-auto-rows:max-content; align-content:start; column-gap:26px; max-height:none; padding-bottom:2px }
+.task-collection-detail-list li { min-width:0; border-bottom:1px solid var(--collection-line) }
+.task-collection-detail-list li + li { border-top:0 }
+.p0 .task-collection-dialog .task-collection-detail-list button { min-height:54px; padding:8px 6px }
+.task-collection-list li + li { border-top:1px solid var(--collection-line) }
+.p0 .task-collection-dialog .task-collection-list button { width:100%; min-height:46px; display:flex; align-items:center; gap:10px; padding:9px 7px; border:0; border-radius:10px; background:transparent; color:inherit; font:inherit; text-align:left; transition:background 160ms,color 160ms }
+.task-collection-list button:hover { background:#bca77b12 }
+.task-collection-copy { display:flex; flex:1; min-width:0; flex-direction:column; gap:2px }
+.task-collection-copy strong { font-weight:400; font-size:11px; line-height:1.65; overflow-wrap:anywhere }
+.task-collection-copy small { color:var(--collection-muted); font-size:10px; line-height:1.6 }
+.task-collection-list button[data-done=true] strong { color:var(--collection-muted); text-decoration:line-through }
+.task-collection-enter { color:var(--collection-muted); font-size:14px }
+.task-collection-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:12px }
+.task-collection-detail-list + .task-collection-actions { padding-top:2px }
+.p0 .task-collection-dialog .task-collection-actions button { padding:6px 11px; border:1px solid var(--collection-line); border-radius:10px; background:transparent; color:inherit; font:inherit; transition:background 160ms,border-color 160ms }
+.task-collection-actions button:hover { background:#bca77b12; border-color:#bca77b80 }
+.task-collection-editor .task-collection-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); column-gap:26px }
+.task-collection-editor .task-collection-list li { min-width:0; border-top:0; border-bottom:1px solid var(--collection-line) }
+.task-collection-editor { display:flex; flex:1 1 auto; min-height:0; flex-direction:column; animation:task-collection-enter 300ms cubic-bezier(.16,.8,.25,1) }
+.task-collection-editor > :not(.task-collection-list) { flex:none }
+.task-collection-field { display:grid; gap:5px; margin-top:8px; color:var(--collection-muted); font-size:10px }
+.p0 .task-collection-dialog input { min-width:0; width:100%; box-sizing:border-box; padding:8px 10px; border:1px solid var(--collection-line); border-radius:10px; background:transparent; color:inherit; font:inherit; font-size:11px }
+.p0 .task-collection-dialog input::placeholder { color:var(--collection-muted); opacity:.8 }
+.task-collection-select-heading { display:flex; justify-content:space-between; align-items:center; gap:10px; margin:12px 0 6px; font-size:10px }
+.p0 .task-collection-dialog :is(.task-collection-select-heading,.task-collection-error) button { border:0; background:transparent; color:inherit; font:inherit; padding:3px; text-decoration:underline; text-underline-offset:3px }
+.task-collection-check { display:grid; place-items:center; width:16px; height:16px; flex:none; border:1px solid var(--collection-line); border-radius:5px }
+.task-collection-check svg { width:14px; height:14px; fill:none; stroke:currentColor; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round }
+.task-collection-list button[aria-checked=true] .task-collection-check { border-color:var(--p0-gold,#d5bb8b); color:var(--p0-gold,#d5bb8b) }
+.p0 .task-collection-dialog :is(button,input):focus-visible { outline:0; box-shadow:inset 0 0 0 1px var(--p0-gold,#d5bb8b) }
+.task-collection-error { color:var(--p0-fg); margin-top:6px!important }
+.task-collection-notice { font-size:11px; line-height:1.7; color:inherit }
+.task-collection-notice button { margin-left:8px; padding:3px; background:transparent; border:0; color:inherit; font:inherit; text-decoration:underline; text-underline-offset:3px }
+.wb-task-collection .wb-task-top strong { display:flex; align-items:center; gap:8px }
+.workbench .wb-ddl-copy strong.wb-ddl-collection-title { display:flex; align-items:center; gap:7px }
+.wb-ddl-collection-title > span { min-width:0; overflow-wrap:anywhere }
+.home-agenda-list .home-collection-title { display:flex; align-items:center; gap:6px }
+@keyframes task-collection-enter { from { opacity:0; transform:translateY(9px) } to { opacity:1; transform:translateY(0) } }
+@media(pointer:coarse) { .p0 .task-collection-dialog input { font-size:16px } .p0 .task-collection-dialog .task-collection-actions button { min-height:44px } }
+@media(max-width:620px) { .task-collection-editor .task-collection-list,.task-collection-dialog .task-collection-detail-list { grid-template-columns:minmax(0,1fr) } }
+@media(prefers-reduced-motion:reduce) { .task-collection-editor { animation:none } }
+.task-collection-dialog[data-reduced-motion=true] .task-collection-editor { animation:none }
+@media(forced-colors:active) { .task-collection-check,.p0 .task-collection-dialog input,.p0 .task-collection-dialog .task-collection-actions button { border-color:ButtonText } .p0 .task-collection-dialog :is(button,input):focus-visible { outline:2px solid Highlight; outline-offset:-3px } }

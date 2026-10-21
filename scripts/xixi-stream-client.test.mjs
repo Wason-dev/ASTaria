@@ -14,7 +14,7 @@ const hook = registerHooks({
     return result
   },
 })
-const { readChatStream, advanceChatStream, restoreChatReasoning } = await import('../src/xixi/stream.ts')
+const { readChatStream, advanceChatStream, restoreChatReasoning, reasoningHeadline, chatThinkingHeadline } = await import('../src/xixi/stream.ts')
 const { chatApi, LocalApiError } = await import('../src/xixi/api.ts')
 hook.deregister()
 
@@ -23,6 +23,45 @@ const frame = (event, newline = '\n') => `data: ${JSON.stringify(event)}${newlin
 const encode = text => new TextEncoder().encode(text)
 const streamFrom = chunks => new ReadableStream({ start(controller) { for (const chunk of chunks) controller.enqueue(typeof chunk === 'string' ? encode(chunk) : chunk); controller.close() } })
 const draft = () => ({ requestId: 'request-one', conversationId: 'main', round: -1, content: '', reasoningContent: '', phase: 'thinking' })
+
+test('generated titles survive SSE parsing, stay in their round, and disappear on content or execution', async () => {
+  let current = advanceChatStream(draft(), { type: 'round', round: 1 })
+  await readChatStream(streamFrom([frame({ type: 'thinking-title', round: 1, title: '核对课程与可用时间' }), frame({ type: 'result', result })]), event => { current = advanceChatStream(current, event) })
+  assert.equal(chatThinkingHeadline(current), '核对课程与可用时间')
+  current = advanceChatStream(current, { type: 'content', round: 1, delta: '答' })
+  current = advanceChatStream(current, { type: 'thinking-title', round: 1, title: '迟到的标题' })
+  assert.equal(chatThinkingHeadline(current), null)
+  current = advanceChatStream(current, { type: 'round', round: 2 })
+  current = advanceChatStream(current, { type: 'thinking-title', round: 1, title: '旧轮次标题' })
+  assert.equal(chatThinkingHeadline(current), '正在思考')
+  current = advanceChatStream(current, { type: 'thinking-title', round: 2, title: '继续核对课程' })
+  current = advanceChatStream(current, { type: 'phase', phase: 'executing' })
+  assert.equal(current.thinkingTitle, undefined)
+  assert.equal(chatThinkingHeadline(current), null)
+})
+
+test('thinking titles accept complete marked lines without leaking ordinary or partial reasoning', () => {
+  for (const text of ['', 'The user says: "我要看你的思考小标题" — I want to see your', '【进度】核对', '【进度】\n', '【进度】' + '长'.repeat(25) + '\n', '正文中引用【进度】不是标题\n']) {
+    assert.equal(reasoningHeadline(text), '正在思考')
+  }
+  assert.equal(reasoningHeadline('【进度】核对课程与空档\n完整思考正文'), '核对课程与空档')
+  assert.equal(reasoningHeadline('【进度】读取日程\r\n正文\n【进度】检查重叠\n更多正文'), '检查重叠')
+  assert.equal(reasoningHeadline('【进度】读取日程\n正文\n【进度】核对'), '读取日程')
+})
+
+test('thinking titles follow current rounds and disappear with the first reply token', () => {
+  let current = advanceChatStream(draft(), { type: 'reasoning', round: 1, delta: '【进度】读取日程\n内部思考' })
+  assert.equal(chatThinkingHeadline(current), '读取日程')
+  current = advanceChatStream(current, { type: 'content', round: 1, delta: '好' })
+  assert.equal(chatThinkingHeadline(current), null)
+  assert.equal(chatThinkingHeadline({ ...current, phase: 'thinking' }), null, 'even an out-of-order phase cannot restore a title over reply text')
+  current = advanceChatStream(current, { type: 'round', round: 2 })
+  assert.equal(chatThinkingHeadline(current), '正在思考', 'a new round cannot inherit an earlier title')
+  current = advanceChatStream(current, { type: 'reasoning', round: 2, delta: '【进度】检查重叠\n新一轮思考' })
+  assert.equal(chatThinkingHeadline(current), '检查重叠')
+  assert.equal(chatThinkingHeadline({ ...current, phase: 'executing' }), null)
+  assert.equal(chatThinkingHeadline({ ...current, phase: 'replying' }), null)
+})
 
 test('SSE preserves UTF-8 and CRLF boundaries even when every byte arrives separately', async () => {
   const events = [
@@ -42,6 +81,22 @@ test('multiple data lines and many events in one chunk decode correctly without 
   await readChatStream(streamFrom([unknown + multiline + frame({ type: 'result', result })]), event => received.push(event))
   assert.deepEqual(received.map(event => event.type), ['content', 'result'])
   assert.equal(received[0].delta, '回复')
+})
+
+test('source metadata streams outside prose, survives rounds, and validates the final persisted message', async () => {
+  const source = { url: 'https://github.com/fixture/repo', title: 'https://github.com/fixture/repo', fetchStatus: 'failed', fetchedAt: '2026-10-12T00:00:00.000Z' }
+  const received = []
+  let current = draft()
+  const final = { ...result, messages: [{ id: 'reply', role: 'assistant', content: '仓库未能打开，可以贴出 README。', sources: [source] }] }
+  const events = [{ type: 'sources', sources: [source, source] }, { type: 'round', round: 2 }, { type: 'content', round: 2, delta: final.messages[0].content }, { type: 'result', result: final }]
+  assert.deepEqual(await readChatStream(streamFrom(events.map(event => frame(event))), event => { received.push(event); current = advanceChatStream(current, event) }), final)
+  assert.deepEqual(current.sources, [source])
+  assert.equal(current.content, final.messages[0].content)
+  assert.deepEqual(received[0], { type: 'sources', sources: [source] })
+  for (const sources of [[{ ...source, content: 'page body must never enter this event' }], Array(7).fill(source), [{ ...source, fetchStatus: 'verified' }], [{ ...source, fetchedAt: 'yesterday' }]]) {
+    await assert.rejects(readChatStream(streamFrom([frame({ type: 'sources', sources })]), () => {}), /连接已中断/u)
+    await assert.rejects(readChatStream(streamFrom([frame({ type: 'result', result: { ...final, messages: [{ ...final.messages[0], sources }] } })]), () => {}), /连接已中断/u)
+  }
 })
 
 test('end of transport without a complete result is never accepted as completion', async () => {

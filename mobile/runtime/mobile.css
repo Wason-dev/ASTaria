@@ -1,0 +1,153 @@
+/* Safe areas belong to the viewport shell, not to the black-hole scene. */
+html[data-mobile] .p0 { bottom: auto; height: var(--m-layout-height, 100svh) }
+html[data-mobile] .home-workspace {
+  inset: var(--safe-area-inset-top, env(safe-area-inset-top)) var(--safe-area-inset-right, env(safe-area-inset-right)) var(--safe-area-inset-bottom, env(safe-area-inset-bottom)) var(--safe-area-inset-left, env(safe-area-inset-left));
+}
+html[data-mobile-keyboard="open"] .home-workspace { bottom: 0 }
+html[data-mobile] .p0 button { touch-action: manipulation }
+/* Android follows the compact content rhythm. iOS needs 16px editable controls
+   to avoid WebKit zooming the viewport on focus; do not enlarge all platforms. */
+html[data-mobile] .p0 :is(input, textarea, select) { font-size: 14px; line-height: 1.6 }
+html[data-mobile="ios"] .p0 :is(input, textarea, select) { font-size: 16px }
+@supports (-webkit-touch-callout: none) {
+  html[data-mobile="preview"] .p0 :is(input, textarea, select) { font-size: 16px }
+}
+html[data-mobile] .xixi-conversation { font-size: 13px; line-height: 1.7 }
+html[data-mobile] .xixi-markdown :is(h1,h2,h3,h4,h5,h6) { margin: 10px 0 5px; font-size: 14px; line-height: 1.55; font-weight: 550 }
+html[data-mobile] .xixi-markdown :is(h4,h5,h6) { font-size: 13px }
+html[data-mobile] .p0 textarea { -webkit-user-select: text; user-select: text }
+html[data-mobile] .home-brand { min-height: 44px }
+html[data-mobile] .home-menu button { min-height: 44px }
+@media (max-width: 600px) {
+  html[data-mobile] .home-workspace { --workspace-content-top: 64px }
+  html[data-mobile] .home-workspace .planner .workspace-heading { grid-template-columns: minmax(0, 1fr) auto }
+  html[data-mobile] .home-workspace header.workspace-heading > .workspace-heading-copy { flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0 }
+  html[data-mobile] .home-workspace header.workspace-heading > .workspace-heading-copy > .workspace-heading-description { width: 100%; min-width: 0; white-space: normal; overflow-wrap: anywhere; font-size: 11px; line-height: 16px }
+  /* The expanded navigation owns the narrow top row. The date returns when
+     the menu closes, so its hit area cannot cover the last menu action. */
+  html[data-mobile] .home-nav[data-menu-open="true"] { --home-clock-space: 0px }
+  html[data-mobile] .home-workspace:has(.home-nav[data-menu-open="true"]) > .home-clock { opacity: 0; pointer-events: none }
+  html[data-mobile] .home-workspace .xixi-settings-scroll { top: 52px; padding: 6px 14px 32px }
+  html[data-mobile] .xixi-settings-page-header { margin-bottom: 10px }
+  html[data-mobile] .xixi-settings-shell { padding: 10px 14px 16px }
+  html[data-mobile] .xixi-settings-content > section:first-child { padding-top: 0 }
+  html[data-mobile] .xixi-settings-tabs { display: flex; flex-wrap: wrap; overflow: visible; gap: 4px; padding-bottom: 8px }
+  html[data-mobile] .xixi-settings-tabs button { flex: 0 0 calc((100% - 8px) / 3); min-width: 0; min-height: 44px; padding: 6px 4px; text-align: center }
+  html[data-mobile] .xixi-model-input-action { align-items: stretch }
+  html[data-mobile] .xixi-model-input-action input { min-width: 0; width: 0; }
+  html[data-mobile] .xixi-model-input-action button { padding-inline: 10px; }
+}
+@media (max-width: 600px) and (min-height: 600px) {
+  /* Keep the task and its measured chat launch below the bright accretion
+     disk. The existing morph uses this element's measured bottom edge. */
+  html[data-mobile] .home-current { top: calc(100% - 196px) }
+}
+.mobile-startup-error {
+  min-height: 100dvh; display: flex; flex-direction: column; justify-content: center; align-items: center;
+  gap: 16px; padding: 28px; box-sizing: border-box; background: #050506; color: #eeeae3;
+  font-family: Inter, "Helvetica Neue", "PingFang SC", sans-serif;
+}
+.mobile-startup-error h1 { font-size: 22px; font-weight: 500; margin: 0 }
+.mobile-startup-error p { font-size: 14px; line-height: 1.7; color: #bcc0c7; max-width: 360px; margin: 0 }
+.mobile-startup-error button { border: 1px solid #e1ded526; border-radius: 10px; padding: 12px 20px; background: transparent; color: #d5bb8b; font: inherit }
+
+/* Phone composition uses the original ASTaria components, type and motion. */
+html[data-mobile] .home-workspace {
+  --m-text: var(--p0-fg); --m-muted: var(--p0-muted); --m-accent:#d5bb8b; --m-line:var(--p0-line);
+  --m-surface:rgb(8 10 14 / .5); --m-safe-top:var(--safe-area-inset-top,env(safe-area-inset-top,0px)); --m-safe-bottom:var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px));
+}
+html[data-mobile] .home-workspace[data-theme=light] { --m-accent:#927443; --m-surface:rgb(250 251 252 / .65) }
+html[data-mobile] .p0 .home-notification[data-empty=true] { display:none }
+html[data-mobile] .p0-whisper { bottom:calc(21px + var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px))) }
+html[data-mobile-keyboard=open] .p0-whisper,
+html[data-mobile-keyboard=open] .home-notification,
+html[data-mobile] .home-workspace:not([data-page=home]) .home-notification { display:none }
+html[data-mobile-keyboard=open] .home-workspace[data-chat-open=true] .home-morph {
+  top:calc(var(--m-visible-offset-top,0px) + 52px)!important;
+  height:calc(var(--m-visible-height,100svh) - 64px - var(--safe-area-inset-top,0px))!important;
+}
+html[data-mobile-keyboard=open] .home-workspace[data-chat-open=true] .home-nav { top:0 }
+html[data-mobile] .p0 :is(.xixi-settings-scroll,.free-time-scroll,.wb-scroll) { bottom:auto; height:calc(var(--m-visible-height,var(--m-layout-height,100svh)) - 86px - var(--safe-area-inset-top,0px)); }
+html[data-mobile] .p0 :is(.tti-dialog,.ics-import,.pl-dialog,.home-task-dialog) { max-height:calc(var(--m-visible-height,100svh) - 32px); }
+html[data-mobile] .home-workspace[data-page=settings] > .home-scene-ui,
+html[data-mobile] .home-workspace[data-page=settings] > .workbench,
+html[data-mobile] .home-workspace[data-page=settings] > .planner { visibility:hidden; pointer-events:none }
+/* Each foreground samples the universe, never another page's text. */
+.home-workspace[data-import-open=true] > :is(.home-nav,.home-clock,.home-notification,.home-scene-ui,.workbench,.planner,.free-time-page,.xixi-settings,.first-run),
+.home-workspace:has(.planner[data-modal-open=true]) > :is(.home-nav,.home-clock,.home-notification) { visibility:hidden!important; pointer-events:none!important }
+@media(max-width:600px) {
+  html[data-mobile] .home-nav { --home-clock-space:0px }
+  html[data-mobile] .home-menu { max-width:calc(100vw - 2 * var(--home-left) - var(--home-brand-width) - 20px); }
+  html[data-mobile] .home-workspace .workspace-heading-description { display:none }
+  html[data-mobile] .p0 .workspace-heading h1 { font-size:22px; font-weight:400; }
+  html[data-mobile] .home-workspace .xixi-settings-tabs { display:flex; flex-wrap:nowrap; overflow-x:auto; gap:3px }
+  html[data-mobile] .home-workspace .xixi-settings-tabs button { flex:0 0 auto; min-height:36px; padding:5px 10px; }
+  html[data-mobile] .p0 .xixi-settings-shell { padding:14px 16px 20px }
+  html[data-mobile] .free-time-page .free-time-layout { display:flex; flex-direction:column; }
+  html[data-mobile] .free-time-page .free-time-goal-list { grid-template-columns:1fr }
+  html[data-mobile] .free-time-page .free-time-pane-heading { gap:10px }
+  html[data-mobile] .free-time-page .free-time-wish-entry { margin-bottom:12px }
+}
+@media(prefers-reduced-motion:reduce) { html[data-mobile] .home-workspace * { scroll-behavior:auto } }
+/* The brand menu is a foreground layer. It never takes height from the active
+   workspace or moves its reading position. */
+html[data-mobile] :is(.wb-scroll,.xixi-settings-scroll,.free-time-viewport,.mobile-schedule-workspace) { transition-property:opacity,visibility; transition-duration:220ms,0s; transition-timing-function:ease,linear; }
+/* A retained home's animated children have inline visibility. Cover the whole
+   foreground tree on other pages so no label can leak through their glass. */
+html[data-mobile] .home-workspace:not([data-page=home]) > .home-scene-ui,
+html[data-mobile] .home-workspace:not([data-page=home]) > .home-scene-ui * { visibility:hidden!important; pointer-events:none!important; }
+
+html[data-mobile] .free-time-mobile-views { display:flex; width:max-content; max-width:100%; border:1px solid var(--ft-line); border-radius:999px; padding:3px; margin:0 0 12px; }
+html[data-mobile] .free-time-page .free-time-metrics { display:none }
+html[data-mobile] .free-time-page .free-time-header { min-height:48px; padding-bottom:10px }
+html[data-mobile] .free-time-page:not([data-mobile-view=wishes]) .free-time-wish-entry { display:none }
+html[data-mobile] .free-time-page[data-mobile-view=plans] .free-time-goals { display:none }
+html[data-mobile] .free-time-page:not([data-mobile-view=plans]) .free-time-plan { display:none }
+html[data-mobile] .free-time-page .free-time-goals>.free-time-pane-content>.free-time-pane-heading>.free-time-tabs { display:none }
+html[data-mobile] .free-time-page:not([data-mobile-view=wishes]) .free-time-layout { gap:0 }
+html[data-mobile] .free-time-viewport { bottom:auto;height:calc(var(--m-visible-height,var(--m-layout-height,100svh)) - 100px - var(--safe-area-inset-top,0px)); }
+/* One phone workspace material. The goals pane is the spacing/contrast anchor;
+   lazy page CSS must not introduce another veil or brighter reading plate. */
+html[data-mobile] .home-workspace {
+  --m-panel-rgb:8 10 14; --m-panel-tint:.20; --m-scene-fill:rgb(5 7 10 / .6);
+  --mobile-glass-fill:rgb(var(--m-panel-rgb) / var(--m-panel-tint));
+  --m-panel-radius:20px; --m-panel-padding:16px;
+  --m-body-size:13px; --m-label-size:12px; --m-meta-size:11px; --m-section-size:14px;
+}
+html[data-mobile] .home-workspace[data-theme=light] {
+  --m-panel-rgb:250 251 252; --m-scene-fill:rgb(252 253 255 / .65);
+}
+html[data-mobile] .home-workspace[data-glass-tone=dark] { --m-panel-tint:.62; }
+.mobile-workspace-scene { position:absolute; inset:0; pointer-events:none; background:var(--m-scene-fill); visibility:hidden; }
+html[data-mobile] .home-workspace:not([data-page=home]) > .mobile-workspace-scene { visibility:visible; }
+.mobile-workspace-scene::after { content:''; position:absolute; inset:0; opacity:.25; background-image:linear-gradient(#c0c5ce0c 1px,transparent 1px),linear-gradient(90deg,#c0c5ce0c 1px,transparent 1px); background-size:32px 32px; }
+.home-workspace[data-grid=false] > .mobile-workspace-scene::after { display:none; }
+html[data-mobile] .p0 .home-workspace:not([data-page=home])::before { content:none; }
+html[data-mobile] .p0 .home-workspace :is(.wb-background,.free-time-background,.xixi-settings-background) { display:none; }
+html[data-mobile] .p0 .home-workspace[data-theme] :is(.workbench,.free-time-page,.xixi-settings,.mobile-schedule-workspace) .home-glass-measure > .home-glass-surface,
+html[data-mobile] .p0 .home-workspace[data-theme] .home-menu > .home-glass-measure > .home-glass-surface,
+html[data-mobile] .p0 .home-workspace[data-chat-open=true] .home-morph > .home-glass-surface {
+  background:rgb(var(--m-panel-rgb) / var(--m-panel-tint));
+}
+html[data-mobile] .p0 .home-workspace :is(.wb-glass,.free-time-pane,.xixi-settings-panel,.m-calendar-body) { border-radius:var(--m-panel-radius); }
+/* Use the same native thin scrollbar contract. Desktop's custom WebKit bars
+   reserve a different gutter from the phone settings/calendar and shift edges. */
+html[data-mobile] .p0 :is(.wb-scroll.wb-scroll,.free-time-viewport.free-time-viewport,.xixi-settings-scroll,.mobile-schedule-workspace) {
+  scrollbar-width:thin; scrollbar-color:color-mix(in srgb,var(--m-muted) 55%,transparent) transparent;
+}
+html[data-mobile] .p0 .home-workspace .wb-briefing-panel { padding:var(--m-panel-padding); }
+html[data-mobile] .p0 .home-workspace .wb-briefing-content { padding:0; }
+html[data-mobile] .p0 .home-workspace :is(.free-time-pane-content,.xixi-settings-shell) { padding-inline:var(--m-panel-padding); }
+html[data-mobile] .p0 .home-workspace :is(.workbench,.free-time-page,.xixi-settings,.m-calendar) { font-size:var(--m-body-size); }
+html[data-mobile] .p0 .home-workspace :is(.wb-brief-message h3,.free-time-pane-heading h3,.m-calendar-day-heading h2,.xixi-settings h3) { font-size:var(--m-section-size); line-height:1.6; font-weight:500; }
+html[data-mobile] .p0 .home-workspace :is(.wb-brief-start,.wb-action,.free-time-primary,.free-time-secondary,.xixi-settings button,.m-calendar-button,.m-calendar-return-week) { font-size:var(--m-label-size); }
+html[data-mobile] .p0 .home-workspace .xixi-settings :is(.xixi-settings-actions button,.xixi-file-label) { border-radius:999px; }
+html[data-mobile] .p0 .home-workspace .workbench { --wb-line:var(--m-line); }
+html[data-mobile] .p0 .home-workspace .free-time-page { --ft-line:var(--m-line); }
+html[data-mobile] .p0 .home-workspace .xixi-settings { --settings-line:var(--m-line); }
+@media(max-width:600px) {
+  html[data-mobile] .wb-today-metrics { display:none }
+  html[data-mobile] .wb-overview-heading { min-height:42px; margin-bottom:12px; }
+  html[data-mobile] .wb-briefing-content { padding:16px; }
+  html[data-mobile] .home-workspace .wb-briefing-content :is(p,strong) { font-size:13px; line-height:1.7; }
+}

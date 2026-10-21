@@ -1,5 +1,8 @@
 import { forwardRef, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
+import { collectionProgress, collectionRemaining, taskEntries } from '../domain/taskCollections'
+import type { TaskCollection } from '../domain/taskCollections'
+import { CollectionIcon } from '../ui/CollectionIcon'
 import type { Task } from '../domain/task'
 import { upcomingDeadlines, unconfirmedDeadlineCount } from './deadlines'
 import type { DeadlineItem } from './deadlines'
@@ -28,7 +31,11 @@ export const UpcomingDeadlines = forwardRef<HTMLHeadingElement, {
   focusMin: number; getSpentMs: (id: string) => number; scheduledMinutes: ScheduledMinutes
   embedded?: boolean; revealTaskId?: string | null
 }>(function UpcomingDeadlines({ tasks, now, disabled, loading, error, highlighted, onSelect, onRetry, focusMin, getSpentMs, scheduledMinutes, appearance, embedded = false, revealTaskId }, ref) {
-  const items = useMemo(() => upcomingDeadlines(tasks, now), [tasks, now])
+  const items = useMemo(() => {
+    const raw = upcomingDeadlines(tasks, now)
+    const byId = new Map(raw.map(item => [item.task.id, item]))
+    return taskEntries(raw.map(item => item.task), tasks).map(entry => ({ ...byId.get(entry.kind === 'task' ? entry.id : entry.visible[0].id)!, collection: entry.kind === 'collection' ? entry : undefined }))
+  }, [tasks, now])
   const unconfirmed = unconfirmedDeadlineCount(tasks)
   const viewport = useRef<HTMLDivElement>(null)
   const track = useRef<HTMLOListElement>(null)
@@ -38,7 +45,7 @@ export const UpcomingDeadlines = forwardRef<HTMLHeadingElement, {
   const [anchorId, setAnchorId] = useState<string | null>(revealTaskId ?? null)
   const [pageRevision, setPageRevision] = useState(0)
   const pageSize = viewportWidth >= 800 ? 3 : viewportWidth >= 500 ? 2 : 1
-  const anchorIndex = Math.max(0, items.findIndex(item => item.task.id === anchorId))
+  const anchorIndex = Math.max(0, items.findIndex(item => item.task.id === anchorId || item.collection?.tasks.some(task => task.id === anchorId)))
   const page = Math.floor(anchorIndex / pageSize)
   const pageCount = Math.ceil(items.length / pageSize)
   const pageStart = page * pageSize
@@ -105,7 +112,7 @@ export const UpcomingDeadlines = forwardRef<HTMLHeadingElement, {
         {items.length > 0 && <>
           <div ref={viewport} className="wb-ddl-timeline-window" style={listHeight === undefined ? undefined : { height: listHeight }}>
             <ol ref={track} id={listId} className="wb-ddl-timeline-track" aria-label="按截止时间排列的事项" style={{ '--wb-ddl-node-width': `${nodeWidth}px`, '--wb-ddl-node-gap': `${nodeGap}px`, transform: `translateX(${-pageStart * (nodeWidth + nodeGap)}px)` } as CSSProperties}>
-              {items.map((item, index) => <DeadlineRow key={item.task.id} item={item} featured={index === 0} offpage={index < pageStart || index >= pageEnd} pageRevision={pageRevision} now={now} focusMin={focusMin} getSpentMs={getSpentMs} scheduledMinutes={scheduledMinutes} disabled={disabled} onSelect={onSelect} />)}
+              {items.map((item, index) => <DeadlineRow key={item.task.id} item={item} collection={item.collection} featured={index === 0} offpage={index < pageStart || index >= pageEnd} pageRevision={pageRevision} now={now} focusMin={focusMin} getSpentMs={getSpentMs} scheduledMinutes={scheduledMinutes} disabled={disabled} onSelect={onSelect} />)}
             </ol>
           </div>
           {pageCount > 1 && <nav className="wb-ddl-pager" aria-label="截止时间线翻页">
@@ -123,7 +130,7 @@ export const UpcomingDeadlines = forwardRef<HTMLHeadingElement, {
   </aside>
 })
 
-function DeadlineRow({ item, featured, offpage, pageRevision, now, focusMin, getSpentMs, scheduledMinutes, disabled, onSelect }: { item: DeadlineItem; featured: boolean; offpage: boolean; pageRevision: number; now: Date; focusMin: number; getSpentMs: (id: string) => number; scheduledMinutes: ScheduledMinutes; disabled: boolean; onSelect: (id: string) => void }) {
+function DeadlineRow({ item, collection, featured, offpage, pageRevision, now, focusMin, getSpentMs, scheduledMinutes, disabled, onSelect }: { item: DeadlineItem; collection?: TaskCollection; featured: boolean; offpage: boolean; pageRevision: number; now: Date; focusMin: number; getSpentMs: (id: string) => number; scheduledMinutes: ScheduledMinutes; disabled: boolean; onSelect: (id: string) => void }) {
   const context = deadlineContext(item.task, now, focusMin, getSpentMs, scheduledMinutes)
   const [expanded, setExpanded] = useState(false)
   const regionId = useId()
@@ -136,6 +143,12 @@ function DeadlineRow({ item, featured, offpage, pageRevision, now, focusMin, get
   ]
   useEffect(() => { setExpanded(false) }, [pageRevision])
   useEffect(() => { if (offpage) setExpanded(false) }, [offpage])
+  if (collection) return <li className="wb-ddl-item" data-urgency={item.urgency} data-offpage={offpage} inert={offpage} aria-hidden={offpage}>
+    <time className="wb-ddl-node-date" dateTime={collection.due}>{item.dateLabel}</time><span className="wb-ddl-node-dot" aria-hidden="true" />
+    <div className="wb-ddl-card"><button className="wb-ddl-select" data-deadline-id={item.task.id} data-focus-origin={collection.id} disabled={disabled} onClick={() => onSelect(item.task.id)} aria-label={`${collection.name}，${collectionProgress(collection)}，${item.remainingLabel}，查看集合`}>
+      <span className="wb-ddl-copy"><span className="wb-ddl-status"><span className="wb-ddl-countdown">{item.remainingLabel}</span></span><strong className="wb-ddl-collection-title"><CollectionIcon /><span>{collection.name}</span></strong><span className="wb-ddl-meta">{collectionProgress(collection)}</span><span className="wb-ddl-advice">{collectionRemaining(collection)}</span></span><span className="wb-ddl-arrow"><WorkbenchIcon name="arrow" /></span>
+    </button></div>
+  </li>
   return <li className="wb-ddl-item" data-urgency={item.urgency} data-offpage={offpage} inert={offpage} aria-hidden={offpage} onKeyDown={event => { if (event.key === 'Escape' && expanded) { event.stopPropagation(); setExpanded(false); toggle.current?.focus() } }}>
     <time className="wb-ddl-node-date" dateTime={item.task.due} aria-label={`${item.dateLabel}截止`}>{item.dateLabel}</time>
     <span className="wb-ddl-node-dot" aria-hidden="true" />

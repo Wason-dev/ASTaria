@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { randomUUID } from './portable.mjs'
 import { ValidationError, knownKeys, text, identifier, choice, day, dateTime, number } from './validation.mjs'
 import { dayCapacity, carryItems, blocksForDay, routinesForDay, minuteOf } from '../src/planner/model.ts'
 import { localDay } from '../src/home/agenda.ts'

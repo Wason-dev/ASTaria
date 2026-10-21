@@ -5,11 +5,23 @@ export const DEFAULT_INITIAL_MINUTES = 30
 export const MIN_INITIAL_SEGMENT_MINUTES = 15
 export function onlyRecordRequested(text) {
   if (/(?:先|暂时?|这次)(?:不|别|不要)(?:用)?(?:排|安排)|(?:不用|不要|别)(?:自动)?(?:排时间|排程|安排(?:时间)?|排进日历)/u.test(text)) return true
+  if (/(?:不|别|不要|不用)(?:再|自动)?(?:占用?|预留)(?:任何|日历|日程)?时间|不排(?:进)?(?:日历|日程)/u.test(text)) return true
   for (const match of text.matchAll(/(?:只|仅)(?:先)?(?:记(?:下|录|着|一下)?|存(?:下|着)?|创建)/gu)) {
     // “不要只记下，直接安排” negates record-only, rather than authorizing it.
     if (!/(?:不要|不用|不能|别|并非|不是|不)(?:再|一直)?\s*$/u.test(text.slice(0, match.index))) return true
   }
   return false
+}
+
+/** Tool intent handles arbitrary reminders. This narrow fallback also protects
+ * obvious date markers when an older/model-generated call omits that intent.
+ * A work deadline alone never makes ordinary homework a record-only item. */
+export function recordOnlyTaskRequested(text, draft, hasExplicitSlot = false) {
+  if (onlyRecordRequested(text) || draft.scheduleMode === 'record-only') return true
+  const title = String(draft.title ?? '')
+  const work = /复习|备考|预习|练习|做题|刷题|背诵|阅读|整理|撰写|准备|填写|提交|交付|购买|打印|领取|制作|缴费|申请|试卷|卷子|真题|错题|习题|报名(?!截止|到期)/u.test(title)
+  const marker = /月考|周考|期中考|期末考|考试|测验|生日|纪念日|(?:截止|到期)(?:日期|时间|日|提醒)?\s*$/u.test(title)
+  return marker && !work && !hasExplicitSlot
 }
 const nextDay = (date, offset) => {
   const value = new Date(`${date}T12:00:00`)

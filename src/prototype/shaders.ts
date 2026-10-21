@@ -1,3 +1,5 @@
+import { geodesicSamplingGLSL } from './geodesicSampling'
+
 export const vertexShader = /* glsl */ `
 varying vec2 vUv;
 void main() {
@@ -26,14 +28,15 @@ uniform float uBinaryEnabled;
 uniform sampler2D uBinaryTypography;
 uniform float uBinaryDensity;
 uniform float uBinaryBrightness;
+uniform float uBinaryGain;
 uniform float uBinaryVisibleFraction;
 uniform float uBinarySparkFrequency;
 uniform float uBinarySparkBrightness;
 uniform float uBinaryFlowSpeed;
 uniform float uBinaryFlowOffset;
 uniform float uBurst;
-uniform sampler2D uGeodesics;
-uniform sampler2D uTermination;
+uniform highp sampler2D uGeodesics;
+uniform highp sampler2D uTermination;
 uniform vec2 uLutSize;
 uniform float uMaxPhi;
 uniform float uCriticalImpact;
@@ -60,6 +63,8 @@ uniform float uDecisionLens;
 uniform float uDecisionFlow;
 uniform float uDecisionTime;
 const float PI = 3.14159265359;
+
+${geodesicSamplingGLSL}
 
 float hash(vec2 p) {
   vec3 p3 = fract(vec3(p.xyx) * .1031);
@@ -105,7 +110,7 @@ vec3 decisionDiskPoint(vec3 p) {
 
 vec3 geodesicPoint(float phi, float lutX, vec3 e1, vec3 e2) {
   float lutY = (phi/uMaxPhi*(uLutSize.y-1.0)+.5)/uLutSize.y;
-  float inverseRadius = texture2D(uGeodesics,vec2(lutX,lutY)).r;
+  float inverseRadius = sampleGeodesics(vec2(lutX,lutY));
   return (e1*cos(phi)+e2*sin(phi))/max(inverseRadius,.0001);
 }
 
@@ -341,12 +346,13 @@ vec3 binaryInterior(vec2 image, float imageRadius) {
   float glyph = texture2D(uBinaryTypography,atlasUv).a*inside;
   float footprint = max(fwidth(coords.x)/glyphSize.x,fwidth(coords.y)/glyphSize.y);
   float resolved = 1.0-smoothstep(.20,.48,footprint);
-  // A constant, near-black neutral gray; only the glyph position animates.
-  float brightness = .00052;
+  // A slightly brighter, near-black neutral gray; only the glyph position animates.
+  // Raise glyph emission alone, keeping the horizon and disk exposure intact.
+  float brightness = .00070;
   float depthFade = mix(.32,.95,smoothstep(.6,1.4,depth));
   float light = glyph*resolved*brightness*depthFade;
   float strength = mix(.42,2.8,pow(uBinaryBrightness,1.5));
-  return vec3(light*strength*rimFade*uBinaryEnabled);
+  return vec3(light*strength*rimFade*uBinaryEnabled*uBinaryGain);
 }
 
 // Continue the existing R=30 transfer orbit from a nearer inward-looking
@@ -369,7 +375,7 @@ float flightOrbitOffset(float impact, float radius) {
 
 void main() {
   float aspect = uResolution.x/uResolution.y;
-  vec2 center = aspect < .8 ? vec2(.5)+(uCenter-vec2(.5))*vec2(.2,6.0) : uCenter;
+  vec2 center = aspect < .8 ? vec2(.5)+(uCenter-vec2(.5))*vec2(.34,6.0) : uCenter;
   float scale = (aspect < .8 ? 13.8 : 10.2)/uZoom;
   vec2 screen = (vUv-center)*vec2(aspect,1.0)*scale;
   // Invert the same angular normal displacement used by the canvas strands.
@@ -407,7 +413,7 @@ void main() {
   float span = delta < 0.0 ? uCriticalImpact : uMaxImpact-uCriticalImpact;
   float q = sign(delta)*pow(abs(delta)/span,1.0/3.0);
   float lutX = ((q+1.0)*.5*(uLutSize.x-1.0)+.5)/uLutSize.x;
-  vec4 terminal = texture2D(uTermination,vec2(lutX,.5));
+  vec4 terminal = sampleTermination(lutX);
   float phi0 = mod(atan(-e1.y,e2.y)+PI,PI);
   float observerPhi = 0.0;
   if (cameraDistance < uCameraRadius-.00001 && uLens > .5) {
@@ -450,14 +456,14 @@ void main() {
         }
       }
       float lutY = (phi/uMaxPhi*(uLutSize.y-1.0)+.5)/uLutSize.y;
-      float invR = texture2D(uGeodesics,vec2(lutX,lutY)).r;
+      float invR = sampleGeodesics(vec2(lutX,lutY));
       float r = 1.0/max(invR,.0001);
       if(r > 2.95 && r < 3.0+11.5*uDecisionRadius) {
         vec3 radial = e1*cos(phi)+e2*sin(phi);
         vec3 tangential = -e1*sin(phi)+e2*cos(phi);
         float row = 1.0/uLutSize.y;
-        float w = (texture2D(uGeodesics,vec2(lutX,lutY+row)).r-
-                   texture2D(uGeodesics,vec2(lutX,lutY-row)).r)/
+        float w = (sampleGeodesics(vec2(lutX,lutY+row))-
+                   sampleGeodesics(vec2(lutX,lutY-row)))/
                    (2.0*uMaxPhi/(uLutSize.y-1.0));
         vec3 localRay = normalize(-w/sqrt(max(.01,1.0-invR))*radial+invR*tangential);
         vec4 sampleDisk = disk(radial*r,localRay,min(float(i),1.0));

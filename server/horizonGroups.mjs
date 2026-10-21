@@ -1,11 +1,11 @@
-import { createHash } from 'node:crypto'
+import { sha256Hex } from './portable.mjs'
 import { ValidationError, knownKeys, identifier, text, day } from './validation.mjs'
 import { ProviderError } from './provider.mjs'
 import { assertContextBudget } from './contextBudget.mjs'
-import { resolveContextBudget } from './modelSettings.mjs'
+import { resolveContextBudget } from './modelSettingsCore.mjs'
 
 const fail = (message, status = 400) => { throw new ValidationError(message, status) }
-const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex')
+const hash = value => sha256Hex(JSON.stringify(value))
 const groupId = value => `horizon-group-${hash(value).slice(0, 24)}`
 const taskView = item => ({ id: item.id, title: item.title, minutes: item.durationMin,
   ...(item.needsReschedule ? { needsReschedule: true } : {}) })

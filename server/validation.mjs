@@ -101,7 +101,7 @@ export function jsonValue(value, label, max = 32000) {
   return JSON.parse(serialized)
 }
 
-const TASK_FIELDS = ['title', 'notes', 'area', 'source', 'inbox', 'due', 'startAt', 'estimateMin', 'occurrence', 'freeTimeGoalId', 'subSteps', 'surfaceAt', 'leadDays', 'importance', 'energy', 'context', 'fuzzyWindow', 'status', 'doneAt', 'deletedAt']
+const TASK_FIELDS = ['title', 'notes', 'collection', 'area', 'source', 'inbox', 'due', 'startAt', 'estimateMin', 'occurrence', 'freeTimeGoalId', 'subSteps', 'surfaceAt', 'leadDays', 'importance', 'energy', 'context', 'fuzzyWindow', 'status', 'doneAt', 'deletedAt']
 export function taskInput(input, { partial = false } = {}) {
   object(input, '任务')
   const value = {}
@@ -111,6 +111,7 @@ export function taskInput(input, { partial = false } = {}) {
   }
   if (has('title')) value.title = text(input.title, '任务名称', 160)
   if (has('notes')) value.notes = text(input.notes, '任务备注', 2000, { optional: true, empty: true })
+  if (has('collection')) value.collection = input.collection == null ? undefined : text(input.collection, '集合名称', 60)
   if (has('area')) value.area = input.area == null ? null : identifier(input.area, '分类')
   if (has('source')) value.source = choice(input.source, ['manual', 'ai', 'import', 'recurring'], '来源', 'manual')
   if (has('inbox')) value.inbox = boolean(input.inbox, '收件箱', true)

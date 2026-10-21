@@ -11,9 +11,16 @@ export const TASK_RECEIPT_CAPABILITIES = {
   },
   estimate: { minuteShortcuts: [15, 20, 30, 45, 60], customMin: 1, customMax: 1440 },
   saving: {
-    requiresChat: false,
     updatesExistingTask: true,
-    reschedulesCalendar: false,
-    description: '用户点击后直接保存同一事项的截止日期/时刻或预估分钟数；具体日历时段另行安排',
+    deadline: {
+      requiresChat: false,
+      reschedulesCalendar: false,
+      description: '截止日期/时刻直接保存到同一事项，不移动日历时段',
+    },
+    estimate: {
+      requiresChat: true,
+      reschedulesCalendar: true,
+      description: '估时发回原对话，核对冲突后重排原事项；以真实回执为准',
+    },
   },
 } as const

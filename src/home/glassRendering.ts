@@ -5,7 +5,8 @@ export function glassBlurFilter(blur: number) {
   return blur > 0 ? `blur(${blur}px)` : 'none'
 }
 
-/** Windows D3D11 composites native blur much more efficiently than SVG displacement. */
+/** Windows and Android auto use system glass. Detailed displacement remains
+ * explicit on supporting Chromium engines; WebKit keeps its CSS fallback. */
 export function supportsGlassRefraction(userAgent: string, rendering: GlassRendering = 'auto') {
-  return /Chrome|Chromium|Edg\//.test(userAgent) && (rendering === 'detailed' || !/Windows/.test(userAgent))
+  return /Chrome|Chromium|Edg\//.test(userAgent) && (rendering === 'detailed' || !/Windows|Android/.test(userAgent))
 }

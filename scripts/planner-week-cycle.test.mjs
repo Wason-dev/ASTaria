@@ -122,7 +122,8 @@ test('夏令时切换不改变单双周（真实时区子进程对照）', () =>
   assert.equal(newYork.some(([, , oddValue, evenValue]) => oddValue === evenValue), false, '每一天必属单周或双周之一')
 })
 
-test('投影、空档与保存冲突校验对同一周的判断一致，停用安排不出现', () => {
+test('投影、空档与保存冲突校验对同一周的判断一致，停用安排不出现', t => {
+  t.mock.timers.enable({ apis: ['Date'], now: at(MONDAY).getTime() })
   const { db, edit } = fixture()
   try {
     edit({ type: 'import-routines', routines: [

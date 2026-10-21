@@ -98,10 +98,10 @@ test('malformed tool fragment fields are rejected instead of being silently coer
   }
 })
 
-for (const interruption of ['eof', 'length', 'missing-finish', 'broken-json', 'overwritten-finish']) test(`incomplete stream ${interruption} never executes accumulated tools`, async t => {
+for (const interruption of ['eof', 'length', 'aborted', 'insufficient_system_resource', 'content_filter', 'missing-finish', 'broken-json', 'overwritten-finish']) test(`incomplete stream ${interruption} never executes accumulated tools`, async t => {
   const db = createDatabase(':memory:'); t.after(() => db.close())
   const values = toolFrames('create_tasks', { tasks: [{ title: '绝不能提前执行' }] }, {
-    done: interruption !== 'eof', finish: interruption === 'missing-finish' ? null : interruption === 'length' ? 'length' : 'tool_calls',
+    done: interruption !== 'eof', finish: interruption === 'missing-finish' ? null : ['length', 'aborted', 'insufficient_system_resource', 'content_filter'].includes(interruption) ? interruption : 'tool_calls',
   })
   const raw = interruption === 'broken-json' ? frames(values.slice(0, 3)) + 'data: {not-json}\n\n'
     : interruption === 'overwritten-finish' ? frames([...values.slice(0, 3), chunk({}, 'length'), chunk({}, 'tool_calls'), '[DONE]']) : frames(values)
@@ -112,6 +112,8 @@ for (const interruption of ['eof', 'length', 'missing-finish', 'broken-json', 'o
   assert.equal(db.listTasks().length, 0)
   assert.equal(db.listOperations().length, 0)
   assert.ok(!deltas.some(event => event.phase === 'executing'))
+  const reason = { length: '长度上限', aborted: '停止了生成', insufficient_system_resource: '资源不足', content_filter: '内容过滤' }[interruption]
+  if (reason) assert.ok(result.error.includes(reason), 'the saved failure explains the actual terminal reason')
 })
 
 test('stream setting off returns JSON end to end and never requests upstream SSE', async t => {
@@ -127,6 +129,22 @@ test('stream setting off returns JSON end to end and never requests upstream SSE
   assert.equal(f.upstream[0].body.stream, false)
 })
 
+for (const effort of ['low', 'high', 'max']) for (const streaming of [true, false]) test(`normal chat preserves ${effort} thinking without an 1800-token ceiling (stream=${streaming})`, async t => {
+  const f = await serviceFixture(t)
+  saveModelSettings(f.db, { ...getModelSettings(f.db), reasoningEffort: effort, streamResponses: streaming })
+  f.responses.push(({ body }) => {
+    assert.equal(body.thinking.type, 'enabled')
+    assert.equal(body.reasoning_effort, effort)
+    assert.equal(Object.hasOwn(body, 'max_tokens'), false, 'a reply-only budget must not truncate the reasoning before its final answer')
+    return streaming ? final('今天的安排已经核对。') : Response.json({ choices: [{ message: { role: 'assistant', content: '今天的安排已经核对。', reasoning_content: '完整思考' }, finish_reason: 'stop' }] })
+  })
+  const response = await f.request('/chat', input('帮我理理今天干什么'), 'text/event-stream')
+  const result = streaming ? parseSSE(await response.text()).at(-1).result : await response.json()
+  assert.equal(result.status, 'completed')
+  assert.equal(result.messages.at(-1).content, '今天的安排已经核对。')
+  assert.equal(getModelSettings(f.db).reasoningEffort, effort)
+})
+
 test('service streams phases and final durable state, while same request id replay never repeats writes', async t => {
   const f = await serviceFixture(t), request = input(), think = ' \n记录真实任务。\t '
   f.responses.push(sse(toolFrames('create_tasks', { tasks: [{ title: '物理课前三题', estimateMin: 30 }] }, { reasoning: think })), final('已经记录物理课前三题。'))
@@ -137,6 +155,7 @@ test('service streams phases and final durable state, while same request id repl
   assert.equal(first.events.at(-1).type, 'result')
   assert.equal(result.status, 'completed')
   assert.equal(f.db.listTasks().length, 1)
+  assert.ok(f.upstream.length >= 2 && f.upstream.every(request => !Object.hasOwn(request.body, 'max_tokens')), 'tool and final-response rounds both preserve the thinking budget')
   assert.equal(result.operations.length, 1)
   assert.equal(result.operations[0].createdTasks[0].id, f.db.listTasks()[0].id)
   assert.equal(result.messages.at(-1).content, '已经记录物理课前三题。')
@@ -217,4 +236,24 @@ for (const removal of ['history-source', 'conversation']) test(`removing ${remov
   assert.equal(f.db.listTasks().length, 0)
   if (removal === 'history-source') assert.equal(finished.events.at(-1).result.status, 'failed')
   else assert.ok(finished.events.some(event => event.type === 'error'))
+})
+
+test('conversation context meter streams, survives reload and resets on a new topic or model switch', async t => {
+  const f=await serviceFixture(t)
+  f.responses.push(sse([chunk({content:'已核对。'}),chunk({},'stop'),{choices:[],usage:{prompt_tokens:125000,completion_tokens:500}},'[DONE]']))
+  const request=input('解释一下如何比较日程和空档')
+  const response=await f.chat(request)
+  const measurements=response.events.filter(event=>event.type==='context-usage')
+  assert.equal(measurements[0].usage.source,'estimate')
+  assert.equal(measurements.at(-1).usage.usedTokens,125500)
+  assert.equal(f.upstream[0].body.stream_options.include_usage,true)
+  const saved=await (await f.request('/conversation?id=main')).json()
+  assert.equal(saved.contextUsage.usedTokens,125500)
+  const fresh=await (await f.request('/conversations',{})).json()
+  assert.equal(fresh.contextUsage,null)
+  saveModelSettings(f.db,{...getModelSettings(f.db),cloudModel:'deepseek-v4-pro'})
+  assert.equal((await (await f.request('/conversation?id=main')).json()).contextUsage,null)
+  saveModelSettings(f.db,{...getModelSettings(f.db),cloudModel:'deepseek-flash'})
+  f.db.retractMessage(f.db.getTurn(request.requestId).userMessageId)
+  assert.equal((await (await f.request('/conversation?id=main')).json()).contextUsage,null)
 })

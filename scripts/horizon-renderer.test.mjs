@@ -358,3 +358,27 @@ test('backing resolution is capped; hidden frames pause; resize and destruction 
   h.observers[0].callback(); h.frame()
   assert.equal(h.pending.size, 0)
 })
+
+test('zero-opacity flight advances positions and clocks without drawing invisible bands', t => {
+  const h = harness(t, { reveal: 0, working: { itemIds: [] } })
+  h.frame()
+  assert.equal(h.canvas.context.strokes.length, 0)
+  assert.ok(h.positions.size > 0)
+  const placements = h.placements
+  h.run(30)
+  assert.equal(h.canvas.context.strokes.length, 0)
+  assert.equal(h.placements, placements + 30)
+  const positions = new Map(h.positions)
+  h.update({ reveal: .000001 }); h.frame()
+  assert.ok(h.canvas.context.strokes.length > 0, 'first nonzero frame restores the complete draw')
+  assert.deepEqual([...h.positions.keys()], [...positions.keys()])
+})
+
+test('duplicate canvas sizes retain atmosphere and destruction releases the backing store', t => {
+  const h = harness(t); h.frame()
+  const count = h.canvases.length, glow = h.canvases[1]
+  h.resize(1440, 900); h.frame()
+  assert.equal(h.canvases.length, count)
+  assert.ok(glow.width > 0)
+  h.dispose(); assert.equal(h.canvas.width, 0); assert.equal(h.canvas.height, 0)
+})

@@ -4,7 +4,7 @@
   "status": "local-candidate",
   "publicRelease": false,
   "releaseAuthorized": false,
-  "updatedOn": "2026-10-20",
+  "updatedOn": "2026-10-21",
   "sourceTests": {
     "status": "passed",
     "command": "npm test",
@@ -26,10 +26,11 @@
     "mobileProductionScope": "10/16 phone four-workspace glass/margin/type consistency, settings navigation and panel motion, home lower-edge repaint, plus shared desktop changes. Android and iOS Web resources were synced from the same dist-mobile build.",
     "packagedSourcesAre": "mobile-detail-2026-10-16",
     "packagedSourcesNote": "Historical 10/16 build evidence only. Later packages were recorded on 10/17 and subsequent source/preview changes are not packaged; see releasePreparation.",
-    "currentIterationPackaged": false,
+    "currentIterationPackaged": true,
     "desktopProductionEvidence": "artifacts/package-2026-10-16/final-desktop-build.log",
     "mobileProductionEvidence": "artifacts/package-2026-10-16/final-mobile-build.log",
-    "evidenceAsOf": "2026-10-16"
+    "evidenceAsOf": "2026-10-16",
+    "latestPackageEvidence": "artifacts/package-2026-10-21/result.json"
   },
   "iconResources": {
     "status": "exported-and-verified",
@@ -2337,7 +2338,7 @@
     "Current mobile UI acceptance for the 2026-10-16 style iteration (four-page material, typography, margins, motion); owner to record",
     "Final packaged mobile UI owner review; Android/iOS device validation and long-term performance are still pending"
   ],
-  "updatedAt": "2026-10-19T03:17:57.893786+00:00",
+  "updatedAt": "2026-10-21T13:45:27.743262+00:00",
   "githubPushPerformed": false,
   "packageCleanup": {
     "checkedAt": "2026-10-16T09:30:42.509078+00:00",
@@ -2380,22 +2381,87 @@
       "evidence": "artifacts/desktop-performance-2026-10-15/applications-alias.json"
     }
   },
-  "latestPackagedBatch": "rc1-icon-progress-2026-10-17",
-  "latestPackagedBatchReplacedAt": "2026-10-17T07:03:40.431Z",
-  "documentationNote": "2026-10-20 cumulative release inventory updated through task collections, glass correction, steps/hover and document reading. Public release remains Beta12.1; current changes are source/preview only. Historical native hashes remain dated evidence.",
-  "historicalEvidenceNote": "Detailed artifact hashes, platform checks, sourceTests and sourceBuilds below retain their dated 2026-10-16 evidence. They do not verify the current files at reused paths or the later source tree. Consult releasePreparation and latestKnownPackage below.",
+  "latestPackagedBatch": "rc1-mobile-glass-2026-10-21",
+  "latestPackagedBatchReplacedAt": null,
+  "documentationNote": "2026-10-21 current local packages cover accumulated changes through mobile native-blur-before-refraction, plus complete macOS PDF CMaps/fonts. Public release remains Beta12.1. README screenshot refresh is required for final v1.0; native-device acceptance and distribution signing remain pending.",
+  "historicalEvidenceNote": "Earlier detailed artifact hashes, platform/source checks, and reused-path records retain their original dates. latestKnownPackage records the verified 2026-10-21 local batch; older full-suite results do not establish a new full-suite pass.",
   "latestKnownPackage": {
-    "evidence": "artifacts/rc1-icon-progress-2026-10-17/result.json",
-    "verifiedAt": "2026-10-17T07:09:14.183Z",
-    "macIsolatedSmoke": "passed",
-    "nativeWindowsTest": false,
-    "nativeAndroidTest": false,
-    "ios": "web payload synced; no IPA",
-    "hashesRevalidatedThisDocumentationPass": false,
-    "note": "Recorded batch only; no new packages or install changes on 10/18."
+    "evidence": "artifacts/package-2026-10-21/result.json",
+    "verifiedAt": "2026-10-21T13:45:27.743262+00:00",
+    "runtimeSourceCommit": "f2cb3d143f0cc6198147b1c612ac6bc9ad37c9a2",
+    "macPackagingSourceCommit": "569eb0802a510d04198412c636c2b721c89b499d",
+    "provenanceNote": "Windows build-info retains the original dirty flag from release-note and local configuration changes at packaging time; packaged source and dist bytes were compared to the final checkout. macOS was repackaged from clean commit 569eb08 with PDF fonts and CMaps.",
+    "directory": "desktop-builds/1.0.0-rc.1-2026-10-21",
+    "assets": [
+      {
+        "path": "desktop-builds/1.0.0-rc.1-2026-10-21/android/ASTaria-1.0.0-rc.1-android-debug.apk",
+        "name": "ASTaria-1.0.0-rc.1-android-debug.apk",
+        "sha256": "a7a06553f3988d435f16a403e1880d4c99174e927c5b01b5b14667f8a03393ee",
+        "sizeBytes": 9965042
+      },
+      {
+        "path": "desktop-builds/1.0.0-rc.1-2026-10-21/mac-arm64/ASTaria-1.0.0-rc.1-mac-arm64/ASTaria-1.0.0-rc.1-mac-arm64.zip",
+        "name": "ASTaria-1.0.0-rc.1-mac-arm64.zip",
+        "sha256": "0c5893c00c9f61a862f4a2824f4978de0226df280a8ff8a8e7f651f7159f5c93",
+        "sizeBytes": 137630351
+      },
+      {
+        "path": "desktop-builds/1.0.0-rc.1-2026-10-21/mac-arm64-dmg/ASTaria-1.0.0-rc.1-mac-arm64-adhoc.dmg",
+        "name": "ASTaria-1.0.0-rc.1-mac-arm64-adhoc.dmg",
+        "sha256": "69aca0b87c03e6f0e90e4abfe92e7a01d8ce020011b3fa588130aa3cc60e321b",
+        "sizeBytes": 150509388
+      },
+      {
+        "path": "desktop-builds/1.0.0-rc.1-2026-10-21/windows-x64/ASTaria-1.0.0-rc.1-win-x64/ASTaria-1.0.0-rc.1-win-x64-portable.zip",
+        "name": "ASTaria-1.0.0-rc.1-win-x64-portable.zip",
+        "sha256": "146101657f79f29297aa243f5a4a72eef750528d0e489121c90df576b7d98586",
+        "sizeBytes": 164571022
+      },
+      {
+        "path": "desktop-builds/1.0.0-rc.1-2026-10-21/windows-x64/ASTaria-1.0.0-rc.1-win-x64/ASTaria-1.0.0-rc.1-win-x64-setup.exe",
+        "name": "ASTaria-1.0.0-rc.1-win-x64-setup.exe",
+        "sha256": "9aa5870cc260618e0daa4c4c2e6fc914a459b973982add0d52ee1f2f2376502c",
+        "sizeBytes": 119209648
+      }
+    ],
+    "validation": {
+      "glassTests": 13,
+      "documentTests": 10,
+      "payloadTests": 43,
+      "macSmoke": "passed",
+      "macSignature": "ad-hoc; verified",
+      "androidSignature": "debug; v2 verified",
+      "windowsSignature": "unsigned",
+      "nativeWindows": "not-tested",
+      "nativeAndroid": "not-tested",
+      "ios": "Web payload synchronized; no IPA",
+      "previewGlassObservation": "User did not observe the dark stripe in the original 2x preview; native device and long-duration checks still pending"
+    },
+    "icons": {
+      "macIcnsSha256": "d7e1fcad5b4e3f7a04c5390821d2d0705b712f2cdf5801c98cddfe17bb59a1f4",
+      "windowsIcoSha256": "d1641ba1bd7281eb17a2de25f626c5b2284335af6680d02988c225ddfc6ec390",
+      "transparentDesktopIcons": true
+    },
+    "staticPayloadChecks": "passed; two exact-hash reviewed PDF.js vendor imports; unknown or modified dynamic imports still rejected",
+    "desktopByteComparisons": [
+      {
+        "platform": "macOS",
+        "filesCompared": 916,
+        "webFiles": 299
+      },
+      {
+        "platform": "Windows",
+        "filesCompared": 916,
+        "webFiles": 299
+      }
+    ],
+    "mobileWebFiles": 308,
+    "installedAppChanged": false,
+    "publiclyPublished": false,
+    "note": "Independent local candidate; the old running app and its Applications alias are retained. This record supersedes historical artifact hashes for the current package batch."
   },
   "releasePreparation": {
-    "updatedOn": "2026-10-20",
+    "updatedOn": "2026-10-21",
     "releaseNotes": "docs/RELEASE_NOTES_v1.0.0.md",
     "coverage": "public Beta12.1 through all v1.0 preparation changes; not just the latest RC1 batch",
     "status": "waiting-not-released",
@@ -2404,26 +2470,12 @@
       "Apple Developer enrollment remains unresolved; distribution signing, notarization and TestFlight remain pending.",
       "Windows test hardware is not ready; current-candidate native acceptance is pending."
     ],
-    "sourceOnlySinceLatestRecordedPackage": [
-      "Hide generated estimate-adjustment user prompt; retain natural assistant response and actual receipts.",
-      "Float32 geodesic lookup with shader interpolation.",
-      "Desktop horizontal day below overview.",
-      "Transparent Markdown tables, math typesetting and context usage ring.",
-      "Independent binary-digit brightness and simplified Horizon controls.",
-      "Popup frost preservation, exit handoff and edge refinement.",
-      "Remove homepage manual capture button and its isolated save path.",
-      "10/19 homepage/Horizon: suppress overlapping notices, deduplicate selected today, share floating glass for event editor and conversation history.",
-      "10/20 task collections across assistant receipts, home and workbench; atomic manual grouping, backup/sync and undo.",
-      "10/20 TaskDialog-style visible dimmed underlay, no masking/filter substitution; stable shared shell and rounded homepage pill clipping.",
-      "10/20 workbench checklist paging motion and missing pointer glints, preserving existing effects.",
-      "10/20 local Worker reading PDF/DOCX/XLSX/XLS/CSV/TSV; bounded read_attachment, scanned page vision, durable originals and retries."
-    ],
     "notImplemented": [
       "Excel (.xls/.xlsx) timetable upload"
     ],
     "releaseChecklist": "docs/RELEASE_NOTES_v1.0.0.md#正式发布前逐项核对",
     "finalReleaseMustUseCumulativeDraft": true,
-    "newPackagesBuiltThisPass": false,
+    "newPackagesBuiltThisPass": true,
     "installedAppChangedThisPass": false,
     "verification": {
       "evidence": "artifacts/release-inventory-2026-10-18/result.json",
@@ -2442,7 +2494,54 @@
       "browser": "Mac Chromium, synthetic database/mock provider; production desktop and 320/390 preview coverage, source fixture theme/material/path matrix",
       "nativePackagesBuilt": false,
       "knownEarlierFullSuiteFailures": "Earlier 2412-test run had 7 failures: 4 context-budget pressure, 1 deadline assertion later fixed, 1 shell Chromium crash, 1 obsolete underlay assertion. No new full-suite pass is claimed; shell browser tests were not rerun."
+    },
+    "includedInPackagedBatch20261021": [
+      "Hide generated estimate-adjustment user prompt; retain natural assistant response and actual receipts.",
+      "Float32 geodesic lookup with shader interpolation.",
+      "Desktop horizontal day below overview.",
+      "Transparent Markdown tables, math typesetting and context usage ring.",
+      "Independent binary-digit brightness and simplified Horizon controls.",
+      "Popup frost preservation, exit handoff and edge refinement.",
+      "Remove homepage manual capture button and its isolated save path.",
+      "10/19 homepage/Horizon: suppress overlapping notices, deduplicate selected today, share floating glass for event editor and conversation history.",
+      "10/20 task collections across assistant receipts, home and workbench; atomic manual grouping, backup/sync and undo.",
+      "10/20 TaskDialog-style visible dimmed underlay, no masking/filter substitution; stable shared shell and rounded homepage pill clipping.",
+      "10/20 workbench checklist paging motion and missing pointer glints, preserving existing effects.",
+      "10/20 local Worker reading PDF/DOCX/XLSX/XLS/CSV/TSV; bounded read_attachment, scanned page vision, durable originals and retries.",
+      "10/21 mobile settings layout/material preferences, mobile native 6px blur before SVG refraction and Mac PDF CMap/font packaging."
+    ],
+    "sourceOnlySinceLatestRecordedPackage": [],
+    "latestPackageVerification": {
+      "evidence": "artifacts/package-2026-10-21/result.json",
+      "targetedTests": {
+        "glass": 13,
+        "documents": 10,
+        "payloadAcceptance": 43
+      },
+      "macIsolatedSmoke": "passed",
+      "macCodesign": "ad-hoc verified",
+      "windowsStaticPayload": "passed",
+      "androidPayloadAndSignature": "passed",
+      "ios": "Web payload synced only",
+      "fullSuiteRunThisPass": false,
+      "deviceAcceptance": "Native Windows, Android/iOS and long-running glass acceptance still pending."
     }
   },
-  "previousDocumentationUpdatedAt": "2026-10-16T09:30:42.509078+00:00"
+  "previousDocumentationUpdatedAt": "2026-10-16T09:30:42.509078+00:00",
+  "previousKnownPackages": [
+    {
+      "batch": "rc1-icon-progress-2026-10-17",
+      "record": {
+        "evidence": "artifacts/rc1-icon-progress-2026-10-17/result.json",
+        "verifiedAt": "2026-10-17T07:09:14.183Z",
+        "macIsolatedSmoke": "passed",
+        "nativeWindowsTest": false,
+        "nativeAndroidTest": false,
+        "ios": "web payload synced; no IPA",
+        "hashesRevalidatedThisDocumentationPass": false,
+        "note": "Recorded batch only; no new packages or install changes on 10/18."
+      }
+    }
+  ],
+  "previousPackagedBatchReplacedAt": "2026-10-17T07:03:40.431Z"
 }

@@ -2382,7 +2382,7 @@
     }
   },
   "latestPackagedBatch": "rc1-mobile-glass-2026-10-21",
-  "latestPackagedBatchReplacedAt": null,
+  "latestPackagedBatchReplacedAt": "2026-10-21T14:12:36.365765+00:00",
   "documentationNote": "2026-10-21 current local packages cover accumulated changes through mobile native-blur-before-refraction, plus complete macOS PDF CMaps/fonts. Public release remains Beta12.1. README screenshot refresh is required for final v1.0; native-device acceptance and distribution signing remain pending.",
   "historicalEvidenceNote": "Earlier detailed artifact hashes, platform/source checks, and reused-path records retain their original dates. latestKnownPackage records the verified 2026-10-21 local batch; older full-suite results do not establish a new full-suite pass.",
   "latestKnownPackage": {
@@ -2456,9 +2456,19 @@
       }
     ],
     "mobileWebFiles": 308,
-    "installedAppChanged": false,
+    "installedAppChanged": true,
     "publiclyPublished": false,
-    "note": "Independent local candidate; the old running app and its Applications alias are retained. This record supersedes historical artifact hashes for the current package batch."
+    "note": "Verified 2026-10-21 candidate replaced the prior local RC1 app after explicit user authorization. The Applications alias was refreshed and the new app launched; product user data was not copied or removed by the replacement.",
+    "localInstallation": {
+      "status": "passed",
+      "replacedAt": "2026-10-21T14:12:36.365765+00:00",
+      "evidence": "artifacts/package-2026-10-21/local-replacement.json",
+      "installedSourceCommit": "569eb0802a510d04198412c636c2b721c89b499d",
+      "applicationsAliasRefreshed": true,
+      "transparentIconApplied": true,
+      "installedStaticCheck": "passed; 1196 files",
+      "runningNewApp": true
+    }
   },
   "releasePreparation": {
     "updatedOn": "2026-10-21",
@@ -2476,7 +2486,7 @@
     "releaseChecklist": "docs/RELEASE_NOTES_v1.0.0.md#正式发布前逐项核对",
     "finalReleaseMustUseCumulativeDraft": true,
     "newPackagesBuiltThisPass": true,
-    "installedAppChangedThisPass": false,
+    "installedAppChangedThisPass": true,
     "verification": {
       "evidence": "artifacts/release-inventory-2026-10-18/result.json",
       "typecheck": "passed",

@@ -1,8 +1,16 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { supportsGlassRefraction } from '../src/home/glassRendering.ts'
+import { glassBackdropFilter, supportsGlassRefraction } from '../src/home/glassRendering.ts'
 import { createDatabase } from '../server/database.mjs'
 import { getPreferences, savePreferences } from '../server/preferences.mjs'
+
+test('mobile detailed glass blurs once before refraction while CSS and desktop paths stay intact', () => {
+  assert.equal(glassBackdropFilter(6, 'glass', true), 'blur(6px) url("#glass")')
+  assert.equal(glassBackdropFilter(0, 'glass', true), 'url("#glass")')
+  assert.equal(glassBackdropFilter(6, 'glass', false), 'url("#glass")')
+  assert.equal(glassBackdropFilter(6, undefined, true), 'blur(6px)')
+  assert.equal(glassBackdropFilter(0, undefined, true), 'none')
+})
 
 test('Windows uses native glass by default and permits explicit detailed refraction', () => {
   const windows = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/150.0 Electron/44.1'

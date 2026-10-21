@@ -253,7 +253,7 @@ test('glass keeps its material and exact geometry across real component transiti
       for(const blur of [0,6,0,6]) {
         await evaluate(`qa.render({blur:${blur},theme:${JSON.stringify(blur?'light':'dark')}});true`)
         const state=await snapshot('material-'+blur)
-        assert.equal(state.blur,String(blur));assert.deepEqual(state.imageSize,['300','220'])
+        assert.equal(state.blur,'0');assert.equal(state.backdrop.startsWith('blur(6px) '),blur===6);assert.deepEqual(state.imageSize,['300','220'])
         assert.equal(state.contentFilter,'none')
       }
       const encodes=await evaluate('qa.encodes.length')
@@ -344,7 +344,7 @@ test('glass keeps its material and exact geometry across real component transiti
         assert.equal((await snapshot('overview-inactive-resize-'+blur)).encodes.length,encoded)
         await evaluate('qa.render({sampling:true});true');await delay(30)
         const state=await snapshot('overview-return-'+blur)
-        assert.deepEqual(state.imageSize,['280.25','440.75']);assert.equal(state.scale,'28');assert.equal(state.blur,String(blur))
+        assert.deepEqual(state.imageSize,['280.25','440.75']);assert.equal(state.scale,'28');assert.equal(state.blur,'0');assert.equal(state.backdrop.startsWith('blur(6px) '),blur===6)
         // Decode the map actually attached to feImage. Its centre must be
         // neutral, not an obsolete scene/slot image; source displacement is
         // bounded to +/-14px per axis by the real SVG scale.

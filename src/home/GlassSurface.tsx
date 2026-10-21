@@ -1,7 +1,7 @@
 import { createContext, useContext, useId, useImperativeHandle, useLayoutEffect, useRef } from 'react'
 import type { CSSProperties, Ref } from 'react'
 import { glassDisplacement, HOME_GLASS } from './glass'
-import { glassBlurFilter, supportsGlassRefraction } from './glassRendering'
+import { glassBackdropFilter, glassBlurFilter, supportsGlassRefraction } from './glassRendering'
 import type { GlassRendering } from './glassRendering'
 import { observePageActivity, pageIsVisible } from '../stores/pageActivity'
 import { observeSceneFrames } from '../stores/sceneFrames'
@@ -126,13 +126,14 @@ export function GlassSurface({ width, height, radius, progress = 0, material, re
           lastGeometry.current = key
         }
       }
-      // Keep a single SVG blur pipeline during an animated resize. Neutral
+      // Keep the same sampling pipeline during an animated resize. Neutral
       // displacement replaces the previous CSS/SVG/CSS sampling switch; the
       // full-resolution exact map returns after the existing settle window.
       const scale = String(paused.current ? 0 : HOME_GLASS.refraction * 2)
       if (displacement.current?.getAttribute('scale') !== scale) displacement.current?.setAttribute('scale', scale)
     }
-    useBackdrop(svgBackdrop && edge.current?.getAttribute('href') ? `url("#${id}")` : glassBlurFilter(material?.blur ?? HOME_GLASS.blur))
+    const blur = material?.blur ?? HOME_GLASS.blur
+    useBackdrop(glassBackdropFilter(blur, svgBackdrop && edge.current?.getAttribute('href') ? id : undefined, mobile))
   }
   useImperativeHandle(geometryRef, () => ({ pause(nextWidth, nextHeight) {
     paused.current = true
@@ -195,7 +196,7 @@ export function GlassSurface({ width, height, radius, progress = 0, material, re
         detached by sync(). Returning must not wait for a new SVG image load. */}
     {svgBackdrop && <svg ref={svg} className="home-glass-definitions" aria-hidden="true" width={responsive ? '100%' : width} height={responsive ? '100%' : height}>
       <defs><filter ref={filter} id={id} x="0" y="0" width={responsive ? '100%' : width} height={responsive ? '100%' : height} filterUnits="userSpaceOnUse" primitiveUnits="userSpaceOnUse" colorInterpolationFilters="sRGB">
-        <feGaussianBlur in="SourceGraphic" stdDeviation={blur} result="soft" />
+        <feGaussianBlur in="SourceGraphic" stdDeviation={mobile ? 0 : blur} result="soft" />
         <feImage ref={edge} x="0" y="0" width={responsive ? '100%' : width} height={responsive ? '100%' : height} preserveAspectRatio="none" result="edge" />
         <feDisplacementMap ref={displacement} in="soft" in2="edge" scale={HOME_GLASS.refraction * 2} xChannelSelector="R" yChannelSelector="G" />
       </filter></defs>

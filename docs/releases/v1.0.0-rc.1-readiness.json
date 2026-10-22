@@ -2568,5 +2568,50 @@
     "status": "local-test-candidate",
     "nativeAcceptance": "pending",
     "publiclyPublished": false
+  },
+  "october22Candidate": {
+    "checkedAt": "2026-10-22T05:24:10.602175+00:00",
+    "sourceCommit": "f50a91fcde81d5e0881ef9e38a2860aeeac961e9",
+    "sourceTests": {
+      "tests": 633,
+      "passed": 632,
+      "failed": 1,
+      "knownBaselineFailure": "scripts/xixi-read-pagination.test.mjs: crowded seven-day overview with small context budget",
+      "baselineVerified": true
+    },
+    "focusedClosure": {
+      "tests": 33,
+      "passed": 33
+    },
+    "media": {
+      "assets": 48,
+      "bytes": 464297979,
+      "verified": true
+    },
+    "desktopBuild": "passed",
+    "mobileBuild": "passed",
+    "androidBuild": "assembleDebug/lintDebug/testDebugUnitTest passed; native unit tests NO-SOURCE",
+    "ios": "web payload synchronized only; no native compile",
+    "apk": {
+      "path": "desktop-builds/1.0.0-rc.1-2026-10-22/ASTaria-1.0.0-rc.1-android-preview-debug.apk",
+      "bytes": 474626104,
+      "sha256": "53bc4cfeb9f6e1df9611bd58ec3aed3b918c6a8a177bb7108ae146697c78d254",
+      "signature": "v2 debug verified",
+      "webFiles": 362,
+      "payload": "byte-identical"
+    },
+    "preview": {
+      "desktop": "http://127.0.0.1:4200/",
+      "mobile": "http://127.0.0.1:4198/",
+      "inspection": "Blocked by automatic browser approval even after explicit user approval; no full UI or device acceptance claimed"
+    },
+    "limits": [
+      "No live-provider latency or semantic acceptance measurement",
+      "Android IME/system bar/4K decoding and battery need device checks",
+      "Mac/Windows installation packages not rebuilt in this batch",
+      "Existing small-context seven-day pagination failure remains"
+    ],
+    "evidence": "artifacts/background-media-2026-10-22/result.json",
+    "published": false
   }
 }

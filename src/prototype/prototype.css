@@ -7,6 +7,18 @@
 }
 .p0-universe { position: absolute; inset: 0; z-index: -1 }
 .p0-universe canvas { display: block; width: 100%; height: 100% }
+.p0-media { position:absolute; inset:0; transform-origin:0 0; overflow:visible; }
+.p0-media-source { position:absolute; inset:0 }
+.p0-media-poster,.p0-media-video { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; pointer-events:none; }
+.p0-media-next { visibility:hidden }
+.p0-media-video { opacity:0; transition:opacity 260ms ease }
+.p0-media-video[data-ready=true] { opacity:1 }
+.p0-media-notice { position:fixed; bottom:8px; right:12px; color:var(--p0-muted); font-size:10px }
+.p0-live { position:absolute; inset:0; opacity:0; transition:opacity 320ms cubic-bezier(.2,.7,.2,1); }
+.p0-live[data-visible=true] { opacity:1 }
+.p0-live[data-ready=false] { visibility:hidden }
+.p0[data-night=false] { background:#f8f6f2 }
+@media(prefers-reduced-motion:reduce) { .p0-media-video,.p0-live { transition:none } }
 .p0 button, .p0 input, .p0 textarea { font: inherit; color: inherit }
 .p0 button { border: 0; background: transparent; cursor: pointer }
 .p0 button:disabled { opacity: .45; cursor: default }

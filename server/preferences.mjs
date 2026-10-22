@@ -8,7 +8,7 @@ export const DEFAULT_BINARY_EFFECT = Object.freeze({
 export const DEFAULT_PREFERENCES = {
   version: 1, startupPage: 'home', theme: 'dark', grid: true, glass: 'clear', glassTone: 'light', density: 'compact', cardEdges: 'both',
   effect: { style: 'tide', intensity: 'gentle', motion: 'system', binary: DEFAULT_BINARY_EFFECT },
-  render: { profile: 'full', quality: 'auto', glass: 'auto' },
+  render: { profile: 'full', quality: 'auto', glass: 'auto', background: 'realtime', mediaResolution: '1080p', mediaQuality: 'high' },
   assistant: { autonomy: 'act', personality: 'medium', useMemory: true, useHistory: true },
   notifications: { enabled: true, quietStart: '23:00', quietEnd: '08:00', opportunities: true },
   focus: { focusMin: 35, restMin: 5 }, scheduling: { bufferMin: 10 },
@@ -45,7 +45,7 @@ export function validatePreferences(value) {
     density: option(value.density, ['compact', 'comfortable'], '信息密度'),
     cardEdges: option(value.cardEdges === undefined ? DEFAULT_PREFERENCES.cardEdges : value.cardEdges, ['both', 'left', 'none'], '卡片装饰线'),
     effect: { style: option(value.effect.style, ['tide', 'filaments', 'stardust', 'off'], '回应特效'), intensity: option(value.effect.intensity, ['gentle', 'standard', 'vivid'], '特效强度'), motion: option(value.effect.motion, ['system', 'reduced', 'full'], '动态效果'), binary: binaryEffect(value.effect.binary) },
-    render: { profile: render.profile === 'rest' ? 'economy' : option(render.profile, ['full', 'smooth90', 'smooth120', 'balanced', 'economy'], '渲染档位'), quality: option(render.quality ?? ({balanced:'high',economy:'low',rest:'low'}[render.profile] ?? 'ultra'), ['auto','ultra','high','low','safe'], '黑洞画质'), glass: option(render.glass ?? 'auto', ['auto', 'detailed'], '玻璃渲染') },
+    render: { profile: render.profile === 'rest' ? 'economy' : option(render.profile, ['full', 'smooth90', 'smooth120', 'balanced', 'economy'], '渲染档位'), quality: option(render.quality ?? ({balanced:'high',economy:'low',rest:'low'}[render.profile] ?? 'ultra'), ['auto','ultra','high','low','safe'], '黑洞画质'), glass: option(render.glass ?? 'auto', ['auto', 'detailed'], '玻璃渲染'), background: option(render.background === undefined ? DEFAULT_PREFERENCES.render.background : render.background, ['realtime', 'video', 'image'], '背景渲染'), mediaResolution: option(render.mediaResolution === undefined ? DEFAULT_PREFERENCES.render.mediaResolution : render.mediaResolution, ['4k', '1080p', '720p'], '媒体分辨率'), mediaQuality: option(render.mediaQuality === undefined ? DEFAULT_PREFERENCES.render.mediaQuality : render.mediaQuality, ['high', 'standard'], '媒体画质') },
     assistant: { autonomy: option(value.assistant.autonomy, ['act', 'propose'], '主动权限'), personality: option(value.assistant.personality === undefined ? DEFAULT_PREFERENCES.assistant.personality : value.assistant.personality, ['low', 'medium', 'high'], '个性强度'), useMemory: bool(value.assistant.useMemory, '记忆上下文'), useHistory: bool(value.assistant.useHistory, '历史上下文') },
     notifications: { enabled: bool(value.notifications.enabled, '通知'), quietStart: clock(value.notifications.quietStart), quietEnd: clock(value.notifications.quietEnd), opportunities: bool(value.notifications.opportunities, '机会提醒') },
     focus: { focusMin: integer(value.focus.focusMin, 5, 120, '专注时长'), restMin: integer(value.focus.restMin, 1, 30, '休息时长') },

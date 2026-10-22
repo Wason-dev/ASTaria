@@ -86,7 +86,9 @@ export function calculateMobileViewport(input: MobileViewportInput, previous?: M
   const keyboard = native ? (native.keyboardVisible ? 'open' : 'closed') : inferredKeyboard ? 'open' : 'closed'
   const keyboardInset = keyboard === 'open' ? Math.min(layoutHeight, native ? native.keyboardInset : Math.max(0, layoutHeight - bottom)) : 0
   return {
-    layoutWidth: px(native?.layoutWidth ?? width), layoutHeight: px(layoutHeight),
+    // A native window often has a fractional CSS height (physical px / density).
+    // Rounding down exposes the legacy document background as a 1px seam.
+    layoutWidth: px(native?.layoutWidth ?? width), layoutHeight: safeArea ? Math.ceil(layoutHeight) : px(layoutHeight),
     visibleHeight: px(visibleHeight), offsetTop: px(offsetTop), keyboardInset: px(keyboardInset), keyboard,
     geometry, keyboardSession: safeArea ? keyboard === 'open' : keyboardSession || keyboard === 'open',
     ...(safeArea ? { safeArea } : {}),

@@ -24,10 +24,6 @@ async function start() {
   } else {
     await import('./index.css')
     Root = window.location.hash === '#/app' ? (await import('./App')).default : (await import('./prototype/BlackHolePrototype')).default
-    if (import.meta.env.MODE === 'desktop' && window.location.hash !== '#/app') {
-      const { prepareSceneGeodesics } = await import('./prototype/geodesicLoader')
-      void prepareSceneGeodesics().catch(() => {})
-    }
   }
   createRoot(container!).render(
   <StrictMode>

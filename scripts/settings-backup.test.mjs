@@ -12,7 +12,7 @@ test('preferences persist on the local database, validate values and reject stal
     assert.deepEqual(savePreferences(db, { expected: initial, value: next }), next)
     assert.deepEqual(getPreferences(db), next)
     next.render.profile = 'economy'
-    assert.deepEqual(savePreferences(db, { expected: getPreferences(db), value: next }).render, { profile: 'economy', quality: 'auto', glass: 'auto' })
+    assert.deepEqual(savePreferences(db, { expected: getPreferences(db), value: next }).render, { profile: 'economy', quality: 'auto', glass: 'auto', background: 'realtime', mediaResolution: '1080p', mediaQuality: 'high' })
     assert.equal(getPreferences(db).render.profile, 'economy')
     assert.throws(() => savePreferences(db, { expected: initial, value: initial }), /其他窗口/)
     for (const mutate of [p => { p.focus.focusMin = 0 }, p => { p.effect.style = 'unknown' }, p => { p.grid = 'false' }, p => { p.notifications.quietStart = '25:00' }, p => { p.assistant.unrecognized = true }]) {
@@ -60,7 +60,7 @@ test('preferences written before render profiles gain the full visual default', 
     const legacy = structuredClone(getPreferences(db))
     delete legacy.render
     db.setPreference('app', legacy)
-    assert.deepEqual(getPreferences(db).render, { profile: 'full', quality: 'auto', glass: 'auto' })
+    assert.deepEqual(getPreferences(db).render, { profile: 'full', quality: 'auto', glass: 'auto', background: 'realtime', mediaResolution: '1080p', mediaQuality: 'high' })
   } finally { db.close() }
 })
 
@@ -141,7 +141,7 @@ test('legacy rest profile migrates to economy and remains editable using either 
         const legacy = { ...getPreferences(db), render: { profile: 'rest' } }
         db.setPreference('app', legacy)
         const migrated = getPreferences(db)
-        assert.deepEqual(migrated.render, { profile: 'economy', quality: 'low', glass: 'auto' })
+        assert.deepEqual(migrated.render, { profile: 'economy', quality: 'low', glass: 'auto', background: 'realtime', mediaResolution: '1080p', mediaQuality: 'high' })
         const expected = useLegacyExpected ? legacy : migrated
         const saved = savePreferences(db, { expected, value: { ...migrated, render: { profile } } })
         assert.equal(saved.render.profile, profile)
@@ -216,4 +216,108 @@ test('memory correction records fresh user evidence and preserves the prior sour
     assert.equal(db.getMessage(after.sourceMessageId).content, '更正记忆：周末九点起')
     assert.throws(() => db.correctMemory(before.id, { expectedUpdatedAt: before.updatedAt, content: '旧写入' }), /失效/)
   } finally { db.close() }
+})
+
+test('media render preferences default to realtime, 1080p and high and persist every allowed choice', () => {
+  const db = createDatabase(':memory:')
+  try {
+    const initial = getPreferences(db)
+    assert.deepEqual(
+      { background: initial.render.background, mediaResolution: initial.render.mediaResolution, mediaQuality: initial.render.mediaQuality },
+      { background: 'realtime', mediaResolution: '1080p', mediaQuality: 'high' },
+    )
+    for (const background of ['realtime', 'video', 'image']) {
+      for (const mediaResolution of ['4k', '1080p', '720p']) {
+        for (const mediaQuality of ['high', 'standard']) {
+          const expected = getPreferences(db)
+          const value = { ...expected, render: { ...expected.render, background, mediaResolution, mediaQuality } }
+          assert.deepEqual(savePreferences(db, { expected, value }), value)
+          assert.deepEqual(getPreferences(db), value)
+          assert.equal(getPreferences(db).render.profile, 'full')
+          assert.equal(getPreferences(db).render.quality, 'auto')
+          assert.equal(getPreferences(db).render.glass, 'auto')
+        }
+      }
+    }
+  } finally { db.close() }
+})
+
+test('older preferences without media render fields gain per-field defaults without write-back and stay editable', () => {
+  const db = createDatabase(':memory:')
+  try {
+    const legacy = structuredClone(getPreferences(db))
+    delete legacy.render.background
+    delete legacy.render.mediaResolution
+    delete legacy.render.mediaQuality
+    db.setPreference('app', legacy)
+    const migrated = getPreferences(db)
+    assert.deepEqual(migrated.render, { profile: 'full', quality: 'auto', glass: 'auto', background: 'realtime', mediaResolution: '1080p', mediaQuality: 'high' })
+    assert.deepEqual(db.getPreference('app'), legacy, 'reading a legacy record does not write defaults back')
+    for (const [useLegacyExpected, background, mediaResolution, mediaQuality] of [[true, 'video', '4k', 'standard'], [false, 'image', '720p', 'standard']]) {
+      db.setPreference('app', legacy)
+      const expected = useLegacyExpected ? legacy : getPreferences(db)
+      const value = { ...getPreferences(db), render: { ...getPreferences(db).render, background, mediaResolution, mediaQuality } }
+      assert.deepEqual(savePreferences(db, { expected, value }), value)
+      assert.deepEqual(getPreferences(db), value)
+    }
+    const partial = structuredClone(getPreferences(db))
+    partial.render = { profile: 'balanced', glass: 'detailed', background: 'video' }
+    db.setPreference('app', partial)
+    assert.deepEqual(getPreferences(db).render, {
+      profile: 'balanced', quality: 'high', glass: 'detailed', background: 'video', mediaResolution: '1080p', mediaQuality: 'high',
+    }, 'partial legacy render keeps profile/glass/quality migration while filling only missing media fields')
+  } finally { db.close() }
+})
+
+test('invalid media render preferences are rejected without changing saved settings', () => {
+  const db = createDatabase(':memory:')
+  try {
+    const current = getPreferences(db)
+    for (const patch of [
+      { background: 'stream' }, { background: null }, { background: true }, { background: 0 },
+      { mediaResolution: '2k' }, { mediaResolution: '1080' }, { mediaResolution: null }, { mediaResolution: false },
+      { mediaQuality: 'ultra' }, { mediaQuality: 'HIGH' }, { mediaQuality: false }, { mediaQuality: {} },
+    ]) {
+      const value = { ...current, render: { ...current.render, ...patch } }
+      assert.throws(() => savePreferences(db, { expected: current, value }), /背景渲染|媒体分辨率|媒体画质/)
+      assert.deepEqual(getPreferences(db), current)
+    }
+    assert.throws(() => savePreferences(db, { expected: current, value: { ...current, render: { ...current.render, media: '4k' } } }), /渲染/)
+    assert.deepEqual(getPreferences(db), current)
+    db.setPreference('app', { ...current, render: { ...current.render, background: 'loop' } })
+    assert.throws(() => getPreferences(db), /背景渲染/, 'a persisted invalid value is not silently normalized')
+  } finally { db.close() }
+})
+
+test('backups saved before media render fields restore with defaults and remain editable', () => {
+  const source = createDatabase(':memory:'), restored = createDatabase(':memory:')
+  try {
+    const legacy = structuredClone(getPreferences(source))
+    delete legacy.render.background
+    delete legacy.render.mediaResolution
+    delete legacy.render.mediaQuality
+    source.setPreference('app', legacy)
+    restored.importData(source.exportData())
+    const restoredPreferences = getPreferences(restored)
+    assert.deepEqual(restoredPreferences, getPreferences(source), 'restoring only defaults the missing media fields')
+    assert.deepEqual(restoredPreferences.render, { profile: 'full', quality: 'auto', glass: 'auto', background: 'realtime', mediaResolution: '1080p', mediaQuality: 'high' })
+    const next = { ...restoredPreferences, render: { ...restoredPreferences.render, background: 'image', mediaResolution: '720p', mediaQuality: 'standard' } }
+    assert.deepEqual(savePreferences(restored, { expected: legacy, value: next }), next)
+    assert.deepEqual(getPreferences(restored), next)
+
+    const roundTrip = createDatabase(':memory:')
+    try {
+      roundTrip.importData(restored.exportData())
+      assert.deepEqual(getPreferences(roundTrip).render, next.render, 'normalized media fields survive another backup round-trip')
+    } finally { roundTrip.close() }
+
+    const sign = value => { value.checksum = createHash('sha256').update(JSON.stringify(value.tables)).digest('hex'); return value }
+    const invalid = source.exportData()
+    const row = invalid.tables.state.find(item => item.key === 'preferences:app')
+    row.value = JSON.stringify({ ...legacy, render: { ...legacy.render, mediaQuality: 'lossless' } })
+    const before = getPreferences(restored), beforeRaw = structuredClone(restored.getPreference('app'))
+    assert.throws(() => restored.importData(sign(invalid)), /媒体画质/)
+    assert.deepEqual(getPreferences(restored), before, 'an invalid backup cannot overwrite live preferences')
+    assert.deepEqual(restored.getPreference('app'), beforeRaw, 'a rejected backup rolls back the raw record too')
+  } finally { source.close(); restored.close() }
 })

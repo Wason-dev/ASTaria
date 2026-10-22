@@ -204,8 +204,14 @@ public final class ASTariaAppearancePlugin extends Plugin {
         Window window = getActivity().getWindow();
         int background = Color.parseColor(light ? "#f8f6f2" : "#050506");
         window.getDecorView().setBackgroundColor(background);
+        if (bridge != null && bridge.getWebView() != null) bridge.getWebView().setBackgroundColor(background);
         window.setStatusBarColor(Color.TRANSPARENT);
         window.setNavigationBarColor(Color.TRANSPARENT);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            // Some Android/Huawei themes retain a light navigation-bar divider
+            // even when the bar itself is transparent.
+            window.setNavigationBarDividerColor(Color.TRANSPARENT);
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             window.setStatusBarContrastEnforced(false);
             window.setNavigationBarContrastEnforced(false);

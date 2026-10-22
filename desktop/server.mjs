@@ -2,6 +2,8 @@ import { handleReminderRequest } from './reminders.mjs'
 import { handleSyncRequest } from './folderSync.mjs'
 import { createServer } from 'node:http'
 import { readFile, stat, realpath } from 'node:fs/promises'
+import { createReadStream } from 'node:fs'
+import { pipeline } from 'node:stream/promises'
 import { resolve, sep } from 'node:path'
 import { timingSafeEqual } from 'node:crypto'
 import { handleUpdateRequest } from './updates.mjs'
@@ -13,6 +15,8 @@ const types = {
   '.js': 'text/javascript; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
   '.png': 'image/png',
+  '.webp': 'image/webp',
+  '.mp4': 'video/mp4',
   '.svg': 'image/svg+xml',
   '.webmanifest': 'application/manifest+json',
   '.woff': 'font/woff',
@@ -80,11 +84,37 @@ export function createDesktopHandler({ root, service, token, updates, reminders,
       if (!types[extension]) { send(res, 404, 'Not found'); return }
       res.setHeader('Content-Type', types[extension])
       res.setHeader('Cache-Control', 'no-store')
-      res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
+      res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self'; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
+      if (extension === '.mp4') {
+        res.setHeader('Accept-Ranges', 'bytes')
+        const range = req.headers.range
+        const parsed = range === undefined ? null : parseMediaRange(range, file.size)
+        if (range !== undefined && !parsed) {
+          res.statusCode = 416; res.setHeader('Content-Range', `bytes */${file.size}`); res.end(); return
+        }
+        const start = parsed?.start ?? 0, end = parsed?.end ?? file.size - 1
+        if (parsed) { res.statusCode = 206; res.setHeader('Content-Range', `bytes ${start}-${end}/${file.size}`) }
+        res.setHeader('Content-Length', end - start + 1)
+        if (req.method === 'HEAD') { res.end(); return }
+        await pipeline(createReadStream(path, { start, end }), res)
+        return
+      }
       if (req.method === 'HEAD') { res.end(); return }
       res.end(await readFile(path))
-    } catch { send(res, 404, 'Not found') }
+    } catch { if (!res.headersSent) send(res, 404, 'Not found'); else res.destroy() }
   }
+}
+
+/** One byte range; bounded reads keep 4K playback from buffering the full file. */
+export function parseMediaRange(value, size) {
+  if (typeof value !== 'string' || !Number.isSafeInteger(size) || size < 1) return null
+  const match = /^bytes=(\d*)-(\d*)$/.exec(value)
+  if (!match || (!match[1] && !match[2])) return null
+  const a = match[1] ? Number(match[1]) : null, b = match[2] ? Number(match[2]) : null
+  if ((a !== null && !Number.isSafeInteger(a)) || (b !== null && !Number.isSafeInteger(b))) return null
+  if (a === null) return b > 0 ? { start: Math.max(0, size - b), end: size - 1 } : null
+  if (a >= size || (b !== null && b < a)) return null
+  return { start: a, end: Math.min(size - 1, b ?? size - 1) }
 }
 
 export function createDesktopServer({ root, service, token, updates, reminders, sync, port = 5199 }) {

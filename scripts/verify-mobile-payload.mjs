@@ -34,7 +34,7 @@ if(apk) {
  for(const row of report.files) {
   const name=`assets/public/${row.name}`
   if(!names.includes(name))report.failures.push(`APK missing ${name}`)
-  else if(digest(execFileSync('/usr/bin/unzip',['-p',apk,name],{maxBuffer:32*1024*1024}))!==row.sha256)report.failures.push(`APK changed ${name}`)
+  else if(digest(execFileSync('/usr/bin/unzip',['-p',apk,name],{maxBuffer:Math.max(32*1024*1024,(await readFile(join(dist,row.name))).length+1)}))!==row.sha256)report.failures.push(`APK changed ${name}`)
  }
  for(const name of names.filter(name=>name.startsWith('assets/public/')&&!name.endsWith('/'))) {
   const asset=name.slice('assets/public/'.length)

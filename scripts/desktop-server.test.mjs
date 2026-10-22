@@ -122,6 +122,7 @@ async function fixture(t, updates) {
   await mkdir(join(root, 'assets'), { recursive: true })
   await writeFile(join(root, 'index.html'), '<main>ASTaria</main>')
   await writeFile(join(root, 'assets', 'app.js'), 'export default 1')
+  await writeFile(join(root, 'assets', 'scene.mp4'), '0123456789')
   await writeFile(join(dir, 'private.json'), '{"private":true}')
   await symlink(join(dir, 'private.json'), join(root, 'escape.json'))
   const db = createDatabase(':memory:')
@@ -130,6 +131,21 @@ async function fixture(t, updates) {
   t.after(async () => { await service.whenIdle(); service.close(); await rm(dir, { recursive: true, force: true }) })
   return { handler, service, db }
 }
+
+test('desktop video streams a bounded authenticated range and supports HEAD', async t => {
+  const { handler } = await fixture(t)
+  const part = await response(handler, request('/assets/scene.mp4', undefined, { range: 'bytes=2-5' }))
+  assert.equal(part.status, 206); assert.equal(part.text, '2345')
+  assert.equal(part.headers['content-type'], 'video/mp4')
+  assert.equal(part.headers['content-range'], 'bytes 2-5/10')
+  assert.equal(part.headers['content-length'], 4)
+  assert.match(part.headers['content-security-policy'], /media-src 'self'/)
+  const head = request('/assets/scene.mp4'); head.method = 'HEAD'
+  assert.equal((await response(handler, head)).text, '')
+  const invalid = await response(handler, request('/assets/scene.mp4', undefined, { range: 'bytes=10-' }))
+  assert.equal(invalid.status, 416); assert.equal(invalid.headers['content-range'], 'bytes */10')
+  assert.equal((await response(handler, request('/assets/scene.mp4', undefined, { 'x-astaria-desktop': undefined }))).status, 403)
+})
 
 test('desktop static asset resolver stays within the built frontend', () => {
   const root = join(tmpdir(), 'astaria-dist')

@@ -484,6 +484,17 @@ export class BlackHoleRenderer {
     this.publishStats()
   }
 
+  /** Carry the existing UI camera when a media-mode flight needs live optics. */
+  setCameraPose(camera: { zoom: number; roll: number; inclination: number; centerX: number; centerY: number }) {
+    for (const key of Object.keys(this.cameraMotion) as (keyof typeof this.cameraMotion)[]) {
+      if (!Number.isFinite(camera[key])) continue
+      const spring = this.cameraMotion[key]
+      spring.value = spring.target = camera[key]; spring.velocity = 0
+    }
+    this.syncCameraUniforms()
+    this.requestFrame()
+  }
+
   /** Position is normalized viewport UV, with the origin at the bottom left. */
   setPointer(x: number, y: number, active = true) {
     this.pointerTarget.set(THREE.MathUtils.clamp(x, 0, 1), THREE.MathUtils.clamp(y, 0, 1))
@@ -555,6 +566,31 @@ export class BlackHoleRenderer {
       cameraTransition: this.cameraIsRunning(), reducedMotion: this.reducedMotion,
       paused: this.paused, simulationTime: this.simulationTime,
     }
+  }
+
+  /** Offline asset authoring only. Never called by the application frame loop.
+   * Export at native 4K rather than upscaling the interactive pixel budget. */
+  captureFrame(seconds: number, width: number, height: number): HTMLCanvasElement {
+    if (!Number.isFinite(seconds) || seconds < 0 || !Number.isInteger(width) || !Number.isInteger(height)
+      || width < 1 || height < 1 || width * height > 3840 * 2160) throw new Error('Invalid capture dimensions')
+    this.setPaused(true)
+    this.cancelFrame()
+    this.cssWidth = width; this.cssHeight = height
+    this.renderer.setPixelRatio(1)
+    this.renderer.setSize(width, height, false)
+    this.renderer.getDrawingBufferSize(this.resolution)
+    this.sceneTarget.setSize(width, height)
+    this.bloom.resize(width, height, false)
+    this.syncCameraUniforms()
+    this.material.uniforms.uTime.value = seconds
+    this.material.uniforms.uNight.value = this.night
+    this.infall.update(seconds, this.material.uniforms.uBurst.value, this.night, this.resolution,
+      false, this.material.uniforms.uZoom.value, this.material.uniforms.uRoll.value, this.cameraCenter)
+    if (this.starTextureDirty) this.renderStars()
+    this.renderer.setRenderTarget(this.sceneTarget)
+    this.renderer.render(this.scene, this.camera)
+    this.bloom.render(this.sceneTarget.texture, this.night, this.pointer, 0)
+    return this.renderer.domElement
   }
 
   dispose() {

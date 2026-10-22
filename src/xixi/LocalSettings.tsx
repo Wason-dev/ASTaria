@@ -5,6 +5,7 @@ import type { LocalStatus, Memory, Operation } from './types'
 import type { PlannerState } from '../planner/types'
 import { DEFAULT_BINARY_EFFECT, normalizeBinaryEffect } from '../prototype/responseEffects'
 import type { BinaryEffectSettings, ResponseEffectSettings, ResponsePhase } from '../prototype/responseEffects'
+import { MEDIA_BITRATES } from '../prototype/backgroundMedia'
 import { DEFAULT_PREFERENCES, publishPreferences, usePreferences } from './preferences'
 import type { Preferences } from './preferences'
 import { notifyLocalDataChange } from '../stores/migration'
@@ -309,10 +310,16 @@ export function LocalSettings({ onClose, onSaved, onEffectChange, onPreviewEffec
     </>}
     {tab === '外观与动画' && <>
       <section className="xixi-render-section">
-        <div className="xixi-settings-section-title"><h3>帧率与画质</h3><small>随页面自动调整</small></div>
-        <Row title="黑洞画质" note="推荐以 60 FPS 为目标，按负载调整并恢复画质；手动选择保持固定。"><AdaptiveSelect aria-label="黑洞画质" disabled={!ready || busy} value={preferences.render.quality} onChange={event => { const quality = event.target.value as Preferences['render']['quality']; void savePreferences({ ...preferences, render: { ...preferences.render, quality, ...(quality === 'auto' ? { profile: 'full' } : {}) } }) }}><option value="auto">ASTaria 推荐 · 自动</option><option value="ultra">最高</option><option value="high">高</option><option value="low">轻量</option><option value="safe">兼容</option></AdaptiveSelect></Row>
+        <div className="xixi-settings-section-title"><h3>背景与画质</h3><small>保留同一片视界</small></div>
+
+        <Row title="黑洞背景" note="视频与静态图随应用提供；思考回应与弦轨等光效临时使用实时场景。"><AdaptiveSelect aria-label="黑洞背景" disabled={!ready || busy} value={preferences.render.background ?? 'realtime'} onChange={event => void savePreferences({ ...preferences, render: { ...preferences.render, background: event.target.value as Preferences['render']['background'] } })}><option value="realtime">实时渲染</option><option value="video">视频</option><option value="image">静态图</option></AdaptiveSelect></Row>
+        {preferences.render.background !== 'realtime' && <>
+          <Row title="背景清晰度" note="横屏、竖屏分别制作；4K 需要更多显存或解码资源。"><AdaptiveSelect aria-label="背景清晰度" disabled={!ready || busy} value={preferences.render.mediaResolution ?? '1080p'} onChange={event => void savePreferences({ ...preferences, render: { ...preferences.render, mediaResolution: event.target.value as Preferences['render']['mediaResolution'] } })}><option value="4k">4K · 2160p</option><option value="1080p">1080p</option><option value="720p">720p</option></AdaptiveSelect></Row>
+          <Row title={preferences.render.background === 'video' ? '视频码率' : '图片质量'} note={preferences.render.background === 'video' ? '固定 30 FPS；两档均保留较高码率，实际解码负载取决于设备。' : '分辨率相同，调整压缩质量；高质量更完整地保留细线。'}><AdaptiveSelect aria-label={preferences.render.background === 'video' ? '视频码率' : '图片质量'} disabled={!ready || busy} value={preferences.render.mediaQuality ?? 'high'} onChange={event => void savePreferences({ ...preferences, render: { ...preferences.render, mediaQuality: event.target.value as Preferences['render']['mediaQuality'] } })}><option value="high">高{preferences.render.background === 'video' ? ` · ${MEDIA_BITRATES[preferences.render.mediaResolution ?? '1080p'].high} Mbps` : '质量'}</option><option value="standard">标准{preferences.render.background === 'video' ? ` · ${MEDIA_BITRATES[preferences.render.mediaResolution ?? '1080p'].standard} Mbps` : '质量'}</option></AdaptiveSelect></Row>
+        </>}
+        <Row title="黑洞画质" note="推荐以 60 FPS 为目标，按负载调整并恢复画质；手动选择保持固定。"><AdaptiveSelect aria-label="黑洞画质" disabled={!ready || busy || preferences.render.background !== 'realtime'} value={preferences.render.quality} onChange={event => { const quality = event.target.value as Preferences['render']['quality']; void savePreferences({ ...preferences, render: { ...preferences.render, quality, ...(quality === 'auto' ? { profile: 'full' } : {}) } }) }}><option value="auto">ASTaria 推荐 · 自动</option><option value="ultra">最高</option><option value="high">高</option><option value="low">轻量</option><option value="safe">兼容</option></AdaptiveSelect></Row>
         <div className="xixi-effect-options xixi-render-options" role="group" aria-label="黑洞渲染档位">
-          {([['smooth120', '120 FPS', '高刷新率'], ['smooth90', '90 FPS', '高刷新率'], ['full', '60 FPS', '标准流畅'], ['balanced', '45 FPS', '较低频率'], ['economy', '30 FPS', '更低频率']] as const).map(([profile, title, description]) => <button key={profile} type="button" aria-pressed={(preferences.render?.profile ?? 'full') === profile} disabled={!ready || busy || preferences.render.quality === 'auto'} onClick={() => renderProfile(profile)}><strong>{title}</strong><small>{description}</small></button>)}
+          {([['smooth120', '120 FPS', '高刷新率'], ['smooth90', '90 FPS', '高刷新率'], ['full', '60 FPS', '标准流畅'], ['balanced', '45 FPS', '较低频率'], ['economy', '30 FPS', '更低频率']] as const).map(([profile, title, description]) => <button key={profile} type="button" aria-pressed={(preferences.render?.profile ?? 'full') === profile} disabled={!ready || busy || preferences.render.background !== 'realtime' || preferences.render.quality === 'auto'} onClick={() => renderProfile(profile)}><strong>{title}</strong><small>{description}</small></button>)}
         </div>
         <p className="xixi-render-note">选择手动画质后可独立调整帧率。首页与聊天使用所选帧率，工作台、余时等工作区背景为省电最高 30 FPS。高刷受屏幕与设备性能限制。</p>
       </section>

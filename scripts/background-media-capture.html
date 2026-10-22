@@ -1,0 +1,27 @@
+<!doctype html><html><meta charset="utf-8"><title>ASTaria local background authoring</title>
+<style>body{margin:0;background:#050506;color:#eee;font:14px system-ui}#scene{width:3840px;height:2160px;position:absolute;top:100px;left:0}header{position:fixed;z-index:2;background:#151515;padding:12px}button{padding:8px}pre{display:inline}</style>
+<header><button id="capture">Generate four native 4K masters</button> <pre id="status">Ready · local renderer only · 240 frames × 4</pre></header><div id="scene"></div>
+<script type="module">
+import { BlackHoleRenderer } from '/src/prototype/BlackHoleRenderer.ts'
+import { prepareSceneGeodesics } from '/src/prototype/geodesicLoader.ts'
+const status=document.querySelector('#status'), host=document.querySelector('#scene')
+document.querySelector('#capture').onclick=async()=>{document.querySelector('#capture').disabled=true
+try { const table=await prepareSceneGeodesics()
+for(const shape of ['landscape','portrait']) for(const theme of ['dark','light']) {
+ const [width,height]=shape==='landscape'?[3840,2160]:[2160,3840]
+ document.documentElement.dataset.mobile=shape==='portrait'?'preview':''
+ host.style.width=width+'px';host.style.height=height+'px'
+ const engine=new BlackHoleRenderer(host,undefined,message=>{throw Error(message)},table)
+ engine.setQuality('ultra');engine.setNight(theme==='dark'?1:0,true)
+ for(let index=0;index<240;index++) {
+  const canvas=engine.captureFrame(24+index/30,width,height)
+  const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'))
+  const response=await fetch('/capture-frame/'+shape+'-'+theme+'/'+index,{method:'POST',body:blob})
+  if(!response.ok)throw Error('Frame save failed')
+  status.textContent=shape+' '+theme+' '+(index+1)+'/240 · '+canvas.width+'×'+canvas.height
+ }
+ engine.dispose()
+}
+status.textContent='DONE · 960 native 4K frames saved'
+}catch(error){status.textContent='ERROR '+error.stack}}
+</script></html>

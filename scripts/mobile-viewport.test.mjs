@@ -176,6 +176,14 @@ const flushMicrotasks = () => new Promise(resolve => { setImmediate(resolve) })
 // ---------------------------------------------------------------------------
 
 describe('calculateMobileViewport', () => {
+  test('fractional native window height covers the last physical pixel without changing the IME extent', () => {
+    const native = { layoutWidth: 390, layoutHeight: 844.4, visibleHeight: 544.4, keyboardInset: 300, keyboardVisible: true,
+      safeArea: { top: 24, right: 0, bottom: 12, left: 0 } }
+    const result = calculateMobileViewport({ innerWidth: 390, innerHeight: 844, native })
+    assert.equal(result.layoutHeight, 845)
+    assert.equal(result.visibleHeight, 544)
+    assert.equal(result.keyboardInset, 300)
+  })
   test('initial 390x800 layout', () => {
     const state = calculateMobileViewport({ innerWidth: 390, innerHeight: 800 })
     assert.equal(state.layoutWidth, 390)

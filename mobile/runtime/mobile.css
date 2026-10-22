@@ -65,9 +65,9 @@ html[data-mobile] .home-workspace:not([data-page=home]) .home-notification { dis
    visible viewport. No 120px keyboard threshold, second easing or camera reset. */
 html[data-mobile] .home-workspace[data-chat-open=true] .home-morph[data-progress="1.000"] {
   --m-chat-available:calc(var(--m-visible-height,100svh) - var(--safe-area-inset-top,0px));
-  --m-chat-top:max(52px,min(var(--home-chat-end-top),calc((var(--m-chat-available) - var(--home-chat-end-height)) / 2)));
+  --m-chat-top:max(52px,calc(var(--home-chat-end-top) - var(--m-keyboard-inset,0px) / 2));
   top:calc(var(--m-visible-offset-top,0px) + var(--m-chat-top))!important;
-  height:min(var(--home-chat-end-height),calc(var(--m-chat-available) - var(--m-chat-top) - 12px))!important;
+  height:max(0px,min(calc(var(--home-chat-end-height) - var(--m-keyboard-inset,0px) + var(--home-chat-end-top) - var(--m-chat-top)),calc(var(--m-chat-available) - var(--m-chat-top) - 12px)))!important;
 }
 html[data-mobile] .p0 :is(.xixi-settings-scroll,.free-time-scroll,.wb-scroll) { bottom:auto; height:calc(var(--m-visible-height,var(--m-layout-height,100svh)) - 86px - var(--safe-area-inset-top,0px)); }
 html[data-mobile] .p0 :is(.tti-dialog,.ics-import,.pl-dialog,.home-task-dialog) { max-height:calc(var(--m-visible-height,100svh) - 32px); }

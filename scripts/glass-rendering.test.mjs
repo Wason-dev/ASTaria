@@ -29,9 +29,9 @@ test('glass rendering upgrades old preferences and persists separately from blac
   try {
     db.setPreference('app', { ...getPreferences(db), render: { profile: 'smooth90' } })
     const expected = getPreferences(db)
-    assert.deepEqual(expected.render, { profile: 'smooth90', quality: 'ultra', glass: 'auto' })
+    assert.deepEqual(expected.render, { profile: 'smooth90', quality: 'ultra', glass: 'auto', background: 'realtime', mediaResolution: '1080p', mediaQuality: 'high' })
     const saved = savePreferences(db, { expected, value: { ...expected, render: { ...expected.render, glass: 'detailed' } } })
-    assert.deepEqual(getPreferences(db).render, { profile: 'smooth90', quality: 'ultra', glass: 'detailed' })
+    assert.deepEqual(getPreferences(db).render, { profile: 'smooth90', quality: 'ultra', glass: 'detailed', background: 'realtime', mediaResolution: '1080p', mediaQuality: 'high' })
     assert.throws(() => savePreferences(db, { expected: saved, value: { ...saved, render: { ...saved.render, glass: 'invalid' } } }), /玻璃渲染/)
   } finally { db.close() }
 })

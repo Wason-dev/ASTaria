@@ -32,6 +32,8 @@ import { abortSignalAny } from './abortSignal.mjs'
 import { createThinkingProgress } from './thinkingProgress.mjs'
 import { contextMeterKey } from './contextUsage.mjs'
 import { taskCollectionChanges } from './taskCollections.mjs'
+import { RECEIPT_NOTES_SCHEMA, validateReceiptNotes, receiptNoteBasis } from './receiptExplanations.mjs'
+import { publicExecutionIssue } from '../src/xixi/executionIssue.ts'
 
 // Reserve room for the fresh clock and source index appended at dispatch.
 // The step tools add schema and focused progress to the payload. Reserve that
@@ -50,10 +52,12 @@ const taskSchedulingReceipt = tasks => ({ ...taskCreationScheduling, taskIds: ta
   requirements: tasks.map(task => ({ taskId: task.id, title: task.title, ...(task.startAt ? { date: task.startAt.slice(0, 10) } : {}) })) })
 const explicitTimeRange = text => /(?<!\d)(?:[01]?\d|2[0-3])\s*[:：]?\s*[0-5]\d\s*(?:[-–—至到]\s*)(?:[01]?\d|2[0-3])\s*[:：]?\s*[0-5]\d(?!\d)/u.test(text)
 const taskProperties = {
+  kind: { type: 'string', enum: ['task', 'reminder'], description: '按用户语义明确区分：可执行的作业/复习/准备是task；考试/生日这类仅标记事件日期是reminder。只记录但尚未安排的作业仍是task，不能靠scheduleMode判类型。' },
   title: str('任务名称，最多160字符'), notes: str('背景、步骤，以及哪些字段是估计'),
   collection: str('同一主题且同一DDL的一批事项的集合名，最多60字，如SAT作业；分批创建沿用同名，跨学科可同组，无关事项省略'),
   due: str('DDL，YYYY-MM-DD 或带明确时区的ISO时间；未知省略，创建后用户可在回执按钮补日期/时刻'),
   startAt: str('计划日期意向，仅YYYY-MM-DD；精确时段用read_planner→plan_tasks'),
+  relations: { type: 'array', maxItems: 8, description: '明确的事项先后关系：复习在考试前、材料在会议前、后续工作在前置事项后。引用真实ID，不把同科目自动关联；保存后跟随目标改期。', items: { ...objectSchema({ relation: { type: 'string', enum: ['before', 'after'] }, kind: { type: 'string', enum: ['event', 'task'] }, id: str('已读取的真实活动/课时/任务ID'), date: str('活动日期YYYY-MM-DD；event必填') }), required: ['relation', 'kind', 'id'] } },
   estimateMin: { type: 'integer', minimum: 1, maximum: 1440, description: '预估分钟数；未知省略，由自动排期先预留30分钟，用户可在回执快捷修改' },
   importance: { type: 'integer', enum: [1, 2, 3] },
   energy: { type: 'string', enum: ['deep', 'light'] },
@@ -82,11 +86,15 @@ const tool = (name, description, properties, required = []) => ({
   type: 'function', function: { name, description, parameters: { ...objectSchema(properties), required } },
 })
 export const XIXI_TOOLS = [
+  tool('finish_response', '完成自然回复，并把简短安排理由写进金色回执。单独调用直接结束，不再请求模型。只引用已保存结果与真实课表，不编造因果、唯一空档或备选。', {
+    content: str('正常自然回复，不套模板，不重复回执完整清单'), receiptNotes: RECEIPT_NOTES_SCHEMA,
+  }, ['content', 'receiptNotes']),
   tool('read_product_guide', '读取ASTaria已实现功能、页面入口和操作边界；资料已足够时直接执行用户任务', {
     section: { type: 'string', enum: ['home', 'workbench', 'schedule', 'free-time', 'strings', 'settings', 'records', 'boundaries'] },
   }, ['section']),
   tool('read_current_time', '读取调用当刻本机系统时钟，返回用户时区的日期与 HH:mm。询问现在、核对钟点或用户指出时间不一致时，读取后采用最新读数', {}),
   tool('ask_user', '需要用户补充必需信息，或已知约束冲突且尚未决定取舍时，立即用一个具体问题询问，给2–4个快捷选项。事实可查先读取，可行的明确请求直接执行；不重复确认已给出的选择。已确定的内容可先保存。单独调用后等待回答，不继续推演同一冲突。选项互斥、可成立，不编造空档；prompt不要另列会与选项编号冲突的方案', {
+    receiptNotes: RECEIPT_NOTES_SCHEMA,
     prompt: str('自然、温柔的提问，可先简短交代已完成的操作；最多1000字；不要在正文另列带编号方案'),
     options: { type: 'array', minItems: 2, maxItems: 4, items: { type: 'string', maxLength: 80 }, description: '具体易选的回答，互不重复；建议安排使用提议语气' },
   }, ['prompt', 'options']),
@@ -212,7 +220,7 @@ export const XIXI_TOOLS = [
     messageIds: { type: 'array', minItems: 1, maxItems: 3, items: str('消息ID，读取出处原文') },
   }),
   tool('create_tasks', '创建事项；考试、生日、截止提醒用record-only，仅记日期，不占时间；作业/复习用auto安排真实空档。指定时段先read_planner并携带schedule；固定活动/临时课程用save_day_events', {
-    tasks: { type: 'array', minItems: 1, maxItems: 8, items: { ...objectSchema(creationProperties), required: ['title'] } },
+    tasks: { type: 'array', minItems: 1, maxItems: 8, items: { ...objectSchema(creationProperties), required: ['title', 'kind'] } },
     expectedRevision: { type: 'integer', minimum: 0, description: '提供schedule时必填，来自read_planner' },
   }, ['tasks']),
   tool('update_task', '修改已有任务。先读取最新任务，将其updatedAt原样传回防止覆盖其他窗口的新修改', {
@@ -292,7 +300,7 @@ function requireDateIntent(draft) {
 }
 function taskView(task) {
   if (!task) return null
-  return Object.fromEntries(['id', 'title', 'collection', 'due', 'startAt', 'estimateMin', 'occurrence', 'freeTimeGoalId', 'status', 'importance', 'updatedAt'].filter(key => task[key] !== undefined).map(key => [key, task[key]]))
+  return Object.fromEntries(['id', 'title', 'collection', 'due', 'startAt', 'estimateMin', 'kind', 'relations', 'occurrence', 'freeTimeGoalId', 'status', 'importance', 'updatedAt'].filter(key => task[key] !== undefined).map(key => [key, task[key]]))
 }
 function recurringScheduling(tasks, plans) {
   const occurrences = tasks.filter(task => task.occurrence)
@@ -478,14 +486,6 @@ function compactOperation(operation) {
     changes: operation.changes.map(change => ({ table: change.table, id: change.id,
       after: change.table === 'tasks' ? taskView(change.after) : change.after ? memoryView(change.after) : null })) }
 }
-function publicExecutionIssue(reason) {
-  if (reason.includes('调课依据需为当前或相邻确认')) return '有一步日程修改没能核对你之前的要求，因此没有保存'
-  if (reason.includes('先用 read_planner 读取这些日期')) return '后续安排需要核对当天的最新日程，尚未保存'
-  return reason.replace(/\b(?:read_planner|read_weekly_timetable|plan_tasks|save_day_events|ask_user)\b/gu, toolName => ({
-    read_planner: '日程读取', read_weekly_timetable: '课表读取', plan_tasks: '任务安排',
-    save_day_events: '活动记录', ask_user: '提问',
-  })[toolName])
-}
 function unfinishedIssues(execution) {
   return [...new Set([execution?.pending, execution?.interrupted, ...(execution?.failures ?? []).map(item => item.error),
     ...[...(execution?.scheduleRequirements ?? []), ...(execution?.eventRequirements ?? [])].filter(item => item.status === 'pending').map(item => item.reason)]
@@ -511,6 +511,7 @@ export function createXixi({ db, complete, webSearch, persona, working, now = ()
   // are request-local (including retries), so neither conversations nor later
   // turns inherit a stale availability value. Actual reads still check the DB.
   const documentAvailability = new WeakMap()
+  const receiptAvailability = new WeakMap()
   const hasDocuments = input => documentAvailability.get(input) === true
   const clock = () => { const value = now(); return value instanceof Date ? value : new Date(value) }
   const timestamp = () => clock().toISOString()
@@ -520,7 +521,7 @@ export function createXixi({ db, complete, webSearch, persona, working, now = ()
   const timezoneMatches = timezone => new Intl.DateTimeFormat('en', { timeZone: timezone }).resolvedOptions().timeZone === plannerTimezone()
   const selectedPlannerDate = input => input.context.date ?? localDay(clock())
   const searchEnabled = () => Boolean(webSearch && db.getPreference('model-connection')?.webSearch?.enabled === true)
-  const tools = input => [...XIXI_TOOLS, ...(searchEnabled() ? [WEB_SEARCH_TOOL] : []),
+  const tools = input => [...XIXI_TOOLS.filter(tool => tool.function.name !== 'finish_response' || receiptAvailability.get(input)), ...(searchEnabled() ? [WEB_SEARCH_TOOL] : []),
     ...(hasDocuments(input) ? [READ_ATTACHMENT_TOOL] : [])]
   const documentSources = outcome => [...new Set((outcome.sectionRefs ?? []).map(ref => ref.messageId))]
   const recordedInTurn = input => new Set(db.listMessages(input.conversationId, { limit: 1000 })
@@ -734,10 +735,11 @@ export function createXixi({ db, complete, webSearch, persona, working, now = ()
     for (const message of db.listMessages(input.conversationId, { limit: 160, forContext: true })) {
       if (message.requestId !== input.requestId) continue
       for (const call of message.toolCalls ?? []) calls.set(call.id, call.function?.name)
-      if (message.role !== 'tool' || calls.get(message.toolCallId) !== 'read_planner') continue
+      if (message.role !== 'tool' || !['read_planner', 'create_tasks'].includes(calls.get(message.toolCallId))) continue
       try {
-        const result = JSON.parse(message.content)
-        if (result.type === 'planner_read' && result.revision === revision) for (const item of result.days ?? []) readDates.add(item.date)
+        const outcome = JSON.parse(message.content)
+        const results = outcome.type === 'planner_read' ? [outcome] : outcome.scheduling?.plannerReview?.reads ?? []
+        for (const result of results) if (result.type === 'planner_read' && result.revision === revision) for (const item of result.days ?? []) readDates.add(item.date)
       } catch { /* A failed or incomplete read is not scheduling evidence. */ }
     }
     if (!readDates.size || dates.some(date => !readDates.has(date))) throw new ValidationError('先用 read_planner 读取这些日期的最新安排，再继续操作', 409)
@@ -860,7 +862,11 @@ export function createXixi({ db, complete, webSearch, persona, working, now = ()
         if (new Date(`${plan.date}T${plan.start}:00`).getTime() < at.getTime()) throw new ValidationError('这段时间已经过去，请从当前时刻之后安排', 409)
         const capacity = dayCapacity(state, tasks, plan.date, at)
         const start = minuteOf(plan.start), end = minuteOf(plan.end)
-        if (!capacity.available.some(range => range.start <= start && range.end >= end)) throw new ValidationError('任务只能排进已知可用窗口。若这是用户给定钟点的固定活动或临时课程，请使用 save_day_events 记录真实占用；不必修改周模板或重复读取相同课表', 409)
+        if (!capacity.available.some(range => range.start <= start && range.end >= end)) {
+          const error = new ValidationError('任务只能排进已知可用窗口。若这是用户给定钟点的固定活动或临时课程，请使用 save_day_events 记录真实占用；不必修改周模板或重复读取相同课表', 409)
+          error.publicMessage = `「${tasks.find(task => task.id === plan.taskId)?.title ?? '这项任务'}」没有排入 ${plan.date} ${plan.start}–${plan.end}：这段时间不在你已设置的可安排空档内。`
+          throw error
+        }
       }
       actions = plans.map(block => ({ type: 'save-block', block }))
       summary = `安排 ${plans.length} 段任务时间：${plans.map(plan => `${plan.date} ${plan.start}–${plan.end}`).join('、')}`
@@ -910,8 +916,10 @@ export function createXixi({ db, complete, webSearch, persona, working, now = ()
       // model gets a chance to answer.
       if (message.role !== 'system' || !message.content?.startsWith(environmentPrefix)) return message
       const facts = JSON.parse(message.content.slice(environmentPrefix.length))
+      const planner = db.getPlanner(), tasks = db.listTasks(), instant = new Date(current.capturedAt)
       return { ...message, content: `${environmentPrefix}${JSON.stringify({ ...facts,
-        now: current.capturedAt, timezone: current.timezone, localTime: current.displayTime, currentTime: current })}` }
+        now: current.capturedAt, timezone: current.timezone, localTime: current.displayTime, currentTime: current,
+        today: { ...facts.today, date: current.localDate, revision: planner.revision, capacity: compactCapacity(dayCapacity(planner, tasks, current.localDate, instant), Math.min(24, facts.today?.capacity?.remaining?.length ?? 0)), availabilityWindows: availabilityWindows(planner, tasks, current.localDate, instant, Math.min(2400, contextUnits(facts.today?.availabilityWindows ?? {}) + 40)), nextSchedule: nextSchedule(planner, tasks, current.localDate, current, Math.min(1500, contextUnits(facts.today?.nextSchedule ?? {}) + 40)) } })}` }
     })
     messages.splice(1, 0, clockMessage(current))
     const budget = contextBudget()
@@ -1305,6 +1313,7 @@ export function createXixi({ db, complete, webSearch, persona, working, now = ()
         timeline: result.timeline.map(item => ({ date: item.date, availableMin: item.availableMin, remainingMin: item.remainingMin,
           scheduledMin: item.scheduledMin, deadlineCount: item.deadlines.length })), readDetails: 'read_planner' }
     }
+    if (name === 'finish_response') throw new ValidationError('finish_response只在操作完成后单独调用，并附有效回执说明')
     if (name === 'ask_user') {
       throw new ValidationError('请单独调用 ask_user，显示问题后等待用户回答')
     }
@@ -1546,7 +1555,7 @@ export function createXixi({ db, complete, webSearch, persona, working, now = ()
     return { ok: true, operation: operationForContext(operation), ...(automatic ? { operations: [operationForContext(automatic)] } : {}),
       scheduling: { changed: Boolean(automatic), required: false, recordedTaskIds, savedPlans: automatic?.planChanges.map(change => change.after).filter(Boolean) ?? [],
         ...recurringScheduling(created, scheduled.plans),
-        allocations: scheduled.allocations, unscheduled: scheduled.unscheduled,
+        allocations: scheduled.allocations, unscheduled: scheduled.unscheduled, evidence: scheduled.evidence,
         ...(scheduled.unscheduled.length ? { nextAction: { kind: 'resolve_unscheduled',
           savedTaskIds: schedulable.map(task => task.id),
           instruction: '事项已经保存，不重复创建。按unscheduled说明真实缺口；已有授权备选就执行，否则立即ask_user问一个必要取舍并等待。默认预留不是用户确认的时长，不按题数臆测时长，不反复推演同一组无解安排。' } } : {}),
@@ -1618,6 +1627,7 @@ export function createXixi({ db, complete, webSearch, persona, working, now = ()
     // into a retryable mutation.
     const existingOperations = db.listOperations({ requestId: input.requestId }).filter(operation => !operation.undoneAt)
     const committed = new Map(existingOperations.map(operation => [operation.id, operation.summary]))
+    receiptAvailability.set(input, existingOperations.length > 0)
     let schedulingNudge = false // Only actual task scheduling obligations require a task-plan commit.
     const workOrder = createWorkOrder({ ...input, userMessageId }, previous, timestamp)
     workOrder.resume()
@@ -1634,7 +1644,26 @@ export function createXixi({ db, complete, webSearch, persona, working, now = ()
       }
     }
     const checkpoint = () => db.updateTurnProgress(input.requestId, workOrder.snapshot())
+    const plannerReview = () => workOrder.value.plannerReview
+    const requireReview = scheduling => {
+      if (!scheduling || (!scheduling.required && !scheduling.unscheduled?.length)) return
+      if (scheduling.unscheduled?.every(item => item.reason?.includes('时区不一致'))) return
+      const tasks = scheduling.taskIds ?? scheduling.unscheduled?.map(item => item.taskId) ?? []
+      workOrder.value.plannerReview = { pending: !scheduling.plannerReview?.complete, taskIds: [...new Set([...(plannerReview()?.pending ? plannerReview().taskIds : []), ...tasks])], revision: db.getPlanner().revision }
+    }
+    const acceptReview = (call, outcome) => {
+      if (call.function?.name !== 'read_planner' || outcome.ok === false || !plannerReview()?.pending) return
+      const args = JSON.parse(call.function.arguments)
+      const end = new Date(`${args.date}T12:00:00`); end.setDate(end.getDate() + (args.days ?? 1) - 1)
+      const lastDate = localDay(end)
+      const relevant = plannerReview().taskIds.every(id => {
+        const task = db.getTask(id), date = task?.occurrence?.date ?? task?.startAt?.slice(0, 10)
+        return !date || (args.date <= date && date <= lastDate)
+      })
+      if (relevant) workOrder.value.plannerReview = { ...plannerReview(), pending: false, reviewedRevision: db.getPlanner().revision }
+    }
     const registerSchedule = scheduling => {
+      requireReview(scheduling)
       const requirements = scheduling?.requirements ?? (scheduling?.required ? (scheduling.taskIds ?? []).map(taskId => ({ taskId })) : [])
       for (const requirement of requirements) {
         const task = db.getTask(requirement.taskId)
@@ -1699,6 +1728,9 @@ export function createXixi({ db, complete, webSearch, persona, working, now = ()
     }
     const performTool = async (call, sourceMessageIds) => {
       assertActive(sourceMessageIds)
+      if (plannerReview()?.pending && !['read_planner', 'read_tasks', 'read_current_time'].includes(call.function?.name)) {
+        throw new ValidationError('必须先读取创建后相关日期的最新日程；未排上事项尚未核对，不能结束或继续写入', 409)
+      }
       // Model-backed previews must not hold a SQLite transaction while awaiting
       // the provider. The preview service rechecks provenance and versions when
       // it commits; ordinary local tools remain synchronous and atomic.
@@ -1735,18 +1767,29 @@ export function createXixi({ db, complete, webSearch, persona, working, now = ()
       }
       return db.transaction(() => {
         db.assertTurnWritable(input.requestId, sourceMessageIds)
-        return executeTool(call, input, userMessageId)
+        const outcome = executeTool(call, input, userMessageId)
+        if (call.function?.name === 'create_tasks' && outcome.ok !== false && (outcome.scheduling?.required || outcome.scheduling?.unscheduled?.length)) {
+          const tasks = [...new Set([...(outcome.scheduling.taskIds ?? []), ...(outcome.scheduling.unscheduled ?? []).map(item => item.taskId)])].map(id => db.getTask(id)).filter(Boolean)
+          const dates = [...new Set(tasks.map(task => task.occurrence?.date ?? task.startAt?.slice(0,10) ?? localDay(clock())))].sort()
+          // This is the same read_planner implementation, executed by the loop
+          // after creation. It adds no model round and is a durable read receipt.
+          const reads = dates.map(date => readPlanner(input, { date, days: 1 }))
+          outcome.scheduling.plannerReview = { complete: reads.length > 0, reads }
+          outcome.scheduling.notice += ' 工具层已执行创建后read_planner，最新读取见plannerReview.reads；不必再为相同日期重复读取，继续排程或必要取舍。'
+        }
+        return outcome
       })
     }
     const recordOutcome = (call, step, outcome) => {
-      if (outcome.ok === false) { workOrder.fail(step, outcome.error); return }
-      if (outcome.operation?.summary) { committed.set(outcome.operation.id, outcome.operation.summary); workOrder.commit(step, outcome.operation) }
+      if (outcome.ok === false) { workOrder.fail(step, outcome.publicMessage ?? outcome.error); return }
+      if (outcome.operation?.summary) { receiptAvailability.set(input, true); committed.set(outcome.operation.id, outcome.operation.summary); workOrder.commit(step, outcome.operation) }
       else workOrder.succeed(step)
       for (const operation of outcome.operations ?? []) {
         const child = workOrder.step(`${call.id}:${operation.id}`, 'auto_schedule_tasks')
         committed.set(operation.id, operation.summary); workOrder.commit(child, operation)
       }
       registerSchedule(outcome.scheduling)
+      acceptReview(call, outcome)
       registerSavedPlans(outcome.savedPlans)
       registerSavedEvents(outcome.expectedEvents ?? outcome.savedEvents)
       for (const eventId of outcome.removedEventIds ?? []) workOrder.cancelEvent(eventId)
@@ -1764,6 +1807,8 @@ export function createXixi({ db, complete, webSearch, persona, working, now = ()
       if (message.role !== 'tool') continue
       try { const outcome = JSON.parse(message.content); if (outcome.ok !== false) {
         registerSchedule(outcome.scheduling)
+        const priorCall = db.listMessages(input.conversationId, { limit: 1000 }).flatMap(item => item.toolCalls ?? []).find(call => call.id === message.toolCallId)
+        if (priorCall) acceptReview(priorCall, outcome)
         registerSavedPlans(outcome.savedPlans)
         registerSavedEvents(outcome.expectedEvents ?? outcome.savedEvents)
         for (const eventId of outcome.removedEventIds ?? []) workOrder.cancelEvent(eventId)
@@ -1826,7 +1871,7 @@ export function createXixi({ db, complete, webSearch, persona, working, now = ()
         emitActivity(`tool:${call.id}`, activity, 'running')
         let outcome
         try { outcome = await performTool(call, sourceMessageIds) }
-        catch (error) { outcome = { ok: false, error: safeToolError(error) } }
+        catch (error) { outcome = { ok: false, error: safeToolError(error), ...(error.publicMessage ? { publicMessage: error.publicMessage } : {}) } }
         assertActive(sourceMessageIds)
         emitActivity(`tool:${call.id}`, activity, outcome.ok === false ? 'failed' : 'done', outcome.ok === false ? outcome.error : '这一步已完成，结果已回到本轮上下文')
         assertActive(sourceMessageIds)
@@ -1843,7 +1888,7 @@ export function createXixi({ db, complete, webSearch, persona, working, now = ()
       let modelContext = await makeContext(input, { summarize: true, currentUser, signal })
       emitActivity('context:snapshot', contextActivity, 'done', '本轮使用已读取的日程快照，后续不会反复读取同一份资料')
       let totalCalls = 0, protocolRepairs = 0
-      let schedulingNudgeCount = 0
+      let schedulingNudgeCount = 0, reviewRepairs = 0
       const repeatedReads = new Map()
       let readProgressHint = ''
       for (let round = 0; round < MAX_ROUNDS; round += 1) {
@@ -1854,6 +1899,8 @@ export function createXixi({ db, complete, webSearch, persona, working, now = ()
           const messages = [
             ...modelContext.messages,
             ...(searchState ? [{ role: 'system', content: webSearchContext(searchState, publicSources(), searchError) }] : []),
+            ...(plannerReview()?.pending ? [{ role: 'system', content: `工具层要求：先read_planner读取创建后相关日期，taskIds=${JSON.stringify(plannerReview().taskIds)}。读取后如已有授权备选直接执行；确实放不下再问一个必要取舍，不重复创建或长时间空转。` }] : []),
+            ...(committed.size ? [{ role: 'system', content: '本轮已有真实操作。最终正常回复用finish_response，同时把简短安排理由放receiptNotes；只有必须用户取舍才ask_user并附receiptNotes。理由基于真实课表/关系/evidence，不编造，不逐项抄时间。finish_response会直接结束，不增加一轮模型请求。' }] : []),
             ...(readProgressHint ? [{ role: 'system', content: readProgressHint }] : []),
             ...((workOrder.value.scheduleRequirements ?? []).some(item => item.mustComplete && item.status === 'pending')
               ? [{ role: 'system', content: `本轮待完成日历事项（逐项核验）：${JSON.stringify(workOrder.value.scheduleRequirements.filter(item => item.mustComplete && item.status === 'pending'))}` }] : []),
@@ -1869,9 +1916,10 @@ export function createXixi({ db, complete, webSearch, persona, working, now = ()
           }) : null
           let response
           try {
-            response = await completeWithClock({ messages, ...(last ? {} : { tools: tools(input) }), max_tokens: 1800 }, input.context.timezone, onEvent ? delta => {
+            response = await completeWithClock({ messages, ...(last ? {} : { tools: tools(input), ...(plannerReview()?.pending ? { tool_choice: { type: 'function', function: { name: 'read_planner' } } } : committed.size ? { tool_choice: 'required' } : {}) }), max_tokens: 1800 }, input.context.timezone, onEvent ? delta => {
               try { assertActive(modelContext.sourceMessageIds) }
               catch { progress?.stop(); return }
+              if (plannerReview()?.pending && delta.type !== 'reasoning') return
               if (delta.type === 'reasoning') progress?.reasoning(delta.delta)
               else progress?.stop()
               emit({ type: 'phase', phase: delta.type === 'reasoning' ? 'thinking' : 'replying' })
@@ -1899,6 +1947,10 @@ export function createXixi({ db, complete, webSearch, persona, working, now = ()
         }
         const calls = message.tool_calls ?? []
         if (!calls.length) {
+          if (plannerReview()?.pending) {
+            if (reviewRepairs++ < 1 && !last) { modelContext = await makeContext(input, { currentUser, signal }); continue }
+            throw new Error('PLANNER_REVIEW_REQUIRED')
+          }
           refreshScheduleProgress(); checkpoint()
           if (schedulingNudge && !workOrder.value.failures.length && schedulingNudgeCount++ < 3) { modelContext = await makeContext(input, { currentUser, signal }); continue }
           if (schedulingNudge) throw new Error('SCHEDULE_INCOMPLETE')
@@ -1916,29 +1968,35 @@ export function createXixi({ db, complete, webSearch, persona, working, now = ()
             taskId: input.context.taskId, sourceMessageIds: modelContext.sourceMessageIds })
           return finish('completed')
         }
+        let completionError
         const rejectedBatch = last || totalCalls + calls.length > MAX_CALLS
           ? '本轮工具调用额度已用完，这批调用均未执行；已保存的操作保留'
           : calls.length > 8 ? '每批最多8个工具调用，这批均未执行；请拆成较小批次继续，勿重复已成功的操作' : null
-        if (calls.length === 1 && calls[0].function.name === 'ask_user') {
-          let args
+        if (calls.length === 1 && ['ask_user', 'finish_response'].includes(calls[0].function.name) && !plannerReview()?.pending) {
+          const finishing = calls[0].function.name === 'finish_response'
           try {
-            args = JSON.parse(calls[0].function.arguments)
-            knownKeys(args, ['prompt', 'question', 'options'])
-            const content = inputText(args.prompt ?? args.question, '问题', 1000)
-            const question = questionOptions({ options: args.options })
-            // A question is a user-facing response, not a business mutation.
-            // Persist it and finish together so replay never repeats the prompt.
-            workOrder.awaiting('等待用户回答快捷问题'); workOrder.finishReply('model'); checkpoint()
+            const args = JSON.parse(calls[0].function.arguments)
+            knownKeys(args, finishing ? ['content', 'receiptNotes'] : ['prompt', 'question', 'options', 'receiptNotes'])
+            const content = inputText(finishing ? args.content : args.prompt ?? args.question, '回复', finishing ? 12000 : 1000)
+            const noteOperations = db.listOperations({ requestId: input.requestId })
+            const notes = validateReceiptNotes(args.receiptNotes, noteOperations, input.requestId)
+            if (finishing && noteOperations.some(operation => !operation.undoneAt && (operation.planChanges?.length || operation.changes?.some(change => change.table === 'tasks' && change.before === null))) && !notes.length) throw new ValidationError('已保存事项需要一条基于真实结果的回执说明，不能省略或虚构')
+            if (finishing && schedulingNudge) throw new ValidationError('已确认的日历安排尚未完成，不能结束；有实际缺口需用ask_user问必要取舍', 409)
+            const question = finishing ? undefined : questionOptions({ options: args.options })
             return db.transaction(() => {
-              db.appendMessage({ id: stableId(input.requestId, 'question'), conversationId: input.conversationId,
-                requestId: input.requestId, role: 'assistant', content, question, reasoningContent: message.reasoning_content,
-                ...(webSearchUsed ? { sources: publicSources() } : {}),
-                taskId: input.context.taskId, sourceMessageIds: modelContext.sourceMessageIds })
+              db.appendMessage({ conversationId: input.conversationId, requestId: input.requestId, role: 'assistant', content: '', reasoningContent: message.reasoning_content, toolCalls: calls, taskId: input.context.taskId, sourceMessageIds: modelContext.sourceMessageIds })
+              db.appendMessage({ conversationId: input.conversationId, requestId: input.requestId, role: 'tool', toolCallId: calls[0].id, content: JSON.stringify({ ok: true, type: 'receipt_explanation', notes, basis: receiptNoteBasis(db, notes), plannerRevision: db.getPlanner().revision }), taskId: input.context.taskId, sourceMessageIds: modelContext.sourceMessageIds })
+              refreshScheduleProgress(); workOrder.clearInterruption()
+              for (const step of workOrder.value.steps.filter(step => ['finish_response', 'ask_user'].includes(step.name) && step.status === 'failed')) workOrder.succeed(step)
+              if (question) workOrder.awaiting('等待用户回答必要取舍'); else workOrder.verify()
+              workOrder.finishReply('model'); checkpoint()
+              db.appendMessage({ conversationId: input.conversationId, requestId: input.requestId, role: 'assistant', content, ...(question ? { question } : unfinishedIssues(workOrder.value).length ? { executionNotice: { issues: unfinishedIssues(workOrder.value) } } : {}), taskId: input.context.taskId, sourceMessageIds: modelContext.sourceMessageIds })
               return finish('completed')
             })
           } catch (error) {
             if (!(error instanceof ValidationError) && !(error instanceof SyntaxError)) throw error
-            // The normal tool error path below lets the model repair its call.
+            completionError = safeToolError(error)
+            // Journal the actual rejected field so the next call can repair it.
           }
         }
         const journalCalls = () => db.appendMessage({ conversationId: input.conversationId, requestId: input.requestId, role: 'assistant',
@@ -1968,8 +2026,8 @@ export function createXixi({ db, complete, webSearch, persona, working, now = ()
           const activity = chatActivityForTool(call.function?.name ?? 'unknown')
           emitActivity(`tool:${call.id}`, activity, 'running')
           let outcome
-          try { outcome = await performTool(call, modelContext.sourceMessageIds) }
-          catch (error) { outcome = { ok: false, error: safeToolError(error) } }
+          try { outcome = completionError && calls.length === 1 ? { ok: false, error: completionError } : await performTool(call, modelContext.sourceMessageIds) }
+          catch (error) { outcome = { ok: false, error: safeToolError(error), ...(error.publicMessage ? { publicMessage: error.publicMessage } : {}) } }
           assertActive(modelContext.sourceMessageIds)
           emitActivity(`tool:${call.id}`, activity, outcome.ok === false ? 'failed' : 'done', outcome.ok === false ? outcome.error : '这一步已完成，结果已回到本轮上下文')
           assertActive(modelContext.sourceMessageIds)
@@ -2008,7 +2066,7 @@ export function createXixi({ db, complete, webSearch, persona, working, now = ()
       // A create followed by a concrete time range is a two-phase workflow:
       // the task record alone is not completion. Keep the turn retryable while
       // the scheduling nudge still says that the calendar phase is pending.
-      if (committedSummaries.length && !workOrder.value.interrupted && !workOrder.value.failures.length && !workOrder.value.steps.some(step => step.status === 'running') && !schedulingNudge && !boundedExecutionFailure) {
+      if (committedSummaries.length && !workOrder.value.interrupted && !workOrder.value.failures.length && !workOrder.value.steps.some(step => step.status === 'running') && !schedulingNudge && !plannerReview()?.pending && !boundedExecutionFailure) {
         workOrder.verify(); workOrder.finishReply('fallback')
         checkpoint()
         return db.transaction(() => {
@@ -2026,6 +2084,7 @@ export function createXixi({ db, complete, webSearch, persona, working, now = ()
         ? cause.oversizedInput ? '这条消息本身较长，请拆成较短的消息后发送' : '这次读取的资料超出当前模型容量，原要求和已保存进度都保留；请缩小要处理的范围，或在模型设置中提高上下文预算后重试'
         : cause?.message === 'TOOL_LIMIT' ? '这项请求仍有步骤未完成，已保存进度；重试会接着处理，不用重新描述'
         : cause?.message === 'NO_EXECUTION_PROGRESS' ? '析熙重复读取了相同资料，没有继续执行，已停止这次空转；原要求和已保存进度保留，可重试继续'
+        : cause?.message === 'PLANNER_REVIEW_REQUIRED' ? '事项已保存，但未完成创建后日程核对，不能确认全部排妥'
         : cause?.message === 'SCHEDULE_INCOMPLETE' ? '事项已记录，但日历时段尚未保存'
         : '析熙暂时没能完成回复，请稍后重试'
       workOrder.interrupt(safeFailure)

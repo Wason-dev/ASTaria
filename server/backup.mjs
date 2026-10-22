@@ -121,7 +121,11 @@ export function validateCompanionState(value) {
       const { question, kind, conditional, facts, ...judgment } = route
       validateRouteJudgment(judgment)
       knownKeys(facts, ['task', 'dates', 'baseline', 'candidate', 'timeline', 'availableWindows', 'effortMin', 'heldMin', 'remainingMin', 'bufferMin', 'baseRevision', 'asOf', 'exactStartProtected', 'verified'])
-      knownKeys(facts.task, ['id', 'title', 'due', 'estimateMin', 'status']); identifier(facts.task.id); text(facts.task.title, '任务名', 160)
+      knownKeys(facts.task, ['id', 'title', 'due', 'estimateMin', 'status', 'kind', 'relations', 'timing']); identifier(facts.task.id); text(facts.task.title, '任务名', 160)
+      taskInput({ title: facts.task.title, ...(facts.task.kind ? { kind: facts.task.kind } : {}), ...(facts.task.relations ? { relations: facts.task.relations } : {}) })
+      if (facts.task.timing !== undefined) for (const bound of array(facts.task.timing, 8)) {
+        knownKeys(bound, ['relation', 'kind', 'id', 'date', 'title', 'boundary']); choice(bound.relation, ['before', 'after']); choice(bound.kind, ['event', 'task']); identifier(bound.id); text(bound.title, '关联事项', 160); stamp(bound.boundary); if (bound.date !== undefined) day(bound.date)
+      }
       if (facts.task.due !== undefined) dateTime(facts.task.due)
       if (facts.task.estimateMin !== undefined && (typeof facts.task.estimateMin !== 'number' || !Number.isFinite(facts.task.estimateMin) || facts.task.estimateMin <= 0)) fail('备份路线估时无效')
       choice(facts.task.status, ['todo', 'doing'], '任务状态'); array(facts.dates, 7).forEach(day)

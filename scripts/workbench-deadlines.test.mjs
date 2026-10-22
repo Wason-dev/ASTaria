@@ -163,7 +163,7 @@ test('recommendations and Upcoming both place precise deadlines before the end o
   assert.deepEqual(groups.available.map(entry => entry.id), ['afternoon', 'late-evening', 'all-day', 'tomorrow-morning', 'tomorrow-all-day'])
   assert.deepEqual(groups.later.map(entry => entry.id), [])
   assert.deepEqual([...groups.available, ...groups.later].map(entry => entry.id).sort(), upcomingDeadlines(tasks, now).map(entry => entry.task.id).sort())
-  assert.equal(recommendationReason(groups.available[0], now), '截止时间更近，先留出这一段时间')
+  assert.equal(recommendationReason(groups.available[0], now), '截止 2026/09/17')
 })
 
 test('recommendation overdue boundaries agree with Upcoming and preserve active-task priority', () => {
@@ -172,9 +172,9 @@ test('recommendation overdue boundaries agree with Upcoming and preserve active-
   const precise = task('precise', '2026-09-18T00:00:00+08:00')
   for (const entry of [allDay, precise]) {
     assert.equal(upcomingDeadlines([entry], midnight)[0].urgency, 'overdue')
-    assert.equal(recommendationReason(entry, midnight), '已过截止时间，先处理这一项')
+    assert.equal(recommendationReason(entry, midnight), '已过截止时间')
   }
-  assert.equal(recommendationReason(task('invalid', '2026-09-17T24:00'), now), '从已收下的事项里，先推进这一项')
+  assert.equal(recommendationReason(task('invalid', '2026-09-17T24:00'), now), '截止日期待确认')
   const tasks = [task('late', '2026-09-17T15:00:00+08:00'), task('ongoing', '2026-09-17', { status: 'doing' }), task('overdue', '2026-09-16')]
   assert.deepEqual(taskGroups(tasks, now).available.map(entry => entry.id), ['overdue', 'ongoing', 'late'])
 })

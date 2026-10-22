@@ -63,6 +63,8 @@ export function Workbench(props: Props & { appearance: ReturnType<typeof useAppe
     '--wb-shadow': appearance.value.shadow / 100, '--wb-background': 1 - appearance.value.background / 100,
     '--wb-columns': appearance.value.columns,
     '--wb-backdrop-filter': glassBlurFilter(appearance.value.backgroundBlur),
+    // Small CSS glass details (tooltips) follow the chosen material blur.
+    '--wb-material-blur': glassBlurFilter(appearance.value.blur),
   } as CSSProperties
   return <GlassSamplingContext.Provider value={props.active}><section className="workbench" {...hover} data-theme={appearance.value.theme} data-active={props.active} aria-label="工作台" inert={!props.active} aria-hidden={!props.active} style={style}>
     <div className="wb-background" aria-hidden="true" />
@@ -102,7 +104,10 @@ function WorkbenchContent({ active, data, now, onCapture, onNotice, appearance, 
     return totals
   }, [tasks, now, scheduleBlocks, completedFreeTimeSessions])
   const groups = useMemo(() => taskGroups(tasks, now, scheduleBlocks, completedFreeTimeSessions), [tasks, now, scheduleBlocks, completedFreeTimeSessions])
-  const briefing = useMemo(() => buildWorkbenchBriefing(tasks, now, timer.durations.focusMin, timer.getSpentMs, scheduledMinutes, scheduleBlocks, completedFreeTimeSessions), [tasks, now, timer.durations.focusMin, timer.getSpentMs, timer.session, scheduledMinutes, scheduleBlocks, completedFreeTimeSessions])
+  // The planner already refreshes this optional projection with its existing
+  // snapshot reads; the workbench only forwards it, never fetches it again.
+  const scheduleExplanations = planner.state?.scheduleExplanations
+  const briefing = useMemo(() => buildWorkbenchBriefing(tasks, now, timer.durations.focusMin, timer.getSpentMs, scheduledMinutes, scheduleBlocks, completedFreeTimeSessions, scheduleExplanations), [tasks, now, timer.durations.focusMin, timer.getSpentMs, timer.session, scheduledMinutes, scheduleBlocks, completedFreeTimeSessions, scheduleExplanations])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectedSession, setSelectedSession] = useState<{ id?: string; taskId: string; date: string; start: string; end: string } | undefined>(undefined)
   const selectedSessionId = selectedSession?.id
@@ -360,8 +365,8 @@ function WorkbenchContent({ active, data, now, onCapture, onNotice, appearance, 
   const renderTask = (task: Task, recommended = false) => { const schedule = taskSchedule(task, now, scheduleBlocks, completedFreeTimeSessions); return <button key={task.id} className="wb-task wb-glass" data-task-id={task.id} data-recommended={recommended} onClick={() => switchTo(task.id)} disabled={busy || transitioning}>
     <MeasuredGlassSurface radius={appearance.radius} material={appearance} />
     <span className="wb-task-body">
-      <span className="wb-task-top"><strong>{task.title}</strong>{recommended ? <span className="wb-recommendation" role="img" aria-label="析熙推荐 · 本地建议" title="析熙推荐 · 本地建议"><Icon name="xixi" /></span> : <Icon name="arrow" className="wb-task-arrow" />}</span>
-      <span className="wb-task-detail"><span>{schedule ? (scheduleStatusLabel(schedule, now) ?? task.notes ?? (recommended ? recommendationReason(task, now) : '从这一项开始')) : (task.notes || (recommended ? recommendationReason(task, now) : '从这一项开始'))}</span></span>
+      <span className="wb-task-top"><strong>{task.title}</strong>{recommended ? <span className="wb-recommendation" role="img" aria-label={scheduleExplanations?.[task.id]?.length ? "析熙说明" : "当前事项"} title={scheduleExplanations?.[task.id]?.length ? "析熙说明" : "当前事项"}><Icon name="xixi" /></span> : <Icon name="arrow" className="wb-task-arrow" />}</span>
+      <span className="wb-task-detail"><span>{scheduleExplanations?.[task.id]?.[0] || (schedule ? scheduleStatusLabel(schedule, now) : undefined) || task.notes || recommendationReason(task, now)}</span></span>
       {appearance.metadata && <span className="wb-task-meta">
         <span className="wb-meta-value" title={`课程或分类：${taskArea(task)}`}><Icon name="book" /><span>{taskArea(task)}</span></span>
         <span className="wb-meta-value" title={schedule ? '日历安排' : task.startAt && agendaDate(task.startAt) ? '安排日期' : '截止时间'}><Icon name="calendar" /><span>{schedule ? scheduleDisplay(schedule, now) : task.startAt && agendaDate(task.startAt) ? `${shortTimestamp(task.startAt, now)}安排` : task.due ? `${deadlineLabel(task, now)}截止` : '待安排'}</span></span>
@@ -382,7 +387,7 @@ function WorkbenchContent({ active, data, now, onCapture, onNotice, appearance, 
         <div className="wb-overview-layout">
         <Glass appearance={appearance} className="wb-briefing-panel"><div className="wb-briefing-content">
           {(preview || (!workspaceLoading && !workspaceError)) && <XixiBriefing embedded tasks={tasks} briefing={briefing} appearance={appearance} preview={preview} disabled={busy || transitioning} focusMin={timer.durations.focusMin} restMin={timer.durations.restMin} onSelect={switchTo} onCapture={onCapture} />}
-          <UpcomingDeadlines embedded ref={deadlineHeading} revealTaskId={deadlineReturnId ?? undefined} appearance={appearance} tasks={tasks} now={now} disabled={busy || transitioning} loading={!preview && workspaceLoading} error={preview ? '' : workspaceError} highlighted={false} onSelect={id => {
+          <UpcomingDeadlines embedded ref={deadlineHeading} revealTaskId={deadlineReturnId ?? undefined} appearance={appearance} tasks={tasks} now={now} disabled={busy || transitioning} loading={!preview && workspaceLoading} error={preview ? '' : workspaceError} highlighted={false} scheduleExplanations={scheduleExplanations} onSelect={id => {
             const group = taskEntries(tasks).find(entry => entry.kind === 'collection' && entry.tasks.some(task => task.id === id))
             if (group?.kind === 'collection' && document.activeElement instanceof HTMLElement) collections.open(group, document.activeElement)
             else switchTo(id)

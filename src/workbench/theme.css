@@ -5,11 +5,8 @@
 .workbench[data-theme] :where(.wb-task-top strong,.wb-task-detail,.wb-task-meta,.wb-today-metrics dd,.wb-section-heading h3,.wb-brief-message h3,.wb-brief-message p,.wb-xixi-identity strong,.wb-ddl-copy strong,.wb-ddl-node-date,.wb-ddl-effort,.wb-xixi-body) { transition: color 320ms }
 
 @media (forced-colors: none) {
-  .p0 .workbench :is(.wb-brief-start,.wb-reason-toggle.wb-icon-button) { background: #dfcfaf; color: #201c16; box-shadow: 0 2px 8px #9a784518 }
-  .p0 .workbench :is(.wb-brief-start,.wb-reason-toggle.wb-icon-button):enabled:hover { background: #eee0c5; color: #201c16; box-shadow: 0 3px 16px #b2936028 }
-  .p0 .workbench .wb-reason-toggle.wb-icon-button[aria-expanded=true] { background: #d6bd90; color: #201c16; box-shadow: inset 0 0 0 1px #96784a55, 0 2px 8px #9a784518 }
-  .p0 .workbench .wb-reason-toggle.wb-icon-button[aria-expanded=true]:enabled:hover { background: #e4cda5 }
-  .p0 .workbench .wb-reason-toggle.wb-icon-button:enabled:active { background: #ccb180; box-shadow: inset 0 1px 4px #6d51262e }
+  .p0 .workbench .wb-brief-start { background: #dfcfaf; color: #201c16; box-shadow: 0 2px 8px #9a784518 }
+  .p0 .workbench .wb-brief-start:enabled:hover { background: #eee0c5; color: #201c16; box-shadow: 0 3px 16px #b2936028 }
   .p0 .workbench .wb-brief-start > span { color: #63533a }
   .p0 .workbench[data-theme=dark] {
     color-scheme: dark;
@@ -69,6 +66,19 @@
   .p0 .workbench[data-theme=dark] :is(.wb-ddl-page-prev,.wb-ddl-page-next):enabled:is(:hover,:focus-visible) { color: #e8d0a4; border-color: #d5bb8b80; background-color: #d5bb8b12; box-shadow: inset 0 1px 0 #ffffff33, 0 3px 12px #d5bb8b15 }
   .p0 .workbench[data-theme=dark] :is(.wb-ddl-page-prev,.wb-ddl-page-next):enabled:active { background-color: #d5bb8b1c; box-shadow: inset 0 1px 5px #0003 }
   .p0 .workbench[data-theme=dark] .wb-icon-button .wb-tooltip { color: #eeeae3; background: #17181bf5; border-color: #d5bb8b40; box-shadow: 0 5px 14px #0005 }
+  /* The reason disclosure is a measured-glass circle, not a solid gold fill.
+     Its tooltip keeps the same light glass family instead of an opaque block. */
+  .p0 .workbench[data-theme=dark] .wb-reason-toggle.wb-icon-button { color: var(--wb-body) }
+  .p0 .workbench[data-theme=dark] .wb-reason-toggle.wb-icon-button:enabled:hover,
+  .p0 .workbench[data-theme=dark] .wb-reason-toggle.wb-icon-button[aria-expanded=true] { color: #e8d0a4 }
+  .p0 .workbench[data-theme=dark] .wb-reason-toggle.wb-icon-button:disabled { color: var(--wb-muted); opacity: .55 }
+  .p0 .workbench[data-theme=dark] .wb-reason-toggle.wb-icon-button .wb-tooltip {
+    color: var(--wb-text);
+    background-color: rgb(30 33 39 / .46);
+    background-image: linear-gradient(120deg, rgb(238 234 227 / .18), transparent 68%);
+    border-color: #d5bb8b40;
+    box-shadow: 0 5px 14px #0003, inset 0 1px 0 #ffffff26;
+  }
 
   .p0 .workbench[data-theme=dark] .wb-input-shell { background: #080a0e50; box-shadow: inset 0 0 0 1px #d8d4cb30 }
   .p0 .workbench[data-theme=dark] .wb-input-shell:focus-within { background: #080a0e80; box-shadow: inset 0 0 0 1px #d5bb8b80 }

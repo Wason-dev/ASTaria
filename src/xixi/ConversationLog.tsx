@@ -1,3 +1,4 @@
+import { publicExecutionIssue } from './executionIssue'
 import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ComponentProps, ReactNode } from 'react'
 import type { XixiConversation, XixiContext } from './useXixiConversation'
@@ -294,7 +295,7 @@ const SavedMessage = memo(function SavedMessage({ row, conversationId, receiptDa
       </div>}
       {!entry.retractedAt && entry.executionNotice && <div className="xixi-execution-notice" role="status" aria-label="执行状态">
         {entry.executionNotice.replyUnavailable && <p>回复生成中断，已保存的操作见下方回执。</p>}
-        {entry.executionNotice.issues.length > 0 && <><strong>尚未完成</strong><ul>{entry.executionNotice.issues.map(issue => <li key={issue}>{issue}</li>)}</ul></>}
+        {entry.executionNotice.issues.length > 0 && <><strong>尚未完成</strong><ul>{entry.executionNotice.issues.map(issue => <li key={issue}>{publicExecutionIssue(issue)}</li>)}</ul></>}
       </div>}
       {receiptEntries(receipts).map(entry => entry.kind === 'operation' ? <Receipt key={entry.id} operation={entry.operation} receiptDay={receiptDay} busy={busy} undoing={undoing === entry.id} disabled={receiptDisabled} actions={actions} /> : <CollectionReceipt key={entry.id} entry={entry} receiptDay={receiptDay} busy={busy} undoing={undoing} disabled={receiptDisabled} actions={actions} />)}
       {companionActions.map(action => <div className="xixi-receipt" key={action.id}><strong>{action.label}</strong><button type="button" className="xixi-text-button" onClick={() => window.dispatchEvent(new CustomEvent('astaria-open-companion', { detail: { tab: action.kind === 'wish' || action.kind === 'goal' ? 'wishes' : 'scenarios', targetId: action.targetId } }))}>查看 ↗</button></div>)}
@@ -439,6 +440,7 @@ const Receipt = memo(function Receipt({ operation, receiptDay, busy, undoing, di
   const title = multiple ? `创建 ${operation.createdTasks!.length} 项事项${operation.scheduledCount ? ` · 已安排 ${operation.scheduledCount} 段时间` : ''}` : operation.summary
   return <div className="xixi-receipt" data-operation-id={operation.id} data-unread={!operation.readAt}>
     <header>{multiple ? <button type="button" className="xixi-text-button" aria-expanded={open} aria-controls={id} onClick={() => setOpen(value => !value)}>{title} {open ? '⌃' : '⌄'}</button> : <strong>{title}</strong>}<ReceiptUndo operation={operation} busy={busy} undoing={undoing} actions={actions} /></header>
+    {!operation.undoneAt && operation.explanations?.map((reason, index) => <p key={index} className="xixi-receipt-reason">{reason}</p>)}
     <div id={id} className="xixi-collection-reveal" data-open={open} inert={!open} aria-hidden={!open}><div>
       {Boolean(operation.details?.length) && <ul className="xixi-receipt-details">{operation.details!.map((detail, index) => <li key={index}>{detail}</li>)}</ul>}
       {!operation.undoneAt && operation.createdTasks?.map(task => multiple ? <ReceiptTaskEditor key={task.id} task={task} receiptDay={receiptDay} disabled={disabled} actions={actions} /> : <MemoReceiptDeadline key={task.id} task={task} receiptDay={receiptDay} disabled={disabled} multiple={false} onSaved={actions.refresh} onEstimate={actions.requestEstimate} />)}
@@ -454,6 +456,7 @@ function CollectionReceipt({ entry, receiptDay, busy, undoing, disabled, actions
     <button type="button" className="xixi-text-button xixi-collection-toggle" aria-expanded={open} aria-controls={id} onClick={() => setOpen(value => !value)}><span><CollectionIcon /> {entry.name}</span><small>{entry.tasks.length} 项 {open ? '⌃' : '⌄'}</small></button>
     <p className="xixi-collection-summary">{entry.due ? `截止 ${due}` : due}{scheduled > 0 && ` · 已安排 ${scheduled} 段`}{undone > 0 && ` · ${undone} 批已撤销`}</p>
     <div id={id} className="xixi-collection-reveal" data-open={open} inert={!open} aria-hidden={!open}><div>
+      {[...new Set(entry.operations.filter(operation => !operation.undoneAt).flatMap(operation => operation.explanations ?? []))].map(reason => <p key={reason} className="xixi-receipt-reason">{reason}</p>)}
       <div className="xixi-collection-undos">{entry.operations.map((operation, index) => <div key={operation.id} data-operation-id={operation.id}><small>{entry.operations.length > 1 ? `第 ${index + 1} 批 · ` : ''}{operation.createdTasks?.length ?? 0} 项</small><ReceiptUndo operation={operation} busy={busy} undoing={undoing === operation.id} actions={actions} /></div>)}</div>
       {entry.tasks.map(task => <ReceiptTaskEditor key={task.id} task={task} receiptDay={receiptDay} disabled={disabled} actions={actions} />)}
       <button type="button" className="xixi-text-button" aria-expanded={details} onClick={() => setDetails(value => !value)}>{details ? '收起' : '查看'}保存明细</button>

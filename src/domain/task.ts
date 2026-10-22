@@ -19,7 +19,9 @@ export type Task = {
   inbox: boolean
   due?: string
   startAt?: string
+  kind?: 'task' | 'reminder'
   estimateMin?: number
+  relations?: { relation: 'before' | 'after'; kind: 'event' | 'task'; id: string; date?: string }[]
   freeTimeGoalId?: string
   occurrence?: {
     seriesId: string

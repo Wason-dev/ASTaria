@@ -32,6 +32,11 @@ export type PlannerState = {
   dayEvents?: DayEvent[]
   /** Read-only API projection of the shared per-session completion history. */
   completedFreeTimeSessions?: Record<string, string>
+  /** Read-only projection of Xixi's explanations for placed tasks. The server
+   * only includes entries that still match the current schedule and task
+   * revision, so stale wording never reaches the workbench. Older servers omit
+   * the field; consumers must treat it as optional. */
+  scheduleExplanations?: Record<string, string[]>
 }
 export type PlannerAction =
   | { type: 'set-first-week-monday'; date: string }

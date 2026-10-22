@@ -1,6 +1,8 @@
 import { routineOccursOn, weekStart } from '../src/planner/weekCycle.ts'
 import { holidayRoutinesForDay } from '../src/planner/model.ts'
 import { sha256Hex } from './portable.mjs'
+import { timingViolation } from './taskTiming.mjs'
+import { replanRelatedTasks } from './replanRelations.mjs'
 import { ValidationError, knownKeys, text, identifier, choice, day, dateTime, clockTime } from './validation.mjs'
 
 const STATE_KEY = 'planner-v1'
@@ -255,6 +257,7 @@ export function createPlannerStore({ db, transaction, getTask, listTasks, now = 
   const requireTask = (id, unfinished = false) => {
     const task = getTask(id)
     if (!task || task.deletedAt) fail('安排关联的任务不存在或已删除', 409)
+    if (unfinished && task.kind === 'reminder') fail('这是日期提醒，不能作为待办占用任务时间；准备工作应记录为关联任务', 409)
     if (unfinished && !activeTask(task)) fail('已完成或已放下的任务不能继续安排', 409)
     return task
   }
@@ -275,6 +278,7 @@ export function createPlannerStore({ db, transaction, getTask, listTasks, now = 
       const overlapEnd = routine.end < block.end ? routine.end : block.end
       if (localInstant(block.date, overlapEnd) <= instant) continue
       const task = getTask(block.taskId)
+      if (task?.relations?.some(relation => relation.kind === 'event' && relation.id === routine.id)) continue
       if (occupiesTime(task)) fail(`固定安排与已有任务时间重叠：${block.date} ${block.start}–${block.end}「${task.title}」。请先调整任务安排`, 409)
     }
   }
@@ -305,6 +309,9 @@ export function createPlannerStore({ db, transaction, getTask, listTasks, now = 
       }
     }
     const range = blockRange(block), deadline = dueLimit(task.due)
+    const relationState = { ...state, blocks: [...state.blocks.filter(item => item.id !== block.id), block] }
+    const violation = timingViolation(task, block, relationState, listTasks())
+    if (violation) fail(`安排不符合事项先后关系：${JSON.stringify(violation)}`, 409)
     if (deadline !== null && Number.isFinite(deadline) && range.end > deadline) fail('安排结束时间超过了任务截止时间', 409)
     // Only sync may retain an ended periodic overlap; ordinary placement and
     // restore validation continue to check the complete routine occupancy.
@@ -542,6 +549,7 @@ export function createPlannerStore({ db, transaction, getTask, listTasks, now = 
         }
         default: fail('不支持的安排操作')
       }
+      if (!deferBlockValidation && action.type !== 'check-item') replanRelatedTasks(JSON.parse(before), state, listTasks(), now(), new Set(action.type === 'save-block' ? [action.block.taskId] : []))
       if (JSON.stringify(state) === before) return state
       if (!Number.isSafeInteger(state.revision + 1)) fail('安排版本超出范围', 409)
       state.revision += 1
@@ -559,6 +567,7 @@ export function createPlannerStore({ db, transaction, getTask, listTasks, now = 
     return transaction(() => {
       let state = getPlanner()
       if (state.revision !== expectedRevision) fail('安排已在其他窗口更新，请刷新后重试', 409)
+      const beforeRelations = structuredClone(state)
       const savedIds = new Set()
       for (const action of actions) {
         const blockId = action?.type === 'save-block' ? action.block?.id : action?.type === 'delete-block' ? action.id : null
@@ -566,7 +575,9 @@ export function createPlannerStore({ db, transaction, getTask, listTasks, now = 
         state = applyPlannerAction(action, state.revision, true)
         if (action.type === 'save-block') savedIds.add(action.block.id)
       }
-      for (const block of state.blocks) if (savedIds.has(block.id)) validateBlock(block, state)
+      replanRelatedTasks(beforeRelations, state, listTasks(), now(), new Set(actions.filter(action => action.type === 'save-block').map(action => action.block.taskId)))
+      for (const block of state.blocks) if (savedIds.has(block.id) || JSON.stringify(beforeRelations.blocks.find(item => item.id === block.id)) !== JSON.stringify(block)) validateBlock(block, state)
+      save(state)
       return state
     })
   }
@@ -604,6 +615,15 @@ export function createPlannerStore({ db, transaction, getTask, listTasks, now = 
     }
     validateBlock(block, state)
     return updatePlanner({ type: 'save-block', block }, state.revision)
+  }
+  function syncTaskRelations(before, after) {
+    if (!before || JSON.stringify(before.relations ?? []) === JSON.stringify(after.relations ?? [])) return
+    const original = getPlanner(), state = structuredClone(original), tasks = listTasks()
+    replanRelatedTasks(original, state, tasks, now(), new Set(), tasks.map(task => task.id === before.id ? before : task))
+    if (JSON.stringify(state.blocks) === JSON.stringify(original.blocks)) return
+    for (const block of state.blocks) if (JSON.stringify(original.blocks.find(item => item.id === block.id)) !== JSON.stringify(block)) validateBlock(block, state)
+    state.revision += 1
+    save(state)
   }
   // Only durable operation snapshots call this, never arbitrary browser input.
   function restorePlanner(snapshot, expectedRevision) {
@@ -692,5 +712,5 @@ export function createPlannerStore({ db, transaction, getTask, listTasks, now = 
       }
     }
   }
-  return { getPlanner, updatePlanner, updatePlannerBatch, removeTask, syncRecurringTaskPlan, restorePlanner, validateStoredState, validateSyncState }
+  return { getPlanner, updatePlanner, updatePlannerBatch, removeTask, syncRecurringTaskPlan, syncTaskRelations, restorePlanner, validateStoredState, validateSyncState }
 }

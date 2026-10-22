@@ -1,3 +1,4 @@
+import { receiptNotesForRequest, receiptJournals } from './receiptExplanations.mjs'
 const receiptDeadline = value => value.length === 10 ? value : new Intl.DateTimeFormat('zh-CN', {
   year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
 }).format(new Date(value))
@@ -6,13 +7,14 @@ const childrenOf = (operation, operations) => operations.filter(child => child.p
   child.requestId === operation.requestId && child.kind === 'planner' && operation.kind !== 'planner')
 
 /** A task and its initial placement are one user action, with one undo target. */
-export function publicOperation(operation, db, operations = db.listOperations()) {
+export function publicOperation(operation, db, operations = db.listOperations(), requestNotes) {
   const parent = operation.parentOperationId && operations.find(item => item.id === operation.parentOperationId &&
     item.requestId === operation.requestId && item.kind !== 'planner')
-  if (parent) return publicOperation(parent, db, operations)
+  if (parent) return publicOperation(parent, db, operations, requestNotes)
   const { id, requestId, summary, createdAt, readAt, undoneAt, undoable, planChanges, changes = [] } = operation
   const children = childrenOf(operation, operations)
   const members = [operation, ...children]
+  const explanations = operation.undoneAt ? [] : (requestNotes ?? receiptNotesForRequest(db, requestId)).filter(note => members.some(item => item.id === note.operationId && !item.undoneAt)).map(note => note.text)
   const created = changes.filter(change => change.table === 'tasks' && change.before === null && change.after)
   const scheduleCount = children.filter(child => !child.undoneAt).reduce((count, child) => count + (child.planChanges ?? []).filter(change => change.after).length, 0)
   const collection = created[0]?.after?.collection
@@ -20,6 +22,7 @@ export function publicOperation(operation, db, operations = db.listOperations())
   return {
     id, requestId, summary: children.length && scheduleCount ? `${title} · 已安排 ${scheduleCount} 段时间` : scheduleHeading(title, planChanges),
     scheduledCount: scheduleCount,
+    ...(explanations.length ? { explanations: [...new Set(explanations)] } : {}),
     createdAt, readAt: members.every(item => item.readAt) ? readAt : null, undoneAt, undoable,
     ...(children.length ? { relatedOperationIds: children.map(child => child.id) } : {}),
     ...(created.length ? { undoLabel: children.length ? '撤销创建与安排' : '撤销创建' } : {}),
@@ -63,5 +66,9 @@ function scheduleHeading(summary, planChanges = []) {
 
 export function publicOperations(operations, db) {
   const groupedChildren = new Set(operations.flatMap(operation => childrenOf(operation, operations).map(child => child.id)))
-  return operations.filter(operation => !groupedChildren.has(operation.id)).map(operation => publicOperation(operation, db, operations))
+  const journals = receiptJournals(db, operations.map(operation => operation.requestId))
+  const notes = new Map([...journals].map(([id, outcomes]) => [id, outcomes.flatMap(outcome => outcome.notes ?? [])]))
+  return operations.filter(operation => !groupedChildren.has(operation.id)).map(operation => {
+    return publicOperation(operation, db, operations, notes.get(operation.requestId) ?? [])
+  })
 }

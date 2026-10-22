@@ -130,7 +130,7 @@ export function createDatabaseCore(db, {
         db.prepare('DELETE FROM state WHERE key = ?').run(`task-undo-version:${id}`)
         recordTaskCompletion(previous, document)
         if (document.deletedAt) planner.removeTask(id)
-        else planner.syncRecurringTaskPlan(previous, document)
+        else { planner.syncRecurringTaskPlan(previous, document); planner.syncTaskRelations(previous, document) }
       }
       return changes
     })
@@ -789,7 +789,8 @@ export function createDatabaseCore(db, {
       const requestedChanges = clean(operation.changes)
       const linksOccurrencePlan = operation.changes.some(change => change.table === 'tasks' && change.before?.occurrence &&
         change.after?.occurrence && !change.after.deletedAt && change.before.occurrence.date !== change.after.occurrence.date)
-      const taskPlannerBefore = linksOccurrencePlan ? planner.getPlanner() : null
+      const linksTiming = operation.changes.some(change => change.table === 'tasks' && change.before && JSON.stringify(change.before.relations ?? []) !== JSON.stringify(change.after?.relations ?? []))
+      const taskPlannerBefore = linksOccurrencePlan || linksTiming ? planner.getPlanner() : null
       const touched = new Set()
       const removedAssignments = []
       for (const change of operation.changes) {
@@ -916,7 +917,7 @@ export function createDatabaseCore(db, {
       const operation = {
         id, requestId, summary, kind: 'planner', changes: [], requestedActions, plannerBefore,
         ...(parentOperationId ? { parentOperationId } : {}),
-        planChanges: [...new Set(requestedActions.flatMap(action => action.type === 'save-block' ? [action.block.id] : action.type === 'delete-block' ? [action.id] : []))]
+        planChanges: [...new Set([...requestedActions.flatMap(action => action.type === 'save-block' ? [action.block.id] : action.type === 'delete-block' ? [action.id] : []), ...[...plannerBefore.blocks, ...state.blocks].filter(block => !same(plannerBefore.blocks.find(item => item.id === block.id) ?? null, state.blocks.find(item => item.id === block.id) ?? null)).map(block => block.id)])]
           .map(blockId => ({ id: blockId, before: plannerBefore.blocks.find(block => block.id === blockId) ?? null,
             after: state.blocks.find(block => block.id === blockId) ?? null })),
         plannerAfterRevision: state.revision, undoable: true, createdAt: now(), readAt: null, undoneAt: null,

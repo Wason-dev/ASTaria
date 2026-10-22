@@ -33,6 +33,13 @@
 .workbench .wb-ddl-timeline-track .wb-ddl-expanded-advice { margin: 4px 0 7px; padding: 8px 9px; border-left: 2px solid #b3a07750; border-radius: 0 8px 8px 0; background: var(--wb-evidence-fill, #ffffff24); font-size: calc(var(--wb-font) - 2px) }
 .p0 .workbench[data-theme=dark] .wb-ddl-evidence { --wb-evidence-fill: #ffffff05 }
 .p0 .workbench[data-theme=dark] .wb-ddl-timeline-track .wb-ddl-evidence ul { background: none }
+/* A folder card explains the group: shared written notes once, then each
+   member's own note. Without written notes the panel is labelled as scheduling
+   information and only repeats stored DDL, estimates and recorded focus. */
+.workbench .wb-ddl-timeline-track .wb-ddl-evidence .wb-ddl-reason-titles { display: block; margin: 2px 0 0; color: var(--wb-muted, #737b82); font-size: calc(var(--wb-font) - 3px); line-height: 1.5; overflow-wrap: anywhere }
+.workbench .wb-ddl-timeline-track .wb-ddl-evidence .wb-ddl-collection-member { display: block; margin: 0 0 2px; color: var(--wb-body, #626b75); font-size: calc(var(--wb-font) - 2px); font-weight: 550; line-height: 1.55; overflow-wrap: anywhere }
+.workbench .wb-ddl-timeline-track .wb-ddl-evidence .wb-ddl-collection-items { margin-top: 6px }
+.workbench .wb-ddl-timeline-track .wb-ddl-facts-heading { margin: 4px 0 6px; color: var(--wb-muted, #737b82); font-size: calc(var(--wb-font) - 3px); line-height: 1.5 }
 .workbench .wb-ddl-pager { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; margin-top: 12px; padding-top: 10px; border-top: 1px solid #71889c16 }
 .workbench .wb-ddl-page-controls { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 10px; margin-left: auto; width: max-content }
 .workbench .wb-ddl-page-status { color: #4a5a65; font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap }

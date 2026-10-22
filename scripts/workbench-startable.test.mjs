@@ -8,7 +8,7 @@ const { buildWorkbenchBriefing } = await import('../src/workbench/briefing.ts')
 hook.deregister()
 process.env.TZ = 'Asia/Shanghai'
 const now = new Date('2026-09-22T17:40:00+08:00')
-const base = (id, extra = {}) => ({ id, title: id, area: null, source: 'manual', inbox: false, leadDays: 3, importance: 2, energy: 'deep', context: [], status: 'todo', createdAt: '2026-01-01', updatedAt: '2026-01-01', deletedAt: null, ...extra })
+const base = (id, extra = {}) => ({ id, title: id, area: null, source: 'manual', kind: 'task', inbox: false, leadDays: 3, importance: 2, energy: 'deep', context: [], status: 'todo', createdAt: '2026-01-01', updatedAt: '2026-01-01', deletedAt: null, ...extra })
 const block = (taskId, date, start, end) => ({ id: `${taskId}-${date}-${start}`, taskId, date, start, end })
 test('a concrete block becomes available exactly twenty minutes before start and stays after it ends', () => {
   const task = base('sat'), blocks = [block('sat', '2026-09-22', '18:00', '19:00')]
@@ -230,3 +230,30 @@ test('ordinary tasks keep their existing semantics under the session rules', () 
   assert.deepEqual(ids(taskGroups([ordinary], localTime('17:40'), [block('ordinary', YESTERDAY, '15:00', '16:00')])), ['ordinary'])
   assert.deepEqual(ids(taskGroups([ordinary], localTime('17:40'))), ['ordinary'])
 })
+
+test('exam reminders do not become startable work; preparation remains a real task', () => {
+ const reminder=base('exam',{title:'数学期中考试',kind:'reminder',due:'2026-11-23'})
+ const revision=base('revision',{title:'数学期中考试复习',due:'2026-11-22',estimateMin:45})
+ const explicit=base('birthday',{title:'同学生日',kind:'reminder',scheduleMode:'record-only',due:'2026-09-25'})
+ assert.deepEqual(taskGroups([reminder,revision,explicit],now).available.map(task=>task.id),['revision'])
+ const brief=buildWorkbenchBriefing([reminder,revision,explicit],now,35,()=>0)
+ assert.equal(brief.recommendation.task.id,'revision')
+})
+test('an active scheduled session wins over a later DDL task and unfinished prerequisites keep downstream work waiting', () => {
+ const future=base('future',{due:'2026-09-23'}), active=base('active',{due:'2026-10-25'})
+ const after=base('after',{relations:[{relation:'after',kind:'task',id:'active'}]})
+ const blocks=[block('active','2026-09-22','17:00','18:00')]
+ const groups=taskGroups([future,active,after],now,blocks)
+ assert.equal(groups.available[0].id,'active')
+ assert.ok(groups.later.some(task=>task.id==='after'))
+ assert.ok(taskGroups([future,{...active,status:'done'},after],now,blocks).available.some(task=>task.id==='after'))
+})
+
+ test('record-only homework remains executable; reminder classification never uses title keywords', () => {
+ const homework=base('homework',{title:'物理作业',kind:'task',scheduleMode:'record-only'})
+ const titleOnly=base('word',{title:'考试系统开发',kind:'task'})
+ const unknown=base('legacy',{source:'ai',kind:undefined,title:'数学期中考试',due:'2026-11-23'})
+ const groups=taskGroups([homework,titleOnly,unknown],now)
+ assert.ok(groups.available.includes(homework));assert.ok(groups.available.includes(titleOnly))
+ assert.ok(groups.later.includes(unknown),'unclassified date record waits for semantic classification, never a guessed recommendation')
+ })

@@ -12,6 +12,7 @@ import { getPreferences, savePreferences } from './preferences.mjs'
 import { normalizeAssistantProtocol } from './provider-protocol.mjs'
 import { toggleTaskStep } from './taskSteps.mjs'
 import { publicOperation, publicOperations } from './operationReceipts.mjs'
+import { currentSchedulingExplanations } from './receiptExplanations.mjs'
 import { ValidationError, identifier, knownKeys } from './validation.mjs'
 import { isSourceMetadataList, uniqueSourceMetadata } from '../src/xixi/sourceMetadata.ts'
 import { compatibleEndpoint } from '../src/xixi/cloudProviders.ts'
@@ -165,7 +166,7 @@ export function createServiceCore({ db, vault, complete, fetcher = fetch, compat
       if (path === '/companion') return companion.listState({ ...(url.searchParams.get('date') ? { date: url.searchParams.get('date') } : {}), ...(url.searchParams.get('days') ? { days: Number(url.searchParams.get('days')) } : {}) })
       if (path === '/companion/string-order') return stringOrder.list({ date: url.searchParams.get('date') || undefined })
       if (path === '/companion/horizon-order') return horizonOrder.list({ date: url.searchParams.get('date') || undefined })
-      if (path === '/planner') return freeTime.plannerState()
+      if (path === '/planner') return { ...freeTime.plannerState(), scheduleExplanations: currentSchedulingExplanations(db) }
       if (path === '/conversation/reasoning') {
         const conversationId = identifier(url.searchParams.get('conversationId'), '对话标识')
         const requestId = identifier(url.searchParams.get('requestId'), '请求标识')
@@ -283,7 +284,7 @@ export function createServiceCore({ db, vault, complete, fetcher = fetch, compat
         }
         return status()
       }
-      if (path === '/planner') return freeTime.plannerState(db.updatePlanner(input.action, input.expectedRevision))
+      if (path === '/planner') { const planner = freeTime.plannerState(db.updatePlanner(input.action, input.expectedRevision)); return { ...planner, scheduleExplanations: currentSchedulingExplanations(db) } }
       if (path === '/settings/key') {
         if (typeof input.key !== 'string' || !/^[\x21-\x7e]{8,512}$/u.test(input.key.trim())) throw new ValidationError('请输入有效的 API Key')
         await vault.save(input.key); return status()

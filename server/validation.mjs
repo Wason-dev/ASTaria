@@ -101,7 +101,7 @@ export function jsonValue(value, label, max = 32000) {
   return JSON.parse(serialized)
 }
 
-const TASK_FIELDS = ['title', 'notes', 'collection', 'area', 'source', 'inbox', 'due', 'startAt', 'estimateMin', 'occurrence', 'freeTimeGoalId', 'subSteps', 'surfaceAt', 'leadDays', 'importance', 'energy', 'context', 'fuzzyWindow', 'status', 'doneAt', 'deletedAt']
+const TASK_FIELDS = ['title', 'notes', 'collection', 'area', 'source', 'inbox', 'due', 'startAt', 'estimateMin', 'kind', 'relations', 'occurrence', 'freeTimeGoalId', 'subSteps', 'surfaceAt', 'leadDays', 'importance', 'energy', 'context', 'fuzzyWindow', 'status', 'doneAt', 'deletedAt']
 export function taskInput(input, { partial = false } = {}) {
   object(input, '任务')
   const value = {}
@@ -118,7 +118,18 @@ export function taskInput(input, { partial = false } = {}) {
   for (const key of ['due', 'startAt', 'surfaceAt', 'doneAt']) {
     if (has(key)) value[key] = input[key] == null ? undefined : dateTime(input[key], key)
   }
+  if (has('kind') && input.kind !== undefined) value.kind = choice(input.kind, ['task', 'reminder'], '事项类型')
   if (has('estimateMin')) value.estimateMin = input.estimateMin == null ? undefined : number(input.estimateMin, '预计用时', 1, 525600)
+  if (has('relations') && input.relations != null) {
+    if (!Array.isArray(input.relations) || input.relations.length > 8) throw new ValidationError('时间关联最多8项')
+    value.relations = input.relations.map(item => {
+      knownKeys(item, ['relation', 'kind', 'id', 'date'], '时间关联')
+      const kind = choice(item.kind, ['event', 'task'], '关联对象')
+      return { relation: choice(item.relation, ['before', 'after'], '先后关系'), kind, id: identifier(item.id, '关联标识'),
+        ...(kind === 'event' || item.date !== undefined ? { date: day(item.date) } : {}) }
+    })
+  }
+  if (has('relations') && input.relations === null) value.relations = undefined
   if (has('freeTimeGoalId')) value.freeTimeGoalId = input.freeTimeGoalId == null ? undefined : identifier(input.freeTimeGoalId, '余时目标标识')
   if (has('occurrence')) {
     if (input.occurrence == null) value.occurrence = undefined

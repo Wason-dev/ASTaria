@@ -234,3 +234,5 @@
 
 .p0 .home-workspace[data-theme=light] .xixi-image-drop { background: #fafbf2f2 }
 .p0 .home-workspace[data-theme=light] .xixi-attachment-error { color: #965944 }
+
+.xixi-receipt .xixi-receipt-reason { margin:7px 0 2px; color:var(--xixi-muted); font-size:11px; line-height:1.75; overflow-wrap:anywhere; white-space:pre-wrap }

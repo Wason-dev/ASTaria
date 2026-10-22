@@ -1,7 +1,9 @@
 import type { Task } from '../domain/task'
+import { collectionProgress, collectionRemaining } from '../domain/taskCollections'
+import type { TaskCollection } from '../domain/taskCollections'
 import { agendaDate, isOpenTask, localDay } from '../home/agenda'
 import { deadlineTime, upcomingDeadlines } from './deadlines'
-import { recommendationReason, taskGroups, taskSchedule, scheduleDisplay } from './tasks'
+import { taskGroups, taskSchedule, scheduleDisplay } from './tasks'
 import type { WorkbenchSchedule } from './tasks'
 
 export type BriefingRecommendation = {
@@ -9,6 +11,13 @@ export type BriefingRecommendation = {
   headline: string
   summary: string
   evidence: string[]
+  /** Verifiable facts only: deadline, estimate and recorded focus. Used when no
+   * written explanation exists, so the workbench never presents a template as
+   * if Xixi had said it. */
+  facts: string[]
+  /** Xixi's explanations from the optional planner projection. Empty when the
+   * current schedule or task revision has no matching explanation. */
+  explanations: string[]
   suggestedMin: number
 }
 
@@ -28,6 +37,8 @@ export type WorkbenchBriefing = {
 export type DeadlineContext = {
   effortLabel: string
   suggestion: string
+  /** Verifiable facts only: deadline, estimate and recorded focus. */
+  facts: string[]
   evidence: string[]
   tone: 'neutral' | 'attention' | 'urgent'
 }
@@ -35,6 +46,71 @@ export type DeadlineContext = {
 const MINUTE = 60_000
 const DAY = 24 * 60 * MINUTE
 export type ScheduledMinutes = Readonly<Record<string, number>>
+
+/** Optional read projection returned by GET /planner: taskId -> explanation. */
+export type ScheduleExplanations = Readonly<Record<string, readonly string[]>>
+
+/** Read one task's written explanation without trusting the projection shape.
+ * Older servers omit the field, older records have no entry for a task, and a
+ * malformed value must never fabricate advice or crash the workbench. */
+export function scheduleExplanationsFor(explanations: ScheduleExplanations | null | undefined, taskId: string): string[] {
+  if (!explanations || typeof explanations !== 'object' || !Object.hasOwn(explanations, taskId)) return []
+  const value: unknown = (explanations as Readonly<Record<string, unknown>>)[taskId]
+  if (!Array.isArray(value)) return []
+  const result: string[] = []
+  for (const reason of value) {
+    if (typeof reason !== 'string') continue
+    const text = reason.trim()
+    if (text && !result.includes(text)) result.push(text)
+  }
+  return result
+}
+
+/** Grouped written explanations for one collection card. Notes shared by
+ * several members are shown once; each member keeps only its own notes. */
+export type CollectionExplanations = {
+  common: Array<{ reason: string; titles: string[] }>
+  items: Array<{ id: string; title: string; reasons: string[] }>
+}
+
+/** Group a collection's written explanations without repeating one note across
+ * members. Stale or malformed projections never invent an explanation. */
+export function collectionExplanations(members: readonly { id: string; title: string }[], explanations: ScheduleExplanations | null | undefined): CollectionExplanations {
+  const perMember = members.map(member => ({ id: member.id, title: member.title, reasons: scheduleExplanationsFor(explanations, member.id) }))
+  const owners = new Map<string, string[]>()
+  for (const member of perMember) {
+    for (const reason of new Set(member.reasons)) owners.set(reason, [...(owners.get(reason) ?? []), member.title])
+  }
+  const shared = [...owners].filter(([, titles]) => titles.length > 1)
+  const sharedReasons = new Set(shared.map(([reason]) => reason))
+  return {
+    common: shared.map(([reason, titles]) => ({ reason, titles: [...new Set(titles)] })),
+    items: perMember.flatMap(member => {
+      const reasons = member.reasons.filter(reason => !sharedReasons.has(reason))
+      return reasons.length ? [{ id: member.id, title: member.title, reasons }] : []
+    }),
+  }
+}
+
+export type CollectionSchedulingFact = { label: string; value: string }
+
+/** Facts for a collection without written explanations: stored DDL, progress,
+ * estimates, scheduled minutes and focus records only. Callers label them as
+ * scheduling information instead of presenting a fixed causal sentence. */
+export function collectionSchedulingFacts(collection: TaskCollection, dateLabel: string, remainingLabel: string, scheduled: ScheduledMinutes = {}, getSpentMs?: (id: string) => number): CollectionSchedulingFact[] {
+  const scheduledMin = collection.tasks.reduce((total, task) => total + (scheduled[task.id] ?? 0), 0)
+  const spentMs = getSpentMs ? collection.tasks.reduce((total, task) => {
+    const value = getSpentMs(task.id)
+    return total + (Number.isFinite(value) && value > 0 ? value : 0)
+  }, 0) : 0
+  const facts: CollectionSchedulingFact[] = [
+    { label: '截止', value: `${dateLabel} · ${remainingLabel}` },
+    { label: '进度', value: `${collectionProgress(collection)} · ${collectionRemaining(collection)}` },
+    { label: '已排', value: scheduledMin > 0 ? `${Math.ceil(scheduledMin)} 分钟` : '尚未安排时段' },
+  ]
+  if (spentMs > 0) facts.push({ label: '专注', value: `累计专注 ${Math.floor(spentMs / 60000)} 分钟` })
+  return facts
+}
 
 export function effectiveEstimate(task: Task, scheduled: ScheduledMinutes = {}): number | undefined {
   if (task.freeTimeGoalId) return scheduled[task.id] > 0 ? scheduled[task.id] : undefined
@@ -87,36 +163,38 @@ export function deadlineContext(task: Task, now: Date, focusMin: number, getSpen
   const focus = focusLength(focusMin)
   const deadline = upcomingDeadlines([task], now)[0]
   const remaining = deadline ? deadline.deadlineMs - now.getTime() : undefined
-  const evidence = [
+  const facts = [
     deadline ? `${deadline.dateLabel} · ${deadline.remainingLabel}`
       : task.due?.trim() ? '截止日期待确认' : '尚未设置明确截止',
     expectedLabel ?? '用时尚未估计',
     `${spentLabel(spent)}${spent > 0 ? '，包含历史记录' : ''}`,
-    `以 ${minutesLabel(focus)} 为一轮估算，未包含休息，也不代表已安排时间`,
   ]
+  // The rhythm note is a planning caveat, not evidence. Keep it out of facts so
+  // a fact-only view never turns a local heuristic into a written suggestion.
+  const evidence = [...facts, `以 ${minutesLabel(focus)} 为一轮估算，未包含休息，也不代表已安排时间`]
   const effortLabel = `${expectedLabel ? expectedLabel : '用时待估'} · ${spentLabel(spent)}`
   if (remaining !== undefined && remaining <= 0) {
-    return { effortLabel, evidence, tone: 'urgent', suggestion: '已过截止时间，先确认剩余工作和新的截止安排' }
+    return { effortLabel, facts, evidence, tone: 'urgent', suggestion: '已过截止时间，先确认剩余工作和新的截止安排' }
   }
   if (expected !== undefined && remaining !== undefined && expected * MINUTE > remaining) {
-    return { effortLabel, evidence, tone: 'urgent', suggestion: `${hasOriginalEstimate ? '原预计用时' : '已排用时'}超过距截止的时间，建议先缩小范围或调整截止安排` }
+    return { effortLabel, facts, evidence, tone: 'urgent', suggestion: `${hasOriginalEstimate ? '原预计用时' : '已排用时'}超过距截止的时间，建议先缩小范围或调整截止安排` }
   }
   const tone = remaining !== undefined && remaining <= DAY ? 'urgent' : expected === undefined || (expected !== undefined && spent >= expected * MINUTE) ? 'attention' : 'neutral'
   if (expected !== undefined && spent >= expected * MINUTE) {
-    return { effortLabel, evidence, tone, suggestion: '累计专注已达到原估时，先核对进度，再调整预计用时' }
+    return { effortLabel, facts, evidence, tone, suggestion: '累计专注已达到原估时，先核对进度，再调整预计用时' }
   }
   if (expected === undefined) {
-    return { effortLabel, evidence, tone, suggestion: `先补一个用时估计，也可以先用 ${minutesLabel(focus)} 探索第一步` }
+    return { effortLabel, facts, evidence, tone, suggestion: `先补一个用时估计，也可以先用 ${minutesLabel(focus)} 探索第一步` }
   }
   const rounds = Math.ceil(expected / focus)
   const estimateBasis = hasOriginalEstimate ? '原估时' : '已排时长'
   const suggestion = rounds > 1
     ? `${estimateBasis}约合 ${rounds} 段专注，先推进 ${minutesLabel(focus)}，再核对进度`
     : `先留出 ${minutesLabel(Math.min(expected, focus))} 推进这一项，再核对进度`
-  return { effortLabel, evidence, tone, suggestion }
+  return { effortLabel, facts, evidence, tone, suggestion }
 }
 
-export function buildWorkbenchBriefing(tasks: readonly Task[], now: Date, focusMin: number, getSpentMs: (id: string) => number, scheduled: ScheduledMinutes = {}, scheduleBlocks: readonly WorkbenchSchedule[] = [], completedFreeTimeSessions: Readonly<Record<string, string>> = {}): WorkbenchBriefing {
+export function buildWorkbenchBriefing(tasks: readonly Task[], now: Date, focusMin: number, getSpentMs: (id: string) => number, scheduled: ScheduledMinutes = {}, scheduleBlocks: readonly WorkbenchSchedule[] = [], completedFreeTimeSessions: Readonly<Record<string, string>> = {}, scheduleExplanations: ScheduleExplanations | null | undefined = undefined): WorkbenchBriefing {
   if (!Number.isFinite(now.getTime())) {
     return { availableCount: 0, dueSoonCount: 0, overdueCount: 0, completedTodayCount: 0, estimatedMin: 0, unestimatedCount: 0, recommendation: null, notices: [] }
   }
@@ -127,10 +205,17 @@ export function buildWorkbenchBriefing(tasks: readonly Task[], now: Date, focusM
   const recommended = available[0]
   const focus = focusLength(focusMin)
   const recommendedSession = recommended?.freeTimeGoalId ? taskSchedule(recommended, now, scheduleBlocks, completedFreeTimeSessions) : undefined
+  const sessionFacts = recommendedSession
+    ? [scheduleDisplay(recommendedSession, now), estimateLabel(recommended!, scheduled) ?? '本次余时']
+    : []
   const context = recommendedSession ? {
     suggestion: `推进这一次余时安排，完成后保留长期目标与之后的安排`,
-    evidence: [scheduleDisplay(recommendedSession, now), estimateLabel(recommended!, scheduled) ?? '本次余时'],
+    facts: sessionFacts,
+    evidence: sessionFacts,
   } : recommended ? deadlineContext(recommended, now, focus, getSpentMs, scheduled) : undefined
+  // Selection, ordering and start rules stay local. Written explanations only
+  // replace the advice paragraph and its basis once the planner returns them.
+  const explanations = recommended && context ? scheduleExplanationsFor(scheduleExplanations, recommended.id) : []
   const notices: BriefingNotice[] = []
   const overEstimate = open.filter(task => {
     const expected = effectiveEstimate(task, scheduled)
@@ -163,9 +248,11 @@ export function buildWorkbenchBriefing(tasks: readonly Task[], now: Date, focusM
     unestimatedCount: unestimated.length,
     recommendation: recommended && context ? {
       task: recommended,
-      headline: `先推进「${recommended.title}」`,
-      summary: context.suggestion,
-      evidence: [recommendationReason(recommended, now), ...context.evidence],
+      headline: `可开始「${recommended.title}」`,
+      summary: explanations[0] ?? context.facts.join(' · '),
+      evidence: explanations.length ? explanations : context.facts,
+      facts: context.facts,
+      explanations,
       suggestedMin: Math.min(effectiveEstimate(recommended, scheduled) ?? focus, focus),
     } : null,
     notices: notices.slice(0, 2),

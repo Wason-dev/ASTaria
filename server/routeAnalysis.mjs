@@ -3,6 +3,7 @@ import { ValidationError, knownKeys, text, identifier, choice, day, clockTime } 
 import { ProviderError } from './provider.mjs'
 import { dayCapacity, blocksForDay, minuteOf } from '../src/planner/model.ts'
 import { localDay } from '../src/home/agenda.ts'
+import { taskTimingBounds } from './taskTiming.mjs'
 import { assertContextBudget } from './contextBudget.mjs'
 import { resolveContextBudget } from './modelSettingsCore.mjs'
 
@@ -81,6 +82,7 @@ export function createRouteAnalysis({ db, planner = db, companion, complete, now
   function snapshot(input) {
     const at = clock(), state = planner.getPlanner(), tasks = db.listTasks(), task = tasks.find(item => item.id === input.taskId)
     if (!task) fail('任务已不存在', 404)
+    if (task.kind === 'reminder') fail('日期提醒不作为工作时段推演，请选择关联的准备任务', 409)
     if (!active(task)) fail('已完成或已放下的任务不能推演', 409)
     if (task.freeTimeGoalId || (db.getCompanionState().freeTimeGoals ?? []).some(goal => goal.taskId === task.id)) fail('这是一项余时长期目标，请在余时页调整频率与学习节奏，不按一次性任务重排', 409)
     if (task.occurrence) fail('每日实例需要保留当天的完整时段，请先在任务详情调整该实例', 409)
@@ -97,15 +99,18 @@ export function createRouteAnalysis({ db, planner = db, companion, complete, now
     const exactStartProtected = Boolean(task.startAt?.includes('T') && !original.length)
     const remainingMin = exactStartProtected ? 0 : effortMin === null ? null : Math.max(0, effortMin - heldMin)
     const capacityTasks = original.length ? tasks.map(item => item.id === task.id ? { ...item, startAt: undefined } : item) : tasks
+    const timing = taskTimingBounds(task, state, tasks)
+    if (timing.unresolved.length) fail('关联事项的时间或先后关系尚未确定，暂时不能生成有效路线', 409)
+    const effectiveDeadline = Math.min(deadline(task), timing.notAfter)
     const bufferMin = buffer(), companionState = companion.listState({ date: input.date, days: 7 })
     const availableWindows = dates.flatMap(date => dayCapacity(working, capacityTasks, date, at).remaining.map(range => ({
-      date, start: Math.ceil(range.start) + bufferMin, end: Math.min(1439, Math.floor(range.end) - bufferMin,
-        Number.isFinite(deadline(task)) ? Math.floor((deadline(task) - instant(date, '00:00')) / 60000) : 1439),
+      date, start: Math.ceil(Math.max(range.start, (timing.notBefore - instant(date, '00:00')) / 60000)) + bufferMin, end: Math.min(1439, Math.floor(range.end) - bufferMin,
+        Number.isFinite(effectiveDeadline) ? Math.floor((effectiveDeadline - instant(date, '00:00')) / 60000) : 1439),
     })).filter(range => range.start < range.end).map(range => ({ date: range.date, start: timeOf(range.start), end: timeOf(range.end) })))
     const baseline = dates.flatMap(date => blocksForDay(state, tasks, date).filter(block => block.taskId === task.id).map(block => ({ ...block, title: task.title })))
     const context = { handoff: companionState.handoffs.find(item => item.taskId === task.id) ?? null,
       freeTimeGoals: companionState.freeTimeGoals ?? [], wishes: companionState.wishes.filter(item => item.status === 'active') }
-    const facts = { task: { id: task.id, title: task.title, due: task.due, estimateMin: task.estimateMin, status: task.status },
+    const facts = { task: { id: task.id, title: task.title, due: task.due, estimateMin: task.estimateMin, status: task.status, kind: task.kind, relations: task.relations, timing: timing.facts },
       dates, baseline, candidate: [], timeline: companionState.timeline, availableWindows,
       effortMin, heldMin, remainingMin, bufferMin, baseRevision: state.revision, asOf: at.toISOString(), exactStartProtected,
       verified: [`本次只调整「${task.title}」从 ${dates[0]} 到 ${dates.at(-1)} 的可移动安排。`,

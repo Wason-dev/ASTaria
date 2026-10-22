@@ -53,25 +53,36 @@ export function taskSchedule(task: Task, now: Date, blocks: readonly WorkbenchSc
  * in later until their day arrives. A deadline alone never delays availability;
  * future start-date intentions and someday tasks still remain in later.
  */
+/** Explicit semantic type, independent from whether the work is scheduled.
+ * Unknown legacy records are not classified by words in their title. */
+export function isDateMarker(task: Task) {
+  return task.kind === 'reminder'
+}
+
 export function taskGroups(tasks: readonly Task[], now: Date, blocks: readonly WorkbenchSchedule[] = [], completedFreeTimeSessions: Readonly<Record<string, string>> = {}) {
   const today = localDay(now), currentMinute = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60 + now.getMilliseconds() / 60000
   const later: Task[] = [], available: Task[] = []
   for (const task of tasks.filter(task => isOpenTask(task))) {
+    if (isDateMarker(task)) continue
+    if (task.relations?.some(relation => relation.kind === 'task' && relation.relation === 'after' && tasks.find(item => item.id === relation.id)?.status !== 'done')) { later.push(task); continue }
     const schedule = taskSchedule(task, now, blocks, completedFreeTimeSessions)
     // Long-running free-time goals enter the workbench through persisted sessions;
     // an unscheduled backing task remains in the goal workflow.
     if (task.freeTimeGoalId && !schedule) continue
     const start = agendaDate(task.startAt)
     const due = agendaDate(task.due)
+    const unclassifiedDate = task.source === 'ai' && !task.kind && Boolean(task.due) && !task.estimateMin && !schedule && task.status !== 'doing'
     const futureDate = start ? localDay(start) > today : task.fuzzyWindow === 'someday'
-    const shouldWait = schedule
+    const shouldWait = unclassifiedDate || (schedule
       ? schedule.date > today || (schedule.date === today && currentMinute < blockMinutes(schedule)!.start - 20)
       : start && task.startAt?.includes('T')
         ? localDay(start) > today || now.getTime() < start.getTime() - 20 * 60000
-        : futureDate && task.status !== 'doing' && !(task.fuzzyWindow === 'today' && !start) && !(due && localDay(due) <= today)
+        : futureDate && task.status !== 'doing' && !(task.fuzzyWindow === 'today' && !start) && !(due && localDay(due) <= today))
     ;(shouldWait ? later : available).push(task)
   }
-  const sort = (a: Task, b: Task) => Number(isOverdue(b, now)) - Number(isOverdue(a, now))
+  const activeNow = (task: Task) => validBlocks(task, blocks, completedFreeTimeSessions).some(block => block.date === today && blockMinutes(block)!.start <= currentMinute && currentMinute < blockMinutes(block)!.end)
+  const sort = (a: Task, b: Task) => Number(activeNow(b)) - Number(activeNow(a))
+    || Number(isOverdue(b, now)) - Number(isOverdue(a, now))
     || Number(b.status === 'doing') - Number(a.status === 'doing')
     || (deadlineTime(a.due) ?? Infinity) - (deadlineTime(b.due) ?? Infinity)
     || b.importance - a.importance || a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)
@@ -99,12 +110,13 @@ export function scheduleStatusLabel(block: WorkbenchSchedule, now: Date): string
   return '原安排已结束，可继续'
 }
 
+/** A factual fallback label, never a comparative or model-authored reason. */
 export function recommendationReason(task: Task, now: Date) {
-  if (isOverdue(task, now)) return '已过截止时间，先处理这一项'
-  if (task.status === 'doing') return '接着上次的进度，少一次切换'
-  if (deadlineTime(task.due) !== undefined) return '截止时间更近，先留出这一段时间'
-  if (task.importance === 3) return '优先级较高，适合先开始'
-  return '从已收下的事项里，先推进这一项'
+  if (isOverdue(task, now)) return '已过截止时间'
+  if (task.status === 'doing') return '进行中'
+  if (deadlineTime(task.due) !== undefined) return `截止 ${task.due!.slice(0, 10).replaceAll('-', '/')}`
+  if (task.due) return '截止日期待确认'
+  return task.estimateMin ? `预计 ${task.estimateMin} 分钟` : '尚未估时'
 }
 
 export function taskArea(task: Task) {

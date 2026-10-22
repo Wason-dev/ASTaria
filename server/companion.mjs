@@ -218,10 +218,10 @@ export function createCompanion({ db, now = () => new Date() }) {
       const at = clock(), planner = db.getPlanner(), allTasks = db.listTasks(), dates = datesFrom(date, days)
       if (date < localDay(at)) fail('请选择今天或未来的日期')
       const ids = input.taskIds ? new Set(input.taskIds.map(id => requireTask(id).id)) : null
-      const selected = allTasks.filter(task => active(task) && (!ids || ids.has(task.id)))
+      const selected = allTasks.filter(task => active(task) && task.kind !== 'reminder' && (!ids || ids.has(task.id)))
       if (selected.length > 64) fail('请先选择最多64项任务进行推演')
       const selectedIds = new Set(selected.map(task => task.id))
-      const occurrenceIds = new Set(selected.filter(task => task.occurrence || task.freeTimeGoalId).map(task => task.id))
+      const occurrenceIds = new Set(selected.filter(task => task.occurrence || task.freeTimeGoalId || task.relations?.length).map(task => task.id))
       const movable = planner.blocks.filter(block => selectedIds.has(block.taskId) && !occurrenceIds.has(block.taskId) && dates.includes(block.date) &&
         !block.locked && instant(block.date, block.start) >= at.getTime())
       if (movable.length > 64) fail('这一范围包含较多安排，请缩短推演天数')
@@ -241,6 +241,7 @@ export function createCompanion({ db, now = () => new Date() }) {
           warnings.push(`${task.title}：保留余时目标的各次学习安排；频率与学习节奏请在余时页调整`)
           continue
         }
+        if (task.relations?.length) { warnings.push(`${task.title}：保留关联事项的现有时段；调整先后关系请让析熙按当前目标时间安排`); continue }
         // Daily instances are date-bound, indivisible sessions. A general
         // load-balancing preview must not turn them back into fungible effort.
         if (task.occurrence) {

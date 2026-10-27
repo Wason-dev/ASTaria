@@ -1,3 +1,4 @@
+import { FocusPages } from './FocusPages'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import { collectionProgress, collectionRemaining, taskEntries } from '../domain/taskCollections'
@@ -35,6 +36,7 @@ import { TaskHandoff } from '../xixi/CompanionPanel'
 import type { Handoff } from '../xixi/companionTypes'
 import { TaskSteps } from './TaskSteps'
 import type { XixiConversation } from '../xixi/useXixiConversation'
+import { useChatDraftCompletion } from '../xixi/useXixiConversation'
 import type { ChatAttachment } from '../xixi/types'
 import './workbench.css'
 import './readability.css'
@@ -76,6 +78,7 @@ function WorkbenchContent({ active, data, now, onCapture, onNotice, appearance, 
   appearance: Appearance
 }) {
   const preview = false
+  const [focusPage, setFocusPage] = useState(0)
   const timer = useFocusTimer('astaria-focus-v1', active)
   const planner = usePlanner(active)
   const tasks = data.tasks
@@ -242,6 +245,7 @@ function WorkbenchContent({ active, data, now, onCapture, onNotice, appearance, 
     const finish = () => {
       // Restore focus after React has committed the new, non-inert stage.
       selectionFocus.current = { returning: selectionPending.current === null, previousId: selectedId }
+      setFocusPage(0)
       setSelectedId(selectionPending.current)
       setSelectedSession(nextSession ? { ...nextSession } : undefined)
       if (selectionPending.current) timer.selectTask(selectionPending.current)
@@ -318,6 +322,7 @@ function WorkbenchContent({ active, data, now, onCapture, onNotice, appearance, 
   }
   const askForSteps = () => {
     if (!selected) return
+    setFocusPage(2)
     setAssistance({ taskId: selected.id, text: `请把「${selected.title}」拆成可以逐项勾选的任务步骤，保存在当前事项中。作业要求：`, revision: Date.now() })
   }
   const reopen = async (task: Task) => {
@@ -359,7 +364,7 @@ function WorkbenchContent({ active, data, now, onCapture, onNotice, appearance, 
     <MeasuredGlassSurface radius={appearance.radius} material={appearance} />
     <span className="wb-task-body"><span className="wb-task-top"><strong><CollectionIcon />{entry.name}</strong><Icon name="arrow" className="wb-task-arrow" /></span>
       <span className="wb-task-detail"><span>{collectionProgress(entry)}</span></span>
-      <span className="wb-task-meta"><span>{entry.due ? `截止 ${deadlineLabel(entry.visible[0], now)}` : '未设 DDL'}</span><span>{collectionRemaining(entry)}</span></span>
+      <span className="wb-task-meta"><span className="wb-meta-value"><Icon name="calendar" /><span>{entry.due ? `截止 ${deadlineLabel(entry.visible[0], now)}` : '未设 DDL'}</span></span><span className="wb-meta-value"><Icon name="hourglass" /><span>{collectionRemaining(entry)}</span></span></span>
     </span>
   </button>
   const renderTask = (task: Task, recommended = false) => { const schedule = taskSchedule(task, now, scheduleBlocks, completedFreeTimeSessions); return <button key={task.id} className="wb-task wb-glass" data-task-id={task.id} data-recommended={recommended} onClick={() => switchTo(task.id)} disabled={busy || transitioning}>
@@ -409,7 +414,7 @@ function WorkbenchContent({ active, data, now, onCapture, onNotice, appearance, 
         <p className="wb-bottom-note">一次只专注一件事 <span>·</span> 默认 {timer.durations.focusMin} 分钟专注 / {timer.durations.restMin} 分钟休息 <button className="wb-inline-button" aria-expanded={timingOpen} onClick={() => setTimingOpen(value => !value)}>调整时长</button></p>
         <DurationControls timer={timer} open={timingOpen} />
       </div> : selected && session && !selectedMissingSession ? <div className="wb-focus wb-enter" key={selectedId}>
-        <div className="wb-focus-layout">
+        <FocusPages page={focusPage} onPage={setFocusPage}>
           <Glass appearance={appearance} className="wb-focus-main">
             <div className="wb-focus-modes" data-mode={handoffRequest ? 'handoff' : 'focus'}>
             <div className="wb-focus-view" data-view="focus" inert={Boolean(handoffRequest)} aria-hidden={Boolean(handoffRequest)}>
@@ -452,7 +457,7 @@ function WorkbenchContent({ active, data, now, onCapture, onNotice, appearance, 
             <TaskSteps key={selected.id} task={selected} disabled={busy || transitioning || !active} onRequestSteps={askForSteps} />
           </Glass>
           <XixiContext key={selected.id} task={selected} now={now} active={active && !transitioning} preview={preview} appearance={appearance} chat={chat} onSettings={onSettings} assistance={assistance?.taskId === selected.id ? assistance : null} />
-        </div>
+        </FocusPages>
       </div> : <div className="wb-empty wb-enter"><h2 ref={heading} tabIndex={-1}>{selectedMissingSession ? '这次余时安排已变更，请重新选择' : '这项任务已不在待办中'}</h2><button className="wb-action" onClick={() => switchTo(null)}>返回选择</button></div>}
       </div>
       {preview && <p className="wb-preview-footnote">示例数据仅用于体验界面，不会写入你的事项</p>}
@@ -477,8 +482,11 @@ function XixiContext({ task, now, active, preview, appearance, chat, onSettings,
   const [warning, setWarning] = useState('')
   const image = useChatAttachment(preview || chat.busy || chat.loading)
   const { attachment, setAttachment } = image
-  useChatImageDropTarget(active && !preview, files => { void image.selectFiles(files) })
+  useChatImageDropTarget(active && !preview, files => { draftRevision.current += 1; void image.selectFiles(files) })
   const draftRevision = useRef(0)
+  const captureDraftCompletion = useChatDraftCompletion(`astaria-xixi-${key}`, draft, attachment, draftRevision, () => {
+    setDraft(''); setAttachment(null)
+  })
   const composeForm = useRef<HTMLFormElement>(null)
   useEffect(() => {
     if (!assistance || preview) return
@@ -486,7 +494,7 @@ function XixiContext({ task, now, active, preview, appearance, chat, onSettings,
     draftRevision.current += 1
     const frame = requestAnimationFrame(() => {
       const input = composeForm.current?.querySelector('textarea')
-      input?.scrollIntoView({ block: 'center', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' })
+      if (!document.documentElement.dataset.mobile) input?.scrollIntoView({ block: 'center', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' })
       input?.focus({ preventScroll: true })
       input?.setSelectionRange(input.value.length, input.value.length)
     })
@@ -499,20 +507,7 @@ function XixiContext({ task, now, active, preview, appearance, chat, onSettings,
   const send = async () => {
     if (preview || chat.busy || chat.loading || image.isReading() || (!draft.trim() && !attachment)) return
     const sent = draft
-    const revision = draftRevision.current
-    if (await chat.send(sent, { page: 'workbench', taskId: task.id, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }, attachment ? [attachment] : undefined)) {
-      if (revision !== draftRevision.current) return
-      // The focus panel may have closed while the reply was arriving.
-      // Clear the persisted draft even when that component is now unmounted.
-      try { if (sessionStorage.getItem(`astaria-xixi-${key}`) === sent) sessionStorage.removeItem(`astaria-xixi-${key}`) } catch { /* The current draft remains available in memory. */ }
-      setDraft(value => value === sent ? '' : value)
-      setAttachment(null)
-    }
-  }
-  const clearSentDraft = (sent: string) => {
-    try { if (sessionStorage.getItem(`astaria-xixi-${key}`)?.trim() === sent) sessionStorage.removeItem(`astaria-xixi-${key}`) } catch { /* Keep the current draft in memory if session storage is unavailable. */ }
-    setDraft(value => value.trim() === sent ? '' : value)
-    setAttachment(null)
+    await chat.send(sent, { page: 'workbench', taskId: task.id, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }, attachment ? [attachment] : undefined, undefined, captureDraftCompletion())
   }
   const restoreDraft = (text: string, attachments?: ChatAttachment[]) => {
     draftRevision.current += 1
@@ -528,16 +523,17 @@ function XixiContext({ task, now, active, preview, appearance, chat, onSettings,
     <header><strong>析熙</strong><ConversationMenu chat={chat} disabled={preview} /></header>
     <div className="wb-xixi-context"><span>正在一起看</span><p>{task.title}</p>{task.due && <small>{deadlineLabel(task, now)}截止</small>}</div>
     {preview ? <p className="xixi-preview-message">这里是示例事项，退出示例后就可以和我聊真实安排</p>
-      : <ConversationLog chat={chat} active={active} onSettings={onSettings} context={{ page: 'workbench', taskId: task.id, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }} onSent={clearSentDraft} onRetracted={restoreDraft} />}
+      : <ConversationLog chat={chat} active={active} onSettings={onSettings} context={{ page: 'workbench', taskId: task.id, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }} onSent={() => {}} onRetracted={restoreDraft} />}
     <form ref={composeForm} className="xixi-compose" onSubmit={event => { event.preventDefault(); void send() }}>
       <label className="p0-sr-only" htmlFor="wb-xixi-input">结合当前事项和析熙对话</label>
-      <XixiInput value={draft} onChange={setDraft} disabled={preview || chat.busy} onSubmit={() => void send()} />
-      <ChatAttachmentPreview attachment={attachment} error={image.error} reading={image.reading} readingLabel={image.readingLabel} onRemove={() => setAttachment(null)} disabled={preview || chat.busy} />
+      <XixiInput value={draft} onChange={value => { draftRevision.current += 1; setDraft(value) }} disabled={preview || chat.busy} onSubmit={() => void send()} />
+      <ChatAttachmentPreview attachment={attachment} error={image.error} reading={image.reading} readingLabel={image.readingLabel} onRemove={() => { draftRevision.current += 1; setAttachment(null) }} disabled={preview || chat.busy} />
       <footer><div className="xixi-compose-tools"><ContextMeter key={chat.conversation?.conversationId} chat={chat} />{warning && <small>{warning}</small>}{preview && <small>示例草稿不会发送</small>}</div><div className="xixi-send-actions">
-        <ChatAttachmentPicker id="wb-image-upload" onFiles={files => { void image.selectFiles(files) }} disabled={preview || chat.busy || chat.loading} />
+        <ChatAttachmentPicker id="wb-image-upload" onFiles={files => { draftRevision.current += 1; void image.selectFiles(files) }} disabled={preview || chat.busy || chat.loading} />
         <button type="submit" className="wb-action xixi-send" disabled={preview || image.reading || chat.busy || chat.loading || (!draft.trim() && !attachment)}>{chat.sending ? '正在想' : '发给析熙'}</button>
       </div></footer>
       {!preview && chat.error && <p className="xixi-send-error" role="alert">{chat.error}{!chat.status?.configured && <button type="button" className="xixi-text-button" onClick={onSettings}>打开设置</button>}</p>}
+      {!preview && chat.waitingNotice && <p className="xixi-delivery" role="status">{chat.waitingNotice}</p>}
     </form>
   </Glass>
 }

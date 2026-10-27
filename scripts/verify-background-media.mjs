@@ -3,8 +3,19 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
 import { dirname } from 'node:path'
 import { spawnSync } from 'node:child_process'
-const manifest = JSON.parse(await readFile('public/backgrounds/manifest.json'))
-assert.equal(manifest.assets.length, 48)
+const sourceManifest = process.argv[3] ?? 'public/backgrounds/manifest.json'
+const manifest = JSON.parse(await readFile(sourceManifest))
+const slim = manifest.distribution === 'bundled-1080p-video-4k-still'
+assert.equal(manifest.assets.length, slim ? 8 : 48)
+if (slim) for (const asset of manifest.assets) {
+ assert.equal(asset.quality, 'high')
+ assert.equal(asset.resolution, asset.kind === 'image' ? '4k' : '1080p')
+}
+if (manifest.view === 'horizon') {
+ assert.equal(manifest.framing, 'overscan-2')
+ assert.equal(manifest.overscan, 2)
+ assert.equal(manifest.captureExposureScale, 2)
+}
 const checks = []
 for (const asset of manifest.assets) {
  const file = 'public/backgrounds/' + asset.file

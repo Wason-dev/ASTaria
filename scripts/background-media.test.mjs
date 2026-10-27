@@ -24,7 +24,8 @@ test('media camera preserves uninterrupted camera progress on reversal and settl
 
 test('media paths select independent orientation, theme, resolution and quality', () => {
   assert.equal(backgroundAsset('portrait', false, '4k', 'high', 'video'), '/backgrounds/portrait-light-4k-high.mp4')
-  assert.equal(backgroundAsset('landscape', true, '720p', 'standard', 'image'), '/backgrounds/landscape-dark-720p-standard.webp')
+  assert.equal(backgroundAsset('landscape', true, '720p', 'standard', 'image'), '/backgrounds/landscape-dark-4k-high.webp')
+  assert.equal(backgroundAsset('portrait', false, '720p', 'standard', 'video'), '/backgrounds/portrait-light-1080p-high.mp4')
 })
 
 test('video byte ranges handle suffix and open requests and reject unsafe or unsatisfiable reads', () => {

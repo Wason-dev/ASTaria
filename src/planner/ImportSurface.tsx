@@ -62,7 +62,7 @@ export function ImportSurface({ surfaceRef, onClose, closeDisabled, beforeClose,
     closeTimer.current = setTimeout(() => latest.current.onClose(), duration)
   }
   useImperativeHandle(surfaceRef, () => ({ close }))
-  return <GlassRenderingContext.Provider value={preferences.render.glass}><GlassSamplingContext.Provider value={!closing}>
+  return <GlassRenderingContext.Provider value={preferences.render.glass}><GlassSamplingContext.Provider value={!closing || Boolean(document.documentElement.dataset.mobile)}>
     <dialog {...props} ref={dialog} className={`import-surface ${className}`} data-theme={preferences.theme} data-glass={preferences.glass}
       data-density={preferences.density} data-reduced-motion={reduced} data-closing={closing} data-import-surface=""
       onCancel={event => { event.preventDefault(); if (!latest.current.onEscape?.()) close() }} onKeyDown={event => event.stopPropagation()}>

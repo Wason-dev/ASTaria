@@ -13,7 +13,7 @@ import type { ReceiptEntry } from './receiptCollections'
 import { CollectionIcon } from '../ui/CollectionIcon'
 import { deadlineLabel } from '../home/agenda'
 import { ReceiptDeadline } from './ReceiptDeadline'
-import { isReceiptEstimateMessage, isReceiptEstimateRequest, receiptEstimateRequest, receiptEstimateSaveIssue } from './receiptTaskSettings'
+import { isReceiptEstimateMessage, receiptEstimateRequest, receiptEstimateSaveIssue } from './receiptTaskSettings'
 import { taskStore } from '../stores/taskStore'
 import type { PlannerState } from '../planner/types'
 import { localDay } from '../home/agenda'
@@ -119,9 +119,9 @@ export function ConversationLog({ chat, active, onSettings, context, onSent, onR
       if (await chat.retractMessage(entry)) { draftRevision.current += 1; if (!isReceiptEstimateMessage(entry)) onRetracted(entry.content, entry.attachments) }
     },
     retry: async entry => {
-      const { chat, onSent } = latest.current
-      const revision = draftRevision.current
-      if (entry.requestId && await chat.retryMessage(entry.requestId) && revision === draftRevision.current && !isReceiptEstimateRequest(entry.content)) onSent(entry.content)
+      // Completion belongs to the original composer snapshot. The transcript
+      // cannot infer ownership from matching text or the currently open page.
+      if (entry.requestId) await latest.current.chat.retryMessage(entry.requestId)
     },
     answer: async option => {
       const { chat, context, onSent } = latest.current
@@ -268,7 +268,7 @@ const SavedMessage = memo(function SavedMessage({ row, conversationId, receiptDa
   const { message: entry, operations: receipts, companionActions } = row
   const reasoningId = entry.requestId ?? entry.id
   const receiptRequest = isReceiptEstimateMessage(entry)
-  const showDelivery = entry.delivery && (!receiptRequest || entry.delivery === 'failed')
+  const showDelivery = !entry.retractedAt && entry.delivery && (!receiptRequest || entry.delivery === 'failed')
   if (receiptRequest && !showDelivery && !showReasoning && !receipts.length && !companionActions.length) return null
   return <article className="xixi-message" data-role={receiptRequest ? 'action' : entry.role} data-message-id={entry.id} data-delivery={entry.delivery} data-retracted={Boolean(entry.retractedAt)}>
       {!receiptRequest && <span>{entry.role === 'user' ? '你' : '析熙'}</span>}
@@ -425,44 +425,48 @@ const MemoReceiptDeadline = memo(function ReceiptDeadlineForDay(props: Component
 
 type ReceiptProps = { operation: Operation; receiptDay?: string; busy: boolean; undoing: boolean; disabled: boolean; actions: HistoryActions }
 function ReceiptUndo({ operation, busy, undoing, actions }: Pick<ReceiptProps, 'operation' | 'busy' | 'undoing' | 'actions'>) {
-  return operation.undoneAt ? <small>已撤销</small> : operation.undoable === false ? null : <button type="button" className="xixi-text-button xixi-undo" disabled={busy} onClick={() => void actions.undo(operation.id)}><ReturnIcon /><span>{undoing ? '撤销中' : operation.undoLabel ?? '撤销'}</span></button>
+  return operation.undoneAt ? <small className="xixi-receipt-state">已撤销</small> : operation.undoable === false ? null : <button type="button" className="xixi-text-button xixi-undo" disabled={busy} onClick={() => void actions.undo(operation.id)}><ReturnIcon /><span>{undoing ? '撤销中' : operation.undoLabel ?? '撤销'}</span></button>
 }
 function ReceiptTaskEditor({ task, receiptDay, disabled, actions }: { task: ReceiptTask; receiptDay?: string; disabled: boolean; actions: HistoryActions }) {
-  const [open, setOpen] = useState(false), [visited, setVisited] = useState(false), id = useId()
-  return <div className="xixi-receipt-task">
-    <button type="button" className="xixi-text-button xixi-collection-toggle" aria-expanded={open} aria-controls={id} onClick={() => { setVisited(true); setOpen(value => !value) }}><span>{task.title}</span><small>{task.estimateMin ? `${task.estimateMin} 分钟` : '用时待估'} <span aria-hidden="true">{open ? '⌃' : '⌄'}</span></small></button>
-    <div id={id} className="xixi-collection-reveal" data-open={open} inert={!open} aria-hidden={!open}><div>{visited && <MemoReceiptDeadline task={task} receiptDay={receiptDay} disabled={disabled} multiple onSaved={actions.refresh} onEstimate={actions.requestEstimate} />}</div></div>
+  return <div className="xixi-receipt xixi-receipt-task" data-receipt-task={task.id}>
+    <MemoReceiptDeadline task={task} receiptDay={receiptDay} disabled={disabled} multiple onSaved={actions.refresh} onEstimate={actions.requestEstimate} />
+  </div>
+}
+function ReceiptDetails({ details }: { details?: string[] }) {
+  const [open, setOpen] = useState(false), id = useId()
+  if (!details?.length) return null
+  return <div className="xixi-receipt-more">
+    <button type="button" className="xixi-text-button" aria-expanded={open} aria-controls={id} onClick={() => setOpen(value => !value)}>{open ? '收起保存明细' : '查看保存明细'}</button>
+    <div id={id} className="xixi-collection-reveal" data-open={open} inert={!open} aria-hidden={!open}><div><ul className="xixi-receipt-details">{details.map((detail, index) => <li key={index}>{detail}</li>)}</ul></div></div>
   </div>
 }
 const Receipt = memo(function Receipt({ operation, receiptDay, busy, undoing, disabled, actions }: ReceiptProps) {
   const multiple = (operation.createdTasks?.length ?? 0) > 1
-  const [open, setOpen] = useState(!multiple), id = useId()
   const title = multiple ? `创建 ${operation.createdTasks!.length} 项事项${operation.scheduledCount ? ` · 已安排 ${operation.scheduledCount} 段时间` : ''}` : operation.summary
-  return <div className="xixi-receipt" data-operation-id={operation.id} data-unread={!operation.readAt}>
-    <header>{multiple ? <button type="button" className="xixi-text-button" aria-expanded={open} aria-controls={id} onClick={() => setOpen(value => !value)}>{title} {open ? '⌃' : '⌄'}</button> : <strong>{title}</strong>}<ReceiptUndo operation={operation} busy={busy} undoing={undoing} actions={actions} /></header>
-    {!operation.undoneAt && operation.explanations?.map((reason, index) => <p key={index} className="xixi-receipt-reason">{reason}</p>)}
-    <div id={id} className="xixi-collection-reveal" data-open={open} inert={!open} aria-hidden={!open}><div>
-      {Boolean(operation.details?.length) && <ul className="xixi-receipt-details">{operation.details!.map((detail, index) => <li key={index}>{detail}</li>)}</ul>}
-      {!operation.undoneAt && operation.createdTasks?.map(task => multiple ? <ReceiptTaskEditor key={task.id} task={task} receiptDay={receiptDay} disabled={disabled} actions={actions} /> : <MemoReceiptDeadline key={task.id} task={task} receiptDay={receiptDay} disabled={disabled} multiple={false} onSaved={actions.refresh} onEstimate={actions.requestEstimate} />)}
-    </div></div>
-  </div>
+  return <>
+    <div className="xixi-receipt" data-operation-id={operation.id} data-unread={!operation.readAt}>
+      <header><strong>{title}</strong><ReceiptUndo operation={operation} busy={busy} undoing={undoing} actions={actions} /></header>
+      {!operation.undoneAt && operation.explanations?.map((reason, index) => <p key={index} className="xixi-receipt-reason">{reason}</p>)}
+      {multiple ? <ReceiptDetails details={operation.details} /> : Boolean(operation.details?.length) && <ul className="xixi-receipt-details">{operation.details!.map((detail, index) => <li key={index}>{detail}</li>)}</ul>}
+      {!operation.undoneAt && !multiple && operation.createdTasks?.map(task => <MemoReceiptDeadline key={task.id} task={task} receiptDay={receiptDay} disabled={disabled} multiple={false} onSaved={actions.refresh} onEstimate={actions.requestEstimate} />)}
+    </div>
+    {!operation.undoneAt && multiple && operation.createdTasks?.map(task => <ReceiptTaskEditor key={task.id} task={task} receiptDay={receiptDay} disabled={disabled} actions={actions} />)}
+  </>
 })
 function CollectionReceipt({ entry, receiptDay, busy, undoing, disabled, actions }: { entry: Extract<ReceiptEntry, { kind: 'collection' }>; receiptDay?: string; busy: boolean; undoing: string | null; disabled: boolean; actions: HistoryActions }) {
-  const [open, setOpen] = useState(false), [details, setDetails] = useState(false), id = useId()
   const scheduled = entry.operations.filter(operation => !operation.undoneAt).reduce((sum, operation) => sum + (operation.scheduledCount ?? 0), 0)
   const undone = entry.operations.filter(operation => operation.undoneAt).length
   const due = entry.due ? deadlineLabel({ due: entry.due } as import('../domain/task').Task, receiptDay ? new Date(`${receiptDay}T12:00:00`) : new Date()) : '未设 DDL'
-  return <div className="xixi-receipt xixi-collection-receipt" data-receipt-collection={entry.id}>
-    <button type="button" className="xixi-text-button xixi-collection-toggle" aria-expanded={open} aria-controls={id} onClick={() => setOpen(value => !value)}><span><CollectionIcon /> {entry.name}</span><small>{entry.tasks.length} 项 {open ? '⌃' : '⌄'}</small></button>
-    <p className="xixi-collection-summary">{entry.due ? `截止 ${due}` : due}{scheduled > 0 && ` · 已安排 ${scheduled} 段`}{undone > 0 && ` · ${undone} 批已撤销`}</p>
-    <div id={id} className="xixi-collection-reveal" data-open={open} inert={!open} aria-hidden={!open}><div>
+  return <>
+    <div className="xixi-receipt xixi-collection-receipt" data-receipt-collection={entry.id}>
+      <header><strong className="xixi-collection-name"><CollectionIcon />{entry.name} · {entry.tasks.length} 项</strong></header>
+      <p className="xixi-collection-summary">{entry.due ? `截止 ${due}` : due}{scheduled > 0 && ` · 已安排 ${scheduled} 段时间`}{undone > 0 && ` · ${undone} 批已撤销`}</p>
       {[...new Set(entry.operations.filter(operation => !operation.undoneAt).flatMap(operation => operation.explanations ?? []))].map(reason => <p key={reason} className="xixi-receipt-reason">{reason}</p>)}
       <div className="xixi-collection-undos">{entry.operations.map((operation, index) => <div key={operation.id} data-operation-id={operation.id}><small>{entry.operations.length > 1 ? `第 ${index + 1} 批 · ` : ''}{operation.createdTasks?.length ?? 0} 项</small><ReceiptUndo operation={operation} busy={busy} undoing={undoing === operation.id} actions={actions} /></div>)}</div>
-      {entry.tasks.map(task => <ReceiptTaskEditor key={task.id} task={task} receiptDay={receiptDay} disabled={disabled} actions={actions} />)}
-      <button type="button" className="xixi-text-button" aria-expanded={details} onClick={() => setDetails(value => !value)}>{details ? '收起' : '查看'}保存明细</button>
-      <div className="xixi-collection-reveal" data-open={details} inert={!details} aria-hidden={!details}><div><ul className="xixi-receipt-details">{entry.operations.flatMap(operation => operation.details ?? []).map((detail, index) => <li key={index}>{detail}</li>)}</ul></div></div>
-    </div></div>
-  </div>
+      <ReceiptDetails details={entry.operations.flatMap(operation => operation.details ?? [])} />
+    </div>
+    {entry.tasks.map(task => <ReceiptTaskEditor key={task.id} task={task} receiptDay={receiptDay} disabled={disabled} actions={actions} />)}
+  </>
 }
 
 function ReturnIcon() { return <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3 2 6l3 3M2.5 6H9a4 4 0 0 1 0 8H7" /></svg> }

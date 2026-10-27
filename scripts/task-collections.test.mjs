@@ -13,6 +13,7 @@ import { taskCollectionChanges } from '../server/taskCollections.mjs'
 import { taskInput } from '../server/validation.mjs'
 import { taskEntries, taskCollectionKey, collectionProgress, collectionRemaining } from '../src/domain/taskCollections.ts'
 import { receiptEntries } from '../src/xixi/receiptCollections.ts'
+import { finishResponse } from './fixtures/model-receipt.mjs'
 
 process.env.TZ = 'Asia/Shanghai'
 const NOW = new Date('2026-10-20T10:00:00+08:00')
@@ -27,8 +28,12 @@ function fixture(t) { const db = createDatabase(':memory:'); t.after(() => db.cl
 
 test('8+2 model creations form one collection across subjects and preserve independent placement, receipts and undo', async t => {
   const db = fixture(t), drafts = Array.from({ length: 10 }, (_, index) => draft(index))
-  const replies = [call('create_tasks', { tasks: drafts.slice(0, 8) }), call('create_tasks', { tasks: drafts.slice(8) }), reply('十份已记好，按真实安排来。')]
-  const xixi = createXixi({ db, now: () => NOW, complete: async () => replies.shift() ?? reply('按回执核对。') })
+  const replies = [call('create_tasks', { tasks: drafts.slice(0, 8) }), call('create_tasks', { tasks: drafts.slice(8) }),
+    payload => finishResponse(payload, '十份已记好，按真实安排来。', '十份练习都在10月25日前，按真实空档各排了一段。')]
+  const xixi = createXixi({ db, now: () => NOW, complete: async payload => {
+    const next = replies.shift()
+    return typeof next === 'function' ? next(payload) : next ?? reply('按回执核对。')
+  } })
   const result = await xixi.chat(input('SAT 作业一共十份，每份35分钟，10月25日截止，记下并安排。'))
   assert.equal(result.status, 'completed')
   assert.equal(result.execution.status, 'verified')

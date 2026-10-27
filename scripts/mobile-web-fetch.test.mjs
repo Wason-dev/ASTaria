@@ -420,37 +420,17 @@ test('a synchronous native response parse cannot escape the deadline before its 
   assert.equal(calls[0].signal.aborted, true)
 })
 
-test('portable search accepts the mobile pageFetcher without an index/key and keeps failed/empty status truthful', async () => {
-  const { calls, fetchPage } = adapter({ [BASE]: response(BASE, repository), [`${BASE}/readme`]: response(`${BASE}/readme`, readme('Actual README')) })
+test('portable mobile search uses official Fetch without starting the legacy page adapter', async () => {
+  const { calls, fetchPage } = adapter({})
+  const requests = []
   const search = createWebSearch({ pageFetcher: fetchPage, getSettings: () => ({ webSearch: { enabled: true } }),
-    keychain: { read: () => { throw Error('must not read a key') } }, fetcher: () => { throw Error('must not use an index') } })
+    keychain: { read: () => 'fixture-key' }, fetcher: async (url, options) => {
+      requests.push({ url, body: JSON.parse(options.body) })
+      return Response.json({ title: 'Repository', content: 'Actual README' })
+    } })
   const result = await search.search(REPO_URL)
   assert.equal(result.sources[0].fetchStatus, 'ok')
-  assert.equal(result.sources[0].fetchedAt, FETCHED_AT)
   assert.match(result.sources[0].content, /Actual README/u)
-  assert.equal(calls.length, 2)
-  const failed = await search.search('https://example.com/public')
-  assert.equal(failed.sources[0].fetchStatus, 'failed')
-  assert.equal(failed.sources[0].content, '')
-  assert.equal(calls.length, 2)
-  const endpoint = `${BASE}/releases?per_page=5`
-  const empty = adapter({ [BASE]: response(BASE, repository), [endpoint]: response(endpoint, []) })
-  const emptySearch = createWebSearch({ pageFetcher: empty.fetchPage, getSettings: () => ({ webSearch: { enabled: true } }) })
-  const noBody = await emptySearch.search(`${REPO_URL}/releases`)
-  assert.equal(noBody.sources[0].fetchStatus, 'empty')
-  assert.equal(noBody.sources[0].content, '')
-})
-
-test('portable search cancellation reaches the native executor and rejects despite a late page reply', async () => {
-  const controller = new AbortController(), entered = deferred(), late = deferred()
-  const { calls, fetchPage } = adapter({ [BASE]: () => { entered.resolve(); return late.promise } })
-  const search = createWebSearch({ pageFetcher: fetchPage, getSettings: () => ({ webSearch: { enabled: true } }) })
-  const pending = search.search(REPO_URL, { signal: controller.signal })
-  await entered.promise
-  controller.abort()
-  await assert.rejects(promptly(pending), /已取消/u)
-  assert.equal(calls[0].signal.aborted, true)
-  late.resolve(response(BASE, repository))
-  await tick()
-  assert.equal(calls.length, 1)
+  assert.deepEqual(requests, [{ url: 'https://api.deepseek.com/v1/tools/fetch', body: { url: REPO_URL } }])
+  assert.equal(calls.length, 0)
 })

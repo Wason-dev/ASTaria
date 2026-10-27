@@ -1,0 +1,7 @@
+/* Round the generic focus shape; explicit circular/pill controls keep theirs. */
+.p0 :where(button,[role=button],summary,a) { border-radius:8px }
+html:not([data-focus-navigation=arrows]) .p0 :is(button,[role=button],[role=option],summary,a,[tabindex]):focus { outline:none!important }
+html[data-focus-navigation=arrows] .p0 :is(button,[role=button],summary,a):focus-visible { outline:1px solid var(--p0-accent,#d5bb8b); outline-offset:2px }
+.p0 :is(dialog,h1,h2,h3)[tabindex="-1"]:focus { outline:none!important }
+html:not([data-focus-navigation=arrows]) .p0 .horizon-task:focus-visible .horizon-task-caption strong { text-decoration:none }
+html:not([data-focus-navigation=arrows]) .p0 .string-node:focus-visible::after { display:none }

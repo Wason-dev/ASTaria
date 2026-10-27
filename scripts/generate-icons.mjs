@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/** Convert the approved desktop PNG and mobile/web SVG masters without redrawing or recolouring. */
+/** Convert the approved black-background SVG master for all platforms without redrawing or recolouring. */
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -9,30 +9,27 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 export const REPO = {
   source: join(ROOT, 'design/icon/new/astaria-icon-transparent.svg'),
   opaqueSource: join(ROOT, 'design/icon/new/astaria-icon.svg'),
-  desktopSource: join(ROOT, 'design/icon/new/astaria-icon-transparent-2048.png'),
   out: join(ROOT, 'public'),
   androidRes: join(ROOT, 'mobile/android/app/src/main/res'),
   iosAssets: join(ROOT, 'mobile/ios/App/App/Assets.xcassets'),
 }
 // The supplied lower-right petal extends slightly beyond the viewBox's
 // inscribed circle. A 78% glyph leaves its whole contour inside PWA's 80% safe circle.
-export const LAYOUT = { desktop: 1.1, web: 1, maskable: .78, ios: 1, splash: .24, adaptiveGlyphDp: 60, adaptiveCanvasDp: 108, notification: .9 }
+export const LAYOUT = { web: 1, maskable: .78, ios: 1, splash: .24, adaptiveGlyphDp: 60, adaptiveCanvasDp: 108, notification: .9 }
 const ICO_SIZES = [16, 24, 32, 48, 64, 128, 256]
 const DENSITIES = [['mdpi', 1], ['hdpi', 1.5], ['xhdpi', 2], ['xxhdpi', 3], ['xxxhdpi', 4]]
 const PNG_OPTIONS = { compressionLevel: 9, adaptiveFiltering: false, palette: false }
 export const USAGE = `node scripts/generate-icons.mjs [--source transparent.svg] [--opaque-source opaque.svg]
-  [--desktop-source approved-transparent-2048.png]
   [--out public] [--android-res res] [--ios-assets Assets.xcassets] [--sharp /absolute/path/to/sharp/index.mjs]
 Defaults use design/icon/new. All input masters are read-only.
-Desktop PNG/ICO use astaria-icon-transparent-2048.png (2048-square RGBA), enlarged 1.1x and centred.
-The desktop PNG must be available locally; there is no SVG or black-background fallback.
-Mobile/web icons retain the supplied black-background SVG policy.
+Desktop PNG/ICO and mobile/web icons use the supplied black-background SVG at full viewBox.
+The opaque desktop artwork avoids macOS 27 automatic transparent-icon compositing.
 Main images retain the supplied colours, paths, strokes and clipping.
 Only Android notification/themed monochrome masks use white RGB.
 Sharp is a build tool and must already be available; this command installs nothing.`
 
 export function parseArgs(argv) {
-  const options = {}, flags = ['--source', '--opaque-source', '--desktop-source', '--out', '--android-res', '--ios-assets', '--sharp']
+  const options = {}, flags = ['--source', '--opaque-source', '--out', '--android-res', '--ios-assets', '--sharp']
   if (argv.length === 1 && ['--help', '-h'].includes(argv[0])) return { help: true }
   for (let i = 0; i < argv.length; i += 2) {
     const flag = argv[i], value = argv[i + 1]
@@ -94,28 +91,6 @@ export function composeGlyph(master, { x = 0, y = 0, size }) {
 const centred = (master, size, ratio) => composeGlyph(master, { x: size * (1 - ratio) / 2, y: size * (1 - ratio) / 2, size: size * ratio })
 const transparent = (master, size, ratio) => canvas(size, centred(master, size, ratio))
 const opaque = (master, size, ratio, background) => canvas(size, `<rect width="100%" height="100%" fill="${background}"/>${centred(master, size, ratio)}`)
-async function readDesktopSource(sharp, source) {
-  const input = await readFile(source).catch(error => {
-    throw new Error(`Cannot read desktop PNG: ${source}. Supply the approved local PNG with --desktop-source; no fallback is allowed.`, { cause: error })
-  })
-  const metadata = await sharp(input).metadata()
-  if (metadata.format !== 'png' || metadata.width !== 2048 || metadata.height !== 2048 || metadata.channels !== 4 || !metadata.hasAlpha) {
-    throw new Error('Desktop source must be a 2048x2048 RGBA PNG')
-  }
-  const { channels } = await sharp(input).stats()
-  const alpha = channels[3]
-  if (alpha.min !== 0 || alpha.max === 0) throw new Error('Desktop source must contain transparent pixels and visible artwork')
-  return input
-}
-function desktopPng(sharp, input, size) {
-  // Preserve the approved conversion in artifacts/v1-transparent-icon/prepare-icons.mjs.
-  // Each ICO size is sampled directly from the PNG master, never from the 1024 export.
-  const enlarged = Math.round(size * LAYOUT.desktop), inset = Math.floor((enlarged - size) / 2)
-  return sharp(input).resize(enlarged, enlarged, { kernel: 'lanczos3' })
-    .extract({ left: inset, top: inset, width: size, height: size }).ensureAlpha()
-    .png(PNG_OPTIONS).toBuffer()
-}
-
 /** Android's local clip groups have the same scope and order as the supplied SVG. */
 export function createSplashVector(master) {
   const lines = []
@@ -163,7 +138,6 @@ export async function main(argv = process.argv.slice(2)) {
   const { help, options = {} } = parseArgs(argv)
   if (help) { console.log(USAGE); return }
   const source = options['--source'] ?? REPO.source, opaqueSource = options['--opaque-source'] ?? REPO.opaqueSource
-  const desktopSource = options['--desktop-source'] ?? REPO.desktopSource
   const master = parseCanonicalSource(await readFile(source, 'utf8'), source)
   const full = parseCanonicalSource(await readFile(opaqueSource, 'utf8'), opaqueSource, true)
   const backgrounds = children(full.tree).filter(node => node.name === 'rect')
@@ -173,7 +147,6 @@ export async function main(argv = process.argv.slice(2)) {
   if (full.body.replace(/^\s*<rect\b[^>]*id="background"[^>]*\/>(?:\r?\n)?/mu, '').trim() !== master.body.trim()) throw new Error('The supplied masters differ beyond the background')
   const splashVector = createSplashVector(master)
   const sharp = (await import(options['--sharp'] ? pathToFileURL(options['--sharp']).href : 'sharp')).default
-  const desktop = await readDesktopSource(sharp, desktopSource)
   const destinations = { public: options['--out'] ?? REPO.out, android: options['--android-res'] ?? REPO.androidRes, ios: options['--ios-assets'] ?? REPO.iosAssets }
   const outputs = []
   const add = (directory, name, bytes) => outputs.push({ path: join(directory, name), bytes })
@@ -188,14 +161,15 @@ export async function main(argv = process.argv.slice(2)) {
     return image.png(PNG_OPTIONS).toBuffer()
   }
   const render = async (svg, size, rgb = false) => png(await raw(svg, size), size, rgb)
-  // Mobile/web keep the opaque SVG policy; desktop uses the approved transparent PNG.
+  // Keep the approved opaque artwork consistent across desktop, mobile and web.
   add(destinations.public, 'astaria-logo.svg', Buffer.from(full.text))
   add(destinations.public, 'astaria-logo.png', await render(sized(full, 1024), 1024, true))
-  add(destinations.public, 'astaria-icon-1024.png', await desktopPng(sharp, desktop, 1024))
+  add(destinations.public, 'astaria-icon-1024.png', await render(sized(full, 1024), 1024, true))
   for (const [name, size] of [['favicon.png', 48], ['apple-touch-icon.png', 180], ['pwa-192x192.png', 192], ['pwa-512x512.png', 512]]) add(destinations.public, name, await render(sized(full, size), size, true))
   add(destinations.public, 'maskable-512x512.png', await render(opaque(master, 512, LAYOUT.maskable, background), 512, true))
   const entries = []
-  for (const size of ICO_SIZES) entries.push({ size, png: await desktopPng(sharp, desktop, size) })
+  // NSIS consumes RGBA representations; the black artwork remains fully opaque.
+  for (const size of ICO_SIZES) entries.push({ size, png: await render(sized(full, size), size) })
   add(destinations.public, 'astaria.ico', buildIco(entries))
   for (const [density, ratio] of DENSITIES) {
     const size = 48 * ratio, legacy = await raw(sized(full, size), size)
@@ -218,7 +192,7 @@ export async function main(argv = process.argv.slice(2)) {
   const splash = await render(opaque(master, 2732, LAYOUT.splash, background), 2732, true)
   for (const name of ['splash-2732x2732.png', 'splash-2732x2732-1.png', 'splash-2732x2732-2.png']) add(destinations.ios, `Splash.imageset/${name}`, splash)
   // All parsing, Android conversion and rasterisation succeed before any output is replaced.
-  const inputs = [source, opaqueSource, desktopSource].map(path => resolve(path))
+  const inputs = [source, opaqueSource].map(path => resolve(path))
   if (outputs.some(({ path }) => inputs.includes(resolve(path)))) throw new Error('Output must not overwrite an input master')
   for (const { path, bytes } of outputs) {
     await mkdir(dirname(path), { recursive: true }); await writeFile(path, bytes)

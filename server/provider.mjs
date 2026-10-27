@@ -5,6 +5,7 @@ import { readCompletionStream } from './completionStream.mjs'
 import { abortSignalTimeout, abortSignalAny } from './abortSignal.mjs'
 import { compatibleEndpoint, CLOUD_PRESETS } from '../src/xixi/cloudProviders.ts'
 import { measureContext } from './contextUsage.mjs'
+import { contextUnits } from './contextBudget.mjs'
 const ENDPOINT = 'https://api.deepseek.com/chat/completions'
 export const MODEL = 'deepseek-flash'
 // Thinking depth comes from the saved setting. Short reply budgets must not
@@ -44,7 +45,7 @@ export function createCompletion(keychain, fetcher = fetch, getModel = () => MOD
     const configuredEffort = settings?.reasoningEffort ?? DEFAULT_REASONING_EFFORT
     // Horizon grouping and ordering use light reasoning to keep the interaction responsive.
     // This request-local cap does not change the user's chat preference.
-    const reasoningEffort = ['timetable-recognition', 'thinking-summary'].includes(purpose) ? 'off'
+    const reasoningEffort = ['timetable-recognition', 'thinking-summary', 'history-summary', 'receipt-explanation', 'planner-required-read'].includes(purpose) ? 'off'
       : ['horizon-order', 'horizon-grouping'].includes(purpose) ? 'low' : configuredEffort
     if (deepseek && !REASONING_EFFORTS.includes(reasoningEffort)) throw new ProviderError('请在设置中选择有效的思考深度')
     const thinkingEnabled = deepseek && reasoningEffort !== 'off'
@@ -61,6 +62,10 @@ export function createCompletion(keychain, fetcher = fetch, getModel = () => MOD
       // Let the thinking provider use its own output budget, as before; keep
       // explicit budgets for non-thinking requests such as image transcription.
       if (thinkingEnabled) delete body.max_tokens
+      // DeepSeek rejects required/named tool choices while thinking (HTTP 400).
+      // Keep the user's reasoning mode. Required planner reads and unfinished
+      // work remain enforced by the local tool loop, not by this wire option.
+      if (thinkingEnabled && body.tool_choice && !['auto', 'none'].includes(body.tool_choice)) body.tool_choice = 'auto'
       body.messages = payload.messages.map(message => message.role === 'assistant'
         ? { ...message, ...(thinkingEnabled ? { reasoning_content: message.reasoning_content ?? '' } : {}) }
         : message)
@@ -69,9 +74,19 @@ export function createCompletion(keychain, fetcher = fetch, getModel = () => MOD
       const { reasoning_content: _reasoning, ...rest } = message
       return rest
     })
+    // A mandatory planner read belongs to the conversation. Auxiliary calls
+    // (for example a thinking subtitle) must not replace its context meter.
+    const trackContext = Boolean(onContextUsage && (!purpose || purpose === 'planner-required-read' || purpose === 'receipt-explanation'))
+    const initialUsage = trackContext ? measureContext(body, { ...settings, cloudModel: model }) : null
     const reportContext = result => {
-      if (!onContextUsage || purpose || signal?.aborted) return
-      try { onContextUsage(measureContext(body, { ...settings, cloudModel: model }, result)) } catch { /* Display telemetry cannot fail a reply. */ }
+      if (!trackContext || signal?.aborted) return
+      try {
+        // Avoid rescanning the potentially long input on every output update.
+        if (result && !result.usage && initialUsage) {
+          const outputTokens = contextUnits(result.choices[0].message)
+          onContextUsage({ ...initialUsage, outputTokens, usedTokens: initialUsage.inputTokens + outputTokens, updatedAt: new Date().toISOString() })
+        } else onContextUsage(result ? measureContext(body, { ...settings, cloudModel: model }, result) : initialUsage)
+      } catch { /* Display telemetry cannot fail a reply. */ }
     }
     reportContext()
     const headers = { 'Content-Type': 'application/json' }
@@ -105,10 +120,11 @@ export function createCompletion(keychain, fetcher = fetch, getModel = () => MOD
     const maxBytes = thinkingEnabled ? 4 * 1024 * 1024 : 512 * 1024
     let result
     if (streaming && response.headers.get('content-type')?.includes('text/event-stream')) {
-      try { result = await readCompletionStream(response, { maxBytes, onDelta }) }
+      try { result = await readCompletionStream(response, { maxBytes, onDelta, onProgress: initialUsage ? reportContext : undefined }) }
       catch { throw new ProviderError(`${label}的流式回复中断，未执行其中不完整的工具调用；已保存进度保留，可以重试`) }
     } else result = await readJSON(response, label, maxBytes)
     if (!result?.choices?.[0]?.message) throw new ProviderError(`${label}暂未返回完整回复，请重试`)
+    reportContext(result)
     const finishReason = result.choices[0].finish_reason
     const interruptedReasons = {
       length: '本轮输出达到模型的长度上限，回复未完成',
@@ -121,7 +137,6 @@ export function createCompletion(keychain, fetcher = fetch, getModel = () => MOD
       error.finishReason = finishReason
       throw error
     }
-    reportContext(result)
     return result
   }
 }

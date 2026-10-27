@@ -1,27 +1,33 @@
-<!doctype html><html><meta charset="utf-8"><title>ASTaria local background authoring</title>
+<!doctype html><html><meta charset="utf-8"><title>ASTaria local background authoring · expanded horizon</title>
 <style>body{margin:0;background:#050506;color:#eee;font:14px system-ui}#scene{width:3840px;height:2160px;position:absolute;top:100px;left:0}header{position:fixed;z-index:2;background:#151515;padding:12px}button{padding:8px}pre{display:inline}</style>
-<header><button id="capture">Generate four native 4K masters</button> <pre id="status">Ready · local renderer only · 240 frames × 4</pre></header><div id="scene"></div>
+<header><select id="view"><option value="panorama">首页全景</option><option value="horizon" selected>弦轨近景</option></select><label>起始帧 <input id="start" type="number" min="0" max="959" value="0" style="width:70px"></label><button id="capture">Generate four native 4K masters</button> <pre id="status">Ready · local renderer only · 240 frames × 4</pre></header><div id="scene"></div>
 <script type="module">
 import { BlackHoleRenderer } from '/src/prototype/BlackHoleRenderer.ts'
 import { prepareSceneGeodesics } from '/src/prototype/geodesicLoader.ts'
 const status=document.querySelector('#status'), host=document.querySelector('#scene')
 document.querySelector('#capture').onclick=async()=>{document.querySelector('#capture').disabled=true
-try { const table=await prepareSceneGeodesics()
+try { const view=document.querySelector('#view').value, start=Number(document.querySelector('#start').value); const table=await prepareSceneGeodesics(); let group=0
 for(const shape of ['landscape','portrait']) for(const theme of ['dark','light']) {
+ const offset=group++*240
+ if(start>=offset+240)continue
  const [width,height]=shape==='landscape'?[3840,2160]:[2160,3840]
  document.documentElement.dataset.mobile=shape==='portrait'?'preview':''
  host.style.width=width+'px';host.style.height=height+'px'
  const engine=new BlackHoleRenderer(host,undefined,message=>{throw Error(message)},table)
  engine.setQuality('ultra');engine.setNight(theme==='dark'?1:0,true)
- for(let index=0;index<240;index++) {
-  const canvas=engine.captureFrame(24+index/30,width,height)
+ for(let index=Math.max(0,start-offset);index<240;index++) {
+  const canvas=engine.captureFrame(24+index/30,width,height,view)
   const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'))
-  const response=await fetch('/capture-frame/'+shape+'-'+theme+'/'+index,{method:'POST',body:blob})
-  if(!response.ok)throw Error('Frame save failed')
+  const bytes=await blob.arrayBuffer()
+  let saved=false
+  for(let attempt=0;attempt<3&&!saved;attempt++) {
+   try { const response=await fetch('/capture-frame/'+view+'/'+shape+'-'+theme+'/'+index,{method:'POST',body:bytes}); if(!response.ok)throw Error(await response.text()); saved=true }
+   catch(error){if(attempt===2)throw Error('Resume at '+(offset+index)+': '+error.message)}
+  }
   status.textContent=shape+' '+theme+' '+(index+1)+'/240 · '+canvas.width+'×'+canvas.height
  }
  engine.dispose()
 }
 status.textContent='DONE · 960 native 4K frames saved'
-}catch(error){status.textContent='ERROR '+error.stack}}
+}catch(error){status.textContent='ERROR '+String(error)+' '+(error?.stack??'')}}
 </script></html>

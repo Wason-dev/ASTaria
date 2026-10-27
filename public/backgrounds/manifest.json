@@ -16,50 +16,6 @@
       "sha256": "51778febc535da0a3b93d4f00fba6395a483dc47c396f000fa8e968c80342e13"
     },
     {
-      "file": "landscape-dark-4k-high.mp4",
-      "kind": "video",
-      "width": 3840,
-      "height": 2160,
-      "quality": "high",
-      "resolution": "4k",
-      "targetMbps": 45,
-      "bytes": 42775361,
-      "sha256": "ef94e17634a6480a41412802876b8fc9e37da48ac36e4d88d6d65059cfc6ed2a"
-    },
-    {
-      "file": "landscape-dark-4k-standard.webp",
-      "kind": "image",
-      "width": 3840,
-      "height": 2160,
-      "quality": "standard",
-      "resolution": "4k",
-      "webpQuality": 90,
-      "bytes": 364532,
-      "sha256": "87a746a278af5c0eed7927ca6b5a64c3b0d5700813f5535c2f8c24b3237e2f24"
-    },
-    {
-      "file": "landscape-dark-4k-standard.mp4",
-      "kind": "video",
-      "width": 3840,
-      "height": 2160,
-      "quality": "standard",
-      "resolution": "4k",
-      "targetMbps": 30,
-      "bytes": 28777941,
-      "sha256": "078bbda1fd6214dab0531945b1911791c23d5a069e47490ceea3578457f3e1b6"
-    },
-    {
-      "file": "landscape-dark-1080p-high.webp",
-      "kind": "image",
-      "width": 1920,
-      "height": 1080,
-      "quality": "high",
-      "resolution": "1080p",
-      "webpQuality": 96,
-      "bytes": 216730,
-      "sha256": "afabbd6ab88e0aa906d4c528b73d3a9ab11297d3a272c9f2a6646fc26a257c6b"
-    },
-    {
       "file": "landscape-dark-1080p-high.mp4",
       "kind": "video",
       "width": 1920,
@@ -69,72 +25,6 @@
       "targetMbps": 20,
       "bytes": 18299332,
       "sha256": "6e83f62c44b0b29cc3b507d5d66436576798ca2d155b434447fd10b2a56b50f4"
-    },
-    {
-      "file": "landscape-dark-1080p-standard.webp",
-      "kind": "image",
-      "width": 1920,
-      "height": 1080,
-      "quality": "standard",
-      "resolution": "1080p",
-      "webpQuality": 90,
-      "bytes": 128680,
-      "sha256": "ece65e85bcd82d55e5a902d30387c9ca7264d7ee1e6d139bc78e7532f746fbf9"
-    },
-    {
-      "file": "landscape-dark-1080p-standard.mp4",
-      "kind": "video",
-      "width": 1920,
-      "height": 1080,
-      "quality": "standard",
-      "resolution": "1080p",
-      "targetMbps": 12,
-      "bytes": 11068092,
-      "sha256": "42720e777c687d5fbc15f1b118671c8ebe696b7b7feff39f29e4eca41646d415"
-    },
-    {
-      "file": "landscape-dark-720p-high.webp",
-      "kind": "image",
-      "width": 1280,
-      "height": 720,
-      "quality": "high",
-      "resolution": "720p",
-      "webpQuality": 96,
-      "bytes": 109550,
-      "sha256": "2ef4d2b4329e3c6cf607bada9531d941d0864744b58cde73a60356683ed278b7"
-    },
-    {
-      "file": "landscape-dark-720p-high.mp4",
-      "kind": "video",
-      "width": 1280,
-      "height": 720,
-      "quality": "high",
-      "resolution": "720p",
-      "targetMbps": 10,
-      "bytes": 8960725,
-      "sha256": "32f821be2225290a91364628f242f4dbe4bb9d35ee3d60616636cf7aa42fbac9"
-    },
-    {
-      "file": "landscape-dark-720p-standard.webp",
-      "kind": "image",
-      "width": 1280,
-      "height": 720,
-      "quality": "standard",
-      "resolution": "720p",
-      "webpQuality": 90,
-      "bytes": 65918,
-      "sha256": "6ba2e16a43512311fa8e8961d1b78da8d86a2917ee8bf4c220d8bda4ebb4c5fd"
-    },
-    {
-      "file": "landscape-dark-720p-standard.mp4",
-      "kind": "video",
-      "width": 1280,
-      "height": 720,
-      "quality": "standard",
-      "resolution": "720p",
-      "targetMbps": 6,
-      "bytes": 5466136,
-      "sha256": "5d1cf44ba2497222dde580524667b542de9636a7b1ee9273bc5072c1021827ae"
     },
     {
       "file": "landscape-light-4k-high.webp",
@@ -148,50 +38,6 @@
       "sha256": "d926b469f84c977fa165d1a131bda5f878dfb882334f22a86bed6f01013e3c88"
     },
     {
-      "file": "landscape-light-4k-high.mp4",
-      "kind": "video",
-      "width": 3840,
-      "height": 2160,
-      "quality": "high",
-      "resolution": "4k",
-      "targetMbps": 45,
-      "bytes": 42233046,
-      "sha256": "fde1932c1596d6e5a8d71f148c7d05ad78b09a2d4a28e2606b3ba971d6d646cb"
-    },
-    {
-      "file": "landscape-light-4k-standard.webp",
-      "kind": "image",
-      "width": 3840,
-      "height": 2160,
-      "quality": "standard",
-      "resolution": "4k",
-      "webpQuality": 90,
-      "bytes": 281876,
-      "sha256": "f7d017b37532bde03ae8670f6489186941d156b367d1fbfae338c0a5b82f9976"
-    },
-    {
-      "file": "landscape-light-4k-standard.mp4",
-      "kind": "video",
-      "width": 3840,
-      "height": 2160,
-      "quality": "standard",
-      "resolution": "4k",
-      "targetMbps": 30,
-      "bytes": 28597260,
-      "sha256": "f4023fad0621e15dc9de9230ec106d8b4109a1371022c2f15b7eb11f59c6ff71"
-    },
-    {
-      "file": "landscape-light-1080p-high.webp",
-      "kind": "image",
-      "width": 1920,
-      "height": 1080,
-      "quality": "high",
-      "resolution": "1080p",
-      "webpQuality": 96,
-      "bytes": 157482,
-      "sha256": "23550bbdabdaa0e229313804ad4538b2952e6590d2f2ea7fb8aa232c41d4b358"
-    },
-    {
       "file": "landscape-light-1080p-high.mp4",
       "kind": "video",
       "width": 1920,
@@ -201,72 +47,6 @@
       "targetMbps": 20,
       "bytes": 18013767,
       "sha256": "31855bfbf800c21d1b7467f25e691c3ed34ee1fb1be40b2fd30c4ee27436bbd0"
-    },
-    {
-      "file": "landscape-light-1080p-standard.webp",
-      "kind": "image",
-      "width": 1920,
-      "height": 1080,
-      "quality": "standard",
-      "resolution": "1080p",
-      "webpQuality": 90,
-      "bytes": 99810,
-      "sha256": "155ed59c4863a46ff7124c1cfb352a570c9cd8b52082712c0e1e9a319ad3e747"
-    },
-    {
-      "file": "landscape-light-1080p-standard.mp4",
-      "kind": "video",
-      "width": 1920,
-      "height": 1080,
-      "quality": "standard",
-      "resolution": "1080p",
-      "targetMbps": 12,
-      "bytes": 11062294,
-      "sha256": "b04ecd1d261310f9068b47b84adc22927a636bdc7ade1dafe6663fc6ea67a0b9"
-    },
-    {
-      "file": "landscape-light-720p-high.webp",
-      "kind": "image",
-      "width": 1280,
-      "height": 720,
-      "quality": "high",
-      "resolution": "720p",
-      "webpQuality": 96,
-      "bytes": 83168,
-      "sha256": "090bb0c69d8276aef79fbbf6ce9763c2d59aed27587c3e0b6fed35a761eb44bb"
-    },
-    {
-      "file": "landscape-light-720p-high.mp4",
-      "kind": "video",
-      "width": 1280,
-      "height": 720,
-      "quality": "high",
-      "resolution": "720p",
-      "targetMbps": 10,
-      "bytes": 8837520,
-      "sha256": "127b4889d9d7a3e8b91302257b991cc856b6aa80372b8efefc63cd9478fce68b"
-    },
-    {
-      "file": "landscape-light-720p-standard.webp",
-      "kind": "image",
-      "width": 1280,
-      "height": 720,
-      "quality": "standard",
-      "resolution": "720p",
-      "webpQuality": 90,
-      "bytes": 52408,
-      "sha256": "7cc3d938e2b7a356d25969188296962f432a641f474e34595ecebf309a8e6401"
-    },
-    {
-      "file": "landscape-light-720p-standard.mp4",
-      "kind": "video",
-      "width": 1280,
-      "height": 720,
-      "quality": "standard",
-      "resolution": "720p",
-      "targetMbps": 6,
-      "bytes": 5434249,
-      "sha256": "e6b44035ffaf16a5f5a50042857cef80b98f2b46661197524f70b98436cd157d"
     },
     {
       "file": "portrait-dark-4k-high.webp",
@@ -280,50 +60,6 @@
       "sha256": "6cbe5127f9352cee88ad1b4ce91c49f4627e25101fcd3d078d4aa6f7899b6b88"
     },
     {
-      "file": "portrait-dark-4k-high.mp4",
-      "kind": "video",
-      "width": 2160,
-      "height": 3840,
-      "quality": "high",
-      "resolution": "4k",
-      "targetMbps": 45,
-      "bytes": 42720213,
-      "sha256": "634561ce7a9c116a8656b67e126853bcd106e48990fae33a8116e377ecb46a9c"
-    },
-    {
-      "file": "portrait-dark-4k-standard.webp",
-      "kind": "image",
-      "width": 2160,
-      "height": 3840,
-      "quality": "standard",
-      "resolution": "4k",
-      "webpQuality": 90,
-      "bytes": 336934,
-      "sha256": "e02e78fae35948365a522a34a8b700fc99f85f677feb5454f1a8ac9d75c3e98b"
-    },
-    {
-      "file": "portrait-dark-4k-standard.mp4",
-      "kind": "video",
-      "width": 2160,
-      "height": 3840,
-      "quality": "standard",
-      "resolution": "4k",
-      "targetMbps": 30,
-      "bytes": 28560830,
-      "sha256": "55905723d74f92d134ddc4dfbed3a86c40a13f897e2cc1118ce871e926e5658c"
-    },
-    {
-      "file": "portrait-dark-1080p-high.webp",
-      "kind": "image",
-      "width": 1080,
-      "height": 1920,
-      "quality": "high",
-      "resolution": "1080p",
-      "webpQuality": 96,
-      "bytes": 212856,
-      "sha256": "5323d575530bed263316f80488d9eb03ba066ac0b701eb4a1b23552d9ddc383f"
-    },
-    {
       "file": "portrait-dark-1080p-high.mp4",
       "kind": "video",
       "width": 1080,
@@ -333,72 +69,6 @@
       "targetMbps": 20,
       "bytes": 18448462,
       "sha256": "5e52f1b5dd43a252a23d4fb5a791dff4605f48deefce915ddf6df6a4fd27fae8"
-    },
-    {
-      "file": "portrait-dark-1080p-standard.webp",
-      "kind": "image",
-      "width": 1080,
-      "height": 1920,
-      "quality": "standard",
-      "resolution": "1080p",
-      "webpQuality": 90,
-      "bytes": 126252,
-      "sha256": "1ce85ac635ce4f84810dd57073219d4daecc62d6f422c2b3618f2ee4896ebb14"
-    },
-    {
-      "file": "portrait-dark-1080p-standard.mp4",
-      "kind": "video",
-      "width": 1080,
-      "height": 1920,
-      "quality": "standard",
-      "resolution": "1080p",
-      "targetMbps": 12,
-      "bytes": 11130511,
-      "sha256": "59f2a035c61d5846c542cc7a328ea0a282d29a2ad7c418870a3d5ceba29bf03f"
-    },
-    {
-      "file": "portrait-dark-720p-high.webp",
-      "kind": "image",
-      "width": 720,
-      "height": 1280,
-      "quality": "high",
-      "resolution": "720p",
-      "webpQuality": 96,
-      "bytes": 109180,
-      "sha256": "5b570ab42df4e49a4ebf648120a08e8d5a60c7a6c27c05d3fff0ea3d1e87106f"
-    },
-    {
-      "file": "portrait-dark-720p-high.mp4",
-      "kind": "video",
-      "width": 720,
-      "height": 1280,
-      "quality": "high",
-      "resolution": "720p",
-      "targetMbps": 10,
-      "bytes": 9095130,
-      "sha256": "36247ef60d96b074151a4e5dfd2696f6eb07f294953dc49cf67fabc01b2ef24b"
-    },
-    {
-      "file": "portrait-dark-720p-standard.webp",
-      "kind": "image",
-      "width": 720,
-      "height": 1280,
-      "quality": "standard",
-      "resolution": "720p",
-      "webpQuality": 90,
-      "bytes": 65498,
-      "sha256": "66cf3cd622c5f94de4304898efcfb4d7b62470ad14ff23b1b730f869a2668ffc"
-    },
-    {
-      "file": "portrait-dark-720p-standard.mp4",
-      "kind": "video",
-      "width": 720,
-      "height": 1280,
-      "quality": "standard",
-      "resolution": "720p",
-      "targetMbps": 6,
-      "bytes": 5499683,
-      "sha256": "7ba0ff77373519f9ccd4c31ec29d157384da4297c57ebed2c707249e668d8fb5"
     },
     {
       "file": "portrait-light-4k-high.webp",
@@ -412,50 +82,6 @@
       "sha256": "794fe7e3bf200d63c7af6cae65d0bd37c2093d8365064fe3535867472df5cc1d"
     },
     {
-      "file": "portrait-light-4k-high.mp4",
-      "kind": "video",
-      "width": 2160,
-      "height": 3840,
-      "quality": "high",
-      "resolution": "4k",
-      "targetMbps": 45,
-      "bytes": 42144989,
-      "sha256": "d99409c76fad36d6aa454b038720dfc905e4f2807c99ab424dcc7b2255111ac3"
-    },
-    {
-      "file": "portrait-light-4k-standard.webp",
-      "kind": "image",
-      "width": 2160,
-      "height": 3840,
-      "quality": "standard",
-      "resolution": "4k",
-      "webpQuality": 90,
-      "bytes": 247694,
-      "sha256": "ebf46d290f6a457f4235775bdf38140024cf27d4bd0157f362f7bc3f6acfc12f"
-    },
-    {
-      "file": "portrait-light-4k-standard.mp4",
-      "kind": "video",
-      "width": 2160,
-      "height": 3840,
-      "quality": "standard",
-      "resolution": "4k",
-      "targetMbps": 30,
-      "bytes": 28499290,
-      "sha256": "721815c3466e89ac1434321d6fed7da2cf5cfbe9adbdd3989b29c8d2e9481def"
-    },
-    {
-      "file": "portrait-light-1080p-high.webp",
-      "kind": "image",
-      "width": 1080,
-      "height": 1920,
-      "quality": "high",
-      "resolution": "1080p",
-      "webpQuality": 96,
-      "bytes": 144172,
-      "sha256": "39bcae1469147e2a6990d7e092437a9fff92a148f20e3d03105da68cbf801664"
-    },
-    {
       "file": "portrait-light-1080p-high.mp4",
       "kind": "video",
       "width": 1080,
@@ -465,72 +91,7 @@
       "targetMbps": 20,
       "bytes": 18061123,
       "sha256": "bf77628cf88e45745bdbb166fa3188985f8549d7cb7bc0597687469569367e6a"
-    },
-    {
-      "file": "portrait-light-1080p-standard.webp",
-      "kind": "image",
-      "width": 1080,
-      "height": 1920,
-      "quality": "standard",
-      "resolution": "1080p",
-      "webpQuality": 90,
-      "bytes": 87720,
-      "sha256": "88ccce19e140a1e7c928d510607e455f9f99d9ef72e6e5770aa27d8ce569b631"
-    },
-    {
-      "file": "portrait-light-1080p-standard.mp4",
-      "kind": "video",
-      "width": 1080,
-      "height": 1920,
-      "quality": "standard",
-      "resolution": "1080p",
-      "targetMbps": 12,
-      "bytes": 11090124,
-      "sha256": "039a988efd1d0c319232ad2de189a69f983aa3a323a37009fd29a5fcd1424751"
-    },
-    {
-      "file": "portrait-light-720p-high.webp",
-      "kind": "image",
-      "width": 720,
-      "height": 1280,
-      "quality": "high",
-      "resolution": "720p",
-      "webpQuality": 96,
-      "bytes": 75944,
-      "sha256": "567c0b36d07982f9908981f50de4f29f11754c417ef54eef3f39627b1ba1d0ed"
-    },
-    {
-      "file": "portrait-light-720p-high.mp4",
-      "kind": "video",
-      "width": 720,
-      "height": 1280,
-      "quality": "high",
-      "resolution": "720p",
-      "targetMbps": 10,
-      "bytes": 8836688,
-      "sha256": "5a2d79b09af8db6f554321e84d2a7c8d06ed16eb8421315e2289f55692b44884"
-    },
-    {
-      "file": "portrait-light-720p-standard.webp",
-      "kind": "image",
-      "width": 720,
-      "height": 1280,
-      "quality": "standard",
-      "resolution": "720p",
-      "webpQuality": 90,
-      "bytes": 47510,
-      "sha256": "cc0722e80951a8e5980ff3337120a867c486b622fc2c31ea2e6781ae758349a6"
-    },
-    {
-      "file": "portrait-light-720p-standard.mp4",
-      "kind": "video",
-      "width": 720,
-      "height": 1280,
-      "quality": "standard",
-      "resolution": "720p",
-      "targetMbps": 6,
-      "bytes": 5442129,
-      "sha256": "13441b2c574088d87640fe41a0a1efad08ca9cb72d01d3e1da6738d77660fc02"
     }
-  ]
+  ],
+  "distribution": "bundled-1080p-video-4k-still"
 }

@@ -30,6 +30,7 @@ public final class ASTariaAppearancePlugin extends Plugin {
     private View decor;
     private ViewTreeObserver.OnGlobalLayoutListener viewportListener;
     private String lastViewport = "";
+    private long viewportRevision = 0;
     private final Set<WindowInsetsAnimationCompat> imeAnimations = new HashSet<>();
     private WindowInsetsCompat animatedInsets;
 
@@ -37,6 +38,8 @@ public final class ASTariaAppearancePlugin extends Plugin {
     public void load() {
         super.load();
         getActivity().runOnUiThread(() -> {
+            bridge.getWebView().setVerticalScrollBarEnabled(false);
+            bridge.getWebView().setHorizontalScrollBarEnabled(false);
             decor = getActivity().getWindow().getDecorView();
             Window window = getActivity().getWindow();
             WindowCompat.setDecorFitsSystemWindows(window, false);
@@ -92,7 +95,7 @@ public final class ASTariaAppearancePlugin extends Plugin {
         getActivity().runOnUiThread(() -> {
             JSObject viewport = readViewport();
             if (viewport == null) call.reject("Viewport not ready");
-            else call.resolve(viewport);
+            else { viewport.put("revision", ++viewportRevision); call.resolve(viewport); }
         });
     }
 
@@ -107,6 +110,7 @@ public final class ASTariaAppearancePlugin extends Plugin {
         String value = viewport.toString();
         if (value.equals(lastViewport)) return;
         lastViewport = value;
+        viewport.put("revision", ++viewportRevision);
         notifyListeners("viewportChanged", viewport);
     }
 
@@ -148,6 +152,7 @@ public final class ASTariaAppearancePlugin extends Plugin {
         viewport.put("visibleHeight", visibleHeight / density);
         viewport.put("keyboardInset", keyboardVisible ? Math.max(0, layoutHeight - keyboardTop) / density : 0);
         viewport.put("keyboardVisible", keyboardVisible);
+        viewport.put("keyboardAnimating", !imeAnimations.isEmpty());
         JSObject safeArea = new JSObject();
         safeArea.put("top", Math.max(0, bars.top - location[1]) / density);
         safeArea.put("right", bars.right / density);

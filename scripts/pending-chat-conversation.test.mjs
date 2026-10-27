@@ -6,7 +6,7 @@ import { registerHooks, stripTypeScriptTypes } from 'node:module'
 // HTTP and an injected pending-chat store backed by the real durable helper and
 // an in-memory adapter. No provider calls, user storage or browser dependencies.
 const runtimeKey = '__astariaPendingChatTestHooks'
-const reactStub = `export const ${['useState', 'useRef', 'useMemo', 'useCallback', 'useEffect'].map(name => `${name} = (...args) => globalThis.${runtimeKey}.${name}(...args)`).join(', ')};`
+const reactStub = `export const ${['useState', 'useRef', 'useMemo', 'useCallback', 'useEffect', 'useLayoutEffect'].map(name => `${name} = (...args) => globalThis.${runtimeKey}.${name}(...args)`).join(', ')};`
 const root = new URL('../src/xixi/', import.meta.url).href
 const loader = registerHooks({
   resolve(specifier, context, next) {
@@ -23,7 +23,7 @@ const loader = registerHooks({
       : result
   },
 })
-const { useXixiConversation } = await import('../src/xixi/useXixiConversation.ts')
+const { useXixiConversation, useChatDraftCompletion } = await import('../src/xixi/useXixiConversation.ts')
 const { createPendingChatRequestStore } = await import('../src/xixi/pendingChatRequest.ts')
 loader.deregister()
 
@@ -43,14 +43,14 @@ function memoryAdapter() {
   return {
     ids: () => [...buckets.values()].flatMap(records => [...records.keys()]),
     async list(scope) { return [...bucket(scope).values()].map(value => structuredClone(value)) },
+    async find(conversationId, requestId) { return [...buckets.values()].flatMap(records => [...records.values()]).filter(item => item.conversationId === conversationId && item.requestId === requestId).map(value => structuredClone(value)) },
     async put(scope, value) { bucket(scope).set(value.requestId, structuredClone(value)) },
     async remove(scope, ids) { for (const id of ids) bucket(scope).delete(id) },
   }
 }
 
-function pendingStoreFixture(scopeId = 'scope-1') {
+function pendingStoreFixture(scopeId = 'scope-1', adapter = memoryAdapter()) {
   const session = new Map()
-  const adapter = memoryAdapter()
   const base = createPendingChatRequestStore({
     session: { getItem: key => session.get(key) ?? null, setItem: (key, value) => session.set(key, value) },
     adapter,
@@ -65,6 +65,7 @@ function pendingStoreFixture(scopeId = 'scope-1') {
     failAfterCommit: false,
     ids: () => adapter.ids(),
     list() { return base.list() },
+    find: (conversationId, requestId) => base.find(conversationId, requestId),
     async save(request) {
       saves.push(structuredClone(request))
       if (api.beforeSave) await api.beforeSave(request, saves.length)
@@ -85,16 +86,24 @@ function pendingStoreFixture(scopeId = 'scope-1') {
 async function fixture(t, options = {}) {
   const originals = new Map(['window', 'document', 'sessionStorage', runtimeKey].map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]))
   const storage = new Map()
-  globalThis.window = { setInterval: () => 0 }
+  const timers = new Map()
+  let timerId = 0
+  globalThis.window = { setInterval: () => 0, setTimeout: callback => { timers.set(++timerId, callback); return timerId }, clearTimeout: id => timers.delete(id) }
   globalThis.document = Object.assign(new EventTarget(), { visibilityState: 'visible' })
-  globalThis.sessionStorage = { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value) }
+  globalThis.sessionStorage = { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) }
   const slots = [], effects = []
   let cursor = 0
   const memo = (factory, deps) => {
     const index = cursor++
     const prior = slots[index]
-    if (!prior || deps.some((value, i) => !Object.is(value, prior.deps[i]))) slots[index] = { value: factory(), deps }
+    if (!prior || !deps || deps.some((value, i) => !Object.is(value, prior.deps[i]))) slots[index] = { value: factory(), deps }
     return slots[index].value
+  }
+  const effect = (callback, deps) => {
+    const index = cursor++, previous = slots[index]
+    if (previous && deps && previous.deps && deps.length === previous.deps.length && deps.every((value, i) => Object.is(value, previous.deps[i]))) return
+    const slot = slots[index] = { deps }
+    effects.push(() => { previous?.cleanup?.(); slot.cleanup = callback() })
   }
   globalThis[runtimeKey] = {
     useState(initial) {
@@ -105,7 +114,8 @@ async function fixture(t, options = {}) {
     useRef(initial) { const index = cursor++; return slots[index] ??= { current: initial } },
     useMemo: memo,
     useCallback: (callback, deps) => memo(() => callback, deps),
-    useEffect(callback, deps) { memo(() => { effects.push(callback); return null }, deps) },
+    useEffect: effect,
+    useLayoutEffect: effect,
   }
   const store = options.store ?? pendingStoreFixture()
   const injected = options.injected !== false
@@ -114,18 +124,23 @@ async function fixture(t, options = {}) {
   let chatResult = options.chatResult ?? null
   const conversationFor = id => (typeof conversation === 'function' ? conversation(id) : conversation)
   let conversation = options.conversation ?? (id => ({ conversationId: id, messages: [], operations: [] }))
-  const reads = [], sent = [], durableAtSend = [], cleanups = []
+  const reads = [], sent = [], durableAtSend = [], requestReads = []
   t.mock.method(globalThis, 'fetch', async (url, init) => {
     if (url === '/api/status') {
       const result = reads.length ? await reads.shift().promise : status
       return Response.json(result)
     }
     if (url.startsWith('/api/conversation/reasoning')) return Response.json({ reasoningContent: '', rounds: [] })
+    if (url.startsWith('/api/conversation/retry?')) {
+      requestReads.push(url)
+      return options.recoveredRequest ? Response.json(options.recoveredRequest) : Response.json({ error: '原发送记录不可用' }, { status: 404 })
+    }
     if (url === '/api/conversation' || url.startsWith('/api/conversation?')) return Response.json(conversationFor(new URL(url, 'http://local').searchParams.get('id') || 'main'))
     if (url === '/api/chat') {
       const request = JSON.parse(init.body)
       sent.push(request)
       durableAtSend.push(injected ? store.ids() : [])
+      if (options.chatResponse) return options.chatResponse(request)
       if (chatError) return Response.json({ error: chatError }, { status: 502 })
       return Response.json(chatResult ? chatResult(request) : { ...request, status: 'completed', messages: [], operations: [] })
     }
@@ -135,13 +150,20 @@ async function fixture(t, options = {}) {
     if (url === '/api/messages/retract') return Response.json(conversationFor(JSON.parse(init.body).conversationId))
     throw new Error(`Unexpected API: ${url}`)
   })
+  const composer = { key: `draft-${crypto.randomUUID()}`, text: options.draft ?? '', attachment: options.attachment ?? null, revision: 0, clears: 0 }
+  const composerRevision = { get current() { return composer.revision } }
+  let captureCompletion, composerStart, composerMounted = true
   const render = () => {
     cursor = 0
     const value = injected ? useXixiConversation(() => {}, () => {}, store) : useXixiConversation(() => {}, () => {})
-    for (const effect of effects.splice(0)) { const cleanup = effect(); if (cleanup) cleanups.push(cleanup) }
+    composerStart = cursor
+    if (composerMounted) captureCompletion = useChatDraftCompletion(composer.key, composer.text, composer.attachment, composerRevision, () => {
+      composer.text = ''; composer.attachment = null; composer.clears++
+    })
+    for (const effect of effects.splice(0)) effect()
     return value
   }
-  const unmount = () => { for (const cleanup of cleanups.splice(0)) cleanup() }
+  const unmount = () => { for (const slot of slots) { slot?.cleanup?.(); if (slot?.cleanup) slot.cleanup = undefined } }
   t.after(() => {
     unmount()
     for (const [key, descriptor] of originals) {
@@ -167,6 +189,13 @@ async function fixture(t, options = {}) {
     reads,
     sent,
     durableAtSend,
+    composer,
+    storage,
+    requestReads,
+    captureCompletion: () => captureCompletion(),
+    hideComposer: () => { for (const slot of slots.splice(composerStart)) slot?.cleanup?.(); composerMounted = false },
+    showComposer: () => { composerMounted = true; composer.revision = 0; return render() },
+    fireProgressTimer: () => { for (const callback of timers.values()) callback() },
     setStatus: value => { status = value },
     setConversation: value => { conversation = value },
     failChat: value => { chatError = value },
@@ -536,4 +565,221 @@ test('a partially saved operation survives failed delivery and the same-ID retry
   assert.deepEqual(f.render().conversation.operations, [savedOperation])
   assert.equal(f.render().conversation.messages.filter(item => item.role === 'user' && item.requestId === requestId).length, 1)
   assert.deepEqual(store.ids(), [])
+})
+
+
+const savedTurn = (request, status = 'completed') => ({ conversationId: request.conversationId, operations: [], messages: [
+  { id: request.requestId + ':user', requestId: request.requestId, seq: 1, role: 'user', content: request.text, createdAt: request.createdAt ?? '', requestStatus: status },
+  { id: request.requestId + ':reply', requestId: request.requestId, seq: 2, role: 'assistant', content: '已保存的回答', createdAt: request.createdAt ?? '', requestStatus: status },
+] })
+const lostTerminal = () => new Response(new ReadableStream({ start(controller) {
+  const encoder = new TextEncoder()
+  controller.enqueue(encoder.encode('data: '+JSON.stringify({type:'content',round:1,delta:'已保存的回答'})+'\n\n'))
+  controller.close()
+} }), { headers: { 'Content-Type':'text/event-stream' } })
+
+test('lost terminal stream frame reconciles durable completion and returns success to the composer without retrying', async t => {
+  let saved = {conversationId:'main',messages:[],operations:[]}
+  const f = await fixture(t,{ conversation:()=>saved,chatResponse:request=>{saved=savedTurn(request);return lostTerminal()} })
+  assert.equal(await f.render().send('讲b',context),true)
+  await f.settle(()=>f.store.ids().length===0)
+  const chat=f.render()
+  assert.equal(chat.error,'')
+  assert.equal(chat.sending,false)
+  assert.equal(chat.busy,false)
+  assert.equal(chat.conversation.messages.find(m=>m.role==='user').delivery,undefined)
+  assert.equal(chat.conversation.messages.find(m=>m.role==='assistant').content,'已保存的回答')
+  assert.equal(f.sent.length,1)
+})
+
+test('later refresh retires an uncertain send only after the durable turn is completed', async t => {
+  let saved={conversationId:'main',messages:[],operations:[]},request
+  const f=await fixture(t,{conversation:()=>saved,chatResponse:value=>{request=value;saved=savedTurn(value,'running');return lostTerminal()} })
+  assert.equal(await f.render().send('继续这轮',context),false)
+  assert.match(f.render().error,/中断/)
+  assert.equal(messageFor(f.render(),request.requestId).delivery,'failed')
+  saved=savedTurn(request,'completed')
+  await f.render().refresh();await f.settle(()=>f.store.ids().length===0)
+  assert.equal(f.render().error,'')
+  assert.equal(messageFor(f.render(),request.requestId).delivery,undefined)
+  assert.equal(f.sent.length,1,'reconciliation must never repeat the model request')
+})
+
+for(const status of ['running','failed',undefined]) test(`saved prose with ${status??'unknown'} status must keep a real interruption retryable`,async t=>{
+  let saved={conversationId:'main',messages:[],operations:[]}
+  const f=await fixture(t,{conversation:()=>saved,chatResponse:request=>{saved=savedTurn(request,status);if(status===undefined)saved.messages.forEach(m=>delete m.requestStatus);return lostTerminal()} })
+  assert.equal(await f.render().send('先解释再记忆',context),false)
+  await f.render().refresh();await tick()
+  assert.equal(f.store.ids().length,1)
+  assert.equal(messageFor(f.render(),f.sent[0].requestId).delivery,'failed')
+  assert.match(f.render().error,/中断/)
+})
+
+test('restart restores completed messages without resurrecting a stale failed send',async t=>{
+  const store=pendingStoreFixture(),request=pendingRecord('stale-complete','main','已经完成的原文')
+  await store.save(request)
+  const f=await fixture(t,{store,conversation:()=>savedTurn(request)})
+  await f.settle(chat=>chat.conversation?.messages.length===2&&store.ids().length===0)
+  assert.equal(messageFor(f.render(),request.requestId).delivery,undefined)
+  assert.equal(f.sent.length,0)
+})
+
+for (const edit of ['none', 'text', 'attachment', 'edit-back']) test(`R5 background completion respects composer ownership: ${edit}`, async t => {
+  let saved = { conversationId: 'main', messages: [], operations: [] }, request
+  const f = await fixture(t, { draft: '记下这件事', attachment, conversation: () => saved, chatResponse: value => {
+    request = value; saved = savedTurn(value, 'running'); return lostTerminal()
+  } })
+  f.storage.set(f.composer.key, f.composer.text)
+  const completed = f.captureCompletion()
+  assert.equal(await f.render().send(f.composer.text, context, [attachment], undefined, completed), false)
+  if (edit === 'text') { f.composer.text = '我后来编辑的新草稿'; f.composer.revision++ }
+  if (edit === 'attachment') f.composer.attachment = { ...attachment, name: '另一张图.png' }
+  if (edit === 'edit-back') { f.composer.revision += 2 /* Even if batching hides the intermediate text. */ }
+  f.render()
+  f.storage.set(f.composer.key, f.composer.text)
+  saved = savedTurn(request)
+  await f.render().refresh()
+  await f.settle(() => f.store.ids().length === 0)
+  assert.equal(f.composer.clears, edit === 'none' ? 1 : 0)
+  assert.equal(f.composer.text, edit === 'none' ? '' : edit === 'text' ? '我后来编辑的新草稿' : '记下这件事')
+  assert.equal(f.composer.attachment === null, edit === 'none')
+  if (edit === 'none') assert.equal(f.storage.has(f.composer.key), false)
+  // A completed request must not permanently deduplicate a legitimate new
+  // message, even if local record cleanup temporarily fails.
+  const previousId = request.requestId
+  await f.store.save(pendingRecord(previousId, 'main', '记下这件事', { attachments: [attachment] }))
+  await f.render().send('记下这件事', context, [attachment])
+  assert.notEqual(f.sent.at(-1).requestId, previousId)
+  completed()
+  assert.equal(f.composer.clears, edit === 'none' ? 1 : 0, 'a completion is consumed only once')
+})
+
+test('R5 completion clears an unmounted composer storage without updating its old React owner', async t => {
+  const f = await fixture(t, { draft: '关闭专注面板前发出的内容' })
+  f.storage.set(f.composer.key, f.composer.text)
+  const complete = f.captureCompletion()
+  f.unmount()
+  complete()
+  assert.equal(f.storage.has(f.composer.key), false)
+  assert.equal(f.composer.clears, 0)
+})
+
+test('R5 background completion reaches the reopened owner of the same workbench draft', async t => {
+  let saved = { conversationId: 'main', messages: [], operations: [] }, request
+  const f = await fixture(t, { draft: '专注草稿', conversation: () => saved, chatResponse: value => { request = value; saved = savedTurn(value, 'running'); return lostTerminal() } })
+  f.storage.set(f.composer.key, f.composer.text)
+  await f.render().send(f.composer.text, context, undefined, undefined, f.captureCompletion())
+  f.hideComposer(); f.render(); f.showComposer()
+  saved = savedTurn(request)
+  await f.render().refresh()
+  assert.equal(f.composer.text, '')
+  assert.equal(f.composer.clears, 1)
+  assert.equal(f.storage.has(f.composer.key), false)
+})
+
+test('R5 completion after changing draft context leaves the visible composer alone', async t => {
+  const f = await fixture(t, { draft: '上一事项的草稿' })
+  const oldKey = f.composer.key
+  f.storage.set(oldKey, f.composer.text)
+  const complete = f.captureCompletion()
+  f.composer.key = 'a-different-task-draft'; f.composer.text = '另一个事项'; f.composer.revision++
+  f.render(); complete()
+  assert.equal(f.composer.text, '另一个事项')
+  assert.equal(f.composer.clears, 0)
+  assert.equal(f.storage.has(oldKey), false)
+})
+
+test('R5 old completion does not clear another draft key or a newly edited identical draft', async t => {
+  const f = await fixture(t, { draft: '原稿' })
+  const complete = f.captureCompletion()
+  f.composer.text = '编辑过'; f.composer.revision++; f.render()
+  f.composer.text = '原稿'; f.composer.revision++; f.render()
+  complete()
+  assert.equal(f.composer.text, '原稿')
+  assert.equal(f.composer.clears, 0)
+})
+
+test('R5 an edit before the next React commit invalidates the captured draft immediately', async t => {
+  const f = await fixture(t, { draft: '原稿' })
+  const complete = f.captureCompletion()
+  f.composer.text = '尚未提交的新输入'; f.composer.revision++
+  complete()
+  assert.equal(f.composer.text, '尚未提交的新输入')
+  assert.equal(f.composer.clears, 0)
+})
+
+function controlledStream() {
+  let controller
+  const response = new Response(new ReadableStream({ start(value) { controller = value } }), { headers: { 'Content-Type': 'text/event-stream' } })
+  return { response, emit: event => controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\n`)), close: () => controller.close() }
+}
+
+for (const progress of ['none', 'content', 'reasoning']) test(`R7 waiting notice clears on success; progress=${progress}`, async t => {
+  const stream = controlledStream()
+  const f = await fixture(t, { chatResponse: () => stream.response })
+  const sending = f.render().send('需要思考的问题', context)
+  await f.settle(() => f.sent.length === 1)
+  if (progress !== 'none') { stream.emit({ type: progress, round: 0, delta: '有进展' }); await tick() }
+  f.fireProgressTimer()
+  assert.equal(Boolean(f.render().waitingNotice), progress === 'none')
+  assert.equal(f.render().error, '')
+  stream.emit({ type: 'result', result: { ...savedTurn(f.sent[0]), requestId: f.sent[0].requestId, status: 'completed' } })
+  stream.close()
+  assert.equal(await sending, true)
+  assert.equal(f.render().waitingNotice, '')
+  assert.equal(f.render().error, '')
+})
+
+test('R7 a late progress event clears waiting before completion and failure keeps its real error', async t => {
+  const stream = controlledStream()
+  const f = await fixture(t, { chatResponse: () => stream.response })
+  const sending = f.render().send('等候进展', context)
+  await f.settle(() => f.sent.length === 1)
+  f.fireProgressTimer()
+  assert.ok(f.render().waitingNotice)
+  stream.emit({ type: 'content', round: 0, delta: '开始回答' }); await tick()
+  assert.equal(f.render().waitingNotice, '')
+  stream.emit({ type: 'result', result: { ...savedTurn(f.sent[0], 'failed'), requestId: f.sent[0].requestId, status: 'failed', error: '实际执行失败' } }); stream.close()
+  assert.equal(await sending, false)
+  assert.equal(f.render().error, '实际执行失败')
+  assert.equal(f.render().waitingNotice, '')
+})
+
+test('R7 background completion must not clear an unrelated validation error', async t => {
+  let saved = { conversationId: 'main', messages: [], operations: [] }, request
+  const f = await fixture(t, { conversation: () => saved, chatResponse: value => { request = value; saved = savedTurn(value, 'running'); return lostTerminal() } })
+  await f.render().send('已经写入', context)
+  await f.store.remove([request.requestId])
+  assert.equal(await f.render().retryMessage(request.requestId), false)
+  const unrelated = f.render().error
+  assert.match(unrelated, /发送记录已更新/)
+  saved = savedTurn(request)
+  await f.render().refresh()
+  assert.equal(f.render().error, unrelated)
+})
+
+for (const source of ['other-window', 'server']) test(`R15 failed transcript retries persisted identity from ${source}`, async t => {
+  const adapter = memoryAdapter(), oldStore = pendingStoreFixture('old-window', adapter), store = pendingStoreFixture('new-window', adapter)
+  const original = pendingRecord('persisted-failure', 'main', '原始请求', { attachments: [attachment], context: { page: 'calendar', date: '2026-10-25', timezone: 'Europe/Paris', taskId: 'task-original', wishId: 'wish-original', freeTimeGoalId: 'goal-original' } })
+  const other = pendingRecord('another-active-request', 'other-conversation', '不能清扫的窗口')
+  await oldStore.save(other)
+  if (source === 'other-window') await oldStore.save(original)
+  const f = await fixture(t, { store, conversation: () => savedTurn(original, 'failed'), recoveredRequest: source === 'server' ? original : undefined })
+  assert.equal(messageFor(f.render(), original.requestId).delivery, 'failed')
+  assert.equal(await f.render().retryMessage(original.requestId), true)
+  assert.deepEqual(f.sent[0], { requestId: original.requestId, conversationId: original.conversationId, text: original.text, attachments: original.attachments, context: original.context })
+  assert.ok(f.durableAtSend[0].includes(original.requestId))
+  assert.deepEqual(await store.list(), [])
+  assert.deepEqual(await oldStore.list(), source === 'other-window' ? [other, original] : [other])
+  assert.equal(f.requestReads.length, source === 'server' ? 1 : 0)
+})
+
+for (const defect of ['missing', 'wrong-request', 'wrong-conversation', 'missing-context']) test(`R15 recovery ${defect} never invents a new request`, async t => {
+  const original = pendingRecord('failed-id', 'main', '保留原始身份')
+  const recoveredRequest = defect === 'missing' ? undefined : { ...original, ...(defect === 'wrong-request' ? { requestId: 'different' } : defect === 'wrong-conversation' ? { conversationId: 'different' } : { context: undefined }) }
+  const f = await fixture(t, { conversation: () => savedTurn(original, 'failed'), recoveredRequest })
+  assert.equal(await f.render().retryMessage(original.requestId), false)
+  assert.equal(f.sent.length, 0)
+  assert.ok(f.render().error)
+  assert.deepEqual(f.store.ids(), [])
 })

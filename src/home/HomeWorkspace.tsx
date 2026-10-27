@@ -5,6 +5,10 @@ import type { Task, TaskStatus } from '../domain/task'
 import type { SceneCamera } from '../spatial/scene'
 import { readableDate, STATUS_LABELS } from '../spatial/scene'
 import { useSceneCamera } from '../spatial/useSceneCamera'
+import { attachKeyboardReturn } from './keyboardReturn'
+import { supportsGlassRefraction } from './glassRendering'
+import { observeKeyboardNavigation } from '../ui/keyboardNavigation'
+import '../ui/keyboard-navigation.css'
 import { useSpatialTasks } from '../spatial/useSpatialTasks'
 import { GlassRenderingContext, GlassSamplingContext, GlassSurface, MeasuredGlassSurface } from './GlassSurface'
 import type { GlassGeometryHandle } from './GlassSurface'
@@ -13,7 +17,7 @@ import { HomeAgenda } from './HomeAgenda'
 import { HomeDeadlinePicker } from './HomeDeadlinePicker'
 import { useLocalTime } from './useLocalTime'
 import { useAppearance } from '../workbench/appearance'
-import { useXixiConversation } from '../xixi/useXixiConversation'
+import { useChatDraftCompletion, useXixiConversation } from '../xixi/useXixiConversation'
 import { ConversationLog } from '../xixi/ConversationLog'
 import { ConversationMenu } from '../xixi/ConversationMenu'
 import { ContextMeter } from '../xixi/ContextMeter'
@@ -97,6 +101,7 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
   const appearance = useAppearance()
   const preferences = usePreferences()
   const started = useRef(false)
+  useEffect(() => observeKeyboardNavigation(), [])
   const [stringsOpen, setStringsOpen] = useState(false)
   const [stringsPreview, setStringsPreview] = useState(false)
   const [previewDayChanged, setPreviewDayChanged] = useState(false)
@@ -156,13 +161,18 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
   const refinePlanAction = useRef<(goal: FreeTimeGoal) => Promise<void>>(async () => {})
   const refinePlan = useCallback((goal: FreeTimeGoal) => { void refinePlanAction.current(goal) }, [])
   const draftRevision = useRef(0)
+  const currentHomeDraft = useRef({ key: draftKey, text: draft })
+  currentHomeDraft.current = { key: draftKey, text: draft }
   const [inputPulse, setInputPulse] = useState<number | null>(null)
   const inputPulseSequence = useRef(0)
   const [draftWarning, setDraftWarning] = useState('')
   const image = useChatAttachment(data.saving || data.loading || Boolean(data.loadError) || chat.busy || chat.loading)
   const { attachment, setAttachment } = image
+  const captureDraftCompletion = useChatDraftCompletion(draftKey, draft, attachment, draftRevision, () => {
+    setDraft(''); setAttachment(null); stopInputPulse()
+  })
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [layout, setLayout] = useState({ width: innerWidth, height: innerHeight, taskBottom: innerHeight * .43 + 49 })
+  const [layout, setLayout] = useState({ width: innerWidth, height: innerHeight, taskBottom: innerHeight * .43 + 49, chatTop: 52, chatBottom: 40 })
   const root = useRef<HTMLDivElement>(null)
   const nav = useRef<HTMLElement>(null)
   const brand = useRef<HTMLButtonElement>(null)
@@ -182,32 +192,50 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
   const taskOpener = useRef<HTMLElement | null>(null)
   const taskFromAgenda = useRef(false)
   const compact = layout.width < 748
+  useEffect(() => {
+    if (mobile && morph.current && root.current) return attachKeyboardReturn(morph.current, root.current,
+      supportsGlassRefraction(navigator.userAgent, preferences.value.render?.glass) ? (width, height, radius) => morphGlass.current?.update(width, height, radius, 1) : undefined)
+  }, [mobile, preferences.value.render?.glass])
   const animateSceneUI = useCallback((next: SceneCamera) => {
     const amount = sceneUnavailable || cameraMissing ? Number(chatOpen) : chatCameraProgress(next)
-    const endWidth = Math.min(340, layout.width - (layout.width <= 600 ? 44 : 68))
-    const endHeight = Math.max(180, Math.min(680, layout.height - 149))
+    const endWidth = Math.min(mobile && compact ? Infinity : 340, layout.width - (layout.width <= 600 ? 44 : 68))
+    const endTop = mobile ? layout.chatTop : Math.max(84, (layout.height - Math.max(180, Math.min(680, layout.height - 149))) / 2)
+    const endHeight = mobile ? Math.max(180, layout.height - endTop - layout.chatBottom) : Math.max(180, Math.min(680, layout.height - 149))
     const startTop = layout.taskBottom + 12
     if (morph.current) {
       const surface = morph.current
       if (mobile) {
+        surface.style.setProperty('--home-chat-progress', String(amount))
+        surface.style.setProperty('--home-chat-start-top', `${startTop}px`)
         surface.style.setProperty('--home-chat-end-height', `${endHeight}px`)
-        surface.style.setProperty('--home-chat-end-top', `${Math.max(84, (layout.height - endHeight) / 2)}px`)
+        surface.style.setProperty('--home-chat-end-top', `${endTop}px`)
       }
-      surface.style.top = `${startTop + (Math.max(84, (layout.height - endHeight) / 2) - startTop) * amount}px`
+      surface.style.top = `${startTop + (endTop - startTop) * amount}px`
       const width = 128 + (endWidth - 128) * amount + (compact ? 0 : endWidth * Math.max(0, (amount - .5) / .5))
       const height = 38 + (endHeight - 38) * amount
       const radius = 19 - 4 * amount
       surface.style.width = `${width}px`
       surface.style.height = `${height}px`
       surface.style.borderRadius = `${radius}px`
-      morphGlass.current?.update(width, height, radius, amount)
+      const visibleHeight = mobile && amount >= .99 ? parseFloat(surface.style.getPropertyValue('--home-keyboard-height')) || height : height
+      morphGlass.current?.update(width, visibleHeight, radius, amount)
       surface.dataset.progress = amount.toFixed(3)
     }
     if (current.current) { current.current.style.opacity = String(Math.max(0, 1 - amount * 3)); current.current.style.visibility = amount > .6 ? 'hidden' : 'visible' }
     if (launch.current) { launch.current.style.opacity = String(Math.max(0, 1 - amount * 4)); launch.current.style.visibility = amount > .35 ? 'hidden' : 'visible' }
     if (deck.current) { deck.current.style.opacity = String(Math.max(0, Math.min(1, (amount - .45) / .55))); deck.current.style.visibility = amount > .35 ? 'visible' : 'hidden' }
   }, [sceneUnavailable, cameraMissing, chatOpen, layout, compact, mobile])
-  const camera = useSceneCamera(readCamera, `${page}:${chatOpen}:${stringsOpen}:${layout.width}:${layout.height}`, animateSceneUI, chatInteractionPhase)
+  const readForegroundCamera = useCallback(() => {
+    const camera = readCamera()
+    if (!mobile || !camera?.presentation || !root.current) return camera
+    const content = root.current, scene = content.closest<HTMLElement>('.p0')
+    if (!scene) return camera
+    // Native safe-area insets belong to the foreground only; the media still
+    // fills the physical window. Translate its circle into this local box.
+    return { ...camera, presentation: { ...camera.presentation, width: content.clientWidth, height: content.clientHeight,
+      cx: camera.presentation.cx - content.offsetLeft, cy: camera.presentation.cy - content.offsetTop } }
+  }, [readCamera, mobile])
+  const camera = useSceneCamera(readForegroundCamera, `${page}:${chatOpen}:${stringsOpen}:${layout.width}:${layout.height}`, animateSceneUI, chatInteractionPhase)
   const progress = sceneUnavailable || cameraMissing ? Number(chatOpen) : chatCameraProgress(camera)
 
   useEffect(() => {
@@ -218,25 +246,35 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
   const selectedTask = data.tasks.find(task => task.id === selectedId)
 
   useEffect(() => {
+    let sloganInset = 22
     const measure = () => {
       if (!root.current || !current.current) return
       const box = root.current.getBoundingClientRect()
       // Keyboard progress changes only the foreground CSS box, never the
       // scene/camera's layout baseline or the morph's animation target.
       const height = box.height
-      if (mobile && morph.current?.dataset.progress === '1.000') {
-        const style = getComputedStyle(morph.current)
-        morphGlass.current?.update(parseFloat(style.width), parseFloat(style.height), parseFloat(style.borderTopLeftRadius), 1)
-      }
       const taskBottom = current.current.getBoundingClientRect().bottom - box.top
+      const navigation = nav.current?.getBoundingClientRect()
+      const wordmark = nav.current?.querySelector('.home-brand-wordmark')?.getBoundingClientRect()
+      const slogan = root.current.closest('.p0')?.querySelector('.p0-whisper')?.getBoundingClientRect()
+      const chatTop = mobile && navigation ? navigation.bottom - box.top + 8 : 52
+      // Balance visible text edges, not the brand's larger invisible touch box.
+      const visualGap = wordmark ? chatTop - (wordmark.bottom - box.top) : 20
+      // The slogan hides while typing. Its empty box is not a new layout
+      // anchor and must not collapse the chat target to its minimum height.
+      if (mobile && slogan?.height) sloganInset = box.bottom - slogan.top
+      const chatBottom = mobile ? sloganInset + visualGap : 40
       setLayout(previous => previous.width === box.width && previous.height === height && previous.taskBottom === taskBottom
-        ? previous : { width: box.width, height, taskBottom })
+        && previous.chatTop === chatTop && previous.chatBottom === chatBottom
+        ? previous : { width: box.width, height, taskBottom, chatTop, chatBottom })
     }
     const observer = new ResizeObserver(measure)
     if (root.current) observer.observe(root.current)
     if (current.current) observer.observe(current.current)
-    document.addEventListener('astaria-mobile-viewport-change', measure)
-    return () => { observer.disconnect(); document.removeEventListener('astaria-mobile-viewport-change', measure) }
+    if (nav.current) observer.observe(nav.current)
+    const slogan = root.current?.closest('.p0')?.querySelector('.p0-whisper')
+    if (slogan) observer.observe(slogan)
+    return () => observer.disconnect()
   }, [mobile])
   useEffect(() => () => clearTimeout(menuTimer.current), [])
   useEffect(() => {
@@ -269,19 +307,22 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
   }, [draft, draftKey])
   useEffect(() => {
     if (page !== 'home' || !focusAfterTransition.current || (chatOpen ? progress < CHAT_READY_PROGRESS : progress > CHAT_COLLAPSED_PROGRESS)) return
+    // Opening a mobile conversation is also a reading action. Only an explicit
+    // tap on its input should ask the system to present the software keyboard.
+    if (mobile && chatOpen) { focusAfterTransition.current = false; return }
     let frame = 0
     let attempts = 0
     const focus = () => {
       const target = chatOpen ? compose.current : launch.current
       // Removing inert and visibility in an immediate camera change can take an
       // additional style pass. Keep the pending focus until it actually lands.
-      target?.focus()
+      target?.focus({ preventScroll: true })
       if (document.activeElement === target) focusAfterTransition.current = false
       else if (++attempts < 8) frame = requestAnimationFrame(focus)
     }
     frame = requestAnimationFrame(focus)
     return () => cancelAnimationFrame(frame)
-  }, [page, chatOpen, progress])
+  }, [page, chatOpen, progress, mobile])
 
   const changeChat = (open: boolean) => {
     clearTimeout(menuTimer.current)
@@ -318,6 +359,21 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
     if (destination === 'free-time') setFreeTimeMounted(true)
     commitPage(destination, openChat)
   }
+  useEffect(() => {
+    const nativeMenu = (event: Event) => {
+      if (showFirstRun || stringsOpen || document.querySelector('dialog[open]')) {
+        setNotification('请先关闭当前面板'); return
+      }
+      const action = (event as CustomEvent<string>).detail
+      if (action === 'new-conversation') {
+        if (chat.busy) { setNotification('析熙还在处理当前对话'); return }
+        void chat.newTopic().then(created => { if (created) changePage('home', true) })
+      } else if (action === 'toggle-chat') changePage('home', !(page === 'home' && chatOpen))
+      else if (['home', 'workbench', 'schedule', 'free-time', 'settings'].includes(action)) changePage(action as WorkspacePage)
+    }
+    window.addEventListener('astaria-native-menu', nativeMenu)
+    return () => window.removeEventListener('astaria-native-menu', nativeMenu)
+  })
   const openStrings = useCallback((preview = false) => {
     if (showFirstRun && !preview) return
     // Both entry surfaces already show the panorama. Preserve its actual
@@ -359,13 +415,22 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
     const revision = ++draftRevision.current
     setClarifyingWish(null)
     setRefiningPlan({ id: goal.id, title: goal.title })
-    setDraft(readDraft(`${DRAFT_KEY}:plan:${goal.id}`))
+    const planDraftKey = `${DRAFT_KEY}:plan:${goal.id}`
+    const savedPlanDraft = readDraft(planDraftKey)
+    setDraft(savedPlanDraft)
+    let insertedFallback = false
     changePage('home', true)
     const sent = `帮我细化「${goal.title}」这份已保存的长期计划，把每周要做的事补充得更具体，更新到原计划里，保留已有进度。${goal.status === 'paused' ? '计划继续保持暂停，先不安排时间。' : '只安排当前阶段，后面的周计划先保留，不要重复创建目标。'}`
-    const accepted = await chat.send(sent, { page: 'home', freeTimeGoalId: goal.id, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone })
+    const accepted = await chat.send(sent, { page: 'home', freeTimeGoalId: goal.id, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }, undefined, undefined, () => {
+      // Only the fallback inserted after an uncertain automatic request belongs
+      // to this send. A user's saved plan draft and attachments remain theirs.
+      if (!insertedFallback || revision !== draftRevision.current || currentHomeDraft.current.key !== planDraftKey || currentHomeDraft.current.text !== sent) return
+      setDraft('')
+      try { if (sessionStorage.getItem(planDraftKey) === sent) sessionStorage.removeItem(planDraftKey) } catch { /* In-memory draft still clears. */ }
+    })
     // A failed preflight has no outgoing chat message yet. Retain a retryable
     // request with the same goal context without replacing an edited draft.
-    if (!accepted && revision === draftRevision.current) setDraft(value => value.trim() ? value : sent)
+    if (!accepted && revision === draftRevision.current && !savedPlanDraft.trim()) { insertedFallback = true; setDraft(sent) }
   }
   const endClarification = (returnToWishes = false) => {
     draftRevision.current += 1
@@ -378,13 +443,9 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
     event.preventDefault()
     if (image.isReading() || (!draft.trim() && !attachment) || data.saving || data.loading || data.loadError || chat.busy) return
     const sent = draft
-    const revision = draftRevision.current
-    const accepted = await chat.send(sent, { page: 'home', ...(clarifyingWish ? { wishId: clarifyingWish.id } : {}), ...(refiningPlan ? { freeTimeGoalId: refiningPlan.id } : {}), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }, attachment ? [attachment] : undefined)
-    if (accepted && revision === draftRevision.current) {
-      setDraft(value => value === sent ? '' : value)
-      setAttachment(null)
-      stopInputPulse()
-      compose.current?.focus()
+    const accepted = await chat.send(sent, { page: 'home', ...(clarifyingWish ? { wishId: clarifyingWish.id } : {}), ...(refiningPlan ? { freeTimeGoalId: refiningPlan.id } : {}), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }, attachment ? [attachment] : undefined, undefined, captureDraftCompletion())
+    if (accepted) {
+      compose.current?.focus({ preventScroll: true })
     }
   }
   const restoreDraft = (text: string, attachments?: ChatAttachment[]) => {
@@ -426,13 +487,13 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
       const fallback = chatOpen ? taskFromAgenda.current
         ? compact && !informationActive ? informationToggle.current : root.current?.querySelector<HTMLElement>('.home-agenda-scroll')
         : compose.current : currentButton.current
-      ;(previous?.isConnected && !previous.closest('[inert]') ? previous : fallback)?.focus()
+      ;(previous?.isConnected && !previous.closest('[inert]') ? previous : fallback)?.focus({ preventScroll: true })
     })
   }
   const startTop = layout.taskBottom + 12
-  const endWidth = Math.min(340, layout.width - (layout.width <= 600 ? 44 : 68))
-  const endHeight = Math.max(180, Math.min(680, layout.height - 149))
-  const endTop = Math.max(84, (layout.height - endHeight) / 2)
+  const endWidth = Math.min(mobile && compact ? Infinity : 340, layout.width - (layout.width <= 600 ? 44 : 68))
+  const endTop = mobile ? layout.chatTop : Math.max(84, (layout.height - Math.max(180, Math.min(680, layout.height - 149))) / 2)
+  const endHeight = mobile ? Math.max(180, layout.height - endTop - layout.chatBottom) : Math.max(180, Math.min(680, layout.height - 149))
   const width = 128 + (endWidth - 128) * progress
   // Extend only the UI surface, reading the existing camera transition.
   const extendedWidth = width + (compact ? 0 : endWidth * Math.max(0, (progress - .5) / .5))
@@ -440,14 +501,14 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
   const radius = 19 + (15 - 19) * progress
   const chatVisible = progress > .35
 
-  return <GlassRenderingContext.Provider value={preferences.value.render?.glass ?? 'auto'}><div ref={root} className="home-workspace" data-spatial-ui data-import-open={importingTimetable || importingIcs} data-string-covered={stringCovered} data-theme={visibleTheme} data-glass-tone={preferences.value.glassTone ?? 'light'} data-chat-open={chatOpen} data-page={page} data-grid={preferences.value.grid} data-card-edges={preferences.value.cardEdges ?? 'both'} data-motion={preferences.value.effect.motion} data-effect-preview={previewPhase !== null}>
+  return <GlassRenderingContext.Provider value={preferences.value.render?.glass ?? 'auto'}><div ref={root} className="home-workspace" data-spatial-ui data-import-open={importingTimetable || importingIcs} data-strings-open={stringsOpen} data-string-covered={stringCovered} data-theme={visibleTheme} data-glass-tone={preferences.value.glassTone ?? 'light'} data-chat-open={chatOpen} data-page={page} data-grid={preferences.value.grid} data-card-edges={preferences.value.cardEdges ?? 'both'} data-motion={preferences.value.effect.motion} data-effect-preview={previewPhase !== null}>
     {mobile && <div className="mobile-workspace-scene" aria-hidden="true" />}
     <ChatImageDropProvider blocked={showFirstRun || stringsOpen || settingsOpen || previewPhase !== null || Boolean(selectedId) || Boolean(receiptScenarioId) || chat.busy || chat.loading || data.saving || data.loading || Boolean(data.loadError)}
       onBlocked={() => setNotification('请先结束当前操作，再添加图片或文档')}
-      onFiles={files => { changePage('home', true); void image.selectFiles(files) }}>
-    <nav ref={nav} className="home-nav" aria-label="ASTaria 导航" data-menu-open={menuOpen} inert={previewPhase !== null} aria-hidden={previewPhase !== null}
-      onPointerEnter={event => { if (event.pointerType !== 'touch') { clearTimeout(menuTimer.current); menuOpenedByHover.current = !menuOpen; setMenuOpen(true) } }}
-      onPointerLeave={() => { menuTimer.current = setTimeout(() => { if (!nav.current?.contains(document.activeElement)) setMenuOpen(false) }, 180) }}
+      onFiles={files => { draftRevision.current += 1; changePage('home', true); void image.selectFiles(files) }}>
+    <nav ref={nav} className="home-nav" aria-label="ASTaria 导航" data-menu-open={menuOpen} inert={previewPhase !== null || stringsOpen} aria-hidden={previewPhase !== null || stringsOpen}
+      onPointerEnter={event => { if (!mobile && event.pointerType !== 'touch') { clearTimeout(menuTimer.current); menuOpenedByHover.current = !menuOpen; setMenuOpen(true) } }}
+      onPointerLeave={() => { if (!mobile) menuTimer.current = setTimeout(() => { if (!nav.current?.contains(document.activeElement)) setMenuOpen(false) }, 180) }}
       onFocus={() => clearTimeout(menuTimer.current)}
       onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setMenuOpen(false) }}>
       <button ref={brand} className="home-brand" aria-expanded={menuOpen} aria-controls="home-menu" aria-label="ASTaria 导航" onKeyDown={event => {
@@ -459,7 +520,7 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
       }} onClick={event => {
         // The pointer opens a hover preview before its first click reaches us.
         // Keep that first click open; subsequent clicks and keyboard activation toggle.
-        const keepOpen = event.detail > 0 && menuOpenedByHover.current
+        const keepOpen = !mobile && event.detail > 0 && menuOpenedByHover.current
         menuOpenedByHover.current = false
         setMenuOpen(open => keepOpen || !open)
       }}>
@@ -514,7 +575,8 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
     </div>
 
     <div ref={morph} className="home-morph" style={{ top: startTop + (endTop - startTop) * progress, width: extendedWidth, height, borderRadius: radius,
-      '--home-chat-end-top': `${endTop}px`, '--home-chat-end-height': `${endHeight}px` } as CSSProperties} data-progress={progress.toFixed(3)} data-compact={compact} data-information-active={informationActive}>
+      '--home-chat-progress': progress, '--home-chat-start-top': `${startTop}px`,
+      '--home-chat-end-top': `${endTop}px`, '--home-chat-end-height': `${endHeight}px` } as CSSProperties} data-progress={progress.toFixed(3)} data-chat-glass={preferences.value.glass} data-compact={compact} data-information-active={informationActive}>
       <GlassSurface geometryRef={morphGlass} width={Math.round(extendedWidth)} height={Math.round(height)} radius={radius} progress={progress} material={homeGlass} />
       <button ref={launch} className="home-launch" onClick={() => changeChat(true)} aria-expanded={chatOpen} aria-controls="home-xixi"
         style={{ opacity: Math.max(0, 1 - progress * 4), visibility: progress > .35 ? 'hidden' : 'visible' }} disabled={chatOpen}>交给析熙</button>
@@ -530,7 +592,7 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
           <strong>析熙</strong>
         </div><div className="xixi-header-actions"><ConversationMenu chat={chat} />{compact && <button ref={informationToggle} className="home-information-toggle" onClick={() => setInformationActive(true)} aria-controls="home-agenda">日程 →</button>}</div></header>
         <ConversationLog chat={chat} active={page === 'home' && chatOpen && progress >= CHAT_READY_PROGRESS && (!compact || !informationActive)} onSettings={openSettings}
-          context={{ page: 'home', ...(clarifyingWish ? { wishId: clarifyingWish.id } : {}), ...(refiningPlan ? { freeTimeGoalId: refiningPlan.id } : {}), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }} onSent={sent => { setDraft(value => value.trim() === sent ? '' : value); setAttachment(null) }} onRetracted={restoreDraft} />
+          context={{ page: 'home', ...(clarifyingWish ? { wishId: clarifyingWish.id } : {}), ...(refiningPlan ? { freeTimeGoalId: refiningPlan.id } : {}), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }} onSent={() => {}} onRetracted={restoreDraft} />
         <form onSubmit={event => void submit(event)}>
           <label className="p0-sr-only" htmlFor="home-compose">写下你的事情，发送给析熙</label>
           <div className="home-input-shell" data-pulsing={inputPulse !== null}>
@@ -545,17 +607,19 @@ export function HomeWorkspace({ readCamera, onViewChange, onThemeChange, onRespo
           <textarea ref={compose} id="home-compose" placeholder="写下你的事情" rows={2} maxLength={4000} value={draft} disabled={data.saving || chat.busy}
             onChange={event => {
               const value = event.target.value
+              draftRevision.current += 1
               const inputType = (event.nativeEvent as InputEvent).inputType
               if (value !== draft && (inputType ? inputType.startsWith('insert') : value.length > draft.length)) flashInput()
               setDraft(value)
             }} onBlur={stopInputPulse} {...submitKeys} />
           </div>
-          <ChatAttachmentPreview attachment={attachment} error={image.error} reading={image.reading} readingLabel={image.readingLabel} onRemove={() => setAttachment(null)} disabled={data.saving || chat.busy} />
+          <ChatAttachmentPreview attachment={attachment} error={image.error} reading={image.reading} readingLabel={image.readingLabel} onRemove={() => { draftRevision.current += 1; setAttachment(null) }} disabled={data.saving || chat.busy} />
           <div className="home-compose-actions"><div className="xixi-compose-tools"><ContextMeter key={chat.conversation?.conversationId} chat={chat} /></div><div className="xixi-send-actions">
-            <ChatAttachmentPicker id="home-image-upload" onFiles={files => { void image.selectFiles(files) }} disabled={data.saving || data.loading || Boolean(data.loadError) || chat.busy || chat.loading} />
+            <ChatAttachmentPicker id="home-image-upload" onFiles={files => { draftRevision.current += 1; void image.selectFiles(files) }} disabled={data.saving || data.loading || Boolean(data.loadError) || chat.busy || chat.loading} />
             <button className="home-capture" type="submit" disabled={image.reading || data.saving || data.loading || Boolean(data.loadError) || chat.busy || chat.loading || (!draft.trim() && !attachment)}>{chat.sending ? '正在想' : '发给析熙'}</button>
           </div></div>
           {chat.error && <p className="xixi-send-error" role="alert">{chat.error}{!chat.status?.configured && <button type="button" className="xixi-text-button" onClick={openSettings}>打开设置</button>}</p>}
+          {chat.waitingNotice && <p className="xixi-delivery" role="status">{chat.waitingNotice}</p>}
           {(draftWarning || data.loadError) && <p className="home-form-error" role="alert">{draftWarning || data.loadError}{data.loadError && <button type="button" onClick={data.retry}>重试读取</button>}</p>}
         </form>
       </section>

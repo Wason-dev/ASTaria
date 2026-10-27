@@ -1,7 +1,7 @@
 import { randomUUID as portableRandomUUID, jsonEqual } from './portable.mjs'
 import { createPlannerStore, defaultPlanner } from './planner.mjs'
 import { validatePreferences } from './preferences.mjs'
-import { normalizeChatAttachments } from './chatAttachments.mjs'
+import { normalizeChatAttachments, summarizeChatAttachments, chatAttachmentsMatch } from './chatAttachments.mjs'
 import { isSourceMetadataList } from '../src/xixi/sourceMetadata.ts'
 import {
   ValidationError, object, knownKeys, text, identifier, choice, number, day, dateTime, clockTime,
@@ -30,11 +30,12 @@ export function createDatabaseCore(db, {
   randomUUID = portableRandomUUID,
   processAlive = () => false,
   ownerPid = 0,
+  ownerToken = randomUUID(),
+  ownerAlive = turn => processAlive(turn.ownerPid),
   createSyncStore,
   createBackupStore,
   validateCompanionState,
 } = {}) {
-  const ownerToken = randomUUID()
   db.exec(`
     PRAGMA foreign_keys = ON;
     PRAGMA busy_timeout = 5000;
@@ -515,13 +516,17 @@ export function createDatabaseCore(db, {
   function getMessage(id) {
     return decodeMessage(db.prepare('SELECT seq,document FROM messages WHERE id = ?').get(identifier(id)))
   }
-  function listMessages(conversationId, { limit = 80, before, forContext = false } = {}) {
+  function listMessages(conversationId, { limit = 80, after, before, forContext = false } = {}) {
     identifier(conversationId)
     number(limit, '消息数量', 1, 1000)
     if (!Number.isInteger(limit)) fail('消息数量必须是整数')
+    if (after !== undefined && (!Number.isSafeInteger(after) || after < 0)) fail('消息起始序号必须是非负安全整数')
     if (before !== undefined) number(before, '消息序号', 1, Number.MAX_SAFE_INTEGER)
-    return db.prepare(`SELECT seq,document FROM messages WHERE conversationId = ?${before === undefined ? '' : ' AND seq < ?'}${forContext ? " AND json_extract(document,'$.excludeFromContext') = 0" : ''} ORDER BY seq DESC LIMIT ?`)
-      .all(conversationId, ...(before === undefined ? [] : [before]), limit).reverse().map(decodeMessage)
+    const rows = db.prepare(`SELECT seq,document FROM messages WHERE conversationId = ?${after === undefined ? '' : ' AND seq > ?'}${before === undefined ? '' : ' AND seq < ?'}${forContext ? " AND json_extract(document,'$.excludeFromContext') = 0" : ''} ORDER BY seq ${after === undefined ? 'DESC' : 'ASC'} LIMIT ?`)
+      .all(conversationId, ...(after === undefined ? [] : [after]), ...(before === undefined ? [] : [before]), limit)
+    // Latest-page callers still receive chronological output. Range readers
+    // take the earliest page after their cursor so middle history is not lost.
+    return (after === undefined ? rows.reverse() : rows).map(decodeMessage)
   }
   function hasSavedReasoning(conversationId, requestId) {
     return Boolean(db.prepare(`SELECT 1 FROM messages WHERE json_extract(document, '$.requestId') = ?
@@ -546,24 +551,44 @@ export function createDatabaseCore(db, {
       const batch = ids.slice(offset, offset + 400)
       rows.push(...db.prepare(`SELECT id AS requestId,
         json_extract(document, '$.conversationId') AS conversationId,
-        json_extract(document, '$.userMessageId') AS userMessageId
+        json_extract(document, '$.userMessageId') AS userMessageId,
+        json_extract(document, '$.status') AS status
         FROM turns WHERE id IN (${batch.map(() => '?').join(',')})`).all(...batch))
     }
     return rows
   }
+  let validationRevision = ''
+  const validatedSources = new Map()
   function assertTurnWritable(requestId, sourceMessageIds = []) {
     if (!Array.isArray(sourceMessageIds)) fail('消息来源列表不正确')
     if (requestId && db.prepare('SELECT 1 FROM state WHERE key = ?').get(`deleted-request:${requestId}`)) fail('这段对话已删除，回复已停止', 410)
     const turn = requestId ? db.prepare("SELECT json_extract(document, '$.retractedAt') AS retractedAt FROM turns WHERE id = ?").get(identifier(requestId)) : null
     if (turn?.retractedAt) fail('这条消息已撤回，不再继续处理', 409)
-    const source = sourceMessageIds.length ? db.prepare(`SELECT
-      json_extract(document, '$.retractedAt') AS retractedAt,
-      json_extract(document, '$.contextRetractedAt') AS contextRetractedAt
-      FROM messages WHERE id = ?`) : null
-    if (sourceMessageIds.some(id => {
-      const message = source.get(identifier(id))
-      return !message || message.retractedAt || message.contextRetractedAt
-    })) fail('相关消息已撤回或删除，这次回复已停止，请重新发送', 409)
+    if (!sourceMessageIds.length) return
+    // Every stream delta rechecks current cancellation. The expensive source
+    // scan is reusable only until ANY local or external database write occurs.
+    // data_version covers other SQLite connections; total_changes covers ours,
+    // including rolled-back writes and backup replacement in this connection.
+    const localRevision = db.prepare('SELECT total_changes() AS value').get().value
+    const externalRevision = db.prepare('PRAGMA data_version').get().data_version
+    // Mobile snapshot export can reopen sql.js and reset total_changes; its
+    // adapter revision remains monotonic across that connection reset.
+    const revision = `${localRevision}:${externalRevision}:${db.revision ?? ''}`
+    if (revision !== validationRevision) { validatedSources.clear(); validationRevision = revision }
+    const key = JSON.stringify(sourceMessageIds)
+    if (validatedSources.has(key)) return
+    const ids = [...new Set(sourceMessageIds.map(id => identifier(id)))]
+    for (let offset = 0; offset < ids.length; offset += 400) {
+      const batch = ids.slice(offset, offset + 400)
+      const rows = db.prepare(`SELECT id,
+        json_extract(document, '$.retractedAt') AS retractedAt,
+        json_extract(document, '$.contextRetractedAt') AS contextRetractedAt
+        FROM messages WHERE id IN (${batch.map(() => '?').join(',')})`).all(...batch)
+      if (rows.length !== batch.length || rows.some(message => message.retractedAt || message.contextRetractedAt))
+        fail('相关消息已撤回或删除，这次回复已停止，请重新发送', 409)
+    }
+    if (validatedSources.size >= 4) validatedSources.delete(validatedSources.keys().next().value)
+    validatedSources.set(key, true)
   }
   function appendMessageRecord(input) {
     object(input, '消息')
@@ -574,7 +599,10 @@ export function createDatabaseCore(db, {
     if (input.reasoningContent != null && (input.role !== 'assistant' || typeof input.reasoningContent !== 'string' || input.reasoningContent.length > 2000000)) fail('模型思考内容格式不正确')
     let sourceMessageIds
     if (input.sourceMessageIds !== undefined) {
-      if (!Array.isArray(input.sourceMessageIds) || input.sourceMessageIds.length > 10000) fail('消息来源列表不正确')
+      // A 1M window can legitimately retain more than 10,000 short messages.
+      // Bound provenance by the supported backup message-table size instead
+      // of failing after the provider has successfully answered that history.
+      if (!Array.isArray(input.sourceMessageIds) || input.sourceMessageIds.length > 100000) fail('消息来源列表不正确')
       sourceMessageIds = [...new Set(input.sourceMessageIds.map(id => identifier(id, '消息来源')))]
       for (const id of sourceMessageIds) if (!getMessage(id)) fail('消息来源不存在')
     }
@@ -634,7 +662,7 @@ export function createDatabaseCore(db, {
       sourceMessageIds: input.sourceMessageIds, updatedAt: now(),
     }
     if (!Number.isInteger(summary.throughSeq)) fail('摘要消息范围必须是整数')
-    if (!Array.isArray(summary.sourceMessageIds) || summary.sourceMessageIds.length > 10000) fail('摘要来源不正确')
+    if (!Array.isArray(summary.sourceMessageIds) || summary.sourceMessageIds.length > 100000) fail('摘要来源不正确')
     for (const id of summary.sourceMessageIds) {
       const source = getMessage(identifier(id))
       if (!source || source.conversationId !== conversationId || source.excludeFromContext || source.seq > summary.throughSeq) fail('摘要来源不可用')
@@ -993,9 +1021,35 @@ export function createDatabaseCore(db, {
     })
   }
   function recoverAbandonedTurns() {
-    for (const turn of all('turns')) {
-      if (turn.status === 'running' && !processAlive(turn.ownerPid)) put('turns', turn.requestId, { ...turn, status: 'failed', error: '本地服务重新启动，可重试这条消息', updatedAt: now() })
+    for (const { document } of db.prepare("SELECT document FROM turns WHERE json_extract(document,'$.status')='running'").all()) {
+      const turn = JSON.parse(document)
+      // A current instance owns its token even on platforms without PIDs.
+      // Unknown foreign ownership is preserved; only proven abandonment wins.
+      if (turn.ownerToken !== ownerToken && ownerAlive(turn) === false) put('turns', turn.requestId, { ...turn, status: 'failed', error: '本地服务重新启动，可重试这条消息', updatedAt: now() })
     }
+  }
+  function compactLegacyTurnAttachments() {
+    let changed = false
+    const rows = db.prepare("SELECT id,document FROM turns WHERE json_type(document,'$.attachments[0].data')='text'").all()
+    for (const row of rows) {
+      const turn = JSON.parse(row.document)
+      // A still-live older service expects its full attachment representation.
+      // Proven abandoned turns were recovered above; do not migrate another
+      // owner's active or uncertain turn underneath that service.
+      if (turn.status === 'running') continue
+      let attachments
+      try {
+        const message = getMessage(turn.userMessageId)
+        // Do not discard the only copy or silently repair conflicting history.
+        if (!message || message.role !== 'user' || message.requestId !== turn.requestId
+          || message.conversationId !== turn.conversationId || message.content !== turn.text) continue
+        if (!chatAttachmentsMatch(turn.attachments, message.attachments)) continue
+        attachments = summarizeChatAttachments(message.attachments)
+      } catch (error) { if (error instanceof ValidationError) continue; throw error }
+      put('turns', row.id, { ...turn, attachments })
+      changed = true
+    }
+    return changed
   }
   function beginTurn(input) {
     object(input, '对话请求')
@@ -1010,10 +1064,13 @@ export function createDatabaseCore(db, {
       const otherRunning = all('turns').find(turn => turn.conversationId === conversationId && turn.status === 'running' && turn.requestId !== requestId)
       if (otherRunning) fail('析熙正在回复这段对话，请等她说完', 409)
       if (previous) {
-        if (previous.conversationId !== conversationId || previous.text !== content || !same(previous.context, context) || !same(previous.attachments ?? [], attachments ?? [])) fail('请求标识已用于不同内容', 409)
+        if (previous.conversationId !== conversationId || previous.text !== content || !same(previous.context, context) || !chatAttachmentsMatch(previous.attachments, attachments)) fail('请求标识已用于不同内容', 409)
+        const source = getMessage(previous.userMessageId)
+        if (!source || source.role !== 'user' || source.requestId !== requestId || source.conversationId !== conversationId
+          || source.content !== content || !chatAttachmentsMatch(previous.attachments, source.attachments)) fail('请求附件与原话不一致', 409)
         if (previous.retractedAt) return { ...previous, claimed: false }
         if (previous.status === 'failed') {
-          const retry = { ...previous, status: 'running', ownerPid, ownerToken, error: undefined, updatedAt: now() }
+          const retry = { ...previous, attachments: summarizeChatAttachments(attachments), status: 'running', ownerPid, ownerToken, error: undefined, updatedAt: now() }
           put('turns', requestId, retry)
           return { ...clean(retry), claimed: true }
         }
@@ -1022,7 +1079,7 @@ export function createDatabaseCore(db, {
       assertTurnWritable(requestId)
       const userMessageId = input.userMessageId ? identifier(input.userMessageId) : `${requestId}:user`
       appendMessage({ id: userMessageId, conversationId, requestId, role: 'user', content, attachments, taskId: context.taskId })
-      const turn = { requestId, conversationId, text: content, ...(attachments ? { attachments } : {}), context, userMessageId, status: 'running', ownerPid, ownerToken, createdAt: now(), updatedAt: now() }
+      const turn = { requestId, conversationId, text: content, ...(attachments ? { attachments: summarizeChatAttachments(attachments) } : {}), context, userMessageId, status: 'running', ownerPid, ownerToken, createdAt: now(), updatedAt: now() }
       put('turns', requestId, turn)
       return { ...turn, claimed: true }
     })
@@ -1055,9 +1112,16 @@ export function createDatabaseCore(db, {
     return turn
   }
 
-  transaction(() => {
+  const compactedAttachments = transaction(() => {
     recoverAbandonedTurns()
+    return compactLegacyTurnAttachments()
   })
+  // Removing duplicate JSON frees pages but sql.js exports those pages too.
+  // Compact only after an actual migration, outside the transaction. A busy
+  // peer or lack of temporary disk space must not prevent opening safe data.
+  if (compactedAttachments) {
+    try { db.exec('VACUUM') } catch { /* Logical deduplication is already committed. */ }
+  }
 
   function correctMemory(id, input) {
     knownKeys(input, ['content', 'expectedUpdatedAt'], '记忆更正')
@@ -1071,7 +1135,7 @@ export function createDatabaseCore(db, {
         lifetime: previous.lifetime, evidence: content, sourceMessageId: source.id, replacesId: previous.id })
     })
   }
-  const backup = createBackupStore?.({ db, transaction, validate: () => {
+  const backup = createBackupStore?.({ db, transaction, recoverAbandonedTurns, validate: () => {
     for (const task of all('tasks')) { fullTask(task); assertOccurrenceUnique(task) }
     for (const area of all('areas')) fullArea(area)
     for (const event of all('events')) fullEvent(event)

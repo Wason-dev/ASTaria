@@ -68,6 +68,8 @@ html[data-mobile] .p0 .home-workspace .xixi-settings[data-mobile-view] .xixi-set
 .xixi-appearance-response-controls{display:flex;flex-direction:column}
 .xixi-appearance-preview{grid-column:1/-1;justify-content:flex-end;margin-top:2px;font-size:10px;color:var(--settings-muted)}
 .xixi-settings .xixi-render-options{grid-template-columns:repeat(5,minmax(0,1fr));margin:10px 0 6px}
+.xixi-media-pack .xixi-settings-actions{margin-top:0;justify-content:flex-end}
+@media(max-width:600px){.xixi-media-pack .xixi-setting-row{flex-wrap:wrap;gap:10px}.xixi-media-pack .xixi-setting-row>div:last-child{max-width:100%}.xixi-media-pack .xixi-settings-actions{justify-content:flex-start}}
 :is(.p0,.app-shell) .xixi-settings .xixi-render-options button{min-height:60px;padding:10px 12px}
 :is(.p0,.app-shell) .xixi-settings .xixi-render-note{font-size:11px;margin:5px 0 0}
 .xixi-settings-content[data-section="外观与动画"] .xixi-effect-options:not(.xixi-render-options){margin:10px 0}

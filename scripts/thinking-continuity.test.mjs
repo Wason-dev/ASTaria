@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { createDatabase } from '../server/database.mjs'
 import { createXixi, HARD_INPUT_UNITS } from '../server/xixi.mjs'
 import { contextUnits, fitContext } from '../server/contextBudget.mjs'
+import { finishResponse } from './fixtures/model-receipt.mjs'
 
 process.env.TZ = 'Asia/Shanghai'
 const DATE = '2026-09-22'
@@ -113,16 +114,18 @@ test('thinking tool pairs cannot be collapsed into a receipt checkpoint to fit a
 
 for (const provider of ['deepseek', 'local']) test(`${provider}: large old thinking archives before live task facts, while a short choice still reads, creates and schedules with an intact current transcript`, async t => {
   const db = createDatabase(':memory:'); t.after(() => db.close())
+  if (provider === 'deepseek') db.setPreference('model-connection', { provider: 'deepseek', cloudModel: 'deepseek-flash',
+    local: { engine: 'ollama', baseUrl: 'http://127.0.0.1:11434/v1', model: '' }, contextBudget: { mode: 'custom', maxUnits: 48000 } })
   if (provider === 'local') db.setPreference('model-connection', { provider: 'local', cloudModel: 'deepseek-flash',
     local: { engine: 'ollama', baseUrl: 'http://127.0.0.1:11434/v1', model: 'test-local-model' } })
-  const hardLimit = provider === 'local' ? 24_000 : HARD_INPUT_UNITS
+  const hardLimit = provider === 'local' ? 24_000 : 48_000
   for (let index = 0; index < 20; index++) db.createTask({ title: `现有资料 ${String(index + 1).padStart(2, '0')}`, estimateMin: 20 })
   const old = input('先核对旧资料的标题，再问我要记录哪一件事')
   const turn = db.beginTurn(old), oldUser = db.getMessage(turn.userMessageId)
   const previousTask = db.listTasks()[0]
   const previousCall = call('archived-title-write', 'update_task', { taskId: previousTask.id, patch: { title: '临时旧标题' } })
   const longReasoning = ` \n${'这是之前回合的长思考，原文必须留在数据库。'.repeat(3500)}\t `
-  assert.ok(contextUnits(longReasoning) > HARD_INPUT_UNITS, 'the historical thought alone exceeds the dispatch budget')
+  assert.ok(contextUnits(longReasoning) > hardLimit, 'the historical thought alone exceeds the dispatch budget')
   const oldAssistant = db.appendMessage({ conversationId: 'main', requestId: old.requestId, role: 'assistant',
     content: '', reasoningContent: longReasoning, toolCalls: [previousCall], sourceMessageIds: [oldUser.id] })
   const operation = db.applyOperation({ id: 'archived-title-operation', requestId: old.requestId, summary: '临时修改旧资料标题',
@@ -143,8 +146,13 @@ for (const provider of ['deepseek', 'local']) test(`${provider}: large old think
   const create = call('current-create', 'create_tasks', { tasks: [{ title: '资料整理回归任务', due: '2026-09-23', estimateMin: 30 }] })
   const readReasoning = ' \n先并行核对现有任务与日程。\t ', writeReasoning = ' \n按第二项创建，并核对实际安排。\t '
   const responses = [response({ content: null, reasoning_content: readReasoning, tool_calls: reads }),
-    response({ content: null, reasoning_content: writeReasoning, tool_calls: [create] }), reply('资料整理已记录并安排。', ' \n按真实回执确认。\t '), reply('新话题。', '')]
-  const xixi = createXixi({ db, now: () => NOW, complete: async request => { requests.push(structuredClone(request)); return responses.shift() } })
+    response({ content: null, reasoning_content: writeReasoning, tool_calls: [create] }),
+    payload => finishResponse(payload, '资料整理已记录并安排。', '资料整理在截止前按30分钟先排进真实空档。'), reply('新话题。', '')]
+  const xixi = createXixi({ db, now: () => NOW, complete: async request => {
+    requests.push(structuredClone(request))
+    const next = responses.shift()
+    return typeof next === 'function' ? next(request) : next
+  } })
   const result = await xixi.chat(current)
   assert.equal(result.status, 'completed', result.error)
   assert.equal(requests.length, 3, 'a long completed history must not consume extra model calls or block the new task')
@@ -207,7 +215,16 @@ for (const provider of ['deepseek', 'local']) test(`${provider}: large old think
   assert.equal(requests[2].messages.find(message => message.tool_calls?.some(tool => tool.id === create.id))?.reasoning_content, writeReasoning)
   assert.deepEqual(requests[2].messages.find(message => message.tool_calls?.some(tool => tool.id === create.id))?.tool_calls, [create])
   const final = currentMessages.at(-1)
-  assert.ok([...originals, ...currentMessages.slice(0, -1)].every(message => final.sourceMessageIds.includes(message.id)), 'the next response depends on each archive source and each retained native message itself')
+  // The finish_response journal is the completion transport itself: it is
+  // written after the final context snapshot, so the reply cannot cite it as an
+  // input. Every earlier archive source and native message must still be cited.
+  const finishCallIds = new Set(currentMessages.filter(message => message.role === 'assistant')
+    .flatMap(message => (message.toolCalls ?? []).filter(call => call.function?.name === 'finish_response').map(call => call.id)))
+  assert.ok(finishCallIds.size > 0, 'the completion reply uses the real finish_response protocol')
+  const dependencies = [...originals, ...currentMessages.slice(0, -1)]
+    .filter(message => !finishCallIds.has(message.toolCallId))
+    .filter(message => !(message.role === 'assistant' && message.toolCalls?.some(call => finishCallIds.has(call.id))))
+  assert.ok(dependencies.every(message => final.sourceMessageIds.includes(message.id)), 'the next response depends on each archive source and each retained native message itself')
   assert.deepEqual(db.listMessages('main', { limit: 100 }).filter(message => message.requestId === old.requestId), originals, 'archiving never edits the durable history')
   const restored = createDatabase(':memory:'); t.after(() => restored.close())
   restored.importData(db.exportData())
@@ -269,7 +286,7 @@ for (const boundary of ['assistant', 'tool']) test(`a summary ending at a native
   assert.deepEqual(db.listMessages('main', { limit: 100 }).filter(message => message.requestId === old.requestId), originals)
 })
 
-for (const boundary of ['assistant', 'tool']) test(`the 160-message window starting at an old ${boundary} archives the fragment instead of replaying a partial native turn`, async t => {
+for (const boundary of ['assistant', 'tool']) test(`pagination starting at an old ${boundary} recovers the full original native turn`, async t => {
   const db = createDatabase(':memory:'); t.after(() => db.close())
   const old = input('消息窗口外的旧请求'), turn = db.beginTurn(old)
   const tool = call('window-boundary-read', 'read_tasks', {})
@@ -303,15 +320,13 @@ for (const boundary of ['assistant', 'tool']) test(`the 160-message window start
   assert.equal(window[0].id, first.id)
   assert.ok(!window.some(message => message.id === turn.userMessageId))
   assertPairs(dispatched.messages)
-  const archiveMessage = dispatched.messages.find(message => message.role === 'system' && message.content.startsWith('已归档的历史回合') && message.content.includes(old.requestId))
-  assert.ok(archiveMessage)
-  const archive = JSON.parse(archiveMessage.content.slice(archiveMessage.content.indexOf('\n') + 1))
-  assert.deepEqual(archive.exchanges.map(message => message.sourceMessageId), originals.filter(message => message.seq >= first.seq).map(message => message.id))
-  assert.equal(archive.exchanges.at(-1).content, final.content)
-  assert.ok(!dispatched.messages.some(message => message.tool_call_id === tool.id || message.tool_calls?.some(call => call.id === tool.id)))
-  assert.ok(!dispatched.messages.some(message => message.reasoning_content === assistant.reasoningContent || message.reasoning_content === final.reasoningContent), 'partial historical reasoning must never be replayed as native assistant state')
+  assert.ok(!dispatched.messages.some(message => message.content?.startsWith('已归档的历史回合') && message.content.includes(old.requestId)))
+  assert.equal(dispatched.messages.find(message => message.role === 'user')?.content, old.text)
+  assert.equal(dispatched.messages.find(message => message.tool_call_id === tool.id)?.content, receipt.content)
+  assert.deepEqual(dispatched.messages.find(message => message.tool_calls?.some(call => call.id === tool.id))?.tool_calls, [tool])
+  assert.equal(dispatched.messages.find(message => message.tool_calls?.some(call => call.id === tool.id))?.reasoning_content, assistant.reasoningContent)
   assert.equal(dispatched.messages.findLast(message => message.role === 'user')?.content, current.text)
   const currentFinal = db.listMessages('main', { limit: 100 }).findLast(message => message.requestId === current.requestId && message.role === 'assistant')
-  assert.ok([db.getTurn(current.requestId).userMessageId, ...archive.exchanges.map(message => message.sourceMessageId)].every(id => currentFinal.sourceMessageIds.includes(id)))
+  assert.ok([db.getTurn(current.requestId).userMessageId, ...originals.map(message => message.id)].every(id => currentFinal.sourceMessageIds.includes(id)))
   assert.deepEqual(db.listMessages('main', { limit: 1000 }).filter(message => message.requestId === old.requestId), originals)
 })

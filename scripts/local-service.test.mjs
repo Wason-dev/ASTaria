@@ -16,6 +16,17 @@ const SECRET = 'sk-fake-TEST-ONLY-not-a-real-provider-secret'
 const reply = content => ({ choices: [{ message: { role: 'assistant', content } }] })
 const toolCall = (name, args, id = randomUUID()) => ({ choices: [{ message: { role: 'assistant', content: null, tool_calls: [{ id, type: 'function', function: { name, arguments: JSON.stringify(args) } }] } }] })
 const chatInput = (text = '记下物理报告') => ({ requestId: randomUUID(), conversationId: 'main', text, context: { timezone: 'Asia/Shanghai', page: 'home' } })
+// The database directory now owns nested folders (for example .sqlite.owners),
+// so the leak scan must walk every file instead of skipping a known directory.
+function filesUnder(directory) {
+  const files = []
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const path = join(directory, entry.name)
+    if (entry.isDirectory()) files.push(...filesUnder(path))
+    else if (entry.isFile()) files.push(path)
+  }
+  return files
+}
 
 async function fixture(t, { responses = [], configured = true, filename } = {}) {
   const directory = filename ? null : mkdtempSync(join(tmpdir(), 'astaria-http-test-'))
@@ -240,9 +251,11 @@ test('keys remain only in the injected vault and never enter database, responses
   assert.doesNotMatch(JSON.stringify(f.requests), new RegExp(SECRET))
   assert.doesNotMatch(JSON.stringify((await f.request('/conversation?id=main')).value), new RegExp(SECRET))
   assert.doesNotMatch(JSON.stringify(logs), new RegExp(SECRET))
-  for (const name of readdirSync(f.directory)) {
-    const bytes = readFileSync(join(f.directory, name))
-    assert.equal(bytes.includes(Buffer.from(SECRET)), false, `${name} must not store API keys`)
+  const storedFiles = filesUnder(f.directory)
+  assert.ok(storedFiles.length > 0, 'the private-key scan must inspect every file under the data directory')
+  for (const path of storedFiles) {
+    const bytes = readFileSync(path)
+    assert.equal(bytes.includes(Buffer.from(SECRET)), false, `${path} must not store API keys`)
   }
   await f.request('/settings/key/remove', {})
   assert.equal((await f.request('/status')).value.configured, false)

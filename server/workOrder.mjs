@@ -37,13 +37,28 @@ export function createWorkOrder(input, previous = null, clock = () => new Date()
       order.commits = [...new Map(order.commits.concat({ stepId: step.id, operationId: operation?.id, summary: operation?.summary }).filter(item => item.operationId).map(item => [item.operationId, item])).values()]
       order.status = 'running'; save()
     },
-    succeed(step) {
+    succeed(step, plannerRead) {
       if (step.status !== 'committed') step.status = 'completed'
       delete step.error
       // Reads and other successful no-receipt tools can also recover a rejected
       // attempt. Their stable intent ID includes the tool and exact arguments;
       // a different read must not erase an unresolved failure.
       const recovered = new Set([step.id])
+      if (step.name === 'read_planner' && plannerRead?.type === 'planner_read') {
+        step.plannerCoverage = { revision: plannerRead.revision, pages: plannerRead.days.map(day => ({
+          date: day.date, section: day.section ?? 'overview', offset: day[day.section]?.offset ?? 0,
+        })) }
+        const pages = order.steps.filter(item => item.status === 'completed' && item.plannerCoverage?.revision === plannerRead.revision)
+          .flatMap(item => item.plannerCoverage.pages)
+        for (const previous of order.steps) {
+          const query = previous.plannerQuery
+          if (previous.status !== 'failed' || previous.name !== 'read_planner' || !query) continue
+          const dates = Array.from({length:query.days},(_,i)=>new Date(Date.parse(query.date+'T12:00:00Z')+i*86400000).toISOString().slice(0,10))
+          if (dates.every(date=>pages.some(page=>page.date===date&&page.section===query.section&&page.offset===query.offset))) {
+            previous.status='recovered'; previous.resolvedByStepId=step.id; recovered.add(previous.id)
+          }
+        }
+      }
       for (const previous of order.steps) if (step.operationId && previous.status === 'failed' &&
         previous.name === step.name && previous.operationId === step.operationId) {
         previous.status = 'recovered'; previous.resolvedByStepId = step.id; recovered.add(previous.id)

@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "version": "1.0.0",
+  "status": "preparing-distribution",
+  "publicRelease": false,
+  "updatedOn": "2026-10-27",
+  "publicVersion": "0.1.0-beta.12.1",
+  "platforms": [
+    "macOS arm64",
+    "Windows x64",
+    "Android",
+    "iOS (iPhone and iPad)"
+  ],
+  "notes": "v1.0.0 is not publicly available. Distribution signing and publication are pending.",
+  "knownLimitations": [
+    "Windows device validation is incomplete.",
+    "Optional 4K video downloads are not available."
+  ]
+}

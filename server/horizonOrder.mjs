@@ -91,9 +91,6 @@ function validateChange(input, snap) {
       if (item?.date === date) previousEnd = item.end
     }
   }
-  if (!changedDates.size) {
-    for (const item of snap.movable) if (item.needsReschedule) changedDates.add(item.date)
-  }
   input.reflowDates = changedDates
   for (const date of snap.dates) {
     if (!changedDates.has(date)) continue
@@ -239,9 +236,8 @@ function reviewedPlans(result, prepared) {
 function reportActivity(stage, { input, snap, prepared, activity }) {
   const local = (id, title, detail, extra = {}) => activity({ id, source: 'local', state: 'done', title, detail, ...extra })
   if (stage === 'snapshot') {
-    const overdue = snap.movable.filter(item => item.needsReschedule).length
     local('snapshot', `读取 ${input.groups.length} 组 · ${snap.movable.length} 段安排`,
-      overdue ? `其中 ${overdue} 段原定时间已过，将从当前剩余空档重新安排` : '已排除完成事项，并保留锁定与正在进行的安排')
+      '只调整尚未开始的时段；已开始、已结束和锁定的安排保留原位')
   } else if (stage === 'capacity') {
     for (const [day, date] of snap.dates.entries()) {
       const items = snap.movable.filter(item => input.assignedDates[item.id] === date)
@@ -273,7 +269,7 @@ export function createHorizonOrder({ db, complete, now = () => new Date(), timeo
     days: 3,
     namespace: 'horizon-order',
     includeElapsedToday: true,
-    signature: db => ({ version: 4, areas: db.listAreas().sort((a, b) => a.id.localeCompare(b.id)) }),
+    signature: db => ({ version: 5, areas: db.listAreas().sort((a, b) => a.id.localeCompare(b.id)) }),
     extendView: (snap, db) => ({ groups: groupsFor(snap, db), groupingSaved: hasSavedGroups(snap) }),
     normalizeInput,
     assertDraft: assertGroups,
@@ -284,8 +280,7 @@ export function createHorizonOrder({ db, complete, now = () => new Date(), timeo
     modelRequest,
     parseResult: reviewedPlans,
     decoratePlans: (plans, input, snap) => input.fragmentPolicy === 'split' ? decorateHorizonSegments(plans, input, snap) : groupPlans(plans, input, snap),
-    metadataOnly: (input, snap) => !snap.movable.some(item => item.needsReschedule)
-      && input.groups.length === snap.view.groups.length && input.groups.every((group, index) => {
+    metadataOnly: (input, snap) => input.groups.length === snap.view.groups.length && input.groups.every((group, index) => {
         const original = snap.view.groups[index]
         return group.day === original.day && group.itemIds.length === original.tasks.length
           && group.itemIds.every((id, offset) => id === original.tasks[offset].id)
@@ -295,6 +290,6 @@ export function createHorizonOrder({ db, complete, now = () => new Date(), timeo
     activity: reportActivity,
     completionOptions: { purpose: 'horizon-order' },
     timeoutMs,
-    isUnchanged: (input, snap) => !snap.movable.some(item => item.needsReschedule) && sameGroups(input, snap),
+    isUnchanged: (input, snap) => sameGroups(input, snap),
   } })
 }

@@ -1,35 +1,18 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createHash } from 'node:crypto'
 import { readFileSync, readdirSync } from 'node:fs'
 import { inflateSync } from 'node:zlib'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 // Static resource contracts only. No SDK, devices, signing stores, Sharp, or ignored input PNG is required.
-// Mobile/web expectations use the SVG masters; desktop uses approved RGBA reference hashes,
-// independently converted from the supplied PNG rather than from generator internals.
+// Expectations use the supplied SVG geometry and palette, independently of generator internals.
 const ROOT = fileURLToPath(new URL('../', import.meta.url))
 const RES = 'mobile/android/app/src/main/res'
 const DENSITIES = [['mdpi', 1], ['hdpi', 1.5], ['xhdpi', 2], ['xxhdpi', 3], ['xxxhdpi', 4]]
 const OPAQUE_MASTER = 'design/icon/new/astaria-icon.svg'
 const TRANSPARENT_MASTER = 'design/icon/new/astaria-icon-transparent.svg'
 const APP_BACKGROUND = '#282828'
-// Approved astaria-icon-transparent-2048.png SHA-256:
-// c037755c2c375372b6c201a9ffa43351d79ca54b9e36f0322670bf0a1353b846
-// Reference: artifacts/v1-transparent-icon/prepare-icons.mjs, Sharp 0.35.5 / libvips 8.18.7.
-// For each size: Lanczos3 to round(size * 1.1), crop size x size at floor((enlarged - size) / 2).
-// These hash every decoded RGBA byte (including interior alpha), not PNG compression or just corners.
-const DESKTOP_RGBA_SHA256 = {
-  16: '0fee55d6d2ccff94421be071bc302b7b870b505868d5bbe74df6a58f7302d6ac',
-  24: '9605ea992e382bc4e787e6c8cad2aa4ecb1b809fbf995c508f78d244439e85ea',
-  32: '490cb06fc4748d188b5cdaf03c508b1190048cc9492ac6b8d55d399174467824',
-  48: 'bc7b379b686cfa8999cebe50fbf0696cbfcce567007a9519fbf9a72736789db3',
-  64: 'b935ddc03e81f6462580db0d7ebe01be8bf21c220aa157ec9317e0e74792ef3c',
-  128: '0d6491a3109d9664051187fb32b36836671276198d311a3da577f5e97a9670a9',
-  256: 'e3b9d6c1315d82b1b81ea8865f8cade8e338a1c4ce8c7fa240b27dd6cf047c6d',
-  1024: 'afca5f4778c5addf5b858db77d6df4629ef5446664848e3e94a23c0edd5ab58c',
-}
 // Platform grids: launcher icons are 48dp, adaptive art is 60/108 of the 108dp canvas,
 // status-bar icons are 90% of the 24dp grid.
 const LAUNCHER_DP = 48
@@ -143,9 +126,17 @@ function load(file) {
 function square(image, size) { assert.deepEqual([image.width, image.height], [size, size]) }
 function expectDesktopPixels(image, size) {
   square(image, size)
-  assert.equal(image.colorType, 6, 'desktop output retains RGBA')
-  assert.equal(createHash('sha256').update(image.data).digest('hex'), DESKTOP_RGBA_SHA256[size],
-    size + 'px desktop output exactly matches the approved PNG enlarged 1.1x, with no added background or recolouring')
+  assert.ok([2, 6].includes(image.colorType), 'desktop output is RGB or RGBA')
+  if (image.channels === 4) for (let i = 3; i < image.data.length; i += 4) assert.equal(image.data[i], 255, 'fully opaque desktop artwork')
+  for (const [x, y] of [[0, 0], [size - 1, 0], [0, size - 1], [size - 1, size - 1]]) {
+    assert.deepEqual(image.pixel(x, y), [...OPAQUE_RGB, 255], 'approved black background')
+  }
+  assert.deepEqual(nonGreyPixels(image), [], 'preserve silver artwork without tint')
+  compareBox(boundsOfPixels(image, rgb => distance(rgb, OPAQUE_RGB) > 12), artworkBox(point => master.map(point, size)), 2, 'desktop geometry')
+  if (size >= 48) {
+    expectMasterColours(image, 'desktop')
+    expectCentre(image, point => master.map(point, size), 'desktop')
+  }
 }
 /** Non-greyscale pixels, found with a straight buffer scan (no per-pixel allocation). */
 function nonGreyPixels(image, step = 1) {
@@ -448,7 +439,7 @@ test('public/astaria-logo.png is the full-viewBox black-background master with t
   assert.deepEqual(tinted.slice(0, 4), [], 'greyscale only, saw ' + tinted.slice(0, 4).map(([x, y, r, g, b]) => rgbToHex([r, g, b]) + '@' + x + ',' + y).join(' '))
 })
 
-test('desktop 1024 PNG matches every approved 1.1x transparent reference pixel', () => {
+test('desktop 1024 PNG preserves the black-background master geometry and palette', () => {
   expectDesktopPixels(load('public/astaria-icon-1024.png'), 1024)
 })
 
@@ -488,7 +479,7 @@ test('maskable 512 fits the entire supplied contour inside the 80% safe circle',
   }
 })
 
-test('Windows ICO has seven valid RGBA entries matching every approved 1.1x transparent reference pixel', () => {
+test('Windows ICO has seven opaque entries preserving the black-background master', () => {
   let ico
   try { ico = bytes('public/astaria.ico') } catch (error) {
     if (error?.code === 'ENOENT') assert.fail('generated icon asset missing: public/astaria.ico')

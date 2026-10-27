@@ -118,6 +118,8 @@
 .xixi-receipt { margin-top: 9px; padding: 9px 10px; border-radius: 11px; border: 1px solid var(--xixi-line); background: #a9906010; font-size: 11px }
 .xixi-receipt > header, .wb-xixi .xixi-receipt > header { display: flex; gap: 8px; justify-content: space-between; align-items: start; padding: 0; border: 0 }
 .xixi-receipt > header strong { font-size: 11px; font-weight: 400; letter-spacing: 0 }
+.xixi-receipt > header > :first-child { min-width:0 }
+.xixi-receipt-state { flex:none; white-space:nowrap; writing-mode:horizontal-tb; align-self:flex-start }
 .xixi-receipt ul { margin: 6px 0 0; padding-left: 15px; color: var(--xixi-muted) }
 .xixi-receipt li + li { margin-top: 4px }
 .xixi-receipt small { font-size: 10px; color: var(--xixi-muted) }
@@ -236,3 +238,11 @@
 .p0 .home-workspace[data-theme=light] .xixi-attachment-error { color: #965944 }
 
 .xixi-receipt .xixi-receipt-reason { margin:7px 0 2px; color:var(--xixi-muted); font-size:11px; line-height:1.75; overflow-wrap:anywhere; white-space:pre-wrap }
+
+/* Creation editors stay visible; only the verbose saved-record list folds. */
+.xixi-receipt-task > .xixi-receipt-task-settings { margin-top:0; padding-top:0; border-top:0 }
+.xixi-collection-name { display:flex; align-items:center; gap:6px }
+.xixi-collection-name svg { width:15px; height:15px; flex:none }
+.xixi-receipt-more { margin-top:8px }
+
+.xixi-receipt.xixi-receipt-task { margin-top:9px; padding:9px 10px }

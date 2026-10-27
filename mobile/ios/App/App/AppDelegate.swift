@@ -1,10 +1,43 @@
 import UIKit
 import Capacitor
+import WebKit
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
 
     var window: UIWindow?
+
+    override func buildMenu(with builder: UIMenuBuilder) {
+        super.buildMenu(with: builder)
+        guard builder.system == .main, UIDevice.current.userInterfaceIdiom == .pad else { return }
+        func command(_ title: String, _ key: String, _ value: String, _ flags: UIKeyModifierFlags = .command) -> UIKeyCommand {
+            UIKeyCommand(title: title, action: #selector(runASTariaCommand(_:)), input: key,
+                         modifierFlags: flags, propertyList: value)
+        }
+        builder.insertChild(UIMenu(title: "", identifier: UIMenu.Identifier("dev.wason.astaria.conversation"), options: .displayInline, children: [
+            command("新建对话", "n", "new-conversation", [.command, .shift])
+        ]), atStartOfMenu: .file)
+        builder.insertChild(UIMenu(title: "前往", identifier: UIMenu.Identifier("dev.wason.astaria.navigation"), options: .displayInline, children: [
+            command("首页", "1", "home"), command("工作台", "2", "workbench"),
+            command("日程", "3", "schedule"), command("余时", "4", "free-time"),
+            command("设置", ",", "settings"), command("展开 / 收起析熙", "l", "toggle-chat")
+        ]), atStartOfMenu: .view)
+        builder.insertChild(UIMenu(title: "", identifier: UIMenu.Identifier("dev.wason.astaria.help"), options: .displayInline, children: [
+            UICommand(title: "ASTaria 官网与使用说明", action: #selector(openASTariaHelp))
+        ]), atStartOfMenu: .help)
+    }
+
+    @objc private func runASTariaCommand(_ command: UICommand) {
+        guard let action = command.propertyList as? String,
+              ["new-conversation", "home", "workbench", "schedule", "free-time", "settings", "toggle-chat"].contains(action),
+              let scene = UIApplication.shared.connectedScenes.first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene,
+              let controller = scene.windows.first(where: { $0.isKeyWindow })?.rootViewController as? CAPBridgeViewController else { return }
+        controller.webView?.evaluateJavaScript("window.dispatchEvent(new CustomEvent('astaria-native-menu',{detail:'\(action)'}))", completionHandler: nil)
+    }
+
+    @objc private func openASTariaHelp() {
+        UIApplication.shared.open(URL(string: "https://astaria.space")!)
+    }
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         // Override point for customization after application launch.

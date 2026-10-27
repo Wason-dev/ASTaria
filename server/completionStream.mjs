@@ -1,10 +1,18 @@
 // OpenAI-compatible SSE decoding. Tool arguments are accumulated privately and
 // are never executable until both a finish reason and the stream terminator arrive.
-export async function readCompletionStream(response, { maxBytes, onDelta }) {
+export async function readCompletionStream(response, { maxBytes, onDelta, onProgress }) {
   const reader = response.body.getReader(), decoder = new TextDecoder()
   const message = { role: 'assistant', content: '' }, calls = new Map()
   let pending = '', data = [], bytes = 0, ended = false, finishReason = null, usage
   let publishedContent = 0, protocolText = false
+  let lastProgress = 0, hasOutput = false
+  const snapshot = () => ({ choices: [{ index: 0, message: { ...message,
+    ...(calls.size ? { tool_calls: [...calls.values()] } : {}) }, finish_reason: finishReason }], ...(usage ? { usage } : {}) })
+  const progress = (force = false) => {
+    if (!onProgress || !hasOutput && !usage || !force && Date.now() - lastProgress < 500) return
+    lastProgress = Date.now()
+    try { onProgress(snapshot()) } catch { /* Optional telemetry cannot interrupt decoding. */ }
+  }
   const emitContent = (final = false) => {
     const content = message.content
     if (/(?:DSML|<\|(?:tool|function)|<｜(?:tool|function))/iu.test(content)) protocolText = true
@@ -27,8 +35,9 @@ export async function readCompletionStream(response, { maxBytes, onDelta }) {
     if (chunk.error) throw new Error('UPSTREAM_STREAM_ERROR')
     if (chunk.usage) usage = chunk.usage
     const choice = chunk.choices?.find(item => item.index === 0 || item.index === undefined)
-    if (!choice) return
+    if (!choice) { if (chunk.usage) progress(true); return }
     const delta = choice.delta ?? {}
+    if (delta.reasoning_content || delta.content || delta.tool_calls?.length) hasOutput = true
     // A terminal reason closes this choice. In particular, a later chunk must
     // never upgrade a truncated `length` result into executable `tool_calls`.
     // Usage-only frames (with no choice) remain valid after termination.
@@ -53,6 +62,7 @@ export async function readCompletionStream(response, { maxBytes, onDelta }) {
       calls.set(part.index, call)
     }
     if (choice.finish_reason) finishReason = choice.finish_reason
+    progress(Boolean(chunk.usage))
   }
   const line = value => {
     if (value === '') event()
@@ -79,5 +89,5 @@ export async function readCompletionStream(response, { maxBytes, onDelta }) {
     if (calls.size) message.tool_calls = [...calls.entries()].sort(([a], [b]) => a - b).map(([, call]) => call)
     if (finishReason === 'stop' && !calls.size) emitContent(true)
     return { choices: [{ index: 0, message, finish_reason: finishReason }], ...(usage ? { usage } : {}) }
-  } finally { await reader.cancel().catch(() => {}) }
+  } finally { progress(true); await reader.cancel().catch(() => {}) }
 }

@@ -202,16 +202,16 @@ test('selectRelease 让稳定版只匹配稳定发布，测试版可以接收预
   assert.equal(promoted.prerelease, false)
 })
 
-test('v1.0 稳定标签使用 canonical signed 资产与验签清单，并能从 rc 升级', async () => {
+test('v1.0.0 正式标签使用 canonical signed 资产与验签清单，并能从 rc 升级', async () => {
   const current = installed({ version: '1.0.0-rc.2' })
-  const stable = buildRelease({ version: '1.0.0', tag: 'v1.0', signing: 'signed' })
+  const stable = buildRelease({ version: '1.0.0', tag: 'v1.0.0', signing: 'signed' })
   const picked = selectRelease([stable.release], current)
   assert.equal(picked.version, '1.0.0')
-  assert.equal(picked.tag, 'v1.0')
+  assert.equal(picked.tag, 'v1.0.0')
   assert.equal(picked.prerelease, false)
   assert.equal(picked.assetName, 'ASTaria-1.0.0-mac-arm64-signed.dmg')
-  assert.equal(picked.downloadUrl, downloadUrl('v1.0', stable.dmgName))
-  assert.equal(picked.manifestUrl, downloadUrl('v1.0', stable.manifestName))
+  assert.equal(picked.downloadUrl, downloadUrl('v1.0.0', stable.dmgName))
+  assert.equal(picked.manifestUrl, downloadUrl('v1.0.0', stable.manifestName))
   assert.equal(validateManifest(stable.manifest, picked, current, testReleaseKeys).version, '1.0.0')
   const backend = createBackend({ releases: [stable.release], builds: [stable] })
   const { updates } = startService({ backend, current })

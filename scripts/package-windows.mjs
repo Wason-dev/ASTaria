@@ -2,9 +2,9 @@
 import { cp, copyFile, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
-import { dirname, join, relative, resolve, sep } from 'node:path'
+import { basename, dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { copyPayload, sourceProvenance } from './package-desktop.mjs'
+import { copyDesktopAssets, copyPayload, sourceProvenance } from './package-desktop.mjs'
 import { copyServerDependencies } from './desktop-dependencies.mjs'
 import { generateNotices } from './third-party-notices.mjs'
 import { isCanonicalVersion, versionParts } from '../desktop/version.mjs'
@@ -18,6 +18,14 @@ const run = (exe, args, cwd) => {
   return result.stdout.trim()
 }
 const hash = async file => createHash('sha256').update(await readFile(file)).digest('hex')
+
+export async function copyWindowsRuntime(source, destination) {
+  await cp(source, destination, { recursive: true, errorOnExist: true, force: false,
+    // Browsing the cached runtime in Finder must not add local folder metadata
+    // or AppleDouble resource forks to a Windows distribution.
+    filter: path => basename(path) !== '.DS_Store' && !basename(path).startsWith('._'),
+  })
+}
 
 export async function packageWindows({ runtime, out, makensis, rcedit, icon = join(ROOT, 'public', 'astaria.ico') }) {
   const pkg = JSON.parse(await readFile(join(ROOT, 'package.json'), 'utf8'))
@@ -33,7 +41,7 @@ export async function packageWindows({ runtime, out, makensis, rcedit, icon = jo
   if (notices.missing.length || notices.review.length || notices.text !== await readFile(join(ROOT, 'THIRD_PARTY_NOTICES.txt'), 'utf8')) throw new Error('Third-party notices are stale')
   await mkdir(out, { recursive: true })
   const stage = await mkdtemp(join(out, '.astaria-windows-')), portable = join(stage, stem)
-  await cp(runtime, portable, { recursive: true, errorOnExist: true, force: false })
+  await copyWindowsRuntime(runtime, portable)
   // Remove Electron's example only from this invocation's copied runtime.
   await rm(join(portable, 'resources', 'default_app.asar'), { force: true })
   await rename(join(portable, 'electron.exe'), join(portable, 'ASTaria.exe'))
@@ -48,7 +56,7 @@ export async function packageWindows({ runtime, out, makensis, rcedit, icon = jo
   const payload = join(portable, 'resources', 'app')
   await mkdir(payload)
   for (const name of ['desktop', 'server', 'src']) await copyPayload(join(ROOT, name), join(payload, name))
-  await cp(join(ROOT, 'dist'), join(payload, 'dist'), { recursive: true })
+  await copyDesktopAssets(join(ROOT, 'dist'), join(payload, 'dist'))
   const dependencies = await copyServerDependencies(ROOT, payload)
   await writeFile(join(payload, 'package.json'), JSON.stringify({ name: 'astaria', productName: 'ASTaria', version: pkg.version, type: 'module', main: 'desktop/main.cjs', license: 'Apache-2.0' }, null, 2))
   for (const [source, target] of [['LICENSE', 'ASTARIA-LICENSE.txt'], ['NOTICE', 'ASTARIA-NOTICE.txt'], ['THIRD_PARTY_NOTICES.txt', 'THIRD_PARTY_NOTICES.txt'], ['third-party/gsap-3.15.0-LICENSE.txt', 'GSAP-LICENSE.txt']]) await copyFile(join(ROOT, source), join(portable, target))

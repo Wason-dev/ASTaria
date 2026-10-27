@@ -19,7 +19,7 @@ export type LocalDevice = {
 export type ExecutionNotice = { issues: string[]; replyUnavailable?: true }
 export type { SourceMetadata } from './sourceMetadata'
 import type { SourceMetadata } from './sourceMetadata'
-export type ChatMessage = { id: string; seq: number; role: 'user' | 'assistant' | 'tool'; content: string; inputKind?: 'receipt-estimate'; attachments?: ChatAttachment[]; reasoningContent?: string; hasSavedReasoning?: boolean; executionNotice?: ExecutionNotice; sources?: SourceMetadata[]; createdAt: string; requestId?: string; taskId?: string; excludeFromContext?: boolean; delivery?: 'sending' | 'failed'; question?: { options: string[] }; retractedAt?: string }
+export type ChatMessage = { id: string; seq: number; role: 'user' | 'assistant' | 'tool'; content: string; inputKind?: 'receipt-estimate'; attachments?: ChatAttachment[]; reasoningContent?: string; hasSavedReasoning?: boolean; executionNotice?: ExecutionNotice; sources?: SourceMetadata[]; createdAt: string; requestId?: string; taskId?: string; excludeFromContext?: boolean; delivery?: 'sending' | 'failed'; requestStatus?: 'running' | 'completed' | 'failed'; question?: { options: string[] }; retractedAt?: string }
 export type ReceiptTask = { id: string; title: string; collection?: string; status?: string; due?: string; estimateMin?: number; updatedAt: string }
 export type Operation = { id: string; requestId: string; summary: string; createdAt: string; readAt: string | null; undoneAt: string | null; undoable?: boolean; undoLabel?: string; relatedOperationIds?: string[]; scheduledCount?: number; explanations?: string[]; details?: string[]; createdTasks?: ReceiptTask[] }
 export type CompanionAction = { id: string; requestId: string; kind: 'scenario' | 'handoff' | 'wish' | 'goal'; label: string; targetId?: string; createdAt: string }
@@ -35,6 +35,7 @@ export type ChatStreamActivity = {
   detail?: string
 }
 export type ChatStreamEvent = { type: 'round'; round: number }
+  | { type: 'round-discarded'; round: number }
   | { type: 'context-usage'; usage: import('./contextUsage').ContextUsage }
   | { type: 'thinking-title'; round: number; title: string }
   | { type: 'reasoning' | 'content'; round: number; delta: string }
@@ -45,7 +46,7 @@ export type ChatStreamEvent = { type: 'round'; round: number }
   | { type: 'error'; error: string }
 export type ChatReasoningRound = { id: string; content: string; round?: number }
 export type SavedReasoning = { reasoningContent: string; rounds?: ChatReasoningRound[]; roundCount?: number; status?: 'running' | 'completed' | 'failed' }
-export type ChatStreamDraft = { requestId: string; conversationId: string; round: number; reasoningContent: string; reasoningRounds?: ChatReasoningRound[]; thinkingTitle?: string; content: string; phase: ChatStreamPhase; activities?: ChatStreamActivity[]; sources?: SourceMetadata[]; contextUsage?: import('./contextUsage').ContextUsage }
+export type ChatStreamDraft = { requestId: string; conversationId: string; round: number; reasoningContent: string; reasoningRounds?: ChatReasoningRound[]; thinkingTitle?: string; content: string; contentRound?: number; contentRounds?: Array<{ round: number; content: string }>; phase: ChatStreamPhase; activities?: ChatStreamActivity[]; sources?: SourceMetadata[]; contextUsage?: import('./contextUsage').ContextUsage }
 export type Memory = { id: string; content: string; scope: 'global' | 'task'; kind: 'preference' | 'project' | 'context'; lifetime?: 'temporary' | 'long-term' | 'inference'; taskId?: string; sourceMessageId: string; expiresAt?: string | null; createdAt: string; updatedAt: string }
 export type ChatImageAttachment = { kind?: 'image'; name: string; mime: 'image/png' | 'image/jpeg' | 'image/webp'; size: number; data: string }
 export type ChatAttachment = ChatImageAttachment | import('./documentAttachment').ChatDocumentAttachment

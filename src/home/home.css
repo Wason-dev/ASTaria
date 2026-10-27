@@ -49,6 +49,9 @@
 .p0 .home-menu button:focus-visible { outline-offset: -1px }
 .home-menu button[aria-current] { background: #ffffff09 }
 .home-clock { position: absolute; right: var(--home-left); top: 32px; display: flex; gap: 12px; font-size: 11px; line-height: 18px; font-variant-numeric: tabular-nums; letter-spacing: .08em; color: var(--p0-muted); white-space: nowrap; pointer-events: auto }
+.home-nav { transition:width 280ms cubic-bezier(.2,.7,.2,1),opacity 180ms ease,visibility 0s 180ms }
+.home-clock { transition:opacity 180ms ease,visibility 0s 180ms }
+.home-workspace[data-strings-open=true] > :is(.home-nav,.home-clock) { opacity:0; visibility:hidden; pointer-events:none }
 .home-clock-short-date { display: none }
 @keyframes home-menu-rim-in { from { opacity: 0 } to { opacity: 1 } }
 .home-notification { position: absolute; right: var(--home-left); bottom: 18px; max-width: min(240px, calc(100vw - 180px)); height: 32px; border-radius: 16px; box-shadow: 0 6px 18px rgba(0, 0, 0, .6); pointer-events: auto }

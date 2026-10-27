@@ -68,7 +68,7 @@
   .p0 .workbench[data-theme=dark] .wb-icon-button .wb-tooltip { color: #eeeae3; background: #17181bf5; border-color: #d5bb8b40; box-shadow: 0 5px 14px #0005 }
   /* The reason disclosure is a measured-glass circle, not a solid gold fill.
      Its tooltip keeps the same light glass family instead of an opaque block. */
-  .p0 .workbench[data-theme=dark] .wb-reason-toggle.wb-icon-button { color: var(--wb-body) }
+  .p0 .workbench[data-theme=dark] .wb-reason-toggle.wb-icon-button { color: var(--wb-text) }
   .p0 .workbench[data-theme=dark] .wb-reason-toggle.wb-icon-button:enabled:hover,
   .p0 .workbench[data-theme=dark] .wb-reason-toggle.wb-icon-button[aria-expanded=true] { color: #e8d0a4 }
   .p0 .workbench[data-theme=dark] .wb-reason-toggle.wb-icon-button:disabled { color: var(--wb-muted); opacity: .55 }

@@ -3,8 +3,6 @@ import initSQLJs from 'sql.js'
 import wasmUrl from 'sql.js/dist/sql-wasm.wasm?url'
 import persona from '../../server/prompts/persona.md?raw'
 import working from '../../server/prompts/working.md?raw'
-import { createMobilePageFetcher } from './webFetch'
-import type { MobileSourceResponse } from './webFetch'
 // @ts-expect-error Portable services are JavaScript shared with Node.
 import { createMobileSession } from './session.mjs'
 // @ts-expect-error Browser storage shares its checks with runtime tests.
@@ -51,9 +49,7 @@ self.onmessage = async (event: MessageEvent<Request>) => {
           const response = await bridge('network.request', { url, method: options.method ?? 'GET', headers: options.headers, body: options.body }, options.signal ?? undefined) as { status: number; headers: Record<string, string>; body: string }
           return new Response(response.body, { status: response.status, headers: response.headers })
         }
-        const pageFetcher = createMobilePageFetcher({ execute: async (input, options) =>
-          await bridge('network.source', input, options.signal) as MobileSourceResponse })
-        session = await createMobileSession({ SQL, storage, serviceOptions: { vault, fetcher, pageFetcher, platform: request.platform, persona, working } })
+        session = await createMobileSession({ SQL, storage, serviceOptions: { vault, fetcher, platform: request.platform, persona, working } })
       })()
       await starting; self.postMessage({ kind: 'result', id: request.id, result: { ready: true } }); return
     }

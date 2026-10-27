@@ -185,8 +185,19 @@ const self = { postMessage: (...args) => parentPort.postMessage(...args) }
 ${sources.worker}
 parentPort.on('message', data => self.onmessage({ data }))
 `
+// The real bootstrap pins the iOS WebView scale through this meta element and
+// only then starts the Worker. Mirror that DOM call instead of a page-only stub.
+function mobileDocument() {
+  const viewport = { name: 'viewport', content: 'width=device-width, initial-scale=1, viewport-fit=cover' }
+  const document = Object.assign(new EventTarget(), {
+    documentElement: { dataset: {}, style: { setProperty() {}, getPropertyValue() { return '' } } },
+    querySelector: selector => selector === 'meta[name="viewport"]' ? viewport : null,
+  })
+  return { document, viewport }
+}
 async function start(t, fs, platform = 'ios') {
   let worker, onStateChange
+  const { document, viewport } = mobileDocument()
   const messages = [], sent = [], window = { fetch: async () => { throw Error('network forbidden') }, location: { origin: 'http://fixture.invalid' } }
   class RuntimeWorker {
     constructor() {
@@ -209,15 +220,18 @@ async function start(t, fs, platform = 'ios') {
     // The native viewport has independent reducer/bridge tests. Snapshot tests
     // exercise the actual Worker/filesystem without an Android UI surface.
     initializeMobileViewport: async () => () => {},
-    window, document: Object.assign(new EventTarget(), { documentElement: { dataset: {}, style: { setProperty() {}, getPropertyValue() { return '' } } } }),
+    window, document,
   })
   await bootstrap()
-  return { call: (...args) => window.fetch(...args), messages, sent, background: () => onStateChange({ isActive: false }), stop: () => worker.terminate() }
+  return { call: (...args) => window.fetch(...args), messages, sent, viewport, background: () => onStateChange({ isActive: false }), stop: () => worker.terminate() }
 }
 
 for (const platform of ['ios', 'android']) {
   test(`${platform} real Worker bridge waits for rename acknowledgement and reloads the same SQLite file`, { timeout: 15000 }, async t => {
     const fs = filesystem(), app = await start(t, fs, platform)
+    const baseViewport = 'width=device-width, initial-scale=1, viewport-fit=cover'
+    assert.equal(app.viewport.content, platform === 'ios' ? `${baseViewport}, maximum-scale=1` : baseViewport,
+      'the iOS bootstrap pins the native viewport scale; Android leaves it alone')
     fs.state.renameGate = deferred(); fs.state.renameStarted = deferred()
     let acknowledged = false
     const pending = app.call('/api/tasks/create', { title: '等待原生持久化确认' }).then(value => { acknowledged = true; return value })

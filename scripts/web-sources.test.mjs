@@ -207,8 +207,8 @@ for (const retracted of [false, true]) test(`${retracted ? 'retraction' : 'expli
   const entered = deferred(), pendingPage = deferred(), controller = new AbortController()
   let pageSignal, calls = 0
   const search = createWebSearch({ getSettings: () => settings,
-    pageFetcher: async (_url, { signal }) => { pageSignal = signal; entered.resolve(); return pendingPage.promise },
-    fetcher: async () => { throw new Error('direct link must not query search service') } })
+    keychain: { read: async () => 'fixture-key' },
+    fetcher: async (_url, { signal }) => { pageSignal = signal; entered.resolve(); return pendingPage.promise } })
   const xixi = createXixi({ db, webSearch: search, complete: async (_payload, { signal }) => {
     assert.ok(signal instanceof AbortSignal)
     calls += 1
@@ -222,7 +222,7 @@ for (const retracted of [false, true]) test(`${retracted ? 'retraction' : 'expli
   const result = await running
   assert.equal(result.status, 'failed')
   assert.ok(pageSignal.aborted)
-  pendingPage.resolve(page())
+  pendingPage.resolve(Response.json({ content: 'late page' }))
   await new Promise(resolve => setImmediate(resolve))
   assert.equal(db.listMessages('main').length, before)
   assert.equal(db.listMessages('main').some(message => message.sources), false)

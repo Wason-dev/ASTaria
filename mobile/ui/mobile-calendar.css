@@ -18,7 +18,7 @@
   scrollbar-width: thin;
   scrollbar-color: var(--m-line) transparent;
   padding: 8px 12px calc(24px + var(--m-safe-bottom, 0px));
-  max-width: 840px;
+  max-width: none;
   margin-inline: auto;
 }
 .m-calendar-body { position:relative; min-width:0; border-radius:20px; box-shadow:0 6px 18px #0006; }
@@ -137,7 +137,7 @@ dialog.m-calendar-sheet {
 .m-calendar-sheet[open][data-closing="true"] { animation: m-calendar-sheet-exit 180ms ease both; }
 .m-calendar-sheet-heading { position:relative; z-index:1; display: flex; align-items: center; gap: 8px; flex: 0 0 auto; width: 100%; padding: 12px; border-bottom: 1px solid var(--import-line); animation:m-calendar-content-enter 200ms ease both; }
 .m-calendar-sheet-heading h2 { font-size: 20px; font-weight: 400; line-height: 1.4; min-width: 0; overflow-wrap: anywhere; }
-.m-calendar-sheet-heading h2:focus { outline: none; }
+.import-surface.m-calendar-sheet .m-calendar-sheet-heading h2:focus { outline: none; }
 .m-calendar-sheet-body { position:relative; z-index:1; flex:0 1 auto; width: 100%; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 12px 16px 16px; scroll-padding-block: 12px; scrollbar-width: thin; scrollbar-color: var(--import-line) transparent; }
 .m-calendar-menu { display: flex; flex-direction: column; gap: 4px; }
 dialog.m-calendar-sheet .m-calendar-menu button { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; min-height: 44px; text-align: left; border:1px solid transparent; border-bottom-color:var(--import-line); border-radius:12px; font-size:13px; line-height:1.5; }
@@ -232,3 +232,9 @@ dialog.m-calendar-sheet button:is(:hover,:focus-visible) { border-color:color-mi
 @keyframes mobile-calendar-period-enter { 0%,45% { opacity:0; transform:translateX(var(--calendar-travel)); } 100% { opacity:1; transform:none; } }
 @media(prefers-reduced-motion:reduce) { .m-calendar-period-window > .m-calendar-period-frame { animation:none!important; } }
 .home-workspace[data-motion=reduced] .m-calendar-period-window > .m-calendar-period-frame { animation:none!important; }
+
+/* Tablet dialogs occupy the visible window, not the top of a phone sheet.
+   Insets constrain the box itself, so neither text nor glass is scaled. */
+@media (min-width: 748px) {
+  dialog.m-calendar-sheet { top:calc(var(--m-visible-offset-top,0px) + 24px); bottom:max(24px,var(--m-keyboard-inset,0px)); margin:auto; height:fit-content; max-height:calc(var(--m-visible-height,100dvh) - 48px); }
+}

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { createDatabase } from '../server/database.mjs'
 import { createXixi, contextUnits, XIXI_TOOLS, MAX_ROUNDS, HARD_INPUT_UNITS } from '../server/xixi.mjs'
+import { finishResponse } from './fixtures/model-receipt.mjs'
 
 // 固定测试时区，与页面上下文 Asia/Shanghai 保持一致
 process.env.TZ = 'Asia/Shanghai'
@@ -115,7 +116,8 @@ test('completed request is durable and idempotent', async t => {
 })
 
 test('completed request replay reads fresh action state without storing full history twice', async t => {
-  const f = fixture(t, [call('create_tasks', { tasks: [{ title: '报告' }] }), reply('记好了')])
+  const f = fixture(t, [call('create_tasks', { tasks: [{ title: '报告' }] }),
+    payload => finishResponse(payload, '记好了', '报告已按默认时长排进今天的真实空档。')])
   const request = input('记下报告')
   const result = await f.xixi.chat(request)
   f.db.undoOperation(result.operations.find(operation => operation.kind !== 'planner').id)
@@ -268,10 +270,11 @@ test('same-conversation concurrent requests serialize and see prior message', as
 
 test('summaries preserve source references and original records while bounding recent history', async t => {
   const f = fixture(t)
+  f.db.setPreference('model-connection', { contextBudget: { mode: 'custom', maxUnits: 48000 } })
   for (let i = 0; i < 18; i += 1) {
     const requestId = randomUUID()
     f.db.appendMessage({ conversationId: 'main', requestId, role: 'user', content: `报告第${i}段还没决定` })
-    f.db.appendMessage({ conversationId: 'main', requestId, role: 'assistant', content: `先保留这个问题${i}` })
+    f.db.appendMessage({ conversationId: 'main', requestId, role: 'assistant', content: `先保留这个问题${i}`, ...(i === 0 ? { reasoningContent: "旧推理".repeat(10000) } : {}) })
   }
   f.responses.push(request => {
     assert.equal(request.response_format.type, 'json_object')
@@ -280,7 +283,10 @@ test('summaries preserve source references and original records while bounding r
   }, reply('我们接着看'))
   await f.xixi.chat(input('继续讨论报告'))
   const summary = f.db.getSummary('main')
-  assert.ok(summary.sourceMessageIds.length >= 12)
+  const covered = f.db.listMessages('main', { limit: 1000 }).filter(message => message.seq <= summary.throughSeq)
+  assert.deepEqual(summary.sourceMessageIds, covered.map(message => message.id), 'every omitted source is covered, rather than summarizing an arbitrary fixed number of turns')
+  const sentSources = JSON.parse(f.requests.at(-1).messages.find(message => message.content?.startsWith('以下对话的出处与发送时间：')).content.slice('以下对话的出处与发送时间：'.length))
+  assert.ok(f.db.listMessages('main', { limit: 1000 }).filter(message => message.seq > summary.throughSeq && message.role === 'user').every(message => sentSources.some(source => source.id === message.id)), 'remaining user turns stay in the sent context')
   assert.equal(f.db.listMessages('main', { limit: 1000 }).length, 38)
   assert.match(summary.text, /未定/)
   assert.ok(contextUnits(f.requests.at(-1).messages) + contextUnits(XIXI_TOOLS) <= HARD_INPUT_UNITS)
@@ -289,7 +295,8 @@ test('summaries preserve source references and original records while bounding r
 
 test('malformed summary leaves original history usable', async t => {
   const f = fixture(t)
-  for (let i = 0; i < 24; i += 1) f.db.appendMessage({ conversationId: 'main', requestId: randomUUID(), role: i % 2 ? 'assistant' : 'user', content: `原文${i}` })
+  f.db.setPreference('model-connection', { contextBudget: { mode: 'custom', maxUnits: 48000 } })
+  for (let i = 0; i < 24; i += 1) f.db.appendMessage({ conversationId: 'main', requestId: randomUUID(), role: i % 2 ? 'assistant' : 'user', content: `原文${i}`, ...(i === 1 ? { reasoningContent: "旧推理".repeat(10000) } : {}) })
   f.responses.push(reply('not json'), reply('继续'))
   const result = await f.xixi.chat(input('继续'))
   assert.equal(result.status, 'completed')
@@ -299,10 +306,11 @@ test('malformed summary leaves original history usable', async t => {
 
 test('long-dialogue summary receives ordered question choices and retains their meaning for ordinal answers', async t => {
   const f = fixture(t)
+  f.db.setPreference('model-connection', { contextBudget: { mode: 'custom', maxUnits: 48000 } })
   const firstRequest = randomUUID()
   f.db.appendMessage({ conversationId: 'main', requestId: firstRequest, role: 'user', content: '报告先留多少时间' })
   const question = f.db.appendMessage({ conversationId: 'main', requestId: firstRequest, role: 'assistant',
-    content: '想先做多久？', question: { options: ['先看题十分钟', '大约一小时', '先不安排'] } })
+    content: '想先做多久？', reasoningContent: '旧推理'.repeat(10000), question: { options: ['先看题十分钟', '大约一小时', '先不安排'] } })
   for (let i = 0; i < 17; i += 1) {
     const requestId = randomUUID()
     f.db.appendMessage({ conversationId: 'main', requestId, role: 'user', content: `先聊其他事情${i}` })

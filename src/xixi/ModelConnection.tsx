@@ -1,3 +1,4 @@
+import { automaticContextBudget } from './contextBudgetPolicy'
 import { useEffect, useRef, useState } from 'react'
 import { localApi } from './api'
 import type { ContextBudgetSettings, LocalDevice, LocalModel, LocalModelEngine, LocalStatus, ModelConnectionTest, ProviderSettings, ReasoningEffort } from './types'
@@ -211,7 +212,7 @@ export function ModelConnection({ status, busy, onAction }: Props) {
       <label htmlFor="deepseek-local-key">{cloudConfigured ? '替换 API Key' : 'API Key'}</label>
       <div className="xixi-model-input-action"><input id="deepseek-local-key" name="astaria-connection-secret" type="password" autoComplete="new-password" autoCapitalize="none" spellCheck={false} value={key} onChange={event => setKey(event.target.value)} placeholder="安全保存到系统凭据存储，不回显" disabled={disabled} /><button type="submit" disabled={disabled || !key.trim()}>保存密钥</button></div>
     </form>
-    <p className="xixi-settings-note">密钥存系统凭据存储。{local ? '联网搜索只发送你明确输入的查询词到 DeepSeek，模型正文仍留在本机。' : compatible ? '此密钥仅用于 DeepSeek 联网搜索，只发送查询词；其它 API 使用上方独立密钥。' : '相关对话与事项交给 DeepSeek，测试会产生少量用量。'}</p>
+    <p className="xixi-settings-note">密钥存系统凭据存储。{local ? '联网搜索复用此 Key，通过 DeepSeek 官方 Search / Fetch 发送查询词或你提供的网址；模型正文仍留在本机。' : compatible ? '此密钥用于 DeepSeek 官方搜索及网页读取；其它 API 使用上方独立密钥。' : '相关对话与事项交给 DeepSeek，测试会产生少量用量。'}</p>
     {cloudConfigured && <button type="button" disabled={disabled} onClick={() => void run('key', async () => { await localApi('/settings/key/remove', {}); setTest(null) }, '已从系统凭据存储移除密钥')}>移除密钥</button>}
   </>
 
@@ -285,11 +286,11 @@ export function ModelConnection({ status, busy, onAction }: Props) {
     </>}
     <div className="xixi-model-web-search">
       <div className="xixi-model-web-search-heading"><strong>联网搜索（可选）</strong><button className="xixi-toggle" type="button" role="switch" aria-label="联网搜索" aria-checked={draft.webSearch.enabled} disabled={disabled} onClick={() => change({ ...draft, webSearch: { ...draft.webSearch, enabled: !draft.webSearch.enabled } })}><span /></button></div>
-      <small>打开后，析熙才会调用 DeepSeek 的联网搜索，并且只发送查询词；课表、事项、聊天和记忆不会随搜索请求发送。{local ? '当前正文仍由本地模型处理。' : ''} 默认关闭。</small>
-      {draft.webSearch.enabled && <small className="xixi-model-web-search-warning">这是独立的云端通道，会产生网络请求和 DeepSeek 用量；请确认你愿意把查询词交给 DeepSeek。</small>}
+      <small>打开后，析熙使用 DeepSeek 官方搜索及网页读取，复用已保存的 DeepSeek Key。请求仅包含查询词或你提供的网址，课表、事项、聊天和记忆不会附带发送。{local ? '当前正文仍由本地模型处理。' : ''} 默认关闭。</small>
+      {draft.webSearch.enabled && <small className="xixi-model-web-search-warning">搜索和网页读取会产生网络请求及 DeepSeek 用量。</small>}
     </div>
     <div className="xixi-model-context-budget">
-      <div className="xixi-model-cloud-row"><label htmlFor="xixi-context-budget-mode">上下文预算</label><AdaptiveSelect id="xixi-context-budget-mode" value={draft.contextBudget.mode} disabled={disabled} aria-describedby="xixi-context-budget-note" onChange={event => change({ ...draft, contextBudget: { ...draft.contextBudget, mode: event.target.value as ContextBudgetSettings['mode'] } })}><option value="auto">自动（{local ? '本地 24K' : '云端 48K'}）</option><option value="custom">自定义</option><option value="off">关闭应用限制</option></AdaptiveSelect></div>
+      <div className="xixi-model-cloud-row"><label htmlFor="xixi-context-budget-mode">上下文预算</label><AdaptiveSelect id="xixi-context-budget-mode" value={draft.contextBudget.mode} disabled={disabled} aria-describedby="xixi-context-budget-note" onChange={event => change({ ...draft, contextBudget: { ...draft.contextBudget, mode: event.target.value as ContextBudgetSettings['mode'] } })}><option value="auto">自动（{automaticContextBudget(draft).hard / 1000}K）</option><option value="custom">自定义</option><option value="off">关闭应用限制</option></AdaptiveSelect></div>
       {customBudget && <div className="xixi-model-budget-custom">
         <label htmlFor="xixi-context-budget-value">预算上限</label>
         <div className="xixi-model-budget-input"><input id="xixi-context-budget-value" type="number" min={8} max={2048} step={1} inputMode="numeric" value={contextBudgetK} disabled={disabled} aria-invalid={!contextBudgetValid} aria-describedby={`xixi-context-budget-note${contextBudgetError ? ' xixi-context-budget-error' : ''}`} onChange={event => {
@@ -301,7 +302,7 @@ export function ModelConnection({ status, busy, onAction }: Props) {
         }} /><span>K</span></div>
       </div>}
       {contextBudgetError && <small id="xixi-context-budget-error" className="xixi-model-budget-error" role="alert">{contextBudgetError}</small>}
-      <small id="xixi-context-budget-note" className="xixi-model-reasoning-note">{draft.contextBudget.mode === 'off' ? '不做应用内压缩或长度拦截；模型接口仍有实际上限。' : '按估算 token 控制上下文，1K = 1000，并非模型官方精确额度。'} 与连接设置一并保存，下一条消息生效。</small>
+      <small id="xixi-context-budget-note" className="xixi-model-reasoning-note">{draft.contextBudget.mode === 'off' ? '不做应用内压缩或长度拦截；模型接口仍有实际上限。' : `按估算 token 控制上下文，${draft.contextBudget.mode === 'auto' ? `约 ${automaticContextBudget(draft).soft / 1000}K 起整理历史，预留后续工具和回复空间；` : ''}1K = 1000，并非模型官方精确额度。`} 与连接设置一并保存，下一条消息生效。</small>
     </div>
     <div className="xixi-model-stream"><div><span>流式输出</span><button className="xixi-toggle" type="button" role="switch" aria-label="流式输出" aria-checked={draft.streamResponses} disabled={disabled} onClick={() => change({ ...draft, streamResponses: !draft.streamResponses })}><span /></button></div><small>逐步显示模型返回的思考和回复 · {draft.streamResponses !== fromStatus(status).streamResponses ? '尚未保存' : '已保存'}，下一条消息生效</small></div>
     <div className="xixi-settings-actions xixi-model-actions">

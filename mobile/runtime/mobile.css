@@ -1,5 +1,9 @@
 /* Safe areas belong to the viewport shell, not to the black-hole scene. */
 html[data-mobile] .p0 { bottom: auto; height: var(--m-layout-height, 100svh) }
+/* Cover native window growth immediately, before the JS viewport sample lands. */
+html[data-mobile=ios], html[data-mobile=ios] body, html[data-mobile=ios] #root { height:100%; overflow:hidden; background:#050506 }
+html[data-mobile=ios]:has(.p0[data-night=false]), html[data-mobile=ios]:has(.p0[data-night=false]) :is(body,#root) { background:#f8f6f2 }
+html[data-mobile=ios] .p0 { min-height:100% }
 html[data-mobile] .home-workspace {
   inset: var(--safe-area-inset-top, env(safe-area-inset-top)) var(--safe-area-inset-right, env(safe-area-inset-right)) var(--safe-area-inset-bottom, env(safe-area-inset-bottom)) var(--safe-area-inset-left, env(safe-area-inset-left));
 }
@@ -8,6 +12,8 @@ html[data-mobile] .p0 button { touch-action: manipulation }
    to avoid WebKit zooming the viewport on focus; do not enlarge all platforms. */
 html[data-mobile] .p0 :is(input, textarea, select) { font-size: 14px; line-height: 1.6 }
 html[data-mobile="ios"] .p0 :is(input, textarea, select) { font-size: 16px }
+/* Chat stays close to the 13px message rhythm; native root scrolling is off. */
+html[data-mobile="ios"] .p0 :is(.home-xixi textarea,.wb-input-textarea) { font-size:14px }
 @supports (-webkit-touch-callout: none) {
   html[data-mobile="preview"] .p0 :is(input, textarea, select) { font-size: 16px }
 }
@@ -17,8 +23,10 @@ html[data-mobile] .xixi-markdown :is(h4,h5,h6) { font-size: 13px }
 html[data-mobile] .p0 textarea { -webkit-user-select: text; user-select: text }
 html[data-mobile] .home-brand { min-height: 44px }
 html[data-mobile] .home-menu button { min-height: 44px }
+html[data-mobile] .home-menu-list { padding-block:0; }
+html[data-mobile] .home-nav { top:0; }
+html[data-mobile] .home-workspace { --workspace-content-top:52px; }
 @media (max-width: 600px) {
-  html[data-mobile] .home-workspace { --workspace-content-top: 64px }
   html[data-mobile] .home-workspace .planner .workspace-heading { grid-template-columns: minmax(0, 1fr) auto }
   html[data-mobile] .home-workspace header.workspace-heading > .workspace-heading-copy { flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0 }
   html[data-mobile] .home-workspace header.workspace-heading > .workspace-heading-copy > .workspace-heading-description { width: 100%; min-width: 0; white-space: normal; overflow-wrap: anywhere; font-size: 11px; line-height: 16px }
@@ -53,23 +61,41 @@ html[data-mobile] .home-menu button { min-height: 44px }
 /* Phone composition uses the original ASTaria components, type and motion. */
 html[data-mobile] .home-workspace {
   --m-text: var(--p0-fg); --m-muted: var(--p0-muted); --m-accent:#d5bb8b; --m-line:var(--p0-line);
+  --m-chat-min-top:var(--home-chat-end-top,52px);
   --m-surface:rgb(8 10 14 / .5); --m-safe-top:var(--safe-area-inset-top,env(safe-area-inset-top,0px)); --m-safe-bottom:var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px));
 }
 html[data-mobile] .home-workspace[data-theme=light] { --m-accent:#927443; --m-surface:rgb(250 251 252 / .65) }
 html[data-mobile] .p0 .home-notification[data-empty=true] { display:none }
-html[data-mobile] .p0-whisper { bottom:calc(21px + var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px))) }
+/* The notification shares the footer with the slogan. Desktop's raised
+   15–18px anchor reaches into the expanded mobile conversation. */
+html[data-mobile] .p0 .home-notification {
+  bottom:0;
+  max-width:min(240px,calc(100% - 2 * var(--home-left) - 112px));
+}
+html[data-mobile] .p0 .home-notification-content { min-width:0 }
+html[data-mobile] .p0-whisper { bottom:calc(5px + var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px))) }
 html[data-mobile-keyboard=open] .p0-whisper,
 html[data-mobile-keyboard=open] .home-notification,
 html[data-mobile] .home-workspace:not([data-page=home]) .home-notification { display:none }
 /* Once the original morph has opened, continuously fit its foreground to the
    visible viewport. No 120px keyboard threshold, second easing or camera reset. */
-html[data-mobile] .home-workspace[data-chat-open=true] .home-morph[data-progress="1.000"] {
-  --m-chat-available:calc(var(--m-visible-height,100svh) - var(--safe-area-inset-top,0px));
-  --m-chat-top:max(52px,calc(var(--home-chat-end-top) - var(--m-keyboard-inset,0px) / 2));
+html[data-mobile]:not([data-mobile-viewport^=native-]) .home-workspace[data-chat-open=true] .home-morph[data-progress="1.000"] {
+  --m-chat-available:calc(var(--m-visible-height,100svh) - var(--m-safe-top,0px));
+  --m-chat-top:max(var(--m-chat-min-top),calc(var(--home-chat-end-top) - var(--m-keyboard-inset,0px) / 2));
   top:calc(var(--m-visible-offset-top,0px) + var(--m-chat-top))!important;
-  height:max(0px,min(calc(var(--home-chat-end-height) - var(--m-keyboard-inset,0px) + var(--home-chat-end-top) - var(--m-chat-top)),calc(var(--m-chat-available) - var(--m-chat-top) - 12px)))!important;
+  height:max(0px,min(var(--home-chat-end-height),calc(var(--m-chat-available) - var(--m-chat-top) - 12px)))!important;
 }
-html[data-mobile] .p0 :is(.xixi-settings-scroll,.free-time-scroll,.wb-scroll) { bottom:auto; height:calc(var(--m-visible-height,var(--m-layout-height,100svh)) - 86px - var(--safe-area-inset-top,0px)); }
+/* One geometry owner throughout the morph, keyboard motion and reversal.
+   Native samples are current animation frames; never animate them a second time. */
+html[data-mobile-viewport^=native-] .home-workspace .home-morph {
+  --m-chat-available:calc(var(--m-visible-height,100svh) - var(--m-safe-top,0px));
+  --m-chat-top:max(var(--m-chat-min-top),min(var(--home-chat-end-top),calc(var(--m-chat-available) - var(--home-chat-end-height) - 12px)));
+  --m-chat-height:max(0px,min(var(--home-chat-end-height),calc(var(--m-chat-available) - var(--m-chat-top) - 12px)));
+  top:calc(var(--home-chat-start-top) + (var(--home-keyboard-top,var(--m-chat-top)) - var(--home-chat-start-top)) * var(--home-chat-progress))!important;
+  height:calc(38px + (var(--home-keyboard-height,var(--m-chat-height)) - 38px) * var(--home-chat-progress))!important;
+  transition:none;
+}
+html[data-mobile] .p0 :is(.xixi-settings-scroll,.free-time-scroll,.wb-scroll) { bottom:auto; height:calc(var(--m-visible-height,var(--m-layout-height,100svh)) - var(--workspace-content-top) - 14px - var(--safe-area-inset-top,0px)); }
 html[data-mobile] .p0 :is(.tti-dialog,.ics-import,.pl-dialog,.home-task-dialog) { max-height:calc(var(--m-visible-height,100svh) - 32px); }
 html[data-mobile] .home-workspace[data-page=settings] > .home-scene-ui,
 html[data-mobile] .home-workspace[data-page=settings] > .workbench,
@@ -116,7 +142,7 @@ html[data-mobile] .free-time-page[data-mobile-view=plans] .free-time-goals { dis
 html[data-mobile] .free-time-page:not([data-mobile-view=plans]) .free-time-plan { display:none }
 html[data-mobile] .free-time-page .free-time-goals>.free-time-pane-content>.free-time-pane-heading>.free-time-tabs { display:none }
 html[data-mobile] .free-time-page:not([data-mobile-view=wishes]) .free-time-layout { gap:0 }
-html[data-mobile] .free-time-viewport { bottom:auto;height:calc(var(--m-visible-height,var(--m-layout-height,100svh)) - 100px - var(--safe-area-inset-top,0px)); }
+html[data-mobile] .free-time-viewport { bottom:auto;height:calc(var(--m-visible-height,var(--m-layout-height,100svh)) - var(--workspace-content-top) - 14px - var(--safe-area-inset-top,0px)); }
 /* One phone workspace material. The goals pane is the spacing/contrast anchor;
    lazy page CSS must not introduce another veil or brighter reading plate. */
 html[data-mobile] .home-workspace {
@@ -129,13 +155,17 @@ html[data-mobile] .home-workspace[data-theme=light] {
   --m-panel-rgb:250 251 252; --m-scene-fill:rgb(252 253 255 / .65);
 }
 html[data-mobile] .home-workspace[data-glass-tone=dark] { --m-panel-tint:.62; }
+/* Only the expanded home clear glass gets four points more tint. */
+html[data-mobile] .home-workspace[data-chat-open=true] .home-morph[data-chat-glass=clear] {
+  --mobile-glass-fill:rgb(var(--m-panel-rgb) / calc(var(--m-panel-tint) + .04 * var(--home-chat-progress,0)));
+}
 .mobile-workspace-scene { position:absolute; inset:0; pointer-events:none; background:var(--m-scene-fill); visibility:hidden; }
 /* The scene continues behind system icons; only interactive content is inset. */
 html[data-mobile] .mobile-workspace-scene { inset:calc(-1 * var(--safe-area-inset-top,env(safe-area-inset-top,0px))) calc(-1 * var(--safe-area-inset-right,env(safe-area-inset-right,0px))) calc(-1 * var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px))) calc(-1 * var(--safe-area-inset-left,env(safe-area-inset-left,0px))); }
 html[data-mobile] .home-workspace:not([data-page=home]) > .mobile-workspace-scene { visibility:visible; }
 .mobile-workspace-scene::after { content:''; position:absolute; inset:0; opacity:.25; background-image:linear-gradient(#c0c5ce0c 1px,transparent 1px),linear-gradient(90deg,#c0c5ce0c 1px,transparent 1px); background-size:32px 32px; }
 .home-workspace[data-grid=false] > .mobile-workspace-scene::after { display:none; }
-html[data-mobile] .p0 .home-workspace:not([data-page=home])::before { content:none; }
+html[data-mobile] .p0 .home-workspace:not([data-page=home])[data-theme]::before { content:none; }
 html[data-mobile] .p0 .home-workspace :is(.wb-background,.free-time-background,.xixi-settings-background) { display:none; }
 html[data-mobile] .p0 .home-workspace[data-theme] :is(.workbench,.free-time-page,.xixi-settings,.mobile-schedule-workspace) .home-glass-measure > .home-glass-surface,
 html[data-mobile] .p0 .home-workspace[data-theme] .home-menu > .home-glass-measure > .home-glass-surface,
@@ -143,11 +173,9 @@ html[data-mobile] .p0 .home-workspace[data-chat-open=true] .home-morph > .home-g
   background:rgb(var(--m-panel-rgb) / var(--m-panel-tint));
 }
 html[data-mobile] .p0 .home-workspace :is(.wb-glass,.free-time-pane,.xixi-settings-panel,.m-calendar-body) { border-radius:var(--m-panel-radius); }
-/* Use the same native thin scrollbar contract. Desktop's custom WebKit bars
-   reserve a different gutter from the phone settings/calendar and shift edges. */
-html[data-mobile] .p0 :is(.wb-scroll.wb-scroll,.free-time-viewport.free-time-viewport,.xixi-settings-scroll,.mobile-schedule-workspace) {
-  scrollbar-width:thin; scrollbar-color:color-mix(in srgb,var(--m-muted) 55%,transparent) transparent;
-}
+/* Touch scrolling remains available without rails over the glass surfaces. */
+html[data-mobile], html[data-mobile] * { scrollbar-width:none!important; }
+html[data-mobile]::-webkit-scrollbar, html[data-mobile] *::-webkit-scrollbar { display:none!important; width:0!important; height:0!important; }
 html[data-mobile] .p0 .home-workspace .wb-briefing-panel { padding:var(--m-panel-padding); }
 html[data-mobile] .p0 .home-workspace .wb-briefing-content { padding:0; }
 html[data-mobile] .p0 .home-workspace :is(.free-time-pane-content,.xixi-settings-shell) { padding-inline:var(--m-panel-padding); }
@@ -164,3 +192,45 @@ html[data-mobile] .p0 .home-workspace .xixi-settings { --settings-line:var(--m-l
   html[data-mobile] .wb-briefing-content { padding:16px; }
   html[data-mobile] .home-workspace .wb-briefing-content :is(p,strong) { font-size:13px; line-height:1.7; }
 }
+
+/* Touch controls cannot depend on hover for their readable state. Keep the
+   existing materials; separate the ink from bright scene details instead. */
+html[data-mobile] .home-workspace { --m-chat-secondary:#d9dce1; --m-chat-text-shadow:0 1px 2px rgb(0 0 0 / .9), 0 0 5px rgb(0 0 0 / .55); --m-chat-icon-shadow:drop-shadow(0 1px 2px rgb(0 0 0 / .8)); }
+html[data-mobile] .home-workspace[data-theme=light] { --m-chat-secondary:#4b535e; --m-chat-text-shadow:none; --m-chat-icon-shadow:none; }
+html[data-mobile] .p0 .xixi-message-actions { opacity:1 }
+html[data-mobile] .p0 :is(.xixi-message-actions button,.xixi-reasoning-toggle,.xixi-reasoning-copy,.xixi-reasoning-round>small,.xixi-collection-summary,.xixi-receipt-details,.xixi-stream-status,.xixi-status) { color:var(--m-chat-secondary); text-shadow:var(--m-chat-text-shadow) }
+html[data-mobile] .p0 :is(.xixi-receipt,.xixi-reasoning,.xixi-message-actions) { text-shadow:var(--m-chat-text-shadow) }
+html[data-mobile] .p0 :is(.xixi-message-actions,.xixi-reasoning-copy,.xixi-receipt) svg { filter:var(--m-chat-icon-shadow) }
+
+/* Native dialog boxes own safe-area spacing exactly once. Inner header/footer
+   paddings are ordinary content spacing, so the scroll body gets real room. */
+html[data-mobile] .p0 dialog.import-surface {
+  --m-dialog-top:calc(var(--safe-area-inset-top,env(safe-area-inset-top,0px)) + var(--workspace-content-top,52px));
+  --m-dialog-bottom:max(12px,var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px)));
+  --m-dialog-height:max(160px,calc(var(--m-visible-height,100dvh) - var(--m-dialog-top) - var(--m-dialog-bottom)));
+  inset:auto; top:calc(var(--m-visible-offset-top,0px) + var(--m-dialog-top));
+  left:max(12px,var(--safe-area-inset-left,0px)); right:max(12px,var(--safe-area-inset-right,0px));
+  margin:0 auto; width:min(920px,calc(100% - 24px)); height:min(720px,var(--m-dialog-height)); max-height:var(--m-dialog-height);
+  border-radius:22px; border-bottom:1px solid var(--import-line);
+}
+html[data-mobile] .p0 dialog.import-surface.m-calendar-sheet { width:min(560px,calc(100% - 24px)); height:auto; }
+html[data-mobile] .p0 .import-surface .import-surface-content { height:100%; min-height:0; max-height:100%; overflow:hidden; }
+html[data-mobile] .p0 .import-surface .import-header { padding:14px 16px 12px; }
+html[data-mobile] .p0 .import-surface .import-footer { padding:12px 16px; }
+html[data-mobile] .p0 .import-surface .import-body { flex:1 1 0; min-height:0; overflow-y:auto; scroll-padding-bottom:20px; padding-bottom:24px; }
+html[data-mobile] .p0 .import-surface .m-calendar-sheet-body { flex:0 1 auto; }
+@media (min-width:748px) {
+  html[data-mobile] .p0 dialog.import-surface {
+    bottom:calc(100dvh - var(--m-visible-offset-top,0px) - var(--m-visible-height,100dvh) + var(--m-dialog-bottom));
+    margin:auto;
+  }
+  html[data-mobile] .p0 dialog.import-surface.m-calendar-sheet { height:fit-content }
+}
+
+/* The home wash covers system insets just like the shared workspace wash.
+   Safe-area padding constrains controls, never the scene's color treatment. */
+html[data-mobile] .p0 .home-workspace[data-page=home][data-theme=light]::before {
+  inset:calc(-1 * var(--safe-area-inset-top,env(safe-area-inset-top,0px))) calc(-1 * var(--safe-area-inset-right,env(safe-area-inset-right,0px))) calc(-1 * var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px))) calc(-1 * var(--safe-area-inset-left,env(safe-area-inset-left,0px)));
+}
+html[data-mobile] .p0 .xixi-message[data-role=assistant] > span { color:var(--m-chat-secondary); text-shadow:var(--m-chat-text-shadow); }
+html[data-mobile] .p0 .xixi-stream > span small { color:inherit; }

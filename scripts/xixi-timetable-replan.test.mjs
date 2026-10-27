@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { createDatabase } from '../server/database.mjs'
 import { createXixi } from '../server/xixi.mjs'
 import { dayCapacity, minuteOf } from '../src/planner/model.ts'
+import { finishResponse } from './fixtures/model-receipt.mjs'
 
 process.env.TZ = 'Asia/Shanghai'
 const date = '2026-10-16', now = new Date('2026-10-12T12:00:00+08:00')
@@ -221,7 +222,8 @@ for (const manual of ['none', 'move', 'delete']) test(`recovery before a tool re
     return response
   }, payload => {
     outcomes.push(receipt(payload))
-    return qaReply('沿用原操作，当前安排以最新日历为准，后续手工修改保留。')
+    return finishResponse(payload, '沿用原操作，当前安排以最新日历为准，后续手工修改保留。',
+      '重复的是同一份课表调整，当前安排以最新日历为准，后来的手工修改继续保留。')
   })
   const retried = await qa.run(input)
   assert.equal(retried.status, 'completed')

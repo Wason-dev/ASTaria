@@ -42,7 +42,7 @@ function parseEvent(data: string): ChatStreamEvent | null {
     }
   }
   if (typeof value.round === 'number' && Number.isInteger(value.round) && value.round >= 0) {
-    if (value.type === 'round') return { type: 'round', round: value.round }
+    if (value.type === 'round' || value.type === 'round-discarded') return { type: value.type, round: value.round }
     if (value.type === 'thinking-title' && typeof value.title === 'string' && value.title.trim()
       && Array.from(value.title).length <= 24 && !/[<>`\u0000-\u001f]/u.test(value.title)) return { type: 'thinking-title', round: value.round, title: value.title.trim() }
     if ((value.type === 'reasoning' || value.type === 'content') && typeof value.delta === 'string') return { type: value.type, round: value.round, delta: value.delta }
@@ -61,6 +61,12 @@ export function restoreChatReasoning(draft: ChatStreamDraft, saved: SavedReasoni
 
 /** Keep the provider's reasoning across tools; temporary prose is not a receipt. */
 export function advanceChatStream(draft: ChatStreamDraft, event: ChatStreamEvent): ChatStreamDraft {
+  if (event.type === 'round-discarded') {
+    const previous = draft.contentRounds ?? (draft.content ? [{ round: draft.contentRound ?? draft.round, content: draft.content }] : [])
+    const contentRounds = previous.filter(part => part.round !== event.round)
+    if (previous.length === contentRounds.length) return draft
+    return { ...draft, contentRounds, content: contentRounds.map(part => part.content).join('\n\n'), contentRound: contentRounds.at(-1)?.round }
+  }
   if (event.type === 'context-usage') return { ...draft, contextUsage: event.usage }
   if (event.type === 'sources') return { ...draft, sources: uniqueSourceMetadata(event.sources) }
   if (event.type === 'phase') return { ...draft, phase: event.phase, ...(event.phase !== 'thinking' ? { thinkingTitle: undefined } : {}) }
@@ -74,7 +80,7 @@ export function advanceChatStream(draft: ChatStreamDraft, event: ChatStreamEvent
   if (event.type !== 'round' && event.type !== 'reasoning' && event.type !== 'content') return draft
   if (event.round < draft.round) return draft
   const next = event.round > draft.round
-    ? { ...draft, round: event.round, content: '', thinkingTitle: undefined, phase: 'thinking' as const }
+    ? { ...draft, round: event.round, thinkingTitle: undefined, phase: 'thinking' as const }
     : draft
   if (event.type === 'reasoning') {
     if (!event.delta) return next
@@ -87,13 +93,21 @@ export function advanceChatStream(draft: ChatStreamDraft, event: ChatStreamEvent
     const reasoningContent = next.reasoningContent + (!exists && next.reasoningContent ? '\n\n' : '') + event.delta
     return { ...next, reasoningRounds, reasoningContent, phase: 'thinking' }
   }
-  if (event.type === 'content') return { ...next, content: next.content + event.delta, thinkingTitle: undefined, phase: 'replying' }
+  if (event.type === 'content') {
+    if (!event.delta) return next
+    const previous = next.contentRounds ?? (next.content ? [{ round: next.contentRound ?? draft.round, content: next.content }] : [])
+    const contentRounds = previous.some(part => part.round === event.round)
+      ? previous.map(part => part.round === event.round ? { ...part, content: part.content + event.delta } : part)
+      : [...previous, { round: event.round, content: event.delta }]
+    return { ...next, contentRounds, content: contentRounds.map(part => part.content).join('\n\n'),
+      contentRound: event.round, thinkingTitle: undefined, phase: 'replying' }
+  }
   return next
 }
 
-/** A visible reply means the model has left its private reasoning phase. */
+/** Reasoning is observable progress too, even before the first reply token. */
 export function streamHasVisibleProgress(draft: ChatStreamDraft) {
-  return Boolean(draft.content.trim() || draft.activities?.some(item => item.state === 'done' || item.state === 'failed'))
+  return Boolean(draft.content.trim() || draft.reasoningContent.trim() || draft.activities?.some(item => item.state === 'done' || item.state === 'failed'))
 }
 
 /** Accept only complete, explicitly marked progress lines. Ordinary thoughts

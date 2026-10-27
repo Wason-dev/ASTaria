@@ -160,11 +160,26 @@ async function start() {
   }
   session.defaultSession.setPermissionRequestHandler((contents, permission, callback) => callback(clipboardWrite(contents, permission)))
   session.defaultSession.setPermissionCheckHandler((contents, permission) => clipboardWrite(contents, permission))
-  Menu.setApplicationMenu(process.platform === 'win32' ? null : Menu.buildFromTemplate([
-    { role: 'appMenu', label: 'ASTaria' },
+  const navigate = action => {
+    if (!window || window.isDestroyed()) return
+    try { if (new URL(window.webContents.getURL()).origin !== appOrigin) return } catch { return }
+    void window.webContents.executeJavaScript(`window.dispatchEvent(new CustomEvent('astaria-native-menu',{detail:${JSON.stringify(action)}}))`).catch(() => {})
+  }
+  const destination = (label, accelerator, action) => ({ id: `astaria-${action}`, label, accelerator, click: () => navigate(action) })
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    ...(process.platform === 'darwin' ? [{ role: 'appMenu', label: 'ASTaria' }] : []),
+    { label: '文件', submenu: [destination('新建对话', 'CmdOrCtrl+Shift+N', 'new-conversation'), { type: 'separator' }, { role: 'close', label: '关闭窗口' }] },
     { role: 'editMenu', label: '编辑' },
-    { label: '显示', submenu: [{ role: 'reload', label: '刷新页面' }, { role: 'togglefullscreen', label: '切换全屏' }] },
+    { label: '显示', submenu: [
+      destination('首页', 'CmdOrCtrl+1', 'home'), destination('工作台', 'CmdOrCtrl+2', 'workbench'),
+      destination('日程', 'CmdOrCtrl+3', 'schedule'), destination('余时', 'CmdOrCtrl+4', 'free-time'),
+      destination('设置', 'CmdOrCtrl+,', 'settings'), { type: 'separator' },
+      destination('展开 / 收起析熙', 'CmdOrCtrl+L', 'toggle-chat'), { type: 'separator' },
+      { role: 'reload', label: '刷新页面' },
+      ...(process.platform === 'darwin' ? [] : [{ role: 'togglefullscreen', label: '切换全屏' }])
+    ] },
     { role: 'windowMenu', label: '窗口' },
+    { label: '帮助', submenu: [{ label: 'ASTaria 官网与使用说明', click: () => { void shell.openExternal('https://astaria.space') } }] },
   ]))
   window = new BrowserWindow({
     width: 1440,
@@ -195,6 +210,7 @@ async function start() {
     },
   })
   if (process.platform === 'win32') {
+    window.setMenuBarVisibility(false)
     window.webContents.on('before-input-event', (event, input) => {
       if (input.type !== 'keyDown') return
       if (input.key === 'F11') { event.preventDefault(); window.setFullScreen(!window.isFullScreen()) }

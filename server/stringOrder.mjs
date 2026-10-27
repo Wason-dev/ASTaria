@@ -47,13 +47,14 @@ export function createVerifiedOrder({ db, complete, now = () => new Date(), poli
       && active(taskMap.get(block.taskId)) && !completed.has(block.id)).sort(chronology).map(block => {
       const task = taskMap.get(block.taskId)
       const elapsed = instant(block.date, block.start) <= at.getTime()
-      const underway = policy.includeElapsedToday && elapsed && task.status === 'doing'
-      const movable = !block.locked && !underway
+      // An unchecked task is not consent to replay its elapsed calendar slot.
+      // Started placements are immutable references in this ordering flow.
+      const underway = elapsed && instant(block.date, block.end) > at.getTime()
+      const movable = !block.locked && !elapsed
       return { id: block.id, taskId: block.taskId, title: task.title, date: block.date, start: block.start, end: block.end,
         durationMin: duration(block), ...(task.due ? { due: task.due } : {}), movable,
-        ...(movable && elapsed ? { needsReschedule: true } : {}),
         ...(block.horizonGroupId ? { horizonGroupId: block.horizonGroupId, horizonGroupTitle: block.horizonGroupTitle } : {}),
-        ...(block.locked ? { reason: '这段时间已锁定' } : underway ? { reason: '正在进行，保留当前安排' } : {}) }
+        ...(block.locked ? { reason: '这段时间已锁定' } : underway ? { reason: '时段已开始，保留原安排' } : elapsed ? { reason: '时段已结束，保留原记录' } : {}) }
     })
     const movable = items.filter(item => item.movable), removed = new Set(movable.map(item => item.id))
     const working = { ...state, blocks: state.blocks.filter(block => !removed.has(block.id)) }
@@ -64,7 +65,6 @@ export function createVerifiedOrder({ db, complete, now = () => new Date(), poli
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
     const snapshotKey = hash({ date, timezone, state, tasks: [...tasks].sort((a, b) => a.id.localeCompare(b.id)),
       goals, history, movableIds: movable.map(item => item.id),
-      ...(policy.includeElapsedToday ? { elapsedIds: movable.filter(item => item.needsReschedule).map(item => item.id) } : {}),
       ...(policy.signature ? { policy: policy.signature(db) } : {}) })
     const view = { date, days, revision: state.revision, snapshotKey, asOf: at.toISOString(), items }
     const snap = { view, at, dates, state, tasks, taskMap, goals, movable, working, capacityTasks, timezone }

@@ -2,6 +2,15 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createWorkOrder } from '../server/workOrder.mjs'
 
+test('split successful planner reads recover a failed range only after every date and section is covered', () => {
+  const order=createWorkOrder({requestId:'read-range',conversationId:'main',userMessageId:'user'})
+  const failed=order.step('failed','read_planner');failed.plannerQuery={date:'2026-10-23',days:2,section:'blocks',offset:0};order.fail(failed,'详细分页每次读取一天，请使用要继续查看的date')
+  const page=(id,date,section='blocks',revision=4)=>{const step=order.step(id,'read_planner');order.succeed(step,{type:'planner_read',revision,days:[{date,section,[section]:{offset:0,items:[]}}]})}
+  page('wrong-section','2026-10-24','routines');page('first','2026-10-23');assert.equal(order.value.failures.length,1)
+  page('old-revision','2026-10-24','blocks',3);assert.equal(order.value.failures.length,1)
+  page('second','2026-10-24');assert.equal(order.value.failures.length,0);assert.equal(failed.status,'recovered')
+})
+
 test('an occurrence verifies requested minutes independently of a later estimate edit', () => {
   const order = createWorkOrder({ requestId: 'repeat-edit', conversationId: 'chat', userMessageId: 'msg' })
   order.expectSchedule('sat', 20, '每天20分钟', { date: '2026-09-22' })

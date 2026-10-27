@@ -40,6 +40,7 @@ test('校庆与临时课程一次记录到精确时刻，不受空课边界/已�
     assert.ok(request.tools.some(item => item.function.name === 'save_day_events'))
     return read()
   }, () => save(f.db), request => {
+    assert.equal(request.tool_choice, undefined, 'the final reply stays compatible with DeepSeek thinking mode')
     const result = receipt(request)
     assert.equal(result.savedEvents.length, 2)
     assert.ok(result.conflicts[0].items.some(item => item.id === 'review'))

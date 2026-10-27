@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { createGeodesicTexture } from './geodesicSampling'
 import { portraitCameraOffset } from './portraitComposition'
+import { HORIZON_MEDIA_OVERSCAN } from './backgroundMedia'
 import { vertexShader, fragmentShader } from './shaders'
 import { createGeodesicLut } from './geodesics'
 import type { GeodesicLut } from './geodesics'
@@ -317,6 +318,7 @@ export class BlackHoleRenderer {
         uCameraRadius: { value: geodesics.cameraRadius },
         uFlightCameraRadius: { value: STRING_FLIGHT_START_RADIUS },
         uFlightEdgeFocus: { value: 0 },
+        uCaptureExposureScale: { value: 1 },
         uFlightApproach: { value: 0 },
         uFlightEdgePull: { value: new THREE.Vector3(0, 0, .1) },
         uResponseStrength: { value: 0 },
@@ -570,7 +572,7 @@ export class BlackHoleRenderer {
 
   /** Offline asset authoring only. Never called by the application frame loop.
    * Export at native 4K rather than upscaling the interactive pixel budget. */
-  captureFrame(seconds: number, width: number, height: number): HTMLCanvasElement {
+  captureFrame(seconds: number, width: number, height: number, view: 'panorama' | 'horizon' = 'panorama'): HTMLCanvasElement {
     if (!Number.isFinite(seconds) || seconds < 0 || !Number.isInteger(width) || !Number.isInteger(height)
       || width < 1 || height < 1 || width * height > 3840 * 2160) throw new Error('Invalid capture dimensions')
     this.setPaused(true)
@@ -582,6 +584,23 @@ export class BlackHoleRenderer {
     this.sceneTarget.setSize(width, height)
     this.bloom.resize(width, height, false)
     this.syncCameraUniforms()
+    // Author the close-up from the actual horizon camera/exposure, never by
+    // scaling the panorama. This is offline only; media playback stays 2D.
+    const uniforms = this.material.uniforms
+    uniforms.uFlightCameraRadius.value = STRING_FLIGHT_START_RADIUS
+    uniforms.uFlightEdgeFocus.value = view === 'horizon' ? 1 : 0
+    // Overscan widens the offline camera, not the bright band around the limb.
+    // Runtime rendering keeps this at 1, preserving its existing exposure.
+    uniforms.uCaptureExposureScale.value = view === 'horizon' ? HORIZON_MEDIA_OVERSCAN : 1
+    uniforms.uFlightApproach.value = view === 'horizon' ? 1 : 0
+    if (view === 'horizon') {
+      const pose = resolveStringFlightCamera({ zoom: uniforms.uZoom.value,
+        roll: THREE.MathUtils.radToDeg(uniforms.uRoll.value), inclination: THREE.MathUtils.radToDeg(uniforms.uInclination.value),
+        centerX: this.cameraCenter.x, centerY: this.cameraCenter.y }, 1, 'edge', width / height, { height: .62, curvature: .16 })
+      this.cameraCenter.set(pose.centerX, .5 + (pose.centerY - .5) / HORIZON_MEDIA_OVERSCAN)
+      uniforms.uZoom.value = pose.zoom / HORIZON_MEDIA_OVERSCAN; uniforms.uRoll.value = THREE.MathUtils.degToRad(pose.roll)
+      uniforms.uInclination.value = THREE.MathUtils.degToRad(pose.inclination); uniforms.uFlightCameraRadius.value = pose.radius
+    }
     this.material.uniforms.uTime.value = seconds
     this.material.uniforms.uNight.value = this.night
     this.infall.update(seconds, this.material.uniforms.uBurst.value, this.night, this.resolution,
@@ -961,8 +980,9 @@ export class BlackHoleRenderer {
     this.cssWidth = width
     this.cssHeight = height
     this.activeDpr = ratio
-    this.renderer.setPixelRatio(ratio)
-    this.renderer.setSize(width, height, false)
+    // setPixelRatio also calls setSize internally. Window resizing should
+    // allocate the final drawing buffer once, not first at the old CSS size.
+    this.renderer.setDrawingBufferSize(width, height, ratio)
     this.renderer.getDrawingBufferSize(this.resolution)
     this.sceneTarget.setSize(this.resolution.x, this.resolution.y)
     this.bloom.resize(this.resolution.x, this.resolution.y, this.quality === 'safe')

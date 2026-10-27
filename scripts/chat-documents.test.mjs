@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { Readable } from 'node:stream'
 import { createDatabase } from '../server/database.mjs'
 import { createLocalService } from '../server/index.mjs'
@@ -20,6 +20,10 @@ const makeDocument = (sections = [{ label: '第1页', text: '合成文档正文'
   kind: 'document', name: `合成资料.${format}`, mime: DOCUMENT_MIME[format], size: bytes.length, data: url(bytes, DOCUMENT_MIME[format]),
   document: { format, sections, warnings: [] },
 })
+// A turn stores only the bounded summary; the user message keeps the raw bytes.
+const attachmentSummary = doc => ({ kind: 'document', name: doc.name, mime: doc.mime, size: doc.size,
+  sha256: createHash('sha256').update(Buffer.from(doc.data.slice(doc.data.indexOf(',') + 1), 'base64')).digest('hex'),
+  documentSha256: createHash('sha256').update(JSON.stringify(doc.document)).digest('hex') })
 const fixture = t => { const db = createDatabase(':memory:'); t.after(() => db.close()); return db }
 const reply = content => ({ choices: [{ message: { role: 'assistant', content } }] })
 const call = (name, args, id = randomUUID()) => ({ id, type: 'function', function: { name, arguments: JSON.stringify(args) } })
@@ -219,14 +223,14 @@ test('original attachment, failed scan retry and backup restore keep raw bytes a
     return reply('重试后仍然读取同一份资料。')
   }})
   const failed=await xixi.chat(request);assert.equal(failed.status,'failed')
-  assert.deepEqual(db.getTurn(request.requestId).attachments,[doc])
+  assert.deepEqual(db.getTurn(request.requestId).attachments,[attachmentSummary(doc)])
   const retried=await xixi.chat(request);assert.equal(retried.status,'completed');assert.equal(n,3)
   assert.equal(db.listMessages('main',{limit:1000}).filter(m=>m.role==='user').length,1)
   assert.deepEqual(db.getMessage(`${request.requestId}:user`).attachments,[doc])
   const backup=db.exportData(), target=fixture(t)
   assert.equal(target.importData(backup).restored,true)
   assert.deepEqual(target.getMessage(`${request.requestId}:user`).attachments,[doc])
-  assert.deepEqual(target.getTurn(request.requestId).attachments,[doc])
+  assert.deepEqual(target.getTurn(request.requestId).attachments,[attachmentSummary(doc)])
   assert.equal(readAttachment(target,'main',{messageId:`${request.requestId}:user`}).sectionRefs[0].hasImage,true)
 })
 

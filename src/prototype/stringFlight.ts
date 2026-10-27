@@ -23,6 +23,13 @@ let currentEdgeFrame = { ...DEFAULT_EDGE_FRAME }
 let currentEdgePull = { ...EMPTY_EDGE_PULL }
 let renderedProjection: StringFlightProjection | null = null
 
+/** Media layers publish their actual transformed circle, in the same units as
+ * the live renderer. The horizon canvas need not know how it was drawn. */
+export function publishMediaStringFlightProjection(projection: StringFlightProjection) {
+  if (!Object.values(projection).every(Number.isFinite) || projection.width <= 0 || projection.height <= 0 || projection.radius <= 0) return
+  renderedProjection = { ...projection }
+}
+
 const finiteClamp = (value: number, fallback: number, min: number, max: number) =>
   Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback
 const wrapAngle = (angle: number) => ((angle + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI

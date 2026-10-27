@@ -84,7 +84,7 @@ export function createDesktopHandler({ root, service, token, updates, reminders,
       if (!types[extension]) { send(res, 404, 'Not found'); return }
       res.setHeader('Content-Type', types[extension])
       res.setHeader('Cache-Control', 'no-store')
-      res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self'; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
+      res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; connect-src 'self' https://raw.githubusercontent.com/Wason-dev/ASTaria/ab225bd2e73ad1560fd35254430261132af71da3/; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
       if (extension === '.mp4') {
         res.setHeader('Accept-Ranges', 'bytes')
         const range = req.headers.range

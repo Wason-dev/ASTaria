@@ -4,27 +4,27 @@ import { readFileSync } from 'node:fs'
 import { createWebSearch, readJSON } from '../server/webSearchCore.mjs'
 
 const settings = () => ({ webSearch: { enabled: true, maxUses: 2 } })
-const rows = { content: [{ type: 'web_search_tool_result', content: [{ type: 'web_search_result', title: 'Fixture', url: 'https://example.com/fixture' }] }] }
+const rows = { results: [{ title: 'Fixture', url: 'https://example.com/fixture', content: '公开正文' }] }
 const deferred = () => { let resolve; const promise = new Promise(done => { resolve = done }); return { promise, resolve } }
 const bytes = text => new TextEncoder().encode(text)
 
-test('portable search has no Node page dependency, Buffer, or eager desktop page access', async () => {
+test('portable Search and Fetch use the same transport without a Node page dependency', async () => {
   const code = readFileSync(new URL('../server/webSearchCore.mjs', import.meta.url), 'utf8')
   assert.doesNotMatch(code, /\bBuffer\b|node:|sourcePage\.mjs|\.arrayBuffer\(/u)
-  const search = createWebSearch({ getSettings: settings, keychain: { read: async () => 'fake-key' }, fetcher: async () => Response.json(rows) })
-  const direct = await search.search('https://github.com/fixture/repo')
-  assert.equal(direct.sources[0].fetchStatus, 'failed')
-  assert.equal(direct.sources[0].content, '')
-  const queried = await search.search('fixture')
-  assert.equal(queried.sources[0].fetchStatus, 'failed')
-  assert.equal(queried.sources[0].content, '')
+  const search = createWebSearch({ getSettings: settings, keychain: { read: async () => 'fake-key' },
+    fetcher: async url => Response.json(url.endsWith('/fetch') ? { content: '公开正文' } : rows) })
+  for (const query of ['https://github.com/fixture/repo', 'fixture']) {
+    const result = await search.search(query)
+    assert.equal(result.sources[0].fetchStatus, 'ok')
+    assert.equal(result.sources[0].content, '公开正文')
+  }
 })
 
-test('mobile-compatible adapter injection receives cancellation and requires a nonempty body for ok', async () => {
+test('Fetch requires a nonempty body for verified status and passes cancellation through', async () => {
   const observed = [], controller = new AbortController()
-  const search = createWebSearch({ getSettings: settings, pageFetcher: async (_url, { signal }) => {
+  const search = createWebSearch({ getSettings: settings, keychain: { read: async () => 'fake-key' }, fetcher: async (_url, { signal }) => {
     observed.push(signal)
-    return { fetchStatus: 'ok', fetchedAt: '2026-10-12T00:00:00.000Z', content: '  ' }
+    return Response.json({ content: '  ' })
   } })
   const result = await search.search('https://example.com/fixture', { signal: controller.signal })
   assert.equal(result.sources[0].fetchStatus, 'empty')
@@ -42,9 +42,9 @@ test('bounded JSON reader keeps split UTF-8 intact without using arrayBuffer', a
 test('bounded JSON reader cancels at the byte limit before reading the unbounded remainder', async () => {
   let cancelled = false, pulls = 0
   const body = new ReadableStream({ pull(controller) { pulls += 1; controller.enqueue(bytes('x'.repeat(200 * 1024))) }, cancel() { cancelled = true } })
-  await assert.rejects(readJSON({ body }), /无法读取/u)
+  await assert.rejects(readJSON({ body }), /内容过大.*4 MiB/u)
   assert.equal(cancelled, true)
-  assert.ok(pulls <= 5, `must stop at the byte limit, observed ${pulls} chunks`)
+  assert.ok(pulls <= 22, `must stop at the 4 MiB byte limit plus at most one prefetched chunk, observed ${pulls} chunks`)
 })
 
 test('cancellation while reading JSON releases the idle stream before page access', async () => {
@@ -88,18 +88,15 @@ test('caller abort reaches cloud search and stops a late response before page fe
   assert.equal(pages, 0)
 })
 
-test('failed adapter bodies and snippets cannot become read page content', async () => {
-  const search = createWebSearch({ getSettings: settings, pageFetcher: async () => ({ content: 'must not be treated as read', fetchStatus: 'failed' }) })
-  const result = await search.search('https://example.com/fixture')
-  assert.equal(result.sources[0].content, '')
-  assert.equal(result.sources[0].fetchStatus, 'failed')
-  assert.ok(Number.isFinite(Date.parse(result.sources[0].fetchedAt)))
+test('Fetch rejects missing content rather than using its title or summary', async () => {
+  const search = createWebSearch({ getSettings: settings, keychain: { read: async () => 'fake-key' }, fetcher: async () => Response.json({ title: '标题', summary: '摘要' }) })
+  await assert.rejects(search.search('https://example.com/fixture'), /没有返回网页正文/u)
 })
 
 test('an unsafe or malformed complete URL never falls through to a credentialed search query', async () => {
   let calls = 0
   const unexpected = () => { calls += 1; throw new Error('must not contact any adapter') }
   const search = createWebSearch({ getSettings: settings, keychain: { read: unexpected }, fetcher: unexpected, pageFetcher: unexpected })
-  for (const query of ['https://username:password@example.com/private', 'https://%invalid']) await assert.rejects(search.search(query), /网页地址无效/u)
+  for (const query of ['https://username:password@example.com/private', 'https://%invalid', 'file:///tmp/private', 'http://localhost/', 'http://127.0.0.1/', 'https://host.internal/', 'http://[::1]/', 'https://example.com:9999/']) await assert.rejects(search.search(query), /网页地址|公开网页/u)
   assert.equal(calls, 0)
 })

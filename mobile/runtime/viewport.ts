@@ -1,5 +1,6 @@
 import { Capacitor, registerPlugin } from '@capacitor/core'
 import type { PluginListenerHandle } from '@capacitor/core'
+import { attachIOSViewport } from './iosViewport.ts'
 
 export const MOBILE_VIEWPORT_EVENT = 'astaria-mobile-viewport-change'
 
@@ -10,6 +11,10 @@ export type NativeViewport = {
   visibleHeight: number
   keyboardInset: number
   keyboardVisible: boolean
+  /** True only while native is publishing the system IME animation curve. */
+  keyboardAnimating?: boolean
+  /** Native sequence keeps delayed queries from replacing newer keyboard frames. */
+  revision?: number
   /** Present when native owns edge-to-edge insets, independently of WebView CSS. */
   safeArea?: { top: number; right: number; bottom: number; left: number }
 }
@@ -34,6 +39,7 @@ export type MobileViewportMetrics = {
   /** Bottom occlusion only: iOS viewport panning is not part of the IME. */
   keyboardInset: number
   keyboard: 'open' | 'closed'
+  keyboardAnimating?: boolean
   safeArea?: NativeViewport['safeArea']
 }
 
@@ -95,6 +101,21 @@ export function calculateMobileViewport(input: MobileViewportInput, previous?: M
   }
 }
 
+/** Android already supplies window-relative geometry. Consume it without
+ * reading innerHeight/visualViewport after writing CSS in the previous frame. */
+export function nativeAndroidViewport(value: NativeViewport | null): MobileViewportMetrics | null {
+  const safe = value?.safeArea
+  if (!value || !safe || ![value.layoutWidth, value.layoutHeight, value.visibleHeight].every(n => Number.isFinite(n) && n > 0)
+    || !Number.isFinite(value.keyboardInset) || value.keyboardInset < 0
+    || !['top', 'right', 'bottom', 'left'].every(edge => Number.isFinite(safe[edge as keyof typeof safe]) && safe[edge as keyof typeof safe] >= 0)) return null
+  return { layoutWidth: px(value.layoutWidth), layoutHeight: Math.ceil(value.layoutHeight),
+    visibleHeight: px(Math.max(1, Math.min(value.layoutHeight, value.visibleHeight))), offsetTop: 0,
+    keyboardInset: value.keyboardVisible ? px(Math.min(value.layoutHeight, value.keyboardInset)) : 0,
+    keyboard: value.keyboardVisible ? 'open' : 'closed', safeArea: safe,
+    ...(typeof value.keyboardAnimating === 'boolean' ? { keyboardAnimating: value.keyboardAnimating } : {}),
+  }
+}
+
 export interface MobileViewportBridge {
   getViewport(): Promise<NativeViewport>
   addListener(event: 'viewportChanged', listener: (viewport: NativeViewport) => void): Promise<PluginListenerHandle>
@@ -102,7 +123,7 @@ export interface MobileViewportBridge {
 
 const appearance = registerPlugin<MobileViewportBridge>('ASTariaAppearance')
 const attachments = new WeakMap<Document, () => void>()
-const nativeBridge = () => Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android' ? appearance : null
+const nativeBridge = () => Capacitor.isNativePlatform() && ['android', 'ios'].includes(Capacitor.getPlatform()) ? appearance : null
 
 /** Bootstrap waits for the native baseline before mounting a possibly focused page. */
 export async function initializeMobileViewport() {
@@ -111,6 +132,9 @@ export async function initializeMobileViewport() {
   if (bridge) {
     try { initialNative = await bridge.getViewport() }
     catch { /* Older native packages still have the DOM fallback. */ }
+  }
+  if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'ios' && bridge) {
+    return attachIOSViewport(bridge, initialNative)
   }
   return attachMobileViewport({ nativeBridge: bridge, initialNative })
 }
@@ -139,6 +163,15 @@ export function attachMobileViewport(options: {
   const bridge = options.nativeBridge === undefined ? nativeBridge() : options.nativeBridge
   let state: MobileViewportState | undefined, published = ''
   let native = options.initialNative ?? null, nativeRevision = 0, frame = 0, disposed = false
+  let lastSampleRevision = native?.revision ?? -1
+  const acceptNative = (value: NativeViewport) => {
+    if (value.revision !== undefined) {
+      if (!Number.isSafeInteger(value.revision) || value.revision < 0 || value.revision < lastSampleRevision) return false
+      lastSampleRevision = value.revision
+    }
+    native = value
+    return true
+  }
   let nativeListener: PluginListenerHandle | undefined
   const listeners: Array<() => void> = []
   const listen = (subject: EventTarget, event: string, listener: EventListener) => {
@@ -147,15 +180,19 @@ export function attachMobileViewport(options: {
   }
   const update = () => {
     if (disposed) return
-    state = calculateMobileViewport({
-      innerWidth: target.innerWidth, innerHeight: target.innerHeight,
-      screenWidth: target.screen?.width, screenHeight: target.screen?.height,
-      orientation: target.screen?.orientation?.type ?? String((target as Window & { orientation?: number }).orientation ?? ''),
-      focused: isEditing(document), visualViewport: viewport, native,
-    }, state)
-    const { layoutWidth, layoutHeight, visibleHeight, offsetTop, keyboardInset, keyboard } = state
-    const metrics: MobileViewportMetrics = { layoutWidth, layoutHeight, visibleHeight, offsetTop, keyboardInset, keyboard,
-      ...(state.safeArea ? { safeArea: state.safeArea } : {}) }
+    let metrics = nativeAndroidViewport(native)
+    if (!metrics) {
+      state = calculateMobileViewport({
+        innerWidth: target.innerWidth, innerHeight: target.innerHeight,
+        screenWidth: target.screen?.width, screenHeight: target.screen?.height,
+        orientation: target.screen?.orientation?.type ?? String((target as Window & { orientation?: number }).orientation ?? ''),
+        focused: isEditing(document), visualViewport: viewport, native,
+      }, state)
+      const { layoutWidth, layoutHeight, visibleHeight, offsetTop, keyboardInset, keyboard } = state
+      metrics = { layoutWidth, layoutHeight, visibleHeight, offsetTop, keyboardInset, keyboard,
+        ...(state.safeArea ? { safeArea: state.safeArea } : {}) }
+    }
+    const { layoutHeight, visibleHeight, offsetTop, keyboardInset, keyboard } = metrics
     const signature = JSON.stringify(metrics)
     if (signature === published) return
     published = signature
@@ -167,11 +204,13 @@ export function attachMobileViewport(options: {
       const text = `${value}px`
       if (root.style.getPropertyValue(name) !== text) root.style.setProperty(name, text)
     }
-    if (state.safeArea) for (const [edge, value] of Object.entries(state.safeArea)) {
+    if (metrics.safeArea) for (const [edge, value] of Object.entries(metrics.safeArea)) {
       const name = `--safe-area-inset-${edge}`, text = `${px(value)}px`
       if (root.style.getPropertyValue(name) !== text) root.style.setProperty(name, text)
     }
     if (root.dataset.mobileKeyboard !== keyboard) root.dataset.mobileKeyboard = keyboard
+    if (metrics.safeArea) root.dataset.mobileViewport = 'native-android'
+    if (metrics.keyboardAnimating !== undefined) root.dataset.mobileKeyboardAnimation = metrics.keyboardAnimating ? 'running' : 'idle'
     document.dispatchEvent(new CustomEvent(MOBILE_VIEWPORT_EVENT, { detail: metrics, bubbles: true }))
   }
   const schedule = () => {
@@ -181,7 +220,10 @@ export function attachMobileViewport(options: {
     if (!bridge || disposed) return
     const revision = ++nativeRevision
     void bridge.getViewport().then(value => {
-      if (!disposed && revision === nativeRevision) { native = value; schedule() }
+      if (!disposed && revision === nativeRevision && acceptNative(value)) {
+        if (nativeAndroidViewport(value)) update()
+        else schedule()
+      }
     }).catch(() => { /* Older native packages use the DOM fallback. */ })
   }
   const restore = () => { refreshNative(); schedule() }
@@ -197,10 +239,11 @@ export function attachMobileViewport(options: {
     // Subscribe before querying; a newer push must win over an older query reply.
     void bridge.addListener('viewportChanged', value => {
       if (!disposed) {
-        nativeRevision++; native = value
+        nativeRevision++
+        if (!acceptNative(value)) return
         // This already is the system's current animation frame. A second RAF
         // would put the foreground an extra frame behind the keyboard.
-        if (value.safeArea) update()
+        if (nativeAndroidViewport(value)) update()
         else schedule()
       }
     }).then(handle => {

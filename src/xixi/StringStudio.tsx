@@ -292,6 +292,6 @@ export function StringInvitation({ onEnter, glass, disabled = false }: { onEnter
       </g>
     </svg></span>
     <span className="string-invitation-copy"><span>弦轨 <small>事件视界</small></span><span>沿着光，让今天慢慢展开</span></span>
-    <span className="string-invitation-link">进入轨道 <span aria-hidden="true">↗</span></span>
+    <span className="string-invitation-link">进入轨道 <span aria-hidden="true">↗︎</span></span>
   </button>
 }

@@ -1,3 +1,4 @@
+import { automaticContextBudget } from '../src/xixi/contextBudgetPolicy.ts'
 import { ValidationError, object, knownKeys, choice } from './validation.mjs'
 import { compatibleEndpoint, CLOUD_PRESETS } from '../src/xixi/cloudProviders.ts'
 
@@ -36,8 +37,9 @@ export function validateContextBudget(value = DEFAULT_CONTEXT_BUDGET) {
 export function resolveContextBudget(settings = {}) {
   const value = validateContextBudget(settings.contextBudget)
   const local = settings.provider === 'local'
-  const hard = value.mode === 'off' ? Infinity : value.mode === 'custom' ? value.maxUnits : local ? 24_000 : 48_000
-  return { enabled: value.mode !== 'off', soft: hard * 2 / 3, hard, turns: local ? 4 : 8 }
+  const automatic = automaticContextBudget(settings)
+  const hard = value.mode === 'off' ? Infinity : value.mode === 'custom' ? value.maxUnits : automatic.hard
+  return { enabled: value.mode !== 'off', soft: value.mode === 'auto' ? automatic.soft : hard * 2 / 3, hard, turns: local ? 4 : 8 }
 }
 
 export function validateWebSearch(value = DEFAULT_WEB_SEARCH) {

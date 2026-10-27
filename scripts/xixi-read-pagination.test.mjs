@@ -30,6 +30,20 @@ const routine = (db, index, items = []) => db.updatePlanner({ type: 'save-routin
   kind: 'class', weekdays: [0, 1, 2, 3, 4, 5, 6], start: clock(480 + index * 10), end: clock(489 + index * 10),
   location: '508', items, enabled: true } }, db.getPlanner().revision)
 
+test('multi-day detail reads return independent pages without a repair round or unfinished warning', async t => {
+  const f = fixture(t)
+  for(let i=0;i<4;i++)routine(f.db,i)
+  f.responses.push(tool('read_planner',{date:DATE,days:3,section:'routines',limit:2}), request => {
+    const result=receipt(request)
+    assert.deepEqual(result.days.map(day=>day.date),['2026-09-22','2026-09-23','2026-09-24'])
+    for(const day of result.days){assert.equal(day.routines.items.length,2);assert.equal(day.routines.readMore.date,day.date);assert.equal(day.routines.readMore.offset,2)}
+    return {choices:[{message:{role:'assistant',content:'三天日程已读取。'}}]}
+  })
+  const result=await f.run()
+  assert.equal(f.requests.length,2)
+  assert.equal(result.messages.at(-1).executionNotice,undefined)
+})
+
 test('crowded seven-day overview is bounded and resumes exact omitted routines in a small model budget', async t => {
   const f = fixture(t)
   f.db.setPreference('model-connection', { contextBudget: { mode: 'custom', maxUnits: 24000 } })

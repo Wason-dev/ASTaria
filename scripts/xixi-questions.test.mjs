@@ -5,6 +5,7 @@ import { createDatabase } from '../server/database.mjs'
 import { createXixi } from '../server/xixi.mjs'
 import { initialTaskSchedule } from '../server/autoSchedule.mjs'
 import { dayCapacity } from '../src/planner/model.ts'
+import { finishResponse } from './fixtures/model-receipt.mjs'
 
 process.env.TZ = 'Asia/Shanghai'
 const call = (name, args) => ({ choices: [{ message: { content: null, tool_calls: [{ id: randomUUID(), type: 'function', function: { name, arguments: JSON.stringify(args) } }] } }] })
@@ -155,7 +156,7 @@ test('scheduleDate alone persists the intended date and schedules that exact day
     requests.push(request)
     return requests.length === 1
       ? call('create_tasks', { tasks: [{ title: '数学作业', scheduleDate: tomorrow, notes: 'Ex2A 3 b iv、v' }] })
-      : reply('已安排到明天18:00–18:30，先按30分钟预留')
+      : finishResponse(request, '已安排到明天18:00–18:30，先按30分钟预留', '明天18:00–18:30 是真实空档，先按30分钟预留。')
   } })
   const result = await xixi.chat(input('明晚数学作业，Ex2A 3 b iv、v'))
   assert.equal(result.status, 'completed')

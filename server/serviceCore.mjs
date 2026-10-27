@@ -51,7 +51,9 @@ export function createServiceCore({ db, vault, complete, fetcher = fetch, compat
       && !db.getTurn(meter.requestId)?.retractedAt ? meter.usage : null
     const raw = db.listMessages(id, { limit: 200, ...(before === undefined ? {} : { before }) })
     const oldestSeq = raw[0]?.seq ?? null
-    const messages = raw.filter(message => message.role !== 'tool' && !message.toolCalls?.length && !(message.retractedAt && message.role === 'assistant'))
+    // A native tool call may follow already-streamed prose (e.g. remember).
+    // Keep that prose after saving/reloading; only the tool payload is private.
+    const messages = raw.filter(message => message.role !== 'tool' && (!message.toolCalls?.length || message.content?.trim()) && !(message.retractedAt && message.role === 'assistant'))
     const visibleRequests = new Set(messages.map(message => message.requestId))
     const operations = db.listOperations()
     const rawRequests = new Set(raw.map(message => message.requestId).filter(Boolean))
@@ -89,7 +91,10 @@ export function createServiceCore({ db, vault, complete, fetcher = fetch, compat
     return {
       conversationId: id, contextUsage,
       messages: messages.sort((a, b) => a.seq - b.seq).map(message => {
-        const visible = { ...publicMessage(message), ...(!message.retractedAt && savedReasoning.has(message.requestId) ? { hasSavedReasoning: true } : {}) }
+        const reference = turnReferences.get(message.requestId)
+        const turnStatus = reference?.conversationId === id ? reference.status : undefined
+        const visible = { ...publicMessage(message),
+          ...(!message.retractedAt && ['running', 'completed', 'failed'].includes(turnStatus) ? { requestStatus: turnStatus } : {}), ...(!message.retractedAt && savedReasoning.has(message.requestId) ? { hasSavedReasoning: true } : {}) }
         if (message.role !== 'assistant' || message.retractedAt || !message.requestId) return visible
         // Bound display only. The exact full reasoning transcript remains stored
         // for subsequent provider calls, including native tool-call rounds.
@@ -196,6 +201,17 @@ export function createServiceCore({ db, vault, complete, fetcher = fetch, compat
         const before = rawBefore === null ? undefined : Number(rawBefore)
         if (rawBefore !== null && (!/^[1-9]\d*$/u.test(rawBefore) || !Number.isSafeInteger(before))) throw new ValidationError('历史消息游标不正确')
         return state(url.searchParams.get('id') || undefined, before)
+      }
+      if (path === '/conversation/retry') {
+        const conversationId = identifier(url.searchParams.get('conversationId'))
+        const requestId = identifier(url.searchParams.get('requestId'))
+        const turn = db.getTurn(requestId)
+        const user = turn?.conversationId === conversationId ? db.getMessage(turn.userMessageId) : null
+        if (!turn || turn.conversationId !== conversationId || !user || user.role !== 'user') throw new ValidationError('找不到这条消息的发送记录', 404)
+        if (turn.retractedAt || user.retractedAt || user.excludeFromContext) throw new ValidationError('这条消息已撤回或不再可重试', 409)
+        if (turn.status !== 'failed') throw new ValidationError(turn.status === 'completed' ? '这条消息已经完成，请重新读取对话' : '这条消息仍在处理中，请稍后核对', 409)
+        return { requestId, conversationId, text: turn.text, context: turn.context,
+          ...(user.attachments?.length ? { attachments: user.attachments } : {}), createdAt: user.createdAt, seq: user.seq }
       }
       if (path === '/conversations') return db.listConversations()
       if (path === '/memories') return db.listMemories().map(memory => ({ ...memory, source: db.getMessage(memory.sourceMessageId)?.content ?? '' }))

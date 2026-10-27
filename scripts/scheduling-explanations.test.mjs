@@ -22,7 +22,7 @@ test('same completion round returns natural receipt explanations to home and wor
  const xixi=createXixi({db,now:()=>time,complete:async request=>{
   requests.push(request)
   if(requests.length===1){time=new Date(DATE+'T08:05:00+08:00');return tool('create_tasks',{tasks:[{title:'物理复习',estimateMin:30,scheduleDate:DATE,relations:[{relation:'before',kind:'event',id:'exam',date:DATE}]}]})}
-  assert.equal(request.tool_choice,'required')
+  assert.notEqual(request.tool_choice,'required', 'completion is enforced locally without incompatible DeepSeek required choice')
   const clock=JSON.parse(request.messages.find(m=>m.role==='system'&&m.content.startsWith('本机实时钟表')).content.split('\n')[1]);assert.equal(clock.localMinute,'08:05')
   const result=last(request);assert.equal(result.scheduling.evidence[0].relations[0].id,'exam')
   assert.ok(result.scheduling.savedPlans.every(block=>block.end<='13:00'))

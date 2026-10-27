@@ -21,7 +21,7 @@ function fixture(t, { onlyFragments = false, protectedTask = false, firstShort =
   act({ type: 'save-day-event', event: { id: 'class', title: '上课', date: DATE, start: '10:00', end: onlyFragments ? '10:50' : '10:30', location: '', items: [] } })
   const long = db.createTask({ title: '物理作业', area: 'physics', ...(protectedTask ? { freeTimeGoalId: 'goal-long' } : {}) })
   const short = onlyFragments ? null : db.createTask({ title: '数学练习', area: 'math' })
-  const block = (id, task, start, end) => act({ type: 'save-block', block: { id, taskId: task.id, date: DATE, start, end, locked: false } })
+  const block = (id, task, start, end) => act({ type: 'save-block', block: { id, taskId: task.id, date: onlyFragments ? '2026-10-15' : DATE, start, end, locked: false } })
   block('long', long, onlyFragments ? '09:00' : firstShort ? '14:00' : '15:00', onlyFragments ? '09:45' : firstShort ? '14:45' : '15:45')
   if (short) block('short', short, firstShort ? '15:00' : '14:00', firstShort ? '15:15' : '14:15')
   if (protectedTask) db.saveCompanionState({ ...db.getCompanionState(), freeTimeGoals: [{ id: 'goal-long', title: '每日物理', taskId: long.id }] })
@@ -32,7 +32,7 @@ function fixture(t, { onlyFragments = false, protectedTask = false, firstShort =
   } })
   const snap = svc.list({ date: DATE })
   const input = { date: DATE, expectedRevision: snap.revision, snapshotKey: snap.snapshotKey, requestId: randomUUID(),
-    groups: snap.groups.map(group => ({ id: group.id, day: group.day, itemIds: group.tasks.map(task => task.id) })).reverse() }
+    groups: snap.groups.map(group => ({ id: group.id, day: onlyFragments ? 0 : group.day, itemIds: group.tasks.map(task => task.id) })).reverse() }
   return { db, svc, seen, long, short, input, act, at: value => { at = new Date(`${DATE}T${value}:00+08:00`) }, model: fn => { model = fn } }
 }
 const taskBlocks = (f, task) => f.db.getPlanner().blocks.filter(block => block.taskId === task.id).sort((a, b) => a.start.localeCompare(b.start))

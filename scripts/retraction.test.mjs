@@ -185,12 +185,13 @@ test('summary arriving after source retraction cannot revive excluded text', asy
     if (request.response_format) { entered.resolve(); return waiting.promise }
     return reply('新的回答')
   })
+  db.setPreference('model-connection', { contextBudget: { mode: 'custom', maxUnits: 48000 } })
   let first
   for (let i = 0; i < 18; i += 1) {
     const requestId = randomUUID()
     const user = db.appendMessage({ conversationId: 'main', requestId, role: 'user', content: `历史第${i}项` })
     if (!first) first = user
-    db.appendMessage({ conversationId: 'main', requestId, role: 'assistant', content: `回应${i}` })
+    db.appendMessage({ conversationId: 'main', requestId, role: 'assistant', content: `回应${i}`, ...(i === 0 ? { reasoningContent: "旧推理".repeat(10000) } : {}) })
   }
   const pending = xixi.chat(input('接着讨论'))
   await entered.promise

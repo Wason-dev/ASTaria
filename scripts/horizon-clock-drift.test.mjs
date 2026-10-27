@@ -8,19 +8,20 @@ process.env.TZ = 'Asia/Shanghai'
 const DATE = '2026-09-26'
 const response = changes => ({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({ changes }) } }] })
 const minute = time => Number(time.slice(0, 2)) * 60 + Number(time.slice(3))
-const fixture = (t, { windowEnd = '22:00', firstStart = '08:00', second = true } = {}) => {
+const fixture = (t, { windowEnd = '22:00', firstStart = '12:00', second = true } = {}) => {
   const db = createDatabase(':memory:'); t.after(() => db.close())
   let at = new Date(`${DATE}T09:59:55+08:00`)
   const edit = action => db.updatePlanner(action, db.getPlanner().revision)
   for (const row of db.getPlanner().routines) edit({ type: 'delete-routine', id: row.id })
   edit({ type: 'save-routine', routine: { id: 'available', title: '上午空档', kind: 'available', weekdays: [0, 1, 2, 3, 4, 5, 6], start: '08:00', end: windowEnd, location: '', items: [], enabled: true } })
+  edit({ type: 'save-day-event', event: { id: 'break', title: '固定占用', date: DATE, start: '10:30', end: '11:00', location: '', items: [] } })
   const first = db.createTask({ title: '数学错题', area: 'math' })
-  edit({ type: 'save-block', block: { id: 'first', taskId: first.id, date: DATE, start: firstStart, end: firstStart.slice(0, 2) + ':30', locked: false } })
+  edit({ type: 'save-block', block: { id: 'first', taskId: first.id, date: firstStart === '10:00' ? DATE : '2026-09-27', start: firstStart, end: firstStart.slice(0, 2) + ':30', locked: false } })
   if (second) {
     const next = db.createTask({ title: '物理作业', area: 'physics' })
-    edit({ type: 'save-block', block: { id: 'second', taskId: next.id, date: DATE, start: '11:00', end: '11:30', locked: false } })
+    edit({ type: 'save-block', block: { id: 'second', taskId: next.id, date: DATE, start: '13:00', end: '13:30', locked: false } })
   }
-  const request = (svc, mutate = groups => groups) => {
+  const request = (svc, mutate = groups => [...groups].sort((a,b) => Number(b.itemIds.includes('first')) - Number(a.itemIds.includes('first'))).map(group => ({ ...group, day: 0 }))) => {
     const snapshot = svc.list({ date: DATE })
     return { date: DATE, expectedRevision: snapshot.revision, snapshotKey: snapshot.snapshotKey, requestId: randomUUID(),
       groups: mutate(snapshot.groups.map(group => ({ id: group.id, title: group.title, day: group.day, itemIds: group.tasks.map(task => task.id) }))) }
@@ -40,8 +41,8 @@ for (const adjusted of [false, true]) test(`model waiting clock drift moves only
   assert.equal(payload.items[0].start, '10:00')
   assert.ok(result.operation)
   assert.equal(calls, 1)
-  assert.equal(block(f, 'first').start, '10:01')
-  assert.equal(block(f, 'second').start, adjusted ? '12:00' : '11:00')
+  assert.equal(block(f, 'first').start, '11:00')
+  assert.equal(block(f, 'second').start, adjusted ? '12:00' : '13:00')
   for (const item of f.db.getPlanner().blocks) {
     assert.equal(item.date, DATE)
     assert.equal(minute(item.end) - minute(item.start), 30)

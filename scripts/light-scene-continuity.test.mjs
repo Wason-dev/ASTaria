@@ -49,8 +49,8 @@ test('daylight survives page cover, modal promotion and reversal without stackin
       }
       home.dataset.page='schedule';
       results.schedule={background:style('.mobile-workspace-scene').backgroundColor,
-        surface:style('.mobile-schedule-panel .home-glass-surface').backgroundColor};
-      home.dataset.theme='dark';page.dataset.theme='dark';
+        surface:style('.mobile-schedule-panel .home-glass-surface').backgroundColor,extraVeil:style('.home-workspace','::before').content};
+      home.dataset.theme='dark';home.dataset.glassTone='dark';page.dataset.theme='dark';
       results.dark={colorScheme:style('dialog').colorScheme,tools:style('.horizon-group-controls button').color,
         surface:style('.mobile-schedule-panel .home-glass-surface').backgroundColor};
       document.querySelector('#results').textContent=JSON.stringify(results);
@@ -84,7 +84,8 @@ test('daylight survives page cover, modal promotion and reversal without stackin
       assert.equal(state.copyOpacity, '1', 'small text must retain contrast over the shadow')
       assert.equal(state.shadow, 'none')
     }
-    assert.equal(result.schedule.surface, 'rgba(250, 251, 252, 0.82)')
+    assert.equal(result.schedule.surface, 'rgba(250, 251, 252, 0.2)')
+    assert.equal(result.schedule.extraVeil, 'none', 'mobile schedule must not stack a content-only wash below the status bar')
     assert.equal(result.schedule.background, 'rgba(252, 253, 255, 0.65)')
     assert.equal(result.dark.colorScheme, 'dark')
     assert.equal(result.dark.tools, 'rgb(173, 155, 123)')

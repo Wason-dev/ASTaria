@@ -4,6 +4,8 @@ export type InformationDensity = 'immersive' | 'work' | 'analysis'
 export type SceneCamera = {
   zoom: number; roll: number; inclination: number; centerX: number; centerY: number
   cameraTransition: boolean; reducedMotion: boolean; paused: boolean; simulationTime: number
+  /** Final media image projection in CSS pixels, after crop and camera motion. */
+  presentation?: { width: number; height: number; cx: number; cy: number; unit: number }
 }
 export type TaskNode = {
   id: string; title: string; status: 'todo' | 'doing'; radius: number; angle: number; due?: string
@@ -54,9 +56,10 @@ export function createScene(tasks: Task[], camera: SceneCamera, density: Informa
 /** Inverse of the frozen P0 image-plane mapping; uses CSS pixels, never DPR. */
 export function sceneProjection(camera: SceneCamera, width: number, height: number) {
   const mobile = width / height < .8
-  const cx = (mobile ? .5 + (camera.centerX - .5) * .34 : camera.centerX) * width
-  const cy = (1 - (mobile ? .5 + (camera.centerY - .5) * 6 : camera.centerY)) * height
-  const unit = height * camera.zoom / (mobile ? 13.8 : 10.2)
+  const media = camera.presentation
+  const cx = media ? media.cx * width / media.width : (mobile ? .5 + (camera.centerX - .5) * .34 : camera.centerX) * width
+  const cy = media ? media.cy * height / media.height : (1 - (mobile ? .5 + (camera.centerY - .5) * 6 : camera.centerY)) * height
+  const unit = media ? media.unit * height / media.height : height * camera.zoom / (mobile ? 13.8 : 10.2)
   const roll = camera.roll * Math.PI / 180
   return {
     cx, cy, unit,

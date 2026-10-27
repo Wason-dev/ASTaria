@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { createDatabase } from '../server/database.mjs'
 import { createXixi } from '../server/xixi.mjs'
 import { createWorkOrder } from '../server/workOrder.mjs'
+import { finishResponse } from './fixtures/model-receipt.mjs'
 
 process.env.TZ = 'Asia/Shanghai'
 const DATE = '2026-09-27'
@@ -53,7 +54,7 @@ test('corrected calls with new call IDs preserve the natural reply after both wr
   }, () => f.plan(), request => {
     assert.match(receipt(request).error, /read_planner/u)
     return read()
-  }, () => f.plan(), reply(content))
+  }, () => f.plan(), payload => finishResponse(payload, content, '活动和三项任务都排到回宿舍之后，20:40 开始，21:50 结束。'))
   const result = await f.run()
   assert.equal(result.execution.status, 'verified')
   assert.equal(result.execution.reply.mode, 'model')
@@ -116,7 +117,8 @@ test('retry restores operation identities for failures saved by an older work-or
   }
   progress.failures = progress.steps.filter(step => step.status === 'failed').map(step => ({ stepId: step.id, error: step.error }))
   f.db.updateTurnProgress(f.input.requestId, progress)
-  f.responses.push(read(), () => f.plan(), reply('活动和任务时间都已保存'))
+  f.responses.push(read(), () => f.plan(), payload => finishResponse(payload, '活动和任务时间都已保存',
+    '活动与三项任务的时段都来自真实保存的回执。'))
   const result = await f.run()
   assert.equal(result.execution.status, 'verified')
   assert.deepEqual(result.execution.failures, [])

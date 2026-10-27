@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { createDatabase } from '../server/database.mjs'
 import { createXixi } from '../server/xixi.mjs'
+import { finishResponse } from './fixtures/model-receipt.mjs'
 
 process.env.TZ = 'Asia/Shanghai'
 const DATE = '2026-09-19', NEXT_DATE = '2026-09-20'
@@ -65,7 +66,8 @@ for (const order of ['planner-before-create', 'create-before-planner']) test(`${
     assert.deepEqual(pending(request)[0].slot, SLOT)
     assert.equal(f.db.getPlanner().blocks.length, 1)
     return tools(read())
-  }, () => tools(planActivity(f.db)), reply('两项对应的日历时段都已保存。'))
+  }, () => tools(planActivity(f.db)), payload => finishResponse(payload, '两项对应的日历时段都已保存。',
+    '测试和 PSEC 活动都按真实空档排进对应时段，两项不再缺少日历安排。'))
   const result = await f.run()
   assert.equal(result.status, 'completed')
   assert.equal(result.execution.status, 'verified')
@@ -278,10 +280,12 @@ test('undoing the old child receipt before the final reply cancels creation with
   const staleReply = 'PSEC社团活动已安排明天17:15–18:00。'
   let childId
   f.responses.push(tools(read()), payload => tools(call('create_tasks', { expectedRevision: receipt(payload).revision,
-    tasks: [{ title: ACTIVITY, schedule: SLOT }] })), () => {
+    tasks: [{ title: ACTIVITY, schedule: SLOT }] })), payload => {
     childId = f.db.listOperations().find(operation => operation.kind === 'planner').id
     f.db.undoOperation(childId)
-    return reply(staleReply)
+    // Cancelled creation leaves no active planned operation to explain, so the
+    // real final frame carries no receipt notes rather than inventing a reason.
+    return finishResponse(payload, staleReply, undefined, { notes: [] })
   })
   const result = await f.run(input('明天17:15–18:00 PSEC社团活动'))
   assert.equal(result.status, 'completed')

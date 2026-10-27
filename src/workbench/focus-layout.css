@@ -124,3 +124,32 @@
 @media (forced-colors: active) {
   .p0 .wb-focus-main .wb-handoff-trigger { background: ButtonFace; color: ButtonText; border-color: ButtonText }
 }
+
+/* Mobile focus uses the same panel surfaces and controls, one page at a time. */
+html[data-mobile] .wb-focus-pages { display:flex; flex-direction:column; gap:10px; min-width:0 }
+html[data-mobile] .wb-focus-page-tabs { display:flex; align-self:center; gap:4px; padding:3px; border:1px solid var(--wb-line); border-radius:999px }
+html[data-mobile] .p0 .wb-focus-page-tabs button { min-height:34px; padding:6px 20px; border-radius:999px; font-size:12px; color:var(--wb-muted); transition:color 160ms ease,background 160ms ease }
+html[data-mobile] .p0 .wb-focus-page-tabs [aria-selected=true] { color:var(--wb-gold); background:color-mix(in srgb,var(--wb-gold) 10%,transparent); box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--wb-gold) 28%,transparent) }
+html[data-mobile] .wb-focus-page-rail { display:flex; width:100%; min-width:0; overflow-x:auto; overflow-y:hidden; scroll-snap-type:x mandatory; overscroll-behavior-x:contain; height:max(220px,calc(var(--m-visible-height,100dvh) - var(--safe-area-inset-top,0px) - var(--workspace-content-top,52px) - 110px)); }
+html[data-mobile] .wb-focus-page { flex:0 0 100%; min-width:0; height:100%; box-sizing:border-box; scroll-snap-align:start; scroll-snap-stop:always; padding:1px 2px 4px; }
+html[data-mobile] .p0 .wb-focus-page > .wb-glass { width:100%; height:100%; min-height:0; box-sizing:border-box; padding:16px; position:relative }
+html[data-mobile] .p0 .wb-focus-page > .wb-glass > .wb-glass-content { height:100%; min-height:0; display:flex; flex-direction:column; }
+html[data-mobile] .wb-focus-page .wb-focus-view { overflow-y:auto; overscroll-behavior-y:contain }
+html[data-mobile] .wb-focus-page .wb-focus-details { min-height:0; flex:none; overflow:visible }
+html[data-mobile] .wb-focus-page .wb-clock-area { margin-block:auto; padding-block:20px }
+html[data-mobile] .wb-focus-page .wb-clock { font-size:clamp(42px,10vw,64px) }
+html[data-mobile] .wb-focus-page .wb-focus-bottom { margin-top:auto; padding-top:12px }
+html[data-mobile] .wb-focus-page :is(.wb-task-steps,.wb-steps-window) { min-height:0 }
+html[data-mobile] .wb-focus-page .wb-steps-list { overflow-y:auto }
+html[data-mobile] .wb-focus-page .wb-steps-empty { min-height:0; overflow-y:auto }
+html[data-mobile] .p0 .wb-focus-page .wb-xixi .xixi-conversation { flex:1 1 0; min-height:60px; max-height:none; }
+html[data-mobile] .wb-focus-page .wb-xixi-context { flex:none; margin-block:8px }
+html[data-mobile] .p0 .wb-focus-page .wb-input-textarea { min-height:52px; max-height:90px; resize:none }
+html[data-mobile] .wb-focus-page .xixi-compose { flex:none }
+html[data-mobile] .wb-scroll[data-focus=true] .wb-container { margin-bottom:0 }
+/* A single rounded shadow follows the page viewport. Clipping three separate
+   outer shadows at the scroll boundary would leave a square gray frame. */
+html[data-mobile] .wb-focus-page-rail { border-radius:20px; box-shadow:0 8px 28px rgb(37 45 57 / var(--wb-shadow)); }
+html[data-mobile] .workbench[data-theme=dark] .wb-focus-page-rail { box-shadow:0 8px 28px rgb(0 0 0 / var(--wb-shadow)); }
+html[data-mobile] .wb-focus-page { padding:0 }
+html[data-mobile] .p0 .workbench .wb-focus-page > .wb-glass { box-shadow:none }

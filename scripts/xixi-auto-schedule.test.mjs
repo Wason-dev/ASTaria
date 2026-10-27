@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { createDatabase } from '../server/database.mjs'
 import { createXixi } from '../server/xixi.mjs'
+import { finishResponse } from './fixtures/model-receipt.mjs'
 
 process.env.TZ = 'Asia/Shanghai'
 const DATE = '2026-09-18'
@@ -24,7 +25,7 @@ test('creating a dated task saves a real calendar block in the first call withou
       assert.equal(receipt.scheduling.changed, true)
       assert.equal(receipt.scheduling.savedPlans.length, 1)
       assert.equal(db.getPlanner().blocks.length, 1)
-      return reply('已安排到今天 18:00–18:30。')
+      return finishResponse(request, '已安排到今天 18:00–18:30。', '今天 18:00–18:30 是真实空档，30 分钟正好放进这一段。')
     },
   ]
   const xixi = createXixi({ db, now: () => NOW, complete: async request => {

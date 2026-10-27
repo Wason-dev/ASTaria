@@ -13,7 +13,7 @@ import { candidateCli, verifyLocalCandidate } from './verify-local-candidate.mjs
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const CLI = join(ROOT, 'scripts/verify-local-candidate.mjs')
-const VERSION = '1.0.0-rc.1'
+const VERSION = '1.0.0'
 const hash = value => createHash('sha256').update(value).digest('hex')
 const exists = async path => lstat(path).then(() => true, error => error.code === 'ENOENT' ? false : Promise.reject(error))
 const codes = report => report.issues.map(issue => issue.code)
@@ -65,9 +65,9 @@ async function fixture(base, platform) {
     await put(payload, 'bin/ASTariaReminders.app/Contents/MacOS/astaria-reminders', binary)
     await put(payload, 'bin/ASTariaReminders.app/Contents/Resources/ASTaria.icns', 'synthetic icon')
     await put(payload, 'bin/ASTariaReminders.app/Contents/Info.plist', plist({ CFBundleIdentifier: 'dev.wason.ASTaria.reminders',
-      CFBundleShortVersionString: '1.0.0', CFBundleVersion: '3.0.0fc1', CFBundleExecutable: 'astaria-reminders' }))
+      CFBundleShortVersionString: '1.0.0', CFBundleVersion: '3.0.0', CFBundleExecutable: 'astaria-reminders' }))
     await put(root, 'Contents/Info.plist', plist({ CFBundleName: 'ASTaria', CFBundleDisplayName: 'ASTaria',
-      CFBundleIdentifier: 'dev.wason.ASTaria', CFBundleShortVersionString: '1.0.0', CFBundleVersion: '3.0.0fc1', CFBundleExecutable: 'Electron' }))
+      CFBundleIdentifier: 'dev.wason.ASTaria', CFBundleShortVersionString: '1.0.0', CFBundleVersion: '3.0.0', CFBundleExecutable: 'Electron' }))
     await put(root, 'Contents/MacOS/Electron', binary)
     await put(root, 'Contents/Resources/ASTaria.icns', 'synthetic icon')
     Object.assign(build, { bundleId: 'dev.wason.ASTaria', nativeHelpers: { keychainSha256: hash(binary) },
@@ -148,7 +148,7 @@ test('static local candidate payload acceptance for both copy layouts', async t 
       }
       await t.test('package/build-info/platform/version mismatches and dependency versions fail', async () => {
         for (const [name, patch, expected] of [['package.json', { productName: 'Electron' }, 'PACKAGE_IDENTITY'],
-          ['package.json', { version: '1.0.0' }, 'PACKAGE_IDENTITY'], ['build-info.json', { version: '1.0.0' }, 'BUILD_IDENTITY'],
+          ['package.json', { version: '0.0.0' }, 'PACKAGE_IDENTITY'], ['build-info.json', { version: '0.0.0' }, 'BUILD_IDENTITY'],
           ['build-info.json', { platform: 'other' }, 'BUILD_IDENTITY'], ['build-info.json', { serverDependencies: [] }, 'DEPENDENCY_MANIFEST'],
           ['node_modules/@noble/hashes/package.json', { version: '0.0.0' }, 'DEPENDENCY_VERSION']]) {
           const path = join(candidate.payload, name), original = JSON.parse(await readFile(path, 'utf8'))
@@ -266,7 +266,7 @@ test('static local candidate payload acceptance for both copy layouts', async t 
       } else {
         await t.test('real PE resources and executable hash must agree, not just build-info branded flag', async () => {
           await changed(join(candidate.root, 'ASTaria.exe'), windowsPe('Electron'), async () => { assert.ok(codes(await verify()).includes('WINDOWS_PE')) })
-          await changed(join(candidate.root, 'ASTaria.exe'), windowsPe('ASTaria', '1.0.0'), async () => { assert.ok(codes(await verify()).includes('WINDOWS_PE')) })
+          await changed(join(candidate.root, 'ASTaria.exe'), windowsPe('ASTaria', '0.0.0'), async () => { assert.ok(codes(await verify()).includes('WINDOWS_PE')) })
           await changed(join(candidate.payload, 'build-info.json'), JSON.stringify({ ...candidate.build, executableSha256: '0'.repeat(64) }), async () => { assert.ok(codes(await verify()).includes('EXECUTABLE_SHA256')) })
         })
       }

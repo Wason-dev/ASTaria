@@ -96,7 +96,7 @@ const changedBlocks = (before, after) => after.blocks.filter(block => {
   return !previous || ['date', 'start', 'end', 'horizonGroupId', 'horizonGroupTitle'].some(key => previous[key] !== block[key])
 })
 
-test('three-day groups contain each real movable block exactly once; locks are references and tasks without blocks stay out', t => {
+test('three-day groups contain each future movable block exactly once; elapsed and locked rows stay references', t => {
   const f = fixture(t), before = f.db.getPlanner(), svc = service(f), snap = svc.list({ date: DATE })
   assert.equal(snap.days, 3)
   assert.equal(snap.groupingSaved, false)
@@ -104,12 +104,15 @@ test('three-day groups contain each real movable block exactly once; locks are r
   assert.deepEqual(snap.groups.map(group => [group.title, group.day]), [['数学', 0], ['物理', 0], ['读完这本书', 1]])
   assert.deepEqual(snap.groups[0].tasks.map(task => [task.id, task.minutes]), [['math-a', 30], ['math-b', 20]])
   assert.equal(snap.groups[2].project, '语文')
-  // Elapsed work stays in the snapshot: underway and locked sessions are visible
-  // references, while overdue todo sessions are movable again with a flag.
+  // A started slot is an immovable original-time reference; the begun doing
+  // session says 时段已开始 and the lock keeps its own reason. Neither counts as
+  // group workload, and the retired needsReschedule flag is never generated.
   assert.deepEqual(snap.items.map(item => item.id), ['begun', 'locked', 'math-a', 'physics', 'math-b', 'reading'])
-  assert.deepEqual(snap.items.slice(0, 2).map(item => [item.id, item.movable, item.needsReschedule ?? null, item.reason]),
-    [['begun', false, null, '正在进行，保留当前安排'], ['locked', false, null, '这段时间已锁定']])
-  assert.ok(snap.items.slice(2).every(item => item.movable && item.needsReschedule === undefined))
+  assert.deepEqual(snap.items.slice(0, 2).map(item => [item.id, item.movable, item.reason]),
+    [['begun', false, '时段已开始，保留原安排'], ['locked', false, '这段时间已锁定']])
+  assert.ok(snap.items.every(item => !Object.hasOwn(item, 'needsReschedule')))
+  assert.ok(snap.items.slice(2).every(item => item.movable))
+  assert.deepEqual(snap.groups.flatMap(group => group.tasks.map(task => task.id)).sort(), ['math-a', 'math-b', 'physics', 'reading'])
   assert.deepEqual(svc.list().groups, snap.groups)
   assert.deepEqual(f.db.getPlanner(), before)
 })

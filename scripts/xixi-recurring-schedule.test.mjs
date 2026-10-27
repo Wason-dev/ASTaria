@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { createDatabase } from '../server/database.mjs'
 import { createXixi, XIXI_TOOLS } from '../server/xixi.mjs'
 import { createCompanion } from '../server/companion.mjs'
+import { finishOrReply } from './fixtures/model-receipt.mjs'
 
 process.env.TZ = 'Asia/Shanghai'
 const TODAY = '2026-09-22'
@@ -23,7 +24,8 @@ const routine = (db, id, title, weekdays, start, end) => update(db, { type: 'sav
   id, title, kind: 'available', weekdays, start, end, location: '', items: [], enabled: true,
 } })
 function fixture(t, tasks = [draft()]) {
-  const db = createDatabase(':memory:'), requests = [], errors = [], responses = [tool('create_tasks', { tasks }), reply('按实际保存的日期确认')]
+  const db = createDatabase(':memory:'), requests = [], errors = [], responses = [tool('create_tasks', { tasks }),
+    payload => finishOrReply(payload, '按实际保存的日期确认', '按真实空档把每天 20 分钟排进对应日期，周六没有安排。')]
   t.after(() => db.close())
   const xixi = createXixi({ db, now: () => NOW, complete: async request => {
     requests.push(request)

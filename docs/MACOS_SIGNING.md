@@ -1,6 +1,6 @@
 # macOS Developer ID 签名与公证准备
 
-`scripts/macos-signing.mjs` 提供签名计划、独立本机签名入口和最终清单刷新接口。Developer ID Application 证书尚未配置，流程处于准备阶段，尚无 Developer ID 签名或 Apple 公证成品的验证记录。计划和纯测试通过只能证明流程准备有效；发行状态必须根据实际签名、公证与成品检查结果确定。
+`scripts/macos-signing.mjs` 提供签名计划、独立本机签名入口和最终清单刷新接口。本文说明可复用流程，不记录具体证书配置或单次构建状态。计划和纯测试通过只能证明流程准备有效；发行状态必须根据实际签名、公证与成品检查结果确定。
 
 ## 状态与发布依据
 
@@ -15,11 +15,11 @@
 
 ## 前置条件与输入
 
-签名环境需要由 macOS 本机 Keychain 管理的 **Developer ID Application** 身份，以及与该身份一致的十位 Apple team ID。不能使用 Developer ID Installer、Apple Development、自动选择的默认身份或只给团队名称。App 本机签名入口通过 `security find-identity -v -p codesigning` 精确匹配唯一身份，再用该身份的证书指纹调用 codesign；DMG 入口核验已有 App 的唯一签名身份，并直接使用 options 中的精确 identity，不查询默认身份。
+签名环境需要由 macOS Keychain 管理的 **Developer ID Application** 身份，以及与该身份一致的十位 Apple team ID。不能使用 Developer ID Installer、Apple Development、自动选择的默认身份或只给团队名称。App 本机签名入口通过 `security find-identity -v -p codesigning` 精确匹配唯一身份，再用该身份的证书指纹调用 codesign；DMG 入口核验已有 App 的唯一签名身份，并直接使用 options 中的精确 identity，不查询默认身份。
 
 公证只引用一个已经存在的 `notarytool` Keychain profile 名。此模块不购买或导入证书，不创建 profile，不接收 Apple ID、密码、应用专用密码、API 私钥、Keychain 密码或私钥文件。身份名称与 team ID 是公开签名元数据；profile 在审阅输出中被隐藏，子进程输出不会被打印到日志。
 
-签名输入应为独立的公开 **构建副本**。执行入口要求 build-info 中版本、架构、平台、名称、bundle ID 和干净源码提交一致。签名会修改副本中的代码及 helper 哈希，因此应使用专门的发行工作目录。未配置证书的环境可以构建计划；本机执行需要匹配的有效签名身份。
+签名输入应为独立的公开 **构建副本**。执行入口要求 build-info 中版本、架构、平台、名称、bundle ID 和干净源码提交一致。签名会修改副本中的代码及 helper 哈希，因此应使用专门的发行工作目录。未配置证书的环境可以构建计划；实际执行需要匹配的有效签名身份。
 
 示例公共配置如下。路径与示例身份均为占位符；必须替换为经过审阅的构建副本、真实精确身份和已有 profile。下面省略了完整 Electron 代码清单，因此只能用来说明字段，不能作为正式签名清单。
 
@@ -101,7 +101,7 @@ node scripts/package-dmg.mjs \
 
 入口复用 `validateMacSigningOptions`、`discoverMacSigningTargets`、`verifyMacSignature` 与 `refreshMacSigningManifest`。它重新扫描完整代码清单，对原 App 和拷贝执行 `codesign --verify --deep --strict`，并逐项验证代码签名和每个 Mach-O 的 `lipo -archs`。App 与各子项必须拥有唯一匹配的 Developer ID Application leaf identity、team ID、runtime 标志和可信 timestamp；拷贝的根及子项 CDHash、包信息和构建信息必须保持一致。打包过程不重签 App，不更新 App 内资源或 helper 哈希。
 
-DMG 使用精确 identity 与 `--timestamp` 签名，不附加 Electron runtime/JIT entitlements；随后核验 DMG 实际签名身份、team、timestamp 与 image。它不调用 `security`、`notarytool`、`stapler` 或 `spctl`。签名时间戳仍可能联系 Apple 服务，运行这个入口需要有效本机证书；纯测试通过不代表已实签。
+DMG 使用精确 identity 与 `--timestamp` 签名，不附加 Electron runtime/JIT entitlements；随后核验 DMG 实际签名身份、team、timestamp 与 image。它不调用 `security`、`notarytool`、`stapler` 或 `spctl`。签名时间戳仍可能联系 Apple 服务，运行这个入口需要有效证书；纯测试通过不代表已实签。
 
 所有 DMG 修改和验签结束后，入口读取暂存 DMG 的实际字节重算 SHA-256 与大小，生成 `ASTaria-{canonical version}-mac-{arch}-signed.dmg`、`.dmg.sha256` 和同 stem 的 `.manifest.json`。清单固定为 `signing: "developer-id"`、`notarized: false`，即使输入 App 已 staple 也不能推断新 DMG 已公证。保留原显式 `--sign-manifest` 选项；只有指定该选项才调用独立 Ed25519 清单签署函数，并排在最终哈希之后、sidecar 写入之前。默认不读取发布私钥。若还要对 DMG 公证并 staple，应在这些改动结束后再次刷新 checksum/manifest，并最后重新签署发布清单。
 
@@ -112,7 +112,7 @@ DMG 使用精确 identity 与 `--timestamp` 签名，不附加 Electron runtime/
 | `verifyDmgDeveloperSignature(report, options, verification)` | 在共享签名校验之上要求唯一身份与报告字段；`verification.verified` 必须来自成功验签，DMG 使用 `hardenedRuntime: false` |
 | `packageDmg(args, dependencies?)` | 返回 `{ artifact, manifest, checksum }`；支持注入 `platform`、`files`、`run`、`copyBundle`、`discover`、`hashAsset`、`signManifest`、`onStep`、`now` |
 
-命令 runner 的结果契约为 `{ status, stdout, stderr, error? }`，非零退出码或异常都会立即停止；错误只记录阶段，不回显子进程输出或认证内容。`onStep` 只收到阶段 ID 与状态。失败时不继续验签、哈希、签署清单或导出文件；只保留本轮创建的隔离 staging 供本机检查。已有输出不覆盖。
+命令 runner 的结果契约为 `{ status, stdout, stderr, error? }`，非零退出码或异常都会立即停止；错误只记录阶段，不回显子进程输出或认证内容。`onStep` 只收到阶段 ID 与状态。失败时不继续验签、哈希、签署清单或导出文件；只保留该次运行创建的隔离 staging 供本地检查。已有输出不覆盖。
 
 ## Electron hardened runtime 与 entitlements
 
@@ -126,12 +126,12 @@ Keychain 和提醒 helper 不继承 Electron 的 JIT 权限。普通 framework�
 
 ## 公证与分发顺序
 
-1. 从清洁、正确架构的 Electron 构建副本开始，核验精确证书身份与每个 Mach-O 架构；写入本轮 entitlements。
+1. 从清洁、正确架构的 Electron 构建副本开始，核验精确证书身份与每个 Mach-O 架构；写入该次运行的 entitlements。
 2. 按深度由内向外签 Mach-O、framework、嵌套 Helper App，更新原生 helper 哈希，最后签 ASTaria.app。验证整个 App，并对每个子项独立 `codesign --verify --strict`（包括非标准 `Resources/app/bin` 位置），再检查签名 authority、team、timestamp 和 runtime 标志。任一步失败立即停止，失败副本不能作为成品。
 3. 用 `ditto -c -k --sequesterRsrc --keepParent` 创建 App 公证 ZIP，然后执行 `xcrun notarytool submit <zip> --keychain-profile <已有名称> --wait --output-format json`。必须解析 JSON 的 `status: Accepted` 和 submission ID；`In Progress`、`Invalid`、超时或无法解析都不能继续。ZIP 本身不能 staple，接受后对 ASTaria.app 执行 `xcrun stapler staple`、`xcrun stapler validate` 和 `spctl --assess --type execute --verbose=2`。
 4. 将 `plan.options` 写为公开 JSON，然后执行计划中的实际 `package-dmg.mjs --signing-options` 命令，用已验证、已 staple 的 App 制作独立 signed DMG。入口保留 App 签名及 ticket，完成 DMG 签名、验签、image 验证与公证前的 checksum/manifest。分发容器包含公开安装说明与 `/Applications` 快捷方式。
 5. DMG 已由打包入口完成精确 Developer ID 时间戳签名，不重复签名。用 `notarytool submit <dmg> --keychain-profile <已有名称> --wait --output-format json` 单独提交并确认 `Accepted`。
-6. 对最终 DMG 执行 `xcrun stapler staple`、`xcrun stapler validate` 和 `spctl --assess --type open --context context:primary-signature --verbose=2`。记录 App、DMG 各自回执、校验退出码与本轮 artifact 路径、最终 DMG SHA-256、App CDHash、team ID。
+6. 对最终 DMG 执行 `xcrun stapler staple`、`xcrun stapler validate` 和 `spctl --assess --type open --context context:primary-signature --verbose=2`。记录 App、DMG 各自回执、校验退出码与该次 artifact 路径、最终 DMG SHA-256、App CDHash、team ID。
 7. 所有签名和 staple 改动结束后，再读取最终 DMG 字节，重算 SHA-256 和 sizeBytes，写对应 `.dmg.sha256` 和 `.manifest.json`。传入的清单模板须包含刚读取的、已更新 helper 哈希的 buildInfo。`refreshMacSigningManifest` 返回更新后的清单与 checksum 文本；它不会写文件或读取发布私钥。它会丢弃旧 Ed25519 签名、旧 ZIP/资产列表和未重新检查的 imageVerified 等标志，要求独立发布步骤对最终清单重新签名并通过既有 `verifyReleaseManifest` 验签。
 
 计划里的 `later` 数组先安排公开 options JSON 写入，再调用实际 DMG 打包命令，之后保留公证、staple、最终验签与清单刷新步骤。公开文件默认路径为输出目录下的 `ASTaria-{version}-mac-{arch}-signing-options.json`，安装说明默认指向仓库 `INSTALL.md`。`write-dmg-options` 和 `refresh-manifest` 是集成步骤；后者必须替换打包命令生成的公证前 sidecar，绑定最终回执并最后签署清单。模块没有执行整个 `later` 数组的入口。集成代码必须按步骤解析回执并核验成品关联，不能仅循环执行其中的命令。收到 Apple 错误时应在受控本机环境审阅诊断，日志不能输出认证材料；这个模块的失败信息只显示停止阶段。
@@ -167,4 +167,4 @@ DMG 打包先在独立可写 staging 映像中加入背景和 Finder 元数据�
 
 构建机需要 Python 3，以及只供打包使用的 `ds_store==1.3.1`、`mac_alias==2.2.2`；可安装到独立工具目录并用 `ASTARIA_DMG_LAYOUT_MODULES` 指定，不加入应用运行时依赖。`ASTARIA_DMG_PYTHON` 可指定 Python 可执行文件。透明说明图标使用系统 clang/AppKit 编译 staging helper；helper 不随 DMG 分发。依赖缺失、写布局或卸载失败时打包停止，不把半成品标为可分发。
 
-Finder 对已打开窗口可能保留本机的大小、工具栏和侧栏设置，已有窗口与首次打开磁盘的显示需分别核对。布局中的默认尺寸为 900×560；目前本机实见已核对背景、拖拽箭头、底部说明文字与说明入口，下载后首次挂载的行为仍属于成品验收。
+Finder 对已打开窗口可能保留本机的大小、工具栏和侧栏设置，已有窗口与首次打开磁盘的显示需分别核对。布局默认尺寸为 900×560。成品验收应分别核对首次挂载与已有窗口中的背景、拖拽箭头、底部说明文字和说明入口。

@@ -10,7 +10,7 @@ const unavailable = () => { throw new ValidationError('手机端暂不安装本�
 
 /** Each request has its own completion scope. Database writes stay synchronous;
  * no second mobile rule engine or desktop HTTP server is involved. */
-export function createMobileService({ db, vault, fetcher, complete, webSearch, pageFetcher, persona, working, platform = 'web-preview' }) {
+export function createMobileService({ db, vault, fetcher, complete, webSearch, persona, working, platform = 'web-preview' }) {
   // A phone's first profile starts frosted. Explicit existing/imported choices
   // remain authoritative; desktop defaults are independent.
   if (!db.getPreference('app')) {
@@ -19,7 +19,7 @@ export function createMobileService({ db, vault, fetcher, complete, webSearch, p
     readOnboarding(db)
     db.setPreference('app', { ...getPreferences(db), glass: 'soft' })
   }
-  webSearch ??= createWebSearch({ keychain: vault, fetcher, pageFetcher, getSettings: () => getModelSettings(db) })
+  webSearch ??= createWebSearch({ keychain: vault, fetcher, getSettings: () => getModelSettings(db) })
   const core = createMobileServiceScope()
   return {
     ...core,

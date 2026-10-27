@@ -154,6 +154,7 @@ test('original settings mobile hierarchy and native-compatible adaptive selectio
     assert.equal(chooser.reused,true);assert.equal(chooser.header,false);assert.ok(chooser.width<=280&&chooser.height<=360);assert.ok(chooser.gap>=5&&chooser.gap<=7);assert.equal(chooser.radius,'19px');assert.equal(chooser.font,'13px');assert.equal(chooser.title,'13px');assert.equal(chooser.weight,'400')
     assert.equal(await evaluate('getComputedStyle(document.querySelector(".adaptive-select-dialog")).backgroundColor'),'rgba(0, 0, 0, 0)')
     assert.equal(await evaluate('document.querySelector(".adaptive-select-dialog .home-glass-measure")!==null'),true)
+    assert.match(await evaluate('getComputedStyle(document.querySelector(".adaptive-select-dialog .home-glass-backdrop")).backdropFilter'), /blur\(6px\)/, 'chooser stays frosted over both clear and frosted settings')
     const clip=await evaluate(`(()=>{const u=document.querySelector('.xixi-settings-scroll'),layers=[...u.querySelectorAll('[style]')].filter(e=>e.style.maskImage),samplers=[...u.querySelectorAll('.home-glass-backdrop')];return {root:u.style.clipPath,emptySamplingAncestors:samplers.every(e=>{for(let p=e.parentElement;p&&p!==u;p=p.parentElement)if(p.style.clipPath||p.style.maskImage)return false;return true}),layers:layers.length,isolated:samplers.every(e=>getComputedStyle(e).visibility!=='hidden'),visibleHeader:getComputedStyle(document.querySelector('.xixi-settings-page-header')).visibility}})()`)
     assert.equal(clip.root,'');assert.equal(clip.emptySamplingAncestors,true);assert.equal(clip.layers,0);assert.equal(clip.isolated,true);assert.equal(clip.visibleHeader,'visible')
     assert.equal(await evaluate('getComputedStyle(document.querySelector(".adaptive-select-dialog"),"::backdrop").backgroundColor'),theme==='dark'?'rgba(0, 0, 0, 0.22)':'rgba(53, 64, 75, 0.09)','TaskDialog uses a slight backdrop tint while retaining context')
@@ -173,7 +174,7 @@ test('original settings mobile hierarchy and native-compatible adaptive selectio
   for(const theme of ['dark','light']){
     await viewport(390);await evaluate(`fixture.mount('android',${JSON.stringify(theme)},'soft','settings','detailed')`);await evaluate('fixture.settle()');await button('外观与动画')
     await click('document.querySelector(".adaptive-select-trigger[aria-label=\\"黑洞画质\\"]")')
-    assert.equal(await evaluate('document.querySelector(".adaptive-select-dialog .home-glass-backdrop").style.backdropFilter.startsWith("url(")'),true)
+    assert.match(await evaluate('document.querySelector(".adaptive-select-dialog .home-glass-backdrop").style.backdropFilter'), /^blur\(6px\) url\(/)
     await assertVisibleUnderlay(`390-${theme}-soft-detailed`);await shot(`390-${theme}-soft-detailed-chooser`);await key('Escape')
   }
   // Inspect every directory/section boundary with real running motion. The

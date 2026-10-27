@@ -1,4 +1,4 @@
-import { createContext, forwardRef, useContext, useId, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react'
+import { createContext, forwardRef, useContext, useId, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode, RefObject, SelectHTMLAttributes } from 'react'
 import { createPortal } from 'react-dom'
 import type { GlassMaterial } from '../home/GlassSurface'
@@ -33,7 +33,12 @@ export const AdaptiveSelect = forwardRef<HTMLSelectElement, SelectHTMLAttributes
   const phaseRef = useRef(phase)
   const open = phase !== 'closed'
   const composing = useRef(false)
-  const material = host?.material ?? { transmission: 70, blur: 0, rim: 40, shadow: 30 }
+  // A chooser must separate its options from the underlying settings text,
+  // including while it previews the global clear-glass preference.
+  const material = useMemo(() => ({
+    ...(host?.material ?? { transmission: 70, rim: 40, shadow: 30 }),
+    blur: Math.max(6, host?.material?.blur ?? 6),
+  }), [host?.material])
   const [active, setActive] = useState(-1)
   const search = useRef({ text: '', time: 0 })
   const restoreFocus = useRef(false)

@@ -1,0 +1,101 @@
+{
+  "view": "horizon",
+  "framing": "overscan-2",
+  "overscan": 2,
+  "captureExposureScale": 2,
+  "source": "ASTaria BlackHoleRenderer native 4K / Ultra / Float32 LUT",
+  "fps": 30,
+  "duration": 7,
+  "loop": "1 second tail-to-head crossfade, first frame at source second 1",
+  "assets": [
+    {
+      "file": "horizon-landscape-dark-4k-high.webp",
+      "kind": "image",
+      "width": 3840,
+      "height": 2160,
+      "quality": "high",
+      "resolution": "4k",
+      "webpQuality": 96,
+      "bytes": 181530,
+      "sha256": "c1978e5673117a4a0b4794ee8bddda7d204dec654655a99a66cd86d394f74b92"
+    },
+    {
+      "file": "horizon-landscape-dark-1080p-high.mp4",
+      "kind": "video",
+      "width": 1920,
+      "height": 1080,
+      "quality": "high",
+      "resolution": "1080p",
+      "targetMbps": 20,
+      "bytes": 17004662,
+      "sha256": "906df2920d0c91b4237f671644e17e7d14449f26869538bf936935f484fee959"
+    },
+    {
+      "file": "horizon-landscape-light-4k-high.webp",
+      "kind": "image",
+      "width": 3840,
+      "height": 2160,
+      "quality": "high",
+      "resolution": "4k",
+      "webpQuality": 96,
+      "bytes": 151940,
+      "sha256": "2be19aa3343b01bcba71069590a8ea183f3d2cf357adc120e26deac14d887c15"
+    },
+    {
+      "file": "horizon-landscape-light-1080p-high.mp4",
+      "kind": "video",
+      "width": 1920,
+      "height": 1080,
+      "quality": "high",
+      "resolution": "1080p",
+      "targetMbps": 20,
+      "bytes": 17004599,
+      "sha256": "e1a3fa4d684b82b01858f25261b43188bed648115fc48220dc38ae941cb816db"
+    },
+    {
+      "file": "horizon-portrait-dark-4k-high.webp",
+      "kind": "image",
+      "width": 2160,
+      "height": 3840,
+      "quality": "high",
+      "resolution": "4k",
+      "webpQuality": 96,
+      "bytes": 182098,
+      "sha256": "1a622d3af6c9b68ab5a47aa17caf63b1f28ee0d057687b63254178dbfc6124c0"
+    },
+    {
+      "file": "horizon-portrait-dark-1080p-high.mp4",
+      "kind": "video",
+      "width": 1080,
+      "height": 1920,
+      "quality": "high",
+      "resolution": "1080p",
+      "targetMbps": 20,
+      "bytes": 17004656,
+      "sha256": "4893f5dbe5470683dedd67977bf4af8a7fdf4e78452f8b3f96f6257a48b05411"
+    },
+    {
+      "file": "horizon-portrait-light-4k-high.webp",
+      "kind": "image",
+      "width": 2160,
+      "height": 3840,
+      "quality": "high",
+      "resolution": "4k",
+      "webpQuality": 96,
+      "bytes": 148520,
+      "sha256": "ab118f8c835e33076e0b36af7e3638989c39e94b78983f94beccaab1a53c7b6b"
+    },
+    {
+      "file": "horizon-portrait-light-1080p-high.mp4",
+      "kind": "video",
+      "width": 1080,
+      "height": 1920,
+      "quality": "high",
+      "resolution": "1080p",
+      "targetMbps": 20,
+      "bytes": 17004605,
+      "sha256": "da26b24923146c8c25384513f2f2e3c9de3a748e0bf04f6cb31545d8a756abe2"
+    }
+  ],
+  "distribution": "bundled-1080p-video-4k-still"
+}

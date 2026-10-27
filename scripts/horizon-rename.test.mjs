@@ -71,16 +71,28 @@ test('new intelligent group IDs with identical membership/order save metadata wi
   assert.deepEqual(f.db.getPlanner().blocks, blocksBefore)
 })
 
-test('overdue unfinished sessions still take the scheduling path even if the only draft edit is a title', async t => {
+test('a title-only edit leaves an already-started session in place and never calls the model', async t => {
   const f = fixture(t, { saved: true, at: '10:01' }), snapshot = f.service.list({ date: DATE })
-  assert.equal(snapshot.items.find(item => item.id === 'math-a').needsReschedule, true)
-  const before = placement(f.db), events = []
-  const result = await f.service.apply(f.request(renameMath), { onEvent: event => events.push(event) })
-  assert.equal(f.calls(), 1, 'overdue work must be rescheduled instead of taking a metadata-only shortcut')
-  assert.ok(events.some(event => event.type === 'phase' && event.phase === 'waiting'))
-  assert.notDeepEqual(placement(f.db), before)
-  assert.ok(f.db.getPlanner().blocks.every(block => block.start > '10:01'))
+  // math-a started at 10:00: its slot is an immovable reference, so only the
+  // two future rows form the editable groups.
+  const started = snapshot.items.find(item => item.id === 'math-a')
+  assert.deepEqual([started.movable, started.reason ?? null, Object.hasOwn(started, 'needsReschedule')], [false, '时段已开始，保留原安排', false])
+  assert.ok(!snapshot.groups.some(group => group.tasks.some(task => task.id === 'math-a')), '已开始的时段不应进入可编辑分组')
+  const before = placement(f.db), blocksBefore = structuredClone(f.db.getPlanner().blocks), events = []
+  const result = await f.service.apply(f.request(groups => groups.map(group => group.itemIds.includes('math-b') ? { ...group, title: '三角函数复习' } : group)),
+    { onEvent: event => events.push(event) })
+  // Renaming future groups stays metadata-only: an elapsed started slot is not a
+  // reason to reflow the day or to spend a schedule-model call.
+  assert.equal(f.calls(), 0, '仅改名不应调用排程模型')
+  assert.deepEqual(placement(f.db), before, '仅改名不应改变任何时刻')
   assert.ok(result.operation?.undoable)
+  const after = f.db.getPlanner().blocks
+  assert.equal(after.find(block => block.id === 'math-b').horizonGroupTitle, '三角函数复习')
+  assert.deepEqual(after.find(block => block.id === 'math-a'), blocksBefore.find(block => block.id === 'math-a'),
+    '已开始的时段保留原时刻与原分组元数据')
+  assert.ok(!events.some(event => event.type === 'phase' && ['waiting', 'thinking', 'receiving'].includes(event.phase)))
+  f.db.undoOperation(result.operation.id)
+  assert.deepEqual(f.db.getPlanner().blocks, blocksBefore)
 })
 
 test('changing group order continues to use the existing scheduling and model path', async t => {

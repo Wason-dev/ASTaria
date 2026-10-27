@@ -36,6 +36,28 @@ test('real provider emits estimated then actual usage, and status summary calls 
  assert.equal(reports.length,2)
  assert.equal(requests[0].max_tokens,undefined,'context display never caps reasoning')
 })
+test('thinking mode removes an unsupported forced tool choice without changing the saved effort',async()=>{
+ const requests=[]
+ const complete=createCompletion({read:async()=> 'fake-test-key'},async(_url,options)=>{requests.push(JSON.parse(options.body));return Response.json({choices:[{message:{role:'assistant',content:'好'},finish_reason:'stop'}]})},()=>settings.cloudModel,()=>settings)
+ await complete({...payload,tool_choice:'required'})
+ assert.equal(requests[0].thinking.type,'enabled')
+ assert.equal(requests[0].reasoning_effort,'high')
+ assert.equal(requests[0].tool_choice,'auto')
+})
+test('a required planner read turns thinking off only for that deterministic round',async()=>{
+ const requests=[], reports=[]
+ const complete=createCompletion({read:async()=> 'fake-test-key'},async(_url,options)=>{requests.push(JSON.parse(options.body));return Response.json({choices:[{message:{role:'assistant',content:'好'},finish_reason:'stop'}]})},()=>settings.cloudModel,()=>settings)
+ const tool_choice={type:'function',function:{name:'read_planner'}}
+ await complete({...payload,tool_choice},{purpose:'planner-required-read',onContextUsage:usage=>reports.push(usage)})
+ assert.equal(requests[0].thinking.type,'disabled')
+ assert.equal(requests[0].reasoning_effort,'none')
+ assert.deepEqual(requests[0].tool_choice,tool_choice)
+ assert.ok(reports.at(-1).outputTokens>0,'required reads are part of conversation usage')
+ await complete(payload)
+ assert.equal(requests[1].thinking.type,'enabled','normal reasoning resumes after the forced read')
+ assert.equal(requests[1].reasoning_effort,'high')
+ assert.equal(requests[1].max_tokens,undefined)
+})
 test('broken optional observers cannot interrupt provider replies',async()=>{
  const complete=createCompletion({read:async()=> 'fake-test-key'},async()=>Response.json({choices:[{message:{content:'完整回答'},finish_reason:'stop'}]}),()=>settings.cloudModel,()=>settings)
  const result=await complete(payload,{onContextUsage:()=>{throw Error('UI disconnected')}})

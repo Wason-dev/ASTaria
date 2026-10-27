@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A57A10000000000000000005 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A57A10000000000000000006 /* PrivacyInfo.xcprivacy */; };
 		A57A10000000000000000001 /* ASTariaSecretsPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = A57A10000000000000000002 /* ASTariaSecretsPlugin.swift */; };
 		A57A10000000000000000003 /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A57A10000000000000000004 /* ViewController.swift */; };
 		2FAD9763203C412B000D30F8 /* config.xml in Resources */ = {isa = PBXBuildFile; fileRef = 2FAD9762203C412B000D30F8 /* config.xml */; };
@@ -21,6 +22,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		A57A10000000000000000006 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		A57A10000000000000000002 /* ASTariaSecretsPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ASTariaSecretsPlugin.swift; sourceTree = "<group>"; };
 		A57A10000000000000000004 /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
 		2FAD9762203C412B000D30F8 /* config.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = config.xml; sourceTree = "<group>"; };
@@ -68,6 +70,7 @@
 		504EC3061FED79650016851F /* App */ = {
 			isa = PBXGroup;
 			children = (
+				A57A10000000000000000006 /* PrivacyInfo.xcprivacy */,
 				A57A10000000000000000002 /* ASTariaSecretsPlugin.swift */,
 				A57A10000000000000000004 /* ViewController.swift */,
 				9582B6822FE993A50072D4E8 /* SceneDelegate.swift */,
@@ -148,6 +151,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A57A10000000000000000005 /* PrivacyInfo.xcprivacy in Resources */,
 				504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */,
 				50B271D11FEDC1A000F3C39B /* public in Resources */,
 				504EC30F1FED79650016851F /* Assets.xcassets in Resources */,

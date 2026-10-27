@@ -6,9 +6,9 @@
 - 应用二进制另附 ASTaria 的 Apache-2.0 LICENSE、NOTICE、Electron 的 LICENSE 与 Chromium notices；生产依赖许可收集无缺失条目。该清单不等于所有列出的包都进入应用二进制。
 - 分发资源不包含开发机器的路径或环境信息。
 
-Windows 的 `public/astaria.ico` 从同一黑底成稿直接渲染 16/24/32/48/64/128/256 像素图层，用于 EXE 与 NSIS 安装/卸载图标；macOS App 与提醒辅助程序使用同一 ICNS。iOS App 图标为 1024 像素 RGB，不含 alpha。以上按黑底成稿导出的 macOS 与 Windows 记录保留为默认导出基线。
+Windows 的 `public/astaria.ico` 从同一黑底成稿直接渲染 16/24/32/48/64/128/256 像素图层，用于 EXE 与 NSIS 安装/卸载图标；macOS App 与提醒辅助程序使用同一 ICNS。iOS App 图标为 1024 像素 RGB，不含 alpha。macOS 与 Windows 均以按黑底成稿导出的资源为默认基线。
 
-2026-10-14 的透明底图标是**本地候选试用**，不是新的分发基线：主代理以 `design/icon/new/astaria-icon-transparent-2048.png`（2048×2048 RGBA）为源，保留原色与图案等比缩放导出 macOS ICNS 与 Windows ICO；图案以中心为基准放大约 10%（`glyphScale 1.1`），原轮廓未被裁掉、透明边缘保留，没有重绘、改色或新增渐变。只覆盖本机候选的 macOS App、提醒辅助程序与**应用程序目录里的 ASTaria 原生替身**（指向 `desktop-builds` 中 Mac 候选的原生 Finder alias；DMG 内的 `Applications` 只是系统文件夹快捷方式，没有替换系统文件夹图标），以及 Windows EXE 与 NSIS 安装/卸载图标。Android、iOS 与网站仍使用已选的黑底成稿，`scripts/generate-icons.mjs` 的默认导出也仍是黑底，既有 41 项黑底导出记录不变。透明源 PNG 是 Git 忽略的本地素材，不应 `git add -f` 或改动忽略规则，也没有被打进本地包，不属于公开分发资源清单；进入本地包的是导出后的透明 ICNS 与 ICO。Mac 本机候选签名与隔离冒烟通过，ICNS 11 档及 Windows EXE / NSIS setup 7 档资源的像素透明验证通过；Finder 显示仍由主代理核对，Windows 真机**尚未验收**；本轮仍为本地候选，没有公开发布、公开下载链接或公开更新签名清单。
+透明底桌面图标是 2026-10-14 的本地素材试验，未成为分发基线；桌面导出与分发已统一使用黑底成稿。透明源 `astaria-icon-transparent.svg` 仍用于 Android adaptive 前景、通知与主题遮罩及启动画面合成。透明 PNG 母版为 Git 忽略的本地文件，不 `git add -f`、不改忽略规则，也不进入仓库或分发产物。
 
 ## DMG 安装背景
 

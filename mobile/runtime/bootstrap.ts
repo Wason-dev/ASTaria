@@ -19,6 +19,12 @@ import { mobilePlatformRequests } from './platformApi.mjs'
 type Pending = { resolve: (value: unknown) => void; reject: (reason: Error) => void; onEvent?: (value: unknown) => void; cleanup: () => void }
 type Reply = { id: string; kind: 'bridge' | 'event' | 'result' | 'error'; operation?: string; input?: unknown; event?: unknown; result?: unknown; error?: string; status?: number }
 export async function startMobileRuntime() {
+  if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'ios') {
+    // Native WKWebView ignores this limit for user pinch gestures. It prevents
+    // the automatic input-focus zoom while keeping chat text at the chosen size.
+    const viewport = document.querySelector<HTMLMetaElement>('meta[name="viewport"]')
+    if (viewport) viewport.content = `${viewport.content}, maximum-scale=1`
+  }
   const worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module', name: 'astaria-local-data' })
   const pending = new Map<string, Pending>(), storage = nativeSnapshots(), secrets = nativeSecrets()
   const sourceRequest = createCapacitorSourceExecutor()

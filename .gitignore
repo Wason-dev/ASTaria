@@ -53,3 +53,7 @@ mobile/ios/DerivedData/
 *.p12
 *.jks
 *.keystore
+
+# Optional 4K video pack remains local until a separate resource publication.
+/media-assets/4k/
+/.mobile-build/

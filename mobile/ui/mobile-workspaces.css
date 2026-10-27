@@ -2,7 +2,9 @@
 .mobile-schedule-workspace[data-active=true] { opacity:1; visibility:visible; transition-delay:0s; pointer-events:auto; }
 .mobile-schedule-panel { position:relative; width:min(var(--workspace-content-width,1320px),calc(100% - 2 * var(--home-left))); margin-inline:auto; height:100%; min-width:0; }
 .mobile-schedule-panel>.m-calendar { position:relative; z-index:1; }
-.mobile-schedule-panel .m-calendar-content { padding:0 0 26px; }
+/* The scrolling viewport includes the shadow gutter; the heading and glass
+   keep their original content width and alignment. */
+.mobile-schedule-panel .m-calendar-content { --calendar-shadow-gutter:min(24px,var(--home-left,22px)); width:calc(100% + 2 * var(--calendar-shadow-gutter)); margin-inline:calc(-1 * var(--calendar-shadow-gutter)); padding:0 var(--calendar-shadow-gutter) 26px; }
 .mobile-schedule-panel .m-calendar .m-calendar-date { min-width:0; border-radius:8px; }
 .mobile-schedule-panel .m-calendar .m-calendar-entry { border:1px solid var(--m-line); border-radius:14px; background:transparent; }
 .mobile-schedule-panel .m-calendar .m-calendar-entry-heading strong { font-size:13px; font-weight:400; }

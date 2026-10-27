@@ -5,7 +5,7 @@ import { planWeeksValue } from './freeTimePlan.mjs'
 import { ValidationError, knownKeys, identifier, text, object, choice, dateTime, day, clockTime, taskInput, questionOptions, executionNotice, validateMemory } from './validation.mjs'
 import { dayEventValue, validateDayEvents, validateDayExceptions, horizonGroupValue } from './planner.mjs'
 import { BACKUP_MAX_BYTES, BACKUP_EXPORT_TOO_LARGE, BACKUP_IMPORT_TOO_LARGE, backupByteLength, serializeBackup } from '../src/xixi/backupLimits.ts'
-import { normalizeChatAttachments } from './chatAttachments.mjs'
+import { normalizeChatAttachments, normalizeTurnAttachments, summarizeChatAttachments, chatAttachmentsMatch } from './chatAttachments.mjs'
 import { isSourceMetadataList } from '../src/xixi/sourceMetadata.ts'
 
 const columns = {
@@ -16,6 +16,7 @@ const columns = {
 }
 const documentTables = new Set(['areas', 'tasks', 'events', 'availability', 'assignments', 'memories', 'operations', 'turns', 'summaries'])
 const stateAllowed = key => ['activeConversation', 'deepseekModel', 'planner-v1', 'planner-v1-weekend-defaults-v1', 'companion-v1', 'preferences:app', 'preferences:model-connection', 'preferences:free-time-daily'].includes(key) || /^(task-undo-version:|generated-area:|deleted-conversation:|deleted-request:)/u.test(key)
+const deviceState = new Set(['preferences:mobile-reminders-enabled'])
 const fail = message => { throw new ValidationError(message) }
 const checksum = tables => sha256Hex(JSON.stringify(tables))
 const integer = (value, min = 0, max = Number.MAX_SAFE_INTEGER) => { if (!Number.isSafeInteger(value) || value < min || value > max) fail('备份数字无效'); return value }
@@ -24,6 +25,9 @@ const bool = value => { if (typeof value !== 'boolean') fail('备份开关无效
 const stamp = value => { dateTime(value); if (!value.includes('T')) fail('备份时间必须包含时区'); return value }
 const optionalStamp = value => { if (value != null) stamp(value) }
 const ids = value => array(value).forEach(item => identifier(item))
+// Context provenance can cover the full supported message table. Other ID
+// collections retain their existing independent 10,000-entry bound.
+const sourceIds = value => array(value, 100000).forEach(item => identifier(item))
 const parse = (value, label = '备份记录') => { try { return JSON.parse(value) } catch { fail(`${label}无法解析`) } }
 function block(value) {
   knownKeys(value, ['id', 'taskId', 'title', 'date', 'start', 'end', 'locked', 'horizonGroupId', 'horizonGroupTitle'])
@@ -167,7 +171,7 @@ function validateDocument(table, document) {
     const attachments = normalizeChatAttachments(document.attachments)
     for (const key of ['requestId', 'taskId', 'toolCallId']) if (document[key] !== undefined) identifier(document[key])
     optionalStamp(document.retractedAt); optionalStamp(document.contextRetractedAt)
-    if (document.sourceMessageIds !== undefined) ids(document.sourceMessageIds)
+    if (document.sourceMessageIds !== undefined) sourceIds(document.sourceMessageIds)
     if (document.reasoningContent !== undefined) { choice(document.role, ['assistant'], '思考内容角色'); text(document.reasoningContent, '思考内容', 2000000, { empty: true }) }
     if (document.question !== undefined) questionOptions(document.question)
     if (document.sources !== undefined && (document.role !== 'assistant' || document.toolCalls?.length || !isSourceMetadataList(document.sources))) fail('备份网页来源元数据无效')
@@ -194,11 +198,11 @@ function validateDocument(table, document) {
     if (document.lifetime !== undefined) { choice(document.lifetime, ['temporary', 'long-term', 'inference'], '记忆类型'); if (document.lifetime !== 'long-term' && !document.expiresAt) fail('临时记忆缺少有效期') }
   } else if (table === 'summaries') {
     knownKeys(document, ['conversationId', 'text', 'throughSeq', 'sourceMessageIds', 'updatedAt'])
-    identifier(document.conversationId); text(document.text, '摘要', 16000, { empty: true }); integer(document.throughSeq); ids(document.sourceMessageIds); stamp(document.updatedAt)
+    identifier(document.conversationId); text(document.text, '摘要', 16000, { empty: true }); integer(document.throughSeq); sourceIds(document.sourceMessageIds); stamp(document.updatedAt)
   } else if (table === 'turns') {
     knownKeys(document, ['requestId', 'conversationId', 'text', 'attachments', 'context', 'userMessageId', 'status', 'ownerPid', 'ownerToken', 'createdAt', 'updatedAt', 'error', 'result', 'progress', 'retractedAt'])
     identifier(document.requestId); identifier(document.conversationId); identifier(document.userMessageId)
-    const attachments = normalizeChatAttachments(document.attachments)
+    const attachments = normalizeTurnAttachments(document.attachments)
     text(document.text, '请求', 16000, { empty: Boolean(attachments?.length) })
     knownKeys(document.context, ['timezone', 'page', 'taskId', 'date', 'wishId', 'freeTimeGoalId']); text(document.context.timezone, '时区', 100)
     if (document.context.freeTimeGoalId !== undefined) identifier(document.context.freeTimeGoalId)
@@ -239,10 +243,11 @@ function validateDocument(table, document) {
   }
 }
 
-export function createBackupStore({ db, transaction, validate }) {
+export function createBackupStore({ db, transaction, validate, recoverAbandonedTurns = () => {} }) {
   const running = () => db.prepare("SELECT COUNT(*) count FROM turns WHERE json_extract(document,'$.status')='running'").get().count > 0
   function exportData() {
     return transaction(() => {
+      recoverAbandonedTurns()
       if (running()) throw new ValidationError('析熙还在处理消息，请等回复结束再备份', 409)
       const tables = Object.fromEntries(Object.entries(columns).map(([table, fields]) => [table, db.prepare(`SELECT ${fields.join(',')} FROM ${table}`).all().filter(row => table !== 'state' || stateAllowed(row.key))]))
       const backup = { format: 'astaria-backup', version: 1, createdAt: new Date().toISOString(), tables, checksum: checksum(tables) }
@@ -278,6 +283,7 @@ export function createBackupStore({ db, transaction, validate }) {
           if (table === 'turns' && document.status === 'running') fail('备份含未完成的请求，请使用完整备份')
         }
         if (table === 'state') {
+          if (deviceState.has(row.key)) { bool(parse(row.value)); continue }
           if (!stateAllowed(row.key) || typeof row.value !== 'string') fail('备份包含不支持的设置')
           if (row.key.startsWith('deleted-')) { identifier(row.key.split(':').slice(1).join(':')); if (row.value.startsWith('{')) object(parse(row.value)); else stamp(row.value) }
           else if (!['activeConversation', 'deepseekModel'].includes(row.key)) {
@@ -302,6 +308,7 @@ export function createBackupStore({ db, transaction, validate }) {
       openCompletions.add(row.taskId)
     }
     return transaction(() => {
+      recoverAbandonedTurns()
       if (running()) throw new ValidationError('析熙还在处理消息，请等回复结束再恢复', 409)
       const priorRevision = JSON.parse(db.prepare("SELECT value FROM state WHERE key='planner-v1'").get()?.value ?? '{}').revision ?? 0
       const oldRequests = db.prepare('SELECT id FROM turns').all()
@@ -309,16 +316,27 @@ export function createBackupStore({ db, transaction, validate }) {
       const previousMemories = new Map(db.prepare('SELECT id,document FROM memories').all().map(row => [row.id, JSON.parse(row.document).updatedAt]))
       const priorHidden = new Set(db.prepare("SELECT id FROM messages WHERE json_extract(document,'$.excludeFromContext')=1").all().map(row => row.id))
       const priorTombstones = db.prepare("SELECT key,value FROM state WHERE key LIKE 'deleted-conversation:%' OR key LIKE 'deleted-request:%'").all()
+      const priorDeviceState = [...deviceState].flatMap(key => db.prepare('SELECT key,value FROM state WHERE key=?').all(key))
       const priorConversations = db.prepare('SELECT id FROM conversations').all()
       for (const table of ['messages', ...Object.keys(columns).filter(table => table !== 'messages')]) db.prepare(`DELETE FROM ${table}`).run()
       for (const [table, fields] of Object.entries(columns)) {
         const insert = db.prepare(`INSERT INTO ${table} (${fields.join(',')}) VALUES (${fields.map(() => '?').join(',')})`)
-        for (const row of input.tables[table]) insert.run(...fields.map(key => row[key]))
+        for (const row of input.tables[table]) {
+          if (table === 'state' && deviceState.has(row.key)) continue
+          // Do not allocate legacy duplicate blobs even temporarily in sql.js.
+          let restored = row
+          if (table === 'turns') {
+            const turn = JSON.parse(row.document)
+            restored = { ...row, document: JSON.stringify({ ...turn, attachments: normalizeTurnAttachments(turn.attachments) }) }
+          }
+          insert.run(...fields.map(key => restored[key]))
+        }
       }
       if (db.prepare('PRAGMA foreign_key_check').all().length) fail('备份对话关联不完整')
       validate()
       const stampNow = new Date().toISOString(), tombstone = db.prepare('INSERT OR REPLACE INTO state(key,value) VALUES(?,?)')
       for (const row of priorTombstones) tombstone.run(row.key, row.value)
+      for (const row of priorDeviceState) tombstone.run(row.key, row.value)
       const deletedConversations = new Set(db.prepare("SELECT key FROM state WHERE key LIKE 'deleted-conversation:%'").all().map(row => row.key.slice('deleted-conversation:'.length)))
       const deletedRequests = new Set(db.prepare("SELECT key FROM state WHERE key LIKE 'deleted-request:%'").all().map(row => row.key.slice('deleted-request:'.length)))
       const messages = db.prepare('SELECT id,seq,document FROM messages').all().map(row => ({ ...JSON.parse(row.document), seq: row.seq }))
@@ -355,6 +373,8 @@ export function createBackupStore({ db, transaction, validate }) {
       for (const row of db.prepare('SELECT id,document FROM turns').all()) {
         const turn = JSON.parse(row.document), user = byMessage.get(turn.userMessageId)
         if (!user || user.role !== 'user' || user.conversationId !== turn.conversationId || user.requestId !== turn.requestId || turn.text !== user.content) fail('备份请求与原话不一致')
+        if (!chatAttachmentsMatch(turn.attachments, user.attachments)) fail('备份请求附件与原话不一致')
+        turn.attachments = summarizeChatAttachments(user.attachments)
         // An interrupted tool loop from a different database epoch is never
         // resumed. The original message remains available for a fresh request.
         if (turn.status === 'failed' || hidden.has(user.id)) turn.retractedAt = turn.retractedAt ?? stampNow

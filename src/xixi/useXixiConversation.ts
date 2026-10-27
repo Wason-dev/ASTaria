@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import * as React from 'react'
 import { chatApi, localApi } from './api'
 import type { ChatAttachment, ChatMessage, ChatStreamDraft, ConversationState, ConversationSummary, LocalStatus, Operation, SavedReasoning } from './types'
 import type { ResponsePhase } from '../prototype/responseEffects'
-import { mergeConversation, mergeOperationReceipt } from './conversationTimeline'
+import { mergeConversation, mergeOperationReceipt, completedChatRequests } from './conversationTimeline'
 import { advanceChatStream, restoreChatReasoning, streamHasVisibleProgress } from './stream'
 import { sameSnapshot } from '../stores/sameSnapshot.ts'
 import { startVisiblePolling } from '../stores/visiblePolling.ts'
 import { isReceiptEstimateRequest } from './receiptTaskSettings'
-import { pendingChatRequests } from './pendingChatRequest'
+import { pendingChatRequests, requestRecord } from './pendingChatRequest'
 import type { PendingChatContext, PendingChatRequest, PendingChatRequestStore } from './pendingChatRequest'
 
 export type XixiContext = PendingChatContext
@@ -20,6 +21,54 @@ function selectedConversation() { try { return sessionStorage.getItem(SELECTED_K
 function sameAttachments(left: ChatAttachment[] | undefined, right: ChatAttachment[] | undefined) {
   return JSON.stringify(left ?? []) === JSON.stringify(right ?? [])
 }
+
+type DraftOwner = { text: string; attachment: ChatAttachment | null; revision: number; currentRevision: { current: number }; instance: object; version: object; clear?: () => void }
+// One window can unmount and reopen a focus composer while a request is being
+// reconciled. Its completion must reach the current owner of that draft key.
+const draftOwners = new Map<string, DraftOwner>()
+export function useChatDraftCompletion(key: string, text: string, attachment: ChatAttachment | null, currentRevision: { current: number }, clear: () => void) {
+  const instance = useRef({})
+  const latest = useRef({ key, text, attachment, revision: currentRevision.current, currentRevision, clear })
+  latest.current = { key, text, attachment, revision: currentRevision.current, currentRevision, clear }
+  const register = (capture = false) => {
+    const value = latest.current
+    const previous = draftOwners.get(value.key)
+    const unchanged = previous && previous.text === value.text && previous.attachment === value.attachment
+      && (previous.instance !== instance.current || previous.revision === value.revision)
+    if (!unchanged && !capture) { draftOwners.delete(value.key); return undefined }
+    const owner = { ...value, instance: instance.current, version: unchanged ? previous.version : {} }
+    draftOwners.set(value.key, owner)
+    return owner
+  }
+  React.useLayoutEffect(() => {
+    register()
+    return () => {
+      const owner = draftOwners.get(key)
+      if (owner?.instance === instance.current) {
+        if (latest.current.key === key && owner.currentRevision.current !== owner.revision) draftOwners.delete(key)
+        else owner.clear = undefined
+      }
+    }
+  })
+  return () => {
+    const { version, text: sent } = register(true)!, storageKey = latest.current.key
+    return () => {
+      const owner = draftOwners.get(storageKey)
+      if (!owner || owner.version !== version) return
+      // Input handlers advance this ref synchronously, including when React
+      // has not yet committed the changed text/attachment to the composer.
+      if (owner.clear && owner.currentRevision.current !== owner.revision) { draftOwners.delete(storageKey); return }
+      // Consume before notifying React: duplicate completion reads
+      // and explicit retries must not clear a newly composed identical message.
+      draftOwners.delete(storageKey)
+      try {
+        if (sessionStorage.getItem(storageKey) === sent) sessionStorage.removeItem(storageKey)
+      } catch { /* The mounted composer can still clear its in-memory draft. */ }
+      owner.clear?.()
+    }
+  }
+}
+
 export function useXixiConversation(onTasksChanged: () => void, onNotice: (message: string) => void, pendingStore: PendingChatRequestStore = pendingChatRequests) {
   const [conversation, setConversation] = useState<ConversationState | null>(null)
   const [outgoing, setOutgoing] = useState<OutgoingMessage[]>([])
@@ -29,6 +78,7 @@ export function useXixiConversation(onTasksChanged: () => void, onNotice: (messa
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [error, setError] = useState('')
+  const [waitingNotice, setWaitingNotice] = useState('')
   const [sending, setSending] = useState(false)
   const [preparingSend, setPreparingSend] = useState(false)
   const preparation = useRef<object | null>(null)
@@ -55,6 +105,10 @@ export function useXixiConversation(onTasksChanged: () => void, onNotice: (messa
   const readingOlder = useRef(false)
   const activeRequest = useRef<string | null>(null)
   const cancelledRequests = useRef(new Set<string>())
+  const completedRequests = useRef(new Set<string>())
+  const completionCallbacks = useRef(new Map<string, Set<() => void>>())
+  const terminalCleanup = useRef(new Set<string>())
+  const deliveryError = useRef<{ requestId: string; text: string } | null>(null)
   const retractInFlight = useRef(false)
   const changed = useRef(onTasksChanged)
   const notice = useRef(onNotice)
@@ -65,21 +119,44 @@ export function useXixiConversation(onTasksChanged: () => void, onNotice: (messa
     const withdrawn = new Set(next.messages.filter(item => item.retractedAt && item.requestId).map(item => item.requestId!))
     // A transport can disconnect just before the final reply is saved. Once
     // that reply arrives through refresh, its durable transcript owns the UI.
-    const settled = new Set(next.messages.filter(item => item.role === 'assistant' && !item.retractedAt && item.requestId && item.content.trim()).map(item => item.requestId!))
+    const settled = completedChatRequests(next)
+    for (const id of settled) {
+      if (!completedRequests.current.has(id)) terminalCleanup.current.add(id)
+      completedRequests.current.add(id)
+      const callbacks = completionCallbacks.current.get(id)
+      completionCallbacks.current.delete(id)
+      callbacks?.forEach(complete => complete())
+    }
+    if (settled.size) {
+      if (terminalCleanup.current.size) {
+        const ids = [...terminalCleanup.current].filter(id => settled.has(id))
+        void (pendingStore.removeConfirmed ? pendingStore.removeConfirmed(next.conversationId, ids) : pendingStore.remove(ids)).then(() => { ids.forEach(id => terminalCleanup.current.delete(id)) })
+          .catch(() => { /* The next refresh retries durable cleanup. */ })
+      }
+      setOutgoing(items => {
+        const retained = items.filter(item => !settled.has(item.requestId))
+        return retained.length === items.length ? items : retained
+      })
+      const previousError = deliveryError.current
+      if (previousError && settled.has(previousError.requestId)) {
+        deliveryError.current = null
+        setError(current => current === previousError.text ? '' : current)
+      }
+    }
     if (withdrawn.size || settled.size) setInterruptedReasoning(current => {
       const retained = Object.entries(current).filter(([id]) => !withdrawn.has(id) && !settled.has(id))
       return retained.length === Object.keys(current).length ? current : Object.fromEntries(retained)
     })
     if (!withdrawn.size) return
-    for (const id of withdrawn) cancelledRequests.current.add(id)
+    for (const id of withdrawn) { cancelledRequests.current.add(id); completionCallbacks.current.delete(id) }
     if (activeTransport.current && withdrawn.has(activeTransport.current.requestId)) {
       activeTransport.current.controller.abort()
       activeTransport.current = null
       activeRequest.current = null
       busy.current = false
-      setStream(null); setSending(false); setResponsePhase('idle')
+      setStream(null); setSending(false); setWaitingNotice(''); setResponsePhase('idle')
     }
-    void pendingStore.remove(withdrawn).catch(() => { /* A later refresh retries cleanup; the server also blocks retry. */ })
+    void (pendingStore.removeConfirmed ? pendingStore.removeConfirmed(next.conversationId, withdrawn) : pendingStore.remove(withdrawn)).catch(() => { /* A later refresh retries cleanup; the server also blocks retry. */ })
     setOutgoing(items => {
       const retained = items.filter(item => !withdrawn.has(item.requestId))
       return retained.length === items.length ? items : retained
@@ -129,7 +206,7 @@ export function useXixiConversation(onTasksChanged: () => void, onNotice: (messa
       if (!mounted.current || currentRestoration !== restorationRevision.current) return
       setOutgoing(current => {
         const known = new Set(current.map(item => item.requestId))
-        return [...current, ...items.filter(item => !known.has(item.requestId) && !cancelledRequests.current.has(item.requestId)).map(item => ({ ...item, delivery: 'failed' as const }))]
+        return [...current, ...items.filter(item => !known.has(item.requestId) && !cancelledRequests.current.has(item.requestId) && !completedRequests.current.has(item.requestId)).map(item => ({ ...item, delivery: 'failed' as const }))]
       })
     }).catch(() => {
       if (mounted.current && currentRestoration === restorationRevision.current) setError('暂时无法读取本机发送记录，请保留原文后重试')
@@ -155,9 +232,9 @@ export function useXixiConversation(onTasksChanged: () => void, onNotice: (messa
     }
   }, [refresh, refreshStatus, pendingStore])
 
-  const send = useCallback(async (text: string, context: XixiContext, attachments?: ChatAttachment[], retryId?: string) => {
+  const send = useCallback(async (text: string, context: XixiContext | null, attachments?: ChatAttachment[], retryId?: string, onCompleted?: () => void) => {
     const content = text.trim()
-    if ((!content && !attachments?.length) || busy.current || retractInFlight.current) return false
+    if ((!retryId && ((!content && !attachments?.length) || !context)) || busy.current || retractInFlight.current) return false
     if (!conversation) { setError('先连接本机服务，读取对话后再发给我'); return false }
     const preparing = {}
     preparation.current = preparing
@@ -181,12 +258,37 @@ export function useXixiConversation(onTasksChanged: () => void, onNotice: (messa
       await pendingRestoration.current
       const pending = await pendingStore.list()
       if (!stillPreparing()) return false
-      const previous = pending.find(item => (!retryId || item.requestId === retryId) && !cancelledRequests.current.has(item.requestId) && item.text === content && sameAttachments(item.attachments, attachments) && item.conversationId === conversation.conversationId && item.context.page === context.page && item.context.taskId === context.taskId && item.context.wishId === context.wishId && item.context.freeTimeGoalId === context.freeTimeGoalId && item.context.date === context.date)
-      if (retryId && !previous) { setError('这条消息的发送记录已更新，请先重新读取对话'); return false }
-      request = previous ?? { requestId: crypto.randomUUID(), conversationId: conversation.conversationId, text: content, ...(attachments?.length ? { attachments } : {}), context, createdAt: new Date().toISOString(), seq: Math.max(0, ...conversation.messages.map(item => item.seq), ...pending.filter(item => item.conversationId === conversation.conversationId).map(item => item.seq ?? 0)) + 1 }
+      let previous = pending.find(item => !cancelledRequests.current.has(item.requestId) && !completedRequests.current.has(item.requestId) && item.conversationId === conversation.conversationId && (retryId ? item.requestId === retryId : item.text === content && sameAttachments(item.attachments, attachments) && item.context.page === context!.page && item.context.taskId === context!.taskId && item.context.wishId === context!.wishId && item.context.freeTimeGoalId === context!.freeTimeGoalId && item.context.date === context!.date && item.context.timezone === context!.timezone))
+      if (retryId) {
+        const entry = conversation.messages.find(item => item.role === 'user' && item.requestId === retryId)
+        if (cancelledRequests.current.has(retryId) || completedRequests.current.has(retryId) || entry?.retractedAt || entry?.requestStatus === 'completed') return false
+        if (!previous && entry?.requestStatus === 'failed') {
+          try {
+            previous = await pendingStore.find(conversation.conversationId, retryId) ?? undefined
+            if (!previous) {
+              // The server must return the original persisted input, never a
+              // reconstruction from the currently selected page or transcript.
+              const recovered = requestRecord(await localApi<PendingChatRequest>(`/conversation/retry?conversationId=${encodeURIComponent(conversation.conversationId)}&requestId=${encodeURIComponent(retryId)}`))
+              if (recovered.requestId !== retryId || recovered.conversationId !== conversation.conversationId) throw new Error('原请求身份不匹配')
+              previous = recovered
+            }
+          } catch (reason) {
+            if (stillPreparing()) setError(message(reason, '暂时无法恢复原发送记录，请重新读取对话后重试'))
+            return false
+          }
+        }
+        if (!stillPreparing()) return false
+        if (!previous) { setError('这条消息的发送记录已更新，请先重新读取对话'); return false }
+      }
+      request = previous ?? { requestId: crypto.randomUUID(), conversationId: conversation.conversationId, text: content, ...(attachments?.length ? { attachments } : {}), context: context!, createdAt: new Date().toISOString(), seq: Math.max(0, ...conversation.messages.map(item => item.seq), ...pending.filter(item => item.conversationId === conversation.conversationId).map(item => item.seq ?? 0)) + 1 }
       retrying = Boolean(previous)
       await pendingStore.save(request)
       if (!stillPreparing() || cancelledRequests.current.has(request.requestId)) return false
+      if (onCompleted) {
+        const callbacks = completionCallbacks.current.get(request.requestId) ?? new Set<() => void>()
+        callbacks.add(onCompleted)
+        completionCallbacks.current.set(request.requestId, callbacks)
+      }
       prepared = true
     } catch {
       if (stillPreparing()) setError('暂时无法保存本机发送记录，输入还在，请重试')
@@ -210,14 +312,16 @@ export function useXixiConversation(onTasksChanged: () => void, onNotice: (messa
     if (retrying && previousDraft) currentDraft = restoreChatReasoning(currentDraft, { reasoningContent: previousDraft.reasoningContent, rounds: previousDraft.reasoningRounds })
     setStream(currentDraft)
     setResponsePhase('thinking')
+    deliveryError.current = null
     setError('')
+    setWaitingNotice('')
     setOutgoing(items => [...items.filter(item => item.requestId !== request.requestId), { ...request, delivery: 'sending' }])
     // Some isolated test environments stub `window` without timers; fall
     // back to the ambient setTimeout/clearTimeout so the guard stays safe.
     const scheduleTimeout: typeof globalThis = typeof window.setTimeout === 'function' ? window : globalThis
     const progressTimer = scheduleTimeout.setTimeout(() => {
       if (mounted.current && activeTransport.current === transport && !streamHasVisibleProgress(currentDraft)) {
-        setError('析熙还在整理思路；如果 30 秒内没有回复，可以直接重试，当前消息已保留')
+        setWaitingNotice('析熙还在整理思路，当前消息已保留')
       }
     }, 30_000)
     try {
@@ -240,10 +344,12 @@ export function useXixiConversation(onTasksChanged: () => void, onNotice: (messa
         const nextDraft = advanceChatStream(currentDraft, event)
         if (nextDraft === currentDraft) return
         currentDraft = nextDraft
+        if (streamHasVisibleProgress(nextDraft)) setWaitingNotice('')
         setStream(nextDraft)
         setResponsePhase(nextDraft.phase === 'replying' ? 'replying' : 'thinking')
       }, transport.controller.signal)
       if (!isCurrent()) return false
+      setWaitingNotice('')
       if (result.requestId !== requestId || result.conversationId !== conversationId) throw new Error('回复与当前消息不一致，正在核对已保存的内容')
       setStream(null)
       setConversation(current => mergeConversation(current, result))
@@ -254,7 +360,9 @@ export function useXixiConversation(onTasksChanged: () => void, onNotice: (messa
         if (currentDraft.reasoningContent) setInterruptedReasoning(items => ({ ...items, [requestId]: currentDraft }))
         setResponsePhase('idle')
         setOutgoing(items => items.map(item => item.requestId === request.requestId ? { ...item, delivery: 'failed' } : item))
-        setError(result.error || '刚才没有完成，原文还在，可以重试')
+        const text = result.error || '刚才没有完成，原文还在，可以重试'
+        deliveryError.current = { requestId, text }
+        setError(text)
         return false
       }
       setInterruptedReasoning(items => Object.fromEntries(Object.entries(items).filter(([id]) => id !== requestId)))
@@ -270,11 +378,14 @@ export function useXixiConversation(onTasksChanged: () => void, onNotice: (messa
       return true
     } catch (reason) {
       if (isCurrent()) {
+        setWaitingNotice('')
         if (currentDraft.reasoningContent) setInterruptedReasoning(items => ({ ...items, [request.requestId]: currentDraft }))
         setStream(null)
         setResponsePhase('idle')
         setOutgoing(items => items.map(item => item.requestId === request.requestId ? { ...item, delivery: 'failed' } : item))
-        setError(message(reason, '暂时没有收到回复，原文还在，可以重试'))
+        const text = message(reason, '暂时没有收到回复，原文还在，可以重试')
+        deliveryError.current = { requestId: request.requestId, text }
+        setError(text)
         // The connection can fail after a real write. Read durable messages and
         // receipts without resending the request or treating prose as a commit.
         try {
@@ -284,6 +395,13 @@ export function useXixiConversation(onTasksChanged: () => void, onNotice: (messa
             setConversation(current => mergeConversation(current, next))
             setLoadError('')
             changed.current()
+            if (completedChatRequests(next).has(request.requestId)) {
+              // The terminal SSE frame was lost, but SQLite confirms success.
+              // Return success to the original composer so its submitted draft
+              // is cleared normally; never replay the model or its writes.
+              try { await pendingStore.remove([request.requestId]) } catch { /* Refresh retries cleanup. */ }
+              return isCurrent()
+            }
           }
         } catch {
           if (isCurrent()) setLoadError('暂时无法核对已保存的变更，连接恢复后会重新读取')
@@ -296,15 +414,16 @@ export function useXixiConversation(onTasksChanged: () => void, onNotice: (messa
         activeTransport.current = null
         activeRequest.current = null
         busy.current = false
-        if (mounted.current) { setSending(false); setStream(null); setResponsePhase('idle') }
+        if (mounted.current) { setSending(false); setStream(null); setWaitingNotice(''); setResponsePhase('idle') }
       }
     }
   }, [conversation, refreshStatus, acceptRetractions, interruptedReasoning, pendingStore])
 
   const retryMessage = useCallback(async (requestId: string) => {
     const request = outgoing.find(item => item.requestId === requestId)
-    if (!request || request.conversationId !== conversation?.conversationId) return false
-    return send(request.text, request.context, request.attachments, requestId)
+    const saved = conversation?.messages.find(item => item.role === 'user' && item.requestId === requestId && item.requestStatus === 'failed' && !item.retractedAt)
+    if ((!request || request.conversationId !== conversation?.conversationId) && !saved) return false
+    return send('', null, undefined, requestId)
   }, [outgoing, conversation?.conversationId, send])
 
   const retractMessage = useCallback(async (entry: ChatMessage) => {
@@ -321,13 +440,14 @@ export function useXixiConversation(onTasksChanged: () => void, onNotice: (messa
       if (!mounted.current) return false
       if (entry.requestId) {
         cancelledRequests.current.add(entry.requestId)
+        completionCallbacks.current.delete(entry.requestId)
         try { await pendingStore.remove([entry.requestId]) } catch { /* The server also rejects retries of withdrawn turns. */ }
         if (!mounted.current) return false
         setOutgoing(items => items.filter(item => item.requestId !== entry.requestId))
         setInterruptedReasoning(items => Object.fromEntries(Object.entries(items).filter(([id]) => id !== entry.requestId)))
         if (activeRequest.current === entry.requestId) {
           activeTransport.current?.controller.abort(); activeTransport.current = null
-          activeRequest.current = null; busy.current = false; setSending(false); setStream(null); setResponsePhase('idle')
+          activeRequest.current = null; busy.current = false; setSending(false); setStream(null); setWaitingNotice(''); setResponsePhase('idle')
         }
       }
       if (selectedId.current === conversationId) setConversation(current => {
@@ -482,6 +602,7 @@ export function useXixiConversation(onTasksChanged: () => void, onNotice: (messa
       try { await pendingStore.removeConversation(id) } catch { /* Deleted conversations cannot accept a retry on the server. */ }
       if (!mounted.current) return false
       setOutgoing(items => items.filter(item => item.conversationId !== id))
+      for (const item of outgoing) if (item.conversationId === id) completionCallbacks.current.delete(item.requestId)
       setInterruptedReasoning(items => Object.fromEntries(Object.entries(items).filter(([, draft]) => draft.conversationId !== id)))
       if (currentId === id) {
         selectedId.current = next.conversationId
@@ -501,7 +622,7 @@ export function useXixiConversation(onTasksChanged: () => void, onNotice: (messa
       busy.current = false
       if (mounted.current) setChangingTopic(false)
     }
-  }, [acceptRetractions, loadTopics, pendingStore])
+  }, [acceptRetractions, loadTopics, pendingStore, outgoing])
 
   const loadOlder = useCallback(async () => {
     if (readingOlder.current || !conversation?.hasOlder || conversation.oldestSeq == null) return false
@@ -537,8 +658,10 @@ export function useXixiConversation(onTasksChanged: () => void, onNotice: (messa
 
   const visibleConversation = useMemo(() => {
     if (!conversation) return null
-    const messages = [...conversation.messages]
+    const messages = conversation.messages.map(entry => entry.role === 'user' && entry.requestId && entry.requestStatus === 'failed' && !entry.retractedAt
+      ? { ...entry, delivery: 'failed' as const } : entry)
     for (const item of outgoing.filter(item => item.conversationId === conversation.conversationId)) {
+      if (completedRequests.current.has(item.requestId)) continue
       const index = messages.findIndex(entry => entry.role === 'user' && entry.requestId === item.requestId)
       if (index >= 0) {
         if (!messages[index].retractedAt) messages[index] = { ...messages[index], delivery: item.delivery }
@@ -547,7 +670,7 @@ export function useXixiConversation(onTasksChanged: () => void, onNotice: (messa
     return { ...conversation, messages: messages.sort((a, b) => a.seq - b.seq) }
   }, [conversation, outgoing])
 
-  return { conversation: visibleConversation, stream, interruptedReasoning, status, loading, loadError, error, sending, preparingSend, responsePhase, changingTopic, undoing, retracting, topics, topicsLoading, topicsError, topicActionError, clearTopicActionError: () => setTopicActionError(''), olderLoading, olderError, busy: preparingSend || sending || changingTopic || Boolean(undoing) || Boolean(retracting), send, retryMessage, retractMessage, undo, newTopic, refresh, refreshStatus, markRead, loadTopics, selectTopic, renameTopic, deleteTopic, loadOlder }
+  return { conversation: visibleConversation, stream, interruptedReasoning, status, loading, loadError, error, waitingNotice, sending, preparingSend, responsePhase, changingTopic, undoing, retracting, topics, topicsLoading, topicsError, topicActionError, clearTopicActionError: () => setTopicActionError(''), olderLoading, olderError, busy: preparingSend || sending || changingTopic || Boolean(undoing) || Boolean(retracting), send, retryMessage, retractMessage, undo, newTopic, refresh, refreshStatus, markRead, loadTopics, selectTopic, renameTopic, deleteTopic, loadOlder }
 }
 
 function message(reason: unknown, fallback: string) { return reason instanceof Error ? reason.message : fallback }

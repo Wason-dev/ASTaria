@@ -11,8 +11,10 @@ export const PENDING_CHAT_OBJECT_STORE = 'requests'
 
 export interface PendingChatAdapter {
   list(scopeId: string): Promise<PendingChatRequest[]>
+  find?(conversationId: string, requestId: string): Promise<PendingChatRequest[]>
   put(scopeId: string, request: PendingChatRequest): Promise<void>
   remove(scopeId: string, requestIds: string[]): Promise<void>
+  removeConfirmed?(conversationId: string, requestIds: string[]): Promise<void>
 }
 type IndexStorage = Pick<Storage, 'getItem' | 'setItem'>
 const invalid = () => new Error('无法读取发送记录，请保留原文后重新打开页面')
@@ -20,7 +22,7 @@ const object = (value: unknown): value is Record<string, unknown> => Boolean(val
 
 // Project only the chat contract. Settings, provider configuration and API keys
 // never enter this store, including when migrating an older session index.
-function requestRecord(value: unknown): PendingChatRequest {
+export function requestRecord(value: unknown): PendingChatRequest {
   if (!object(value) || typeof value.requestId !== 'string' || !value.requestId || typeof value.conversationId !== 'string' || !value.conversationId || typeof value.text !== 'string' || !object(value.context)) throw invalid()
   const context = value.context
   if (typeof context.page !== 'string' || !['home', 'workbench', 'calendar', 'timetable'].includes(context.page) || typeof context.timezone !== 'string') throw invalid()
@@ -96,8 +98,37 @@ export function createIndexedDBPendingChatAdapter(factory: () => IDBFactory = ()
         return requestRecord(value)
       })
     },
+    async find(conversationId, requestId) {
+      const matches: PendingChatRequest[] = []
+      // Exact identity lookup is read-only. A new window must never claim or
+      // sweep another window's pending requests merely because they are old.
+      await transaction('readonly', store => {
+        const cursor = store.openCursor()
+        cursor.onsuccess = () => {
+          const entry = cursor.result
+          if (!entry) return
+          if (entry.value.conversationId === conversationId && entry.value.requestId === requestId) matches.push(entry.value)
+          entry.continue()
+        }
+        return undefined
+      })
+      return matches.map(requestRecord)
+    },
     async put(scopeId, request) { await transaction('readwrite', store => store.put({ ...requestRecord(request), scopeId })) },
     async remove(scopeId, requestIds) { await transaction('readwrite', store => { for (const id of requestIds) store.delete([scopeId, id]); return undefined }) },
+    async removeConfirmed(conversationId, requestIds) {
+      const ids = new Set(requestIds)
+      await transaction('readwrite', store => {
+        const request = store.openCursor()
+        request.onsuccess = () => {
+          const entry = request.result
+          if (!entry) return
+          if (entry.value.conversationId === conversationId && ids.has(entry.value.requestId)) store.delete([entry.value.scopeId, entry.value.requestId])
+          entry.continue()
+        }
+        return undefined
+      })
+    },
   }
 }
 
@@ -155,6 +186,17 @@ export function createPendingChatRequestStore(options: { session?: IndexStorage;
   })
   return {
     list: () => serialized(load),
+    find: (conversationId: string, requestId: string) => serialized(async () => {
+      const local = (await load()).filter(item => item.conversationId === conversationId && item.requestId === requestId)
+      const matches = [...local, ...(await adapter.find?.(conversationId, requestId) ?? [])].map(requestRecord)
+      if (matches.some(item => item.conversationId !== conversationId || item.requestId !== requestId)) throw invalid()
+      const first = matches[0]
+      const input = (item: PendingChatRequest) => JSON.stringify({ requestId: item.requestId, conversationId: item.conversationId, text: item.text, context: item.context, attachments: item.attachments ?? [] })
+      // The server timestamp/sequence can differ from the optimistic record;
+      // only the original chat input participates in idempotency.
+      if (first && matches.some(item => input(item) !== input(first))) throw new Error('这条消息的原发送记录不一致，请先重新读取对话')
+      return first ?? null
+    }),
     save: (input: PendingChatRequest) => serialized(async () => {
       const request = requestRecord(input), owner = scope()
       const pending = await load(), previous = pending.find(item => item.requestId === request.requestId)
@@ -169,6 +211,17 @@ export function createPendingChatRequestStore(options: { session?: IndexStorage;
       writeIndex([...pending.map(indexRecord), indexRecord(request)])
     }),
     remove: (requestIds: Iterable<string>) => { const ids = new Set(requestIds); return removeWhere(item => ids.has(item.requestId)) },
+    // Only server-confirmed completed/retracted identities may be collected
+    // across scopes. Age or a missing sessionStorage scope is not proof.
+    removeConfirmed: (conversationId: string, requestIds: Iterable<string>) => serialized(async () => {
+      const ids = [...new Set(requestIds)]
+      const items = await load()
+      if (adapter.removeConfirmed) await adapter.removeConfirmed(conversationId, ids)
+      else if (items.some(item => item.conversationId === conversationId && ids.includes(item.requestId))) {
+        await adapter.remove(scope(), items.filter(item => item.conversationId === conversationId && ids.includes(item.requestId)).map(item => item.requestId))
+      }
+      try { writeIndex(items.filter(item => item.conversationId !== conversationId || !ids.includes(item.requestId)).map(indexRecord)) } catch { /* Cache only. */ }
+    }),
     removeConversation: (conversationId: string) => removeWhere(item => item.conversationId === conversationId),
   }
 }

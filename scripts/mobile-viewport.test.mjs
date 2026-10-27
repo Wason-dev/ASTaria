@@ -778,3 +778,27 @@ describe('attachMobileViewport', () => {
     detach()
   })
 })
+
+test('Android native animation frames need no webpage geometry reads and reject delayed native samples', async () => {
+  const document = new FakeDocument(), env = createWindow(document)
+  const sample = (revision, inset, animating = true) => viewportPayload(390, 844, {
+    revision, visibleHeight: 844 - inset, keyboardInset: inset, keyboardVisible: inset > 0, keyboardAnimating: animating,
+    safeArea: { top: 24, right: 0, bottom: 16, left: 0 },
+  })
+  let push
+  const bridge = { getViewport: async () => sample(0, 0, false), addListener: async (_event, fn) => { push = fn; return { remove: async () => {} } } }
+  const dispose = attachMobileViewport({ window: env.window, document, nativeBridge: bridge, initialNative: sample(0, 0, false) })
+  await flushMicrotasks()
+  for (const property of ['innerWidth', 'innerHeight', 'screen']) Object.defineProperty(env.window, property, { get() { throw Error(`Native frame flushed ${property}`) } })
+  for (const [index, inset] of [4, 50, 160, 300, 360, 300, 160, 50, 4, 0].entries()) {
+    push(sample(index + 1, inset, index < 9))
+    assert.equal(document.css.getPropertyValue('--m-visible-height'), `${844-inset}px`)
+    assert.equal(env.pendingFrames(), 0)
+  }
+  assert.equal(document.dataset.mobileKeyboardAnimation, 'idle')
+  const writes = document.css.writes.length
+  push(sample(2, 360))
+  assert.equal(document.css.writes.length, writes)
+  assert.equal(document.css.getPropertyValue('--m-visible-height'), '844px')
+  dispose()
+})

@@ -44,6 +44,7 @@ uniform float uMaxImpact;
 uniform float uCameraRadius;
 uniform float uFlightCameraRadius;
 uniform float uFlightEdgeFocus;
+uniform float uCaptureExposureScale;
 uniform float uFlightApproach;
 uniform vec3 uFlightEdgePull;
 uniform float uResponseStrength;
@@ -527,7 +528,7 @@ void main() {
   // As the observer settles at the edge, adapt exposure away from the limb.
   // Keep the same moving disk/stellar field, with quiet space for the labels;
   // the near-horizon strands retain their original photographic brightness.
-  float limbDistance = abs(length(screen)-shadowImageRadius)/scale;
+  float limbDistance = abs(length(screen)-shadowImageRadius)/scale*uCaptureExposureScale;
   float edgeExposure = mix(.065,1.0,exp(-pow(limbDistance/.10,2.0)));
   // Paper daylight needs to adapt before the dark silhouette fills the view.
   // Drive exposure from the same reversible camera progress, retaining both

@@ -1,4 +1,4 @@
-import { useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useContext, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import type { Task } from '../../src/domain/task'
 import { agendaDate, agendaItems, agendaPlanIndex, dayTaskLabel, localDay, monthDays, shiftDay, shiftMonth } from '../../src/home/agenda'
@@ -200,7 +200,7 @@ export function MobileCalendar({ planner, tasks, now, onChat, onImport, onSheetC
       </div>
       </div></div>
     </div>
-    {sheet && <CalendarSheet title={sheetTitle} busy={sheetBusy} onClose={closeSheet} returnLabel={sheetTrail.at(-1)?.kind === 'weekly' ? '返回每周安排' : sheetTrail.length ? '返回上一级' : '返回日程'}>
+    {sheet && <CalendarSheet title={sheetTitle} nested={sheetTrail.length > 0} busy={sheetBusy} onClose={closeSheet} returnLabel={sheetTrail.at(-1)?.kind === 'weekly' ? '返回每周安排' : sheetTrail.length ? '返回上一级' : '返回日程'}>
       {notice && <p className="m-calendar-notice" role="status">{notice}</p>}
       {sheet.kind === 'menu' && <nav className="m-calendar-menu" aria-label="日程工具">
         <button type="button" onClick={() => { setSheet(null); onImport('screenshot') }}>截图导入课表<Symbol name="right" /></button>
@@ -241,7 +241,7 @@ function TimelineRow({ entry, day, today, now, onOpen }: { entry: CalendarEntry;
   </li>
 }
 
-function CalendarSheet({ title, busy, onClose, returnLabel, children }: { title: string; busy: boolean; onClose: () => void; returnLabel: string; children: ReactNode }) {
+function CalendarSheet({ title, nested, busy, onClose, returnLabel, children }: { title: string; nested: boolean; busy: boolean; onClose: () => void; returnLabel: string; children: ReactNode }) {
   const sampling = useContext(GlassSamplingContext)
   const { value: preferences } = usePreferences()
   const element = useRef<HTMLDialogElement>(null)
@@ -251,7 +251,7 @@ function CalendarSheet({ title, busy, onClose, returnLabel, children }: { title:
   const closingRef = useRef(false)
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const [opener] = useState(() => document.activeElement instanceof HTMLElement ? document.activeElement : null)
-  useEffect(() => {
+  useLayoutEffect(() => {
     const dialog = element.current
     dialog?.showModal()
     return () => {
@@ -263,13 +263,16 @@ function CalendarSheet({ title, busy, onClose, returnLabel, children }: { title:
       })
     }
   }, [])
-  useEffect(() => { closingRef.current = false; setClosing(false); heading.current?.focus({ preventScroll: true }); element.current?.querySelector('.m-calendar-sheet-body')?.scrollTo(0, 0) }, [title])
+  useLayoutEffect(() => { closingRef.current = false; setClosing(false); heading.current?.focus({ preventScroll: true }); element.current?.querySelector('.m-calendar-sheet-body')?.scrollTo(0, 0) }, [title])
   const back = () => {
     if (busy || closingRef.current) return
+    // Returning within the same dialog is a content transition. Retiring the
+    // glass here exposes a bare scene before the parent menu is shown again.
+    if (nested) { onClose(); return }
     closingRef.current = true; setClosing(true)
     timer.current = setTimeout(onClose, preferences.effect.motion === 'reduced' || matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 180)
   }
-  return <GlassRenderingContext.Provider value={preferences.render.glass}><GlassSamplingContext.Provider value={sampling && !closing}><dialog ref={element} className="import-surface m-calendar-sheet" data-mobile-sheet="calendar" data-closing={closing} data-theme={preferences.theme} data-glass={preferences.glass} data-reduced-motion={preferences.effect.motion === 'reduced'} inert={closing} aria-labelledby={titleId} aria-busy={busy} onCancel={event => { event.preventDefault(); back() }} onKeyDown={event => event.stopPropagation()}>
+  return <GlassRenderingContext.Provider value={preferences.render.glass}><GlassSamplingContext.Provider value={sampling}><dialog ref={element} className="import-surface m-calendar-sheet" data-mobile-sheet="calendar" data-closing={closing} data-theme={preferences.theme} data-glass={preferences.glass} data-reduced-motion={preferences.effect.motion === 'reduced'} inert={closing} aria-labelledby={titleId} aria-busy={busy} onCancel={event => { event.preventDefault(); back() }} onKeyDown={event => event.stopPropagation()}>
     <MeasuredGlassSurface radius={22} material={{ transmission: preferences.theme === 'light' ? preferences.glass === 'soft' ? 14 : 18 : preferences.glass === 'soft' ? 24 : 30, blur: preferences.glass === 'soft' ? 6 : 0, rim: 44, shadow: 30, reflection: 12 }} />
     <header className="m-calendar-sheet-heading"><button type="button" className="m-calendar-icon-button" disabled={busy} aria-label={returnLabel} onClick={back}><Symbol name="left" /></button><h2 id={titleId} ref={heading} tabIndex={-1}>{title}</h2></header>
     <div className="m-calendar-sheet-body import-body"><ImportStep step={title}>{children}</ImportStep></div>

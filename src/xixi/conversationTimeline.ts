@@ -61,3 +61,13 @@ export function mergeOperationReceipt(current: ConversationState | null, operati
   const related = new Set([operation.id, ...(operation.relatedOperationIds ?? [])])
   return { ...current, operations: [...current.operations.filter(item => !related.has(item.id)), operation] }
 }
+
+/** A saved tool-round paragraph is not completion. Only the durable turn state
+ * (or a verified terminal chat result) can retire an uncertain send. */
+export function completedChatRequests(state: ConversationState): Set<string> {
+  const ids = new Set(state.messages.filter(message => message.requestStatus === 'completed' && !message.retractedAt && message.requestId)
+    .map(message => message.requestId!))
+  if ('status' in state && state.status === 'completed' && 'requestId' in state && typeof state.requestId === 'string'
+    && !state.messages.some(message => message.requestId === state.requestId && message.retractedAt)) ids.add(state.requestId)
+  return ids
+}

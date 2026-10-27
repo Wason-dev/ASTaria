@@ -8,6 +8,7 @@ import { createDatabase } from '../server/database.mjs'
 import { createLocalService } from '../server/index.mjs'
 import { getModelSettings, saveModelSettings } from '../server/modelSettings.mjs'
 import { localDay } from '../src/home/agenda.ts'
+import { finishArguments } from './fixtures/model-receipt.mjs'
 
 process.env.TZ = 'Asia/Shanghai'
 const vault = { read: async () => 'sk-FAKE-stream-tests-only', status: async () => true }
@@ -87,6 +88,60 @@ test('SSE reassembles split UTF-8, exact reasoning and interleaved tool argument
   assert.deepEqual(result.usage, { prompt_tokens: 20, completion_tokens: 30 })
 })
 
+test('streaming output estimates grow before a provider usage frame arrives', async () => {
+  const reports = []
+  const complete = createCompletion(vault, async () => sse([
+    chunk({ reasoning_content: '先核对当前日程。' }), chunk({ content: '已经保存好了。' }), chunk({}, 'stop'), '[DONE]',
+  ]))
+  await complete({ messages: [{ role: 'user', content: '记录活动' }] }, { onDelta() {}, onContextUsage: usage => reports.push(usage) })
+  assert.equal(reports[0].outputTokens, 0)
+  assert.ok(reports.at(-1).outputTokens > 0)
+  assert.equal(reports.at(-1).source, 'estimate')
+})
+
+test('reasoning updates the meter while the stream is still open, then official usage replaces it', async () => {
+  const reports = [], firstOutput = deferred(), gate = {}
+  const complete = createCompletion(vault, async () => new Response(new ReadableStream({ start(controller) {
+    gate.controller = controller
+    controller.enqueue(encoder.encode(frames([chunk({ reasoning_content: '正在核对已有时间。' })])))
+  } }), { headers: { 'content-type': 'text/event-stream' } }))
+  const running = complete({ messages: [{ role: 'user', content: '核对时间' }] }, {
+    onDelta() {}, onContextUsage(usage) { reports.push(usage); if (usage.outputTokens > 0) firstOutput.resolve() },
+  })
+  await firstOutput.promise
+  assert.equal(reports.at(-1).source, 'estimate')
+  assert.ok(reports.at(-1).outputTokens > 0)
+  gate.controller.enqueue(encoder.encode(frames([chunk({ content: '已核对。' }), chunk({}, 'stop'),
+    { choices: [], usage: { prompt_tokens: 123, completion_tokens: 45 } }, '[DONE]'])))
+  gate.controller.close()
+  await running
+  assert.equal(reports.at(-1).source, 'provider')
+  assert.equal(reports.at(-1).outputTokens, 45)
+  assert.equal(reports.at(-1).usedTokens, 168)
+})
+
+test('a failed follow-up cannot replace saved tool-round output with its zero preflight estimate', async t => {
+  const f = await serviceFixture(t)
+  f.responses.push(sse([...toolFrames('create_tasks', { tasks: [{ title: '隔离用量核验' }] }).slice(0, -1),
+    { choices: [], usage: { prompt_tokens: 234, completion_tokens: 67 } }, '[DONE]']),
+    new Response('unavailable', { status: 503 }))
+  const response = await f.chat(input('只记录隔离用量核验'))
+  assert.equal(f.db.listTasks().length, 1)
+  assert.equal(response.events.at(-1).result.execution.reply.mode, 'fallback')
+  const saved = await (await f.request('/conversation?id=main')).json()
+  assert.equal(saved.contextUsage.outputTokens, 67)
+  assert.equal(saved.contextUsage.source, 'provider')
+})
+
+test('an interrupted stream retains measured output even without a final usage frame', async t => {
+  const f = await serviceFixture(t)
+  f.responses.push(sse([chunk({ reasoning_content: '已有的推理输出，需要保留用量。' })]))
+  await f.chat(input('解释当前时间'))
+  const saved = await (await f.request('/conversation?id=main')).json()
+  assert.equal(saved.contextUsage.source, 'estimate')
+  assert.ok(saved.contextUsage.outputTokens > 0)
+})
+
 test('malformed tool fragment fields are rejected instead of being silently coerced to strings', async () => {
   for (const patch of [{ id: 12 }, { type: false }, { function: null }, { function: [] }, { function: { name: 0 } },
     { function: { arguments: { tasks: [] } } }, { function: { arguments: false } }]) {
@@ -127,6 +182,23 @@ test('stream setting off returns JSON end to end and never requests upstream SSE
   assert.equal(result.status, 'completed')
   assert.equal(result.messages.at(-1).content, '完整回复')
   assert.equal(f.upstream[0].body.stream, false)
+})
+
+test('prose streamed before remember survives the tool round, final response and reload', async t => {
+  const f=await serviceFixture(t)
+  f.responses.push(sse([chunk({content:'这段分析应该一直保留。'}),...toolFrames('remember',{
+    content:'喜欢温柔的交流',evidence:'我喜欢你温柔点',scope:'global',kind:'preference',
+  })]),final('偏好也记下了。'))
+  const request=input('我喜欢你温柔点')
+  const response=await f.chat(request)
+  const result=response.events.findLast(event=>event.type==='result').result
+  assert.equal(result.status,'completed')
+  assert.equal(f.db.listMemories().length,1)
+  const prose=result.messages.filter(message=>message.role==='assistant').map(message=>message.content)
+  assert.deepEqual(prose,['这段分析应该一直保留。','偏好也记下了。'])
+  assert.ok(result.messages.every(message=>!message.toolCalls),'raw tool arguments stay private')
+  const restored=await(await f.request('/conversation?id=main')).json()
+  assert.deepEqual(restored.messages.filter(message=>message.role==='assistant').map(message=>message.content),prose)
 })
 
 for (const effort of ['low', 'high', 'max']) for (const streaming of [true, false]) test(`normal chat preserves ${effort} thinking without an 1800-token ceiling (stream=${streaming})`, async t => {
@@ -185,7 +257,8 @@ test('retry after an interrupted scheduling stream continues the saved task inst
   assert.equal(f.db.getPlanner().blocks.length, 0)
   const taskId = f.db.listTasks()[0].id
   f.responses.push(sse(toolFrames('read_planner', { date })), () => sse(toolFrames('plan_tasks', { expectedRevision: f.db.getPlanner().revision,
-    plans: [{ taskId, date, start: '18:00', end: '18:30' }] })), final('已经排入明天18:00。'))
+    plans: [{ taskId, date, start: '18:00', end: '18:30' }] })), ({ body }) => sse(toolFrames('finish_response',
+    finishArguments(body, '已经排入明天18:00。', '明晚18:00–18:30 是真实空档，所以把物理作业放在这一段。'))))
   const done = (await f.chat(request)).events.at(-1).result
   assert.equal(done.status, 'completed')
   assert.equal(f.db.listTasks().length, 1)
@@ -256,4 +329,35 @@ test('conversation context meter streams, survives reload and resets on a new to
   saveModelSettings(f.db,{...getModelSettings(f.db),cloudModel:'deepseek-flash'})
   f.db.retractMessage(f.db.getTurn(request.requestId).userMessageId)
   assert.equal((await (await f.request('/conversation?id=main')).json()).contextUsage,null)
+})
+
+test('unlimited context keeps history beyond 160 and 1000 messages and the meter measures the growing dispatch', async t => {
+  const f = await serviceFixture(t)
+  saveModelSettings(f.db, { ...getModelSettings(f.db), contextBudget: { mode: 'off', maxUnits: 48000 } })
+  const ids = []
+  for (let i = 0; i < 605; i++) {
+    const requestId = randomUUID()
+    ids.push(f.db.appendMessage({ conversationId: 'main', requestId, role: 'user', content: `history-${i}` }).id)
+    f.db.appendMessage({ conversationId: 'main', requestId, role: 'assistant', content: `answer-${i}` })
+  }
+  f.db.retractMessage(ids[3])
+  const { contextUnits } = await import('../server/contextBudget.mjs')
+  const respond = ({ body }) => {
+    assert.ok(body.messages.some(message => message.content === 'history-0'))
+    assert.ok(body.messages.some(message => message.content === 'answer-604'))
+    assert.equal(body.messages.some(message => message.content === 'history-3'), false)
+    return sse([chunk({ content: '已看完' }), chunk({}, 'stop'),
+      { choices: [], usage: { prompt_tokens: contextUnits(body), completion_tokens: 20 } }, '[DONE]'])
+  }
+  f.responses.push(respond, respond)
+  const first = await f.chat(input('接着聊这段内容'))
+  const firstUsage = first.events.filter(e => e.type === 'context-usage').at(-1).usage
+  const second = await f.chat(input('再补充一段信息。'.repeat(200)))
+  const secondUsage = second.events.filter(e => e.type === 'context-usage').at(-1).usage
+  assert.equal(f.upstream.length, 2, 'no summary request added while application limits are off')
+  assert.ok(secondUsage.usedTokens > firstUsage.usedTokens)
+  assert.equal(secondUsage.inputTokens, contextUnits(f.upstream[1].body))
+  assert.equal(f.upstream[1].body.messages.filter(m => m.content === 'history-0').length, 1)
+  const saved = await (await f.request('/conversation?id=main')).json()
+  assert.deepEqual(saved.contextUsage, secondUsage)
 })

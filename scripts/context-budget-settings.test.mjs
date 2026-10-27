@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { createDatabase } from '../server/database.mjs'
-import { createXixi, HARD_INPUT_UNITS } from '../server/xixi.mjs'
+import { createXixi } from '../server/xixi.mjs'
 import { contextUnits } from '../server/contextBudget.mjs'
 import { getModelSettings, saveModelSettings, validateContextBudget, resolveContextBudget } from '../server/modelSettings.mjs'
 
@@ -14,7 +14,9 @@ test('budget settings migrate, validate, persist and survive backup without alte
   const legacy = getModelSettings(db)
   assert.deepEqual(legacy.contextBudget, { mode: 'auto', maxUnits: 48000 })
   assert.deepEqual(resolveContextBudget({ provider: 'local' }), { enabled: true, soft: 16000, hard: 24000, turns: 4 })
-  assert.equal(resolveContextBudget({}).hard, 48000)
+  assert.equal(resolveContextBudget({}).hard, 900000)
+  assert.equal(resolveContextBudget({ provider: 'deepseek' }).soft, 800000)
+  assert.equal(resolveContextBudget({ provider: 'compatible' }).hard, 48000)
   for (const setting of [{ mode: 'off', maxUnits: 128000 }, { mode: 'custom', maxUnits: 128000 }, { mode: 'auto', maxUnits: 128000 }]) {
     const saved = saveModelSettings(db, { ...legacy, contextBudget: setting })
     assert.deepEqual(getModelSettings(db).contextBudget, setting)
@@ -31,7 +33,7 @@ test('budget settings migrate, validate, persist and survive backup without alte
 
 for (const mode of ['auto', 'custom', 'off']) test(`${mode} budget changes dispatch behavior rather than only the saved label`, async t => {
   const db = createDatabase(':memory:'); t.after(() => db.close())
-  saveModelSettings(db, { ...getModelSettings(db), contextBudget: { mode, maxUnits: 128000 } })
+  saveModelSettings(db, { ...getModelSettings(db), contextBudget: { mode, maxUnits: 48000 } })
   const old = input('之前讨论的任务资料'), turn = db.beginTurn(old)
   const thought = '旧思考'.repeat(16000)
   const final = db.appendMessage({ conversationId: old.conversationId, requestId: old.requestId, role: 'assistant', content: '以前核对过资料。', reasoningContent: thought })
@@ -40,10 +42,10 @@ for (const mode of ['auto', 'custom', 'off']) test(`${mode} budget changes dispa
   const xixi = createXixi({ db, complete: async request => { sent = request; return reply('当前请求正常完成。') } })
   assert.equal((await xixi.chat(input('继续'))).status, 'completed')
   const archived = sent.messages.some(message => message.content?.startsWith('已归档的历史回合'))
-  assert.equal(archived, mode === 'auto')
-  if (mode !== 'auto') {
+  assert.equal(archived, mode === 'custom')
+  if (mode !== 'custom') {
     assert.equal(sent.messages.find(message => message.content === final.content)?.reasoning_content, thought)
-    assert.ok(contextUnits(sent.messages) + contextUnits(sent.tools) > HARD_INPUT_UNITS)
+    assert.ok(contextUnits(sent.messages) + contextUnits(sent.tools) > 48_000)
   }
   assert.equal(db.getMessage(final.id).reasoningContent, thought)
   assert.ok(sent.messages.some(message => message.content === db.getMessage(turn.userMessageId).content))
@@ -71,8 +73,48 @@ test('disabled budget passes a long current thinking/tool chain intact and skips
   assert.ok(requests.every(request => request.response_format === undefined))
   assert.equal(db.getSummary(current.conversationId), null)
   assert.ok(requests[0].messages.some(message => message.content === '历史请求0'))
-  assert.ok(contextUnits(requests[1].messages) + contextUnits(requests[1].tools) > HARD_INPUT_UNITS)
+  assert.ok(contextUnits(requests[1].messages) + contextUnits(requests[1].tools) > 48_000)
   assert.equal(requests[1].messages.find(message => message.tool_calls)?.reasoning_content, thought)
   const stored = db.listMessages(current.conversationId, { limit: 160 }).find(message => message.toolCallId === tool.id)
   assert.equal(requests[1].messages.find(message => message.tool_call_id === tool.id).content, stored.content)
+})
+
+for (const mode of ['auto', 'custom', 'off']) test(`${mode}: more than 160 short messages retain the first turn without a summary request`, async t => {
+  const db = createDatabase(':memory:'); t.after(() => db.close())
+  saveModelSettings(db, { ...getModelSettings(db), contextBudget: { mode, maxUnits: 900000 } })
+  for (let n = 0; n < 110; n++) {
+    const old = input(`历史问题 ${n}`)
+    db.beginTurn(old)
+    db.appendMessage({ conversationId: old.conversationId, requestId: old.requestId, role: 'assistant', content: `历史回答 ${n}` })
+    db.finishTurn(old.requestId, { status: 'completed' })
+  }
+  const requests = []
+  const xixi = createXixi({ db, complete: async request => { requests.push(request); return reply('继续。') } })
+  assert.equal((await xixi.chat(input('继续全部记录'))).status, 'completed')
+  assert.equal(requests.length, 1)
+  assert.ok(requests[0].messages.some(message => message.content === '历史问题 0'))
+  assert.ok(requests[0].messages.some(message => message.content === '历史回答 109'))
+  assert.equal(db.getSummary('budget-test'), null)
+  assert.equal(requests[0].max_tokens, 1800)
+})
+
+test('DeepSeek automatic summary starts under genuine 800K history pressure and preserves original records', async t => {
+  const db = createDatabase(':memory:'); t.after(() => db.close())
+  for (let n = 0; n < 20; n++) {
+    const old = input(`问题 ${n}`)
+    db.beginTurn(old)
+    db.appendMessage({ conversationId: old.conversationId, requestId: old.requestId, role: 'assistant', content: `回答 ${n}`, reasoningContent: 'x'.repeat(130000) })
+    db.finishTurn(old.requestId, { status: 'completed' })
+  }
+  const requests = []
+  const xixi = createXixi({ db, complete: async request => {
+    requests.push(request)
+    return request.response_format ? reply(JSON.stringify({ goal: '继续', openItems: [] })) : reply('接着来。')
+  } })
+  assert.equal((await xixi.chat(input('继续'))).status, 'completed')
+  assert.equal(requests.length, 2)
+  assert.ok(db.getSummary('budget-test').throughSeq > 0)
+  assert.equal(db.listMessages('budget-test', { limit: 1000 }).filter(m => m.reasoningContent?.length === 130000).length, 20)
+  assert.ok(contextUnits(requests[1].messages) + contextUnits(requests[1].tools) < 900000)
+  assert.equal(requests[1].max_tokens, 1800)
 })

@@ -20,6 +20,8 @@
 .workbench .wb-ddl-meta .wb-ddl-effort { display: inline-flex; align-items: center; gap: 4px; line-height: 1.6 }
 .workbench .wb-ddl-meta .wb-icon { width: 12px; height: 12px; flex: none; color: #7e8589 }
 .workbench .wb-ddl-card { position: relative; min-width: 0 }
+.workbench .wb-ddl-card .wb-ddl-arrow { position: absolute; right: 16px; bottom: 14px; display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; pointer-events: none }
+.workbench .wb-ddl-card .wb-ddl-arrow > .wb-icon { width: 14px; height: 14px }
 .workbench .wb-ddl-details { min-width: 0; padding-top: 0 }
 .p0 .workbench .wb-ddl-card .wb-ddl-reason-toggle.wb-icon-button { position: absolute; right: 10px; top: 10px; margin: 0; z-index: 5 }
 /* Use the empty space alongside the icon; a tooltip above obscures deadline advice. */

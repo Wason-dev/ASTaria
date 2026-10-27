@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { Readable } from 'node:stream'
-import { conversationTimeline, mergeConversation } from '../src/xixi/conversationTimeline.ts'
+import { conversationTimeline, mergeConversation, completedChatRequests } from '../src/xixi/conversationTimeline.ts'
 import { createDatabase } from '../server/database.mjs'
 import { createLocalService } from '../server/index.mjs'
 
@@ -133,4 +133,23 @@ test('receipt estimate input keeps its execution text while public history ident
   const after = await invoke(service, '/conversation?id=main')
   assert.equal(after.body.messages[0].content, '已撤回')
   assert.equal(after.body.messages[0].inputKind, 'receipt-estimate', 'refresh after cancellation does not create a user bubble')
+})
+
+
+test('conversation exposes persisted turn completion without inferring it from assistant prose',async t=>{
+  const {db,service,turn}=fixture(t)
+  const current=turn('terminal-check')
+  db.appendMessage({conversationId:'main',requestId:'terminal-check',role:'assistant',content:'先说明一下，然后继续处理'})
+  const read=async()=> (await invoke(service,'/conversation?id=main')).body
+  const running=await read()
+  assert.equal(running.messages.find(m=>m.id===current.userMessageId).requestStatus,'running')
+  assert.equal(completedChatRequests(running).size,0)
+  db.finishTurn('terminal-check',{status:'failed',error:'工具后断开'})
+  assert.equal(completedChatRequests(await read()).size,0)
+  db.finishTurn('terminal-check',{status:'completed'})
+  const complete=await read()
+  assert.deepEqual([...completedChatRequests(complete)],['terminal-check'])
+  assert.ok(complete.messages.every(m=>!('progress' in m)&&!('ownerToken' in m)&&!('result' in m)))
+  db.retractMessage(current.userMessageId)
+  assert.equal(completedChatRequests(await read()).size,0)
 })

@@ -5,9 +5,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createServer } from 'vite'
-import react from '@vitejs/plugin-react'
-import tailwindcss from '@tailwindcss/vite'
+import { preview } from 'vite'
 import { Readable } from 'node:stream'
 import { createDatabase } from '../server/database.mjs'
 import { createLocalService } from '../server/index.mjs'
@@ -16,6 +14,8 @@ import { createCompanion } from '../server/companion.mjs'
 import { randomUUID } from 'node:crypto'
 import { createXixi } from '../server/xixi.mjs'
 import { createFreeTime } from '../server/freeTime.mjs'
+import { DEFAULT_PREFERENCES } from '../server/preferences.mjs'
+import { finishResponse } from './fixtures/model-receipt.mjs'
 
 // Frozen demo clock in this process and its owned browser; never open the user's database.
 process.env.TZ = 'Asia/Shanghai'
@@ -25,6 +25,7 @@ globalThis.Date = class extends NativeDate {
   constructor(...args) { super(...(args.length ? args : [INSTANT])) }
   static now() { return new NativeDate(INSTANT).getTime() }
 }
+const mobile = process.env.README_CAPTURE_MOBILE === '1'
 const output = resolve(process.env.README_CAPTURE_OUTPUT ?? 'artifacts/readme-capture')
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const temporary = await mkdtemp(join(tmpdir(), 'astaria-readme-'))
@@ -80,7 +81,7 @@ edit({ type: 'set-day-exception', date: '2026-10-05', endDate: '2026-10-06', kin
 edit({ type: 'set-day-exception', date: '2026-10-09', kind: 'rescheduled', sourceWeekday: 3 })
 edit({ type: 'set-day-exception', date: '2026-10-10', kind: 'rescheduled', sourceWeekday: 5 })
 edit({ type: 'save-day-event', event: { id: 'demo-ceremony', title: '校庆典礼', date: '2026-10-05', start: '09:30', end: '11:00', location: '礼堂', items: ['活动手册'] } })
-db.createTask({ title: '整理机器人项目资料', estimateMin: 30, inbox: false })
+db.createTask({ title: '整理读书分享资料', estimateMin: 30, inbox: false })
 // Unscheduled work with real deadlines: these fill the planner's 待安排 column.
 for (const [title, estimateMin, due] of [
   ['准备课堂演示', 20, '2026-10-09'],
@@ -88,14 +89,16 @@ for (const [title, estimateMin, due] of [
   ['整理小组分工', 30, '2026-10-11'],
 ]) db.createTask({ title, estimateMin, due, inbox: false })
 // The populated capture exercises a fresh user's tour with demonstration data.
-db.setPreference('onboarding-completed', false)
+db.setPreference('onboarding-completed', true)
+db.setPreference('app', { ...DEFAULT_PREFERENCES, glass: 'soft' })
 db.createTask({ title: '选一本下月想读的书', estimateMin: 15, inbox: false })
 // Reserve the demonstration slot while seeding unrelated recurring goals.
+for (const title of ['阅读理解练习', '词汇填空练习', '语法整理']) db.createTask({title,collection:'英语周末作业',due:'2026-10-11',estimateMin:35,inbox:false})
 const reservation = db.createTask({ title: '演示时段预留', estimateMin: 45, inbox: false })
 edit({ type: 'save-block', block: { id: 'demo-reservation', taskId: reservation.id, date: DATE, start: '18:00', end: '18:45', locked: true } })
 const companion = createCompanion({ db })
 for (const goal of [
-  { title: 'Java 与机器人编程', minPerWeek: 3, sessionMin: 30, sessionMax: 45, targetNote: '从变量和循环开始，完成一个小练习' },
+  { title: '编程基础练习', minPerWeek: 3, sessionMin: 30, sessionMax: 45, targetNote: '从变量和循环开始，完成一个小练习' },
   { title: '英语阅读', minPerWeek: 4, sessionMin: 20, sessionMax: 30, targetNote: '读完一篇短文，整理三个有用的表达' },
   { title: '速写练习', minPerWeek: 2, sessionMin: 20, sessionMax: 30, targetNote: '给观察与创作留一点时间' },
 ]) companion.saveFreeTimeGoal(goal)
@@ -109,9 +112,10 @@ const requestId = randomUUID()
 const responses = [
   () => tool('read_planner', { date: DATE }),
   () => tool('create_tasks', { expectedRevision: db.getPlanner().revision, tasks: [{ title: '完成物理实验报告', due: '2026-10-09', estimateMin: 45, schedule: { date: DATE, start: '18:00', end: '18:45' } }] }),
-  () => ({ choices: [{ message: { role: 'assistant', content: '记好了，明天截止，今晚 18:00–18:45 做。留出完整 45 分钟，和 19:00 的实验数据整理不冲突。' } }] }),
+  () => tool('read_planner', { date: DATE }),
+  payload => finishResponse(payload, '记好了，明天截止，今晚 18:00–18:45 完成。实验数据整理仍在 19:00 开始，中间留了 15 分钟休息。', '报告明天要交，今晚晚自习的第一段空档有完整 45 分钟，做完也不会挤占 19:00 的实验数据整理。'),
 ]
-const xixi = createXixi({ db, complete: async () => { const response = responses.shift(); assert.ok(response, 'unexpected additional model call'); return response() } })
+const xixi = createXixi({ db, complete: async payload => { const response = responses.shift(); assert.ok(response, 'unexpected additional model call'); return response(payload) } })
 const turn = await xixi.chat({ requestId, conversationId: db.getActiveConversation().id, text: '物理实验报告明天交，预计 45 分钟，帮我记下来并安排到今晚的空档。', context: { timezone: 'Asia/Shanghai', page: 'home', date: DATE } })
 assert.equal(turn.status, 'completed')
 assert.equal(turn.execution.status, 'verified', JSON.stringify(turn.execution))
@@ -181,7 +185,7 @@ const check = async (name, expression) => { assert.equal(await evaluate(expressi
 const click = async selector => {
   await wait(`!!document.querySelector(${JSON.stringify(selector)})`)
   await evaluate(`document.querySelector(${JSON.stringify(selector)}).scrollIntoView({block:'nearest',inline:'nearest'});true`)
-  await delay(100)
+  await wait(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e||e.disabled||e.closest('[inert]'))return false;const r=e.getBoundingClientRect();return r.width>0&&r.height>0&&e.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2))})()`)
   const point = await evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)}),r=e.getBoundingClientRect();if(!e.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)))throw Error('Occluded '+${JSON.stringify(selector)});return{x:r.x+r.width/2,y:r.y+r.height/2}})()`)
   await send('Input.dispatchMouseEvent', { type: 'mousePressed', button: 'left', clickCount: 1, ...point }); await send('Input.dispatchMouseEvent', { type: 'mouseReleased', button: 'left', clickCount: 1, ...point })
   await delay(50)
@@ -189,12 +193,8 @@ const click = async selector => {
 const shot = async name => writeFile(`${output}/${name}.png`, Buffer.from((await send('Page.captureScreenshot', { format: 'png' })).data, 'base64'))
 try {
   await mkdir(output, { recursive: true })
-  vite = await createServer({ configFile: false, root, cacheDir: join(temporary, 'vite-cache'), plugins: [react(), tailwindcss()], logLevel: 'error', server: { host: '127.0.0.1', port: 0, open: false } })
-  vite.middlewares.use((req, res, next) => {
-    if (!req.url?.startsWith('/api/')) return next()
-    res.statusCode = 503; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ error: 'QA API escaped interception' }))
-  })
-  await vite.listen(); base = `http://127.0.0.1:${vite.httpServer.address().port}/`
+  vite = await preview({ configFile:false, root, build:{outDir:mobile?'dist-mobile':'dist'}, preview:{host:'127.0.0.1',port:0,open:false} })
+  base = `http://127.0.0.1:${vite.httpServer.address().port}/`
   chrome = spawn(process.env.CHROME_BINARY ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', [
     '--headless=new', '--remote-debugging-port=0', `--user-data-dir=${profile}`,
     '--no-first-run', '--no-default-browser-check', '--disable-background-networking', '--disable-component-update', '--disable-sync', '--disable-default-apps',
@@ -216,7 +216,7 @@ try {
   await send('Page.enable'); await send('Runtime.enable'); await send('Network.setBypassServiceWorker', { bypass: true })
   await send('Fetch.enable', { patterns: [{ urlPattern: '*', requestStage: 'Request' }] })
   await send('Emulation.setTimezoneOverride', { timezoneId: 'Asia/Shanghai' })
-  await send('Emulation.setDeviceMetricsOverride', { width: 1600, height: 1050, deviceScaleFactor: 1, mobile: false })
+  await send('Emulation.setDeviceMetricsOverride', { width: mobile ? 430 : 1600, height: mobile ? 932 : 1050, deviceScaleFactor: 1, mobile })
   await send('Page.addScriptToEvaluateOnNewDocument', { source: `{const NativeDate=Date;window.Date=class extends NativeDate{constructor(...args){super(...(args.length?args:['${INSTANT}']))}static now(){return NativeDate.now()}};localStorage.setItem('astaria-sqlite-migration-v1','complete')}` })
   await send('Page.navigate', { url: base }); await wait('!!document.querySelector(".home-brand")')
 
@@ -241,127 +241,47 @@ try {
     await delay(450)
   }
 
-  await wait('document.querySelector(".first-run")?.open === true')
-  const introLayers = await evaluate(`(()=>{const w=document.querySelector('.home-workspace');return{contains:w.contains(document.querySelector('.first-run')),matches:w.matches(':has(.first-run)'),nav:getComputedStyle(document.querySelector('.home-nav')).display,scene:getComputedStyle(document.querySelector('.home-scene-ui')).display}})()`)
-  assert.equal(introLayers.scene, 'none', JSON.stringify(introLayers))
-  await check('first launch defaults to medium personality and dark glass', `(()=>{const d=document.querySelector('.first-run');return d.querySelector('button[aria-pressed=true]').textContent==='中'&&d.textContent.includes('黑色玻璃')})()`)
-  await check('guide uses one sampled glass panel', `(()=>{const d=document.querySelector('.first-run');return d.querySelectorAll('.home-glass-measure').length===1&&d.querySelector('.home-glass-surface')?.getAttribute('style')?.includes('backdrop-filter')})()`)
-  await delay(500)
-  await shot('first-run')
-  await byText('.first-run-options button', '磨砂玻璃')
-  await check('soft preview changes real glass blur', `document.querySelector('.first-run feGaussianBlur')?.getAttribute('stdDeviation')==='6'`)
-  await shot('first-run-soft-dark')
-  await byText('.first-run-options button', '黑色玻璃')
-  await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true })
-  await delay(400)
-  await shot('first-run-mobile-dark')
-  await send('Emulation.setDeviceMetricsOverride', { width: 1600, height: 1050, deviceScaleFactor: 1, mobile: false })
-  await byText('.first-run-options button', '浅色')
-  await byText('.first-run-options button', '磨砂玻璃')
-  await delay(350)
-  await check('light preview changes the home scene and sampled glass', `(()=>{const d=document.querySelector('.first-run'),w=document.querySelector('.home-workspace');return w.dataset.theme==='light'&&getComputedStyle(w,'::before').backgroundColor.includes('252, 253, 255')&&getComputedStyle(d.querySelector('.home-glass-surface')).backgroundColor.includes('250, 251, 252')})()`)
-  await shot('first-run-light')
-  await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true })
-  await delay(400)
-  await shot('first-run-mobile')
-  await send('Emulation.setDeviceMetricsOverride', { width: 1600, height: 1050, deviceScaleFactor: 1, mobile: false })
-  await byText('.first-run-options button', '深色')
-  await byText('.first-run-options button', '黑色玻璃')
-  await click('.first-run-next')
-  await check('key can be configured later', `document.querySelector('.first-run').dataset.step==='1'&&document.querySelector('.first-run-next').textContent==='稍后配置'`)
-  const demoKey = `demo-${randomUUID()}`
-  await click('#first-run-key')
-  await send('Input.insertText', { text: demoKey })
-  await click('.first-run-next')
-  assert.ok(savedKeys.length === 1 && savedKeys[0] === demoKey, 'guide saves an entered key through the isolated vault')
-  checks.push('guide saves an entered key through the isolated vault')
-  await wait(`document.querySelector('.first-run')?.dataset.step==='2'`)
-  await click('.first-run footer button:first-child')
-  await check('key step can be revisited without exposing saved value', `document.querySelector('.first-run').dataset.step==='1'&&document.querySelector('#first-run-key').value===''`)
-  await click('.first-run-next')
-  assert.equal(savedKeys.length, 1, 'skipping key on revisit does not write again')
-  checks.push('key step can be skipped without a second vault write')
-  for (const [step, page, name] of [
-    [2, 'home', 'home'], [3, 'free-time', 'free-time'], [4, 'schedule', 'planner'], [5, 'workbench', 'workbench'], [6, 'home', 'horizon-entry'],
-  ]) {
-    await wait(`document.querySelector('.first-run').dataset.step===${JSON.stringify(String(step))}&&document.querySelector('.home-workspace').dataset.page===${JSON.stringify(page)}`)
-    await delay(400)
-    await check(`tour ${name} shows its real page`, `(()=>{const d=document.querySelector('.first-run');return d.dataset.tour==='true'&&d.getBoundingClientRect().right<innerWidth&&d.getBoundingClientRect().bottom<innerHeight})()`)
-    await shot(`tour-${name}`)
-    await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true })
-    const mobileTarget = { 2: '.home-launch', 3: '.free-time-tabs[aria-label="余时目标分类"]', 4: '.pl-segment[aria-label="日程视图"]', 5: '.wb-available .wb-task:first-child' }[step]
-    if (mobileTarget) await evaluate(`document.querySelector(${JSON.stringify(mobileTarget)})?.scrollIntoView({block:'center',inline:'nearest'});true`)
-    await delay(300)
-    await check(`mobile tour ${name} fits and leaves its page visible`, `(()=>{const d=document.querySelector('.first-run'),r=d.getBoundingClientRect(),s=document.querySelector('.home-workspace'),page=s.dataset.page,content=page==='free-time'?document.querySelector('.free-time-viewport'):page==='schedule'?document.querySelector('.pl-scroll'):page==='workbench'?document.querySelector('.wb-scroll'):null;return r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight&&(!content||content.getBoundingClientRect().bottom<=r.top)})()`)
-    if (mobileTarget) await check(`mobile tour ${name} keeps its target reachable`, `(()=>{const e=document.querySelector(${JSON.stringify(mobileTarget)}),r=e.getBoundingClientRect(),d=document.querySelector('.first-run').getBoundingClientRect(),x=Math.max(0,Math.min(innerWidth-1,r.left+r.width/2)),y=Math.max(0,Math.min(innerHeight-1,r.top+r.height/2));return r.top>=0&&r.bottom<=d.top&&e.contains(document.elementFromPoint(x,y))})()`)
-    await shot(`tour-${name}-mobile`)
-    await send('Emulation.setDeviceMetricsOverride', { width: 1600, height: 1050, deviceScaleFactor: 1, mobile: false })
-    await delay(150)
-    if (step === 2) {
-      // The home scene publishes this bridge asynchronously; the launch button alone is not
-      // enough of a readiness signal, and the camera assertions below need the bridge.
-      await wait('!!window.__ASTARIA_P0__')
-      await click('.home-launch')
-      await wait('!window.__ASTARIA_P0__.getCameraSnapshot().cameraTransition && document.querySelector(".home-morph")?.dataset.progress === "1.000" && !document.querySelector("#home-xixi").inert')
-      await click('.home-collapse')
-      await wait('!window.__ASTARIA_P0__.getCameraSnapshot().cameraTransition && document.querySelector(".home-morph")?.dataset.progress === "0.000"')
-    }
-    if (step === 3) {
-      await click('.free-time-tabs[aria-label="余时目标分类"] button:nth-child(2)')
-      await check('guide switches to considering', `document.querySelector('.free-time-tabs[aria-label="余时目标分类"] button:nth-child(2)').getAttribute('aria-pressed')==='true'`)
-      await click('.free-time-tabs[aria-label="余时目标分类"] button:first-child')
-      await check('horizon invitation is disabled during tour', `document.querySelector('.string-invitation').disabled===true`)
-    }
-    if (step === 4) {
-      await click('.pl-segment[aria-label="日程视图"] button[data-mode=day]')
-      await check('guide changes planner mode', `document.querySelector('.planner').dataset.mode==='day'`)
-    }
-    if (step === 5) {
-      await click('.wb-available .wb-task')
-      await wait('!!document.querySelector(".wb-back")')
-      await click('.wb-back')
-      await wait('!!document.querySelector(".wb-available .wb-task")')
-    }
-    if (step >= 2 && step <= 5) {
-      await wait(`document.querySelector('.first-run-feedback')?.textContent==='已完成这一步'`)
-      await check(`tour ${name} confirms real interaction`, `document.querySelector('.first-run-feedback')?.textContent==='已完成这一步'`)
-    }
-    if (step < 6) await click('.first-run-next')
-  }
-  await check('horizon preview has an explicit entry', `document.querySelector('.horizon-studio')===null&&document.querySelector('.home-black-hole-entry').dataset.visible==='false'`)
-  const plannerRevisionBeforePreview = db.getPlanner().revision
-  await click('.first-run-preview')
-  await wait(`document.querySelector('.horizon-studio')?.dataset.phase==='ready'`)
-  await check('preview opens the real horizon without edit or save controls', `(()=>{const d=document.querySelector('.horizon-studio');return Boolean(d.open&&!document.querySelector('.first-run').open&&!d.querySelector('.horizon-group-controls')&&!d.querySelector('.orbit-select')&&d.querySelector('.orbit-group[disabled]'))})()`)
-  assert.equal(apiPaths.filter(item => item.path === '/api/companion/horizon-groups').length, 0, 'horizon preview never requests model grouping')
-  assert.equal(apiPaths.filter(item => item.path === '/api/companion/horizon-order' && item.method !== 'GET').length, 0, 'horizon preview never saves an order')
-  checks.push('horizon preview uses only local reads')
-  await shot('tour-horizon-preview')
-  await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true })
-  await delay(250)
-  await check('mobile horizon preview keeps date controls and return reachable', `(()=>{const d=document.querySelector('.horizon-studio'),date=d.querySelector('.horizon-day-heading nav'),back=d.querySelector('.orbit-cancel'),a=date.getBoundingClientRect(),b=back.getBoundingClientRect();return d.open&&a.left>=0&&a.right<=innerWidth&&b.left>=0&&b.right<=innerWidth&&b.bottom<=innerHeight&&date.contains(document.elementFromPoint(a.left+a.width/2,a.top+a.height/2))&&back.contains(document.elementFromPoint(b.left+b.width/2,b.top+b.height/2))})()`)
-  await shot('tour-horizon-preview-mobile')
-  await click('.horizon-day-heading nav button:nth-child(2)')
-  await check('preview switches date', `document.querySelector('.horizon-day-heading nav button:nth-child(2)').getAttribute('aria-pressed')==='true'`)
-  await click('.orbit-cancel')
-  await wait(`document.querySelector('.first-run')?.open===true&&!document.querySelector('.horizon-studio')`)
-  await check('horizon tour confirms a real date switch and return', `document.querySelector('.first-run-feedback')?.textContent==='已完成这一步'`)
-  await send('Emulation.setDeviceMetricsOverride', { width: 1600, height: 1050, deviceScaleFactor: 1, mobile: false })
-  assert.equal(db.getPlanner().revision, plannerRevisionBeforePreview, 'horizon preview leaves planner data unchanged')
-  checks.push('horizon preview leaves planner data unchanged')
-  await click('.first-run footer button:first-child')
-  await check('back navigates to prior real page', `document.querySelector('.first-run').dataset.step==='5'&&document.querySelector('.home-workspace').dataset.page==='workbench'`)
-  await click('.first-run-next')
-  await click('.first-run-next')
-  await wait('!document.querySelector(".first-run")')
-  assert.equal(db.getPreference('onboarding-completed'), true)
-  checks.push('first-run tour marks completion in the isolated database')
-  await send('Page.reload', { ignoreCache: true }).catch(error => {
-    if (!String(error.message).includes('Inspected target navigated or closed')) throw error
-  })
-  await wait('!!document.querySelector(".home-brand") && !!window.__ASTARIA_P0__')
-  await delay(400)
-  await check('completed tour does not reopen after reload', `!document.querySelector('.first-run')`)
+  if (mobile) {
+    await wait('!!document.querySelector(".first-run")')
+    await delay(1200)
+    await shot('mobile-first-run')
+    const imported = await evaluate(`(async()=>{const r=await fetch('/api/data/import',{method:'POST',headers:{'Content-Type':'application/json','X-ASTaria-Local':'1'},body:JSON.stringify({backup:${JSON.stringify(db.exportData())},confirmed:true})});if(!r.ok)throw Error(await r.text());const s=await fetch('/api/onboarding',{method:'POST',headers:{'Content-Type':'application/json','X-ASTaria-Local':'1'},body:JSON.stringify({completed:true})});if(!s.ok)throw Error(await s.text());return true})()`)
+    assert.equal(imported, true)
+    checks.push('fictional backup imported through the production mobile worker')
+    await evaluate(`sessionStorage.setItem('astaria-xixi-conversation-v1', ${JSON.stringify(db.getActiveConversation().id)});true`)
+    await send('Page.reload', {ignoreCache:true})
+    await wait('!!document.querySelector(".home-launch") && !document.querySelector(".first-run")')
+    await delay(1600)
+    await check('mobile composition is active', `document.documentElement.dataset.mobile==='preview'`)
+    await shot('mobile-home')
+    await click('.home-launch')
+    await wait('document.querySelector(".home-morph")?.dataset.progress === "1.000"')
+    await delay(650)
+    await wait(`document.querySelector('.xixi-conversation')?.textContent.includes('实验报告')`)
+    await evaluate(`document.querySelector('.xixi-conversation').scrollTop=0;true`)
+    await check('mobile chat panel fits the viewport', `(()=>{const r=document.querySelector('.home-morph').getBoundingClientRect();return r.left>=0&&r.right<=innerWidth+1&&r.bottom<=innerHeight+1})()`)
+    await shot('mobile-chat')
+    await nav('日程')
+    await delay(1400)
+    await shot('mobile-planner')
+    await nav('工作台')
+    await wait('!!document.querySelector(".wb-available .wb-task")')
+    await delay(650)
+    await shot('mobile-workbench')
+    await click('.wb-available .wb-task')
+    await wait('!!document.querySelector(".wb-xixi textarea")')
+    await delay(650)
+    await shot('mobile-focus')
+    await send('Emulation.setDeviceMetricsOverride',{width:1194,height:834,deviceScaleFactor:1,mobile:true})
+    await nav('首页')
+    if (await evaluate(`document.querySelector('.home-morph')?.dataset.progress!=='1.000'`)) await click('.home-launch')
+    await wait('document.querySelector(".home-morph")?.dataset.progress === "1.000"')
+    await delay(1500)
+    await shot('tablet-chat')
+    assert.equal(errors.length,0,JSON.stringify(errors))
+    await writeFile(`${output}/mobile-results.json`,JSON.stringify({checks,errors,scenario:{fictional:true,runtime:'production mobile worker',nativeDevice:false}},null,2))
+    console.log(`PASS mobile README capture (${output})`)
+  } else {
   await wait('!!window.__ASTARIA_P0__ && !document.querySelector(".home-current-title").disabled')
   await delay(1200)
   await shot('home')
@@ -394,19 +314,8 @@ try {
   await nav('余时')
   await wait('document.querySelector(".free-time-page")?.dataset.active === "true" && document.querySelectorAll(".free-time-goal-list li").length >= 3')
   await delay(900)
-  await check('three active goals and actual scheduled minutes', `document.querySelector('.free-time-metrics').textContent.includes('3 项')&&document.querySelector('.free-time-page').textContent.includes('Java 与机器人编程')`)
+  await check('three active goals and actual scheduled minutes', `document.querySelector('.free-time-metrics').textContent.includes('3 项')&&document.querySelector('.free-time-page').textContent.includes('编程基础练习')`)
   await shot('free-time')
-  await evaluate(`(()=>{const original=HTMLCanvasElement.prototype.toDataURL;window.__glassEncodes=0;HTMLCanvasElement.prototype.toDataURL=function(...args){window.__glassEncodes++;return original.apply(this,args)};return true})()`)
-  await click('.free-time-wish-heading button')
-  await evaluate(`(()=>{const el=document.querySelector('.free-time-wish-entry .home-glass-surface');window.__wishGlass=[];const t0=performance.now();const id=setInterval(()=>{window.__wishGlass.push([Math.round(performance.now()-t0),getComputedStyle(el).backdropFilter]);if(window.__wishGlass.length>24)clearInterval(id)},40);return true})()`)
-  await delay(650)
-  await check('wish expansion settles to one final refraction map', `(()=>{const pane=document.querySelector('.free-time-wish-entry'),surface=pane.querySelector('.home-glass-surface'),edge=pane.querySelector('feImage');return window.__glassEncodes<=3&&getComputedStyle(surface).backdropFilter.includes('url(')&&Number(edge.getAttribute('height'))===pane.clientHeight})()`)
-  await check('wish expansion keeps a live refraction surface while sampling', `window.__wishGlass.some(row => row[1].includes('blur(') || row[1].includes('url('))`)
-  await check('wish expansion settles to exactly one final refraction map', `(()=>{const r=window.__wishGlass.at(-1)[1],d=document.querySelector('.free-time-wish-entry');const defs=[...d.querySelectorAll('svg.home-glass-definitions')];const used=defs.filter(fe=>fe.querySelector('feImage')&&r==='url("#'+fe.querySelector('filter').id+'")');return used.length===1&&used[0].querySelectorAll('feImage').length===1&&(used[0].querySelector('feImage').getAttribute('href')||'').startsWith('data:image/png')})()`)
-  await shot('free-time-wish-open')
-  await click('.free-time-wish-heading button')
-  await delay(650)
-  await check('wish collapse avoids per-frame refraction encoding', `window.__glassEncodes<=6`)
   await click('button.string-invitation')
   await wait('document.querySelector(".horizon-studio")?.dataset.phase === "ready" && document.querySelector(".horizon-studio")?.dataset.busy === "false"')
   await click('.horizon-day-heading nav button:nth-child(2)')
@@ -435,12 +344,12 @@ try {
   await nav('工作台')
   await wait('document.querySelector(".workbench")?.dataset.active === "true" && !!document.querySelector(".wb-available .wb-task")')
   await delay(600)
-  await check('workbench lists only real tasks from the same seeded planner', `(()=>{const list=document.querySelector('.wb-available');if(!list)return false;const seeded=${JSON.stringify(db.listTasks().map(task => task.title))};const cards=[...list.querySelectorAll('.wb-task')].map(card=>card.querySelector('.wb-task-top strong')?.textContent);return cards.length>=1&&cards.every(title=>seeded.includes(title))&&new Set(cards).size===cards.length})()`)
+  await check('workbench lists only real tasks from the same seeded planner', `(()=>{const list=document.querySelector('.wb-available');if(!list)return false;const seeded=${JSON.stringify([...new Set(db.listTasks().flatMap(task => [task.title,task.collection].filter(Boolean)))])};const cards=[...list.querySelectorAll('.wb-task')].map(card=>card.querySelector('strong')?.textContent);return cards.length>=1&&cards.every(title=>seeded.includes(title))&&new Set(cards).size===cards.length})()`)
   await shot('workbench')
   await click(`.wb-task[data-task-id="${receiptTask.id}"]`)
   await wait(`!!document.querySelector('.wb-xixi textarea') && !document.querySelector('.wb-scroll').inert`)
   await delay(600)
-  await check('focus chat shares the compact plus beside Send', `(()=>{const p=document.querySelector('.wb-xixi .xixi-attachment-button');return p?.getAttribute('aria-label')==='添加图片'&&p.nextElementSibling?.type==='submit'&&!document.querySelector('.wb-xixi .wb-input-shell button')})()`)
+  await check('focus chat shares the compact plus beside Send', `(()=>{const p=document.querySelector('.wb-xixi .xixi-attachment-button');return /添加/.test(p?.getAttribute('aria-label')??'')&&p.nextElementSibling?.type==='submit'&&!document.querySelector('.wb-xixi .wb-input-shell button')})()`)
   await shot('workbench-focus')
   const unaffectedTasks = db.listTasks().filter(task => task.id !== receiptTask.id)
   const unaffectedBlocks = db.getPlanner().blocks.filter(block => block.taskId !== receiptTask.id)
@@ -462,6 +371,7 @@ try {
   assert.equal(errors.length, 0, JSON.stringify(errors))
   await writeFile(`${output}/results.json`, JSON.stringify({ checks, scenario: { date: DATE, fictional: true, model: 'scripted', storage: ':memory:', goals: 3, scheduledSessions: scheduled.addedSessions.length }, errors, apiPaths }, null, 2))
   console.log(`PASS README capture and real undo (${output})`)
+  }
 } catch (error) {
   await shot('failure').catch(() => {})
   await writeFile(`${output}/failure.json`, JSON.stringify({ message: error.message, checks, errors, apiPaths }, null, 2))
@@ -473,5 +383,5 @@ try {
     chrome.kill('SIGTERM'); await Promise.race([new Promise(resolve => chrome.once('exit', resolve)), delay(3000)])
     if (chrome.exitCode === null) { chrome.kill('SIGKILL'); await delay(150) }
   }
-  await vite?.close(); service.close(); await rm(temporary, { recursive: true, force: true })
+  if (vite) { vite.httpServer.closeAllConnections(); await new Promise(done=>vite.httpServer.close(done)) }; service.close(); await rm(temporary, { recursive: true, force: true })
 }

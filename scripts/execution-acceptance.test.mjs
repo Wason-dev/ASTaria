@@ -7,6 +7,7 @@ import { join } from 'node:path'
 import { Readable } from 'node:stream'
 import { createDatabase } from '../server/database.mjs'
 import { createLocalService } from '../server/index.mjs'
+import { finishResponse } from './fixtures/model-receipt.mjs'
 
 process.env.TZ = 'Asia/Shanghai'
 const DATE = '2026-09-18', TOMORROW = '2026-09-19'
@@ -128,7 +129,7 @@ test('HTTP flow: interrupted math/physics rescheduling survives restart and retr
     return tools(call('read_planner', { date: DATE }))
   }, payload => tools(call('plan_tasks', { expectedRevision: receipt(payload).revision,
     plans: [{ id: 'physics-plan', taskId: physics.id, date: DATE, start: '21:30', end: '22:30' }],
-  })), reply('数学已缩到21:00–21:30，物理已排21:30–22:30。'))
+  })), payload => finishResponse(payload, '数学已缩到21:00–21:30，物理已排21:30–22:30。', '数学压缩到半小时，物理接在后面排到22:30，两段都在今晚空档内。'))
   const resumed = await f.ok('/chat', input)
   assert.equal(resumed.status, 'completed')
   assert.equal(resumed.execution.status, 'verified')
@@ -164,7 +165,7 @@ test('HTTP flow: PSEC creation and its first placement share one receipt while m
     plans: [{ id: 'exam-plan', taskId: exam.id, date: TOMORROW, start: '18:30', end: '19:00' }],
   })), tools(call('read_planner', { date: TOMORROW })), payload => tools(call('create_tasks', {
     expectedRevision: receipt(payload).revision, tasks: [{ title: 'PSEC社团活动', schedule: slot }],
-  })), reply('PSEC社团活动已排17:15–18:00，考试已移18:30–19:00。'))
+  })), payload => finishResponse(payload, 'PSEC社团活动已排17:15–18:00，考试已移18:30–19:00。', 'PSEC活动占用17:15–18:00，考试顺延到18:30开始，两段不重叠。'))
   const result = await f.ok('/chat', input)
   assert.equal(result.status, 'completed')
   assert.equal(result.execution.status, 'verified')

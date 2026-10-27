@@ -1,9 +1,2 @@
-import { createWebSearch as createPortableWebSearch } from './webSearchCore.mjs'
-import { fetchSourcePage } from './sourcePage.mjs'
-
+// Desktop and mobile share the official DeepSeek Search / Fetch transport.
 export * from './webSearchCore.mjs'
-
-/** Desktop keeps DNS pinning and public-address checks in its page adapter. */
-export function createWebSearch(options = {}) {
-  return createPortableWebSearch({ pageFetcher: fetchSourcePage, ...options })
-}

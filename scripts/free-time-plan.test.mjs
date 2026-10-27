@@ -7,6 +7,7 @@ import { createFreeTime } from '../server/freeTime.mjs'
 import { currentPlanWeek, refreshPlanProgress } from '../server/freeTimePlan.mjs'
 import { createXixi, contextUnits } from '../server/xixi.mjs'
 import { freeTimeCompletionAction } from '../src/planner/completion.ts'
+import { finishOrReply } from './fixtures/model-receipt.mjs'
 
 process.env.TZ = 'Asia/Shanghai'
 const DATE = '2026-09-22'
@@ -246,8 +247,9 @@ test('析熙细化入口拿到最新目标并把 details 写回原目标，不�
   assert.deepEqual(f.db.getPlanner().blocks, blocks, '撤回细化聊天不删除原目标已有安排')
 })
 
-for (const status of ['active', 'paused']) test(`52 周 ${status} 长计划细化后可在默认预算内获得模型确认，未改的未来详情完整保留`, async t => {
+for (const status of ['active', 'paused']) test(`52 周 ${status} 长计划细化后可在自定义48K预算内获得模型确认，未改的未来详情完整保留`, async t => {
   const db = createDatabase(':memory:'); t.after(() => db.close())
+  db.setPreference('model-connection', { contextBudget: { mode: 'custom', maxUnits: 48000 } })
   const companion = createCompanion({ db, now: () => new Date(`${DATE}T09:00:00+08:00`) })
   const weeks = longWeeks()
   const original = companion.saveFreeTimeGoal({ title: '完整长期计划', status, minPerWeek: 2, planWeeks: weeks })
@@ -270,7 +272,7 @@ for (const status of ['active', 'paused']) test(`52 周 ${status} 长计划细�
         assert.equal(receipt.sessions.length, 2)
         assert.ok(receipt.operation.id)
       } else assert.equal(db.getPlanner().blocks.length, 0)
-      return reply('当前阶段已细化。')
+      return finishOrReply(payload, '当前阶段已细化。', '按当前阶段把两段时间放进真实空档，未来阶段只保留大纲。')
     }
     const environmentMessage = payload.messages.find(message => message.content?.startsWith('当前环境与数据库资料'))
     const environment = JSON.parse(environmentMessage.content.slice(environmentMessage.content.indexOf('\n') + 1))
@@ -303,6 +305,7 @@ for (const status of ['active', 'paused']) test(`52 周 ${status} 长计划细�
 
 test('52 周目标可先读完整大纲，再定向读取未来阶段全文并继续模型回复', async t => {
   const db = createDatabase(':memory:'); t.after(() => db.close())
+  db.setPreference('model-connection', { contextBudget: { mode: 'custom', maxUnits: 48000 } })
   const weeks = longWeeks().map(week => ({ ...week, title: week.title.padEnd(160, '题'), details: week.details.padEnd(3000, '学') }))
   const companion = createCompanion({ db, now: () => new Date(`${DATE}T09:00:00+08:00`) })
   const goal = companion.saveFreeTimeGoal({ title: '完整长期计划', minPerWeek: 2, planWeeks: weeks })
@@ -384,7 +387,7 @@ test('schedule_free_time 对长计划只回传有界目标摘要，保留真实�
     assert.equal(receipt.goals[0].planWeeks, undefined)
     assert.equal(receipt.sessions.length, 2)
     assert.ok(receipt.operation.id)
-    return reply('本阶段的两段学习已安排。')
+    return finishOrReply(payload, '本阶段的两段学习已安排。', '按本周空档安排了两段学习，未来阶段细节没有改动。')
   } })
   const result = await model.chat({ requestId: randomUUID(), conversationId: 'long-plan-schedule', text: '安排本周余时学习',
     context: { page: 'home', timezone: 'Asia/Shanghai' } })

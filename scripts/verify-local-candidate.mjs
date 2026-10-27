@@ -11,7 +11,7 @@ import { parseDocument } from 'htmlparser2'
 import { NtExecutable, NtExecutableResource, Resource } from 'resedit'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const VERSION = '1.0.0-rc.1'
+const VERSION = '1.0.0'
 const USAGE = 'node scripts/verify-local-candidate.mjs --app <ASTaria.app> | --windows <portable-directory>'
 const MAX_FILES = 40_000, MAX_ISSUES = 40, MAX_TEXT = 16 * 1024 * 1024
 // Electron 44's Chromium notices exceed 19 MiB; keep the larger allowance
@@ -383,7 +383,7 @@ export async function verifyLocalCandidate({ app, windows, sourceRoot = ROOT } =
   const pkg = await attempt('PACKAGE_JSON', `${payloadPrefix}/package.json`, () => jsonAt(payloadPath('package.json')))
   const build = await attempt('BUILD_INFO', `${payloadPrefix}/build-info.json`, () => jsonAt(payloadPath('build-info.json')))
   const sourcePkg = await attempt('SOURCE_PACKAGE', 'package.json', () => jsonAt(join(sourceRoot, 'package.json')))
-  if (sourcePkg?.name !== 'astaria' || sourcePkg?.version !== VERSION) issue('SOURCE_VERSION', 'package.json', 'Trusted source must be astaria 1.0.0-rc.1.')
+  if (sourcePkg?.name !== 'astaria' || sourcePkg?.version !== VERSION) issue('SOURCE_VERSION', 'package.json', 'Trusted source must be astaria 1.0.0.')
   if (pkg?.name !== 'astaria' || pkg?.productName !== 'ASTaria' || pkg?.version !== VERSION
     || pkg?.type !== 'module' || pkg?.main !== 'desktop/main.cjs' || pkg?.license !== 'Apache-2.0') issue('PACKAGE_IDENTITY', `${payloadPrefix}/package.json`, 'ASTaria package identity/version/entry does not match the candidate contract.')
   if (build?.schemaVersion !== 1 || build?.name !== 'ASTaria' || build?.version !== VERSION || build?.version !== pkg?.version
@@ -423,7 +423,7 @@ export async function verifyLocalCandidate({ app, windows, sourceRoot = ROOT } =
     const name = 'Contents/Info.plist'
     const plist = await attempt('PLIST', name, () => plistAt(requireFile(name)))
     if (plist?.CFBundleName !== 'ASTaria' || plist?.CFBundleDisplayName !== 'ASTaria' || plist?.CFBundleIdentifier !== 'dev.wason.ASTaria'
-      || plist?.CFBundleShortVersionString !== '1.0.0' || plist?.CFBundleVersion !== '3.0.0fc1') issue('PLATFORM_IDENTITY', name, 'macOS plist product/version does not match build-info.')
+      || plist?.CFBundleShortVersionString !== '1.0.0' || plist?.CFBundleVersion !== '3.0.0') issue('PLATFORM_IDENTITY', name, 'macOS plist product/version does not match build-info.')
     if (typeof plist?.CFBundleExecutable !== 'string' || !/^[A-Za-z0-9 _.-]+$/u.test(plist.CFBundleExecutable)) issue('PLATFORM_EXECUTABLE', name, 'A bounded macOS executable name is required.')
     else requireFile(`Contents/MacOS/${plist.CFBundleExecutable}`)
     requireFile('Contents/Resources/ASTaria.icns')
@@ -434,7 +434,7 @@ export async function verifyLocalCandidate({ app, windows, sourceRoot = ROOT } =
     const reminder = 'bin/ASTariaReminders.app/Contents/Info.plist'
     const reminderPlist = await attempt('REMINDER_PLIST', reminder, () => plistAt(payloadPath(reminder)))
     if (reminderPlist?.CFBundleIdentifier !== 'dev.wason.ASTaria.reminders' || reminderPlist?.CFBundleShortVersionString !== '1.0.0'
-      || reminderPlist?.CFBundleVersion !== '3.0.0fc1' || reminderPlist?.CFBundleExecutable !== 'astaria-reminders') issue('REMINDER_IDENTITY', reminder, 'Reminder helper identity/version is inconsistent.')
+      || reminderPlist?.CFBundleVersion !== '3.0.0' || reminderPlist?.CFBundleExecutable !== 'astaria-reminders') issue('REMINDER_IDENTITY', reminder, 'Reminder helper identity/version is inconsistent.')
     for (const [field, source] of [['packagerSha256', 'scripts/package-desktop.mjs'], ['packageLockSha256', 'package-lock.json']]) {
       await attempt('SOURCE_SHA256', source, async () => { if (build?.[field] !== await hashFile(join(sourceRoot, source))) issue('SOURCE_SHA256', source, `${field} differs from the current public build source.`) })
     }

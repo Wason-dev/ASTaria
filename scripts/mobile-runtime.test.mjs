@@ -44,11 +44,12 @@ test('mobile chat uses the shared direct-page search and persists sources outsid
   const saved = storage(), pages = [], requests = []
   const url = 'https://github.com/fixture/repo'
   const session = await createMobileSession({ SQL, storage: saved, serviceOptions: { ...serviceOptions,
-    vault: { status: async () => true, read: async () => { throw Error('direct page must not read a search key') } },
-    fetcher: async () => { throw Error('direct page must not query a model search endpoint') },
-    pageFetcher: async (url, options) => { pages.push({ url, signal: options.signal }); return {
-      content: '公开仓库 README：安装后可以离线记录事项。', fetchStatus: 'ok', fetchedAt: '2026-10-12T01:02:03.000Z',
-    } },
+    vault: { status: async () => true, read: async () => 'fixture-key' },
+    fetcher: async (endpoint, options) => {
+      assert.equal(endpoint, 'https://api.deepseek.com/v1/tools/fetch')
+      pages.push({ url: JSON.parse(options.body).url, signal: options.signal })
+      return Response.json({ title: '仓库', content: '公开仓库 README：安装后可以离线记录事项。' })
+    },
     complete: async payload => {
       requests.push(payload)
       return requests.length === 1 ? { choices: [{ message: { role: 'assistant', content: '', tool_calls: [{

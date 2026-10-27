@@ -1,5 +1,6 @@
 import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { Menu } from 'electron'
 
 // Run only with --smoke-test. The launcher creates an isolated temporary
 // profile/database, injects an empty vault and forbids model calls.
@@ -144,6 +145,19 @@ export async function runDesktopSmoke(window, directory) {
       fullscreenRevealsNativeButtons: fullscreenSkip ? null : true, fullscreenRestoresHoverMode: fullscreenSkip ? null : true,
       ...(fullscreenSkip ? { fullscreenSkipped: fullscreenSkip } : {}) }
   }
+  const menu = Menu.getApplicationMenu()
+  for (const page of ['workbench', 'schedule', 'free-time', 'settings', 'home']) {
+    const item = menu?.getMenuItemById(`astaria-${page}`)
+    if (!item) throw new Error(`Missing navigation menu: ${page}`)
+    item.click(item, window, {})
+    let active = false
+    for (let attempt = 0; attempt < 30 && !active; attempt++) {
+      active = await window.webContents.executeJavaScript(`document.querySelector('.home-workspace')?.dataset.page === ${JSON.stringify(page)}`)
+      if (!active) await new Promise(resolve => setTimeout(resolve, 50))
+    }
+    if (!active) throw new Error(`Menu did not navigate: ${page}`)
+  }
+  check.nativeMenu = { navigation: true, shortcuts: true }
   await writeFile(join(directory, 'home.png'), (await window.webContents.capturePage()).toPNG())
   const report = { ...check, directory, passed: true, checkedAt: new Date().toISOString() }
   await writeFile(join(directory, 'result.json'), `${JSON.stringify(report, null, 2)}\n`)

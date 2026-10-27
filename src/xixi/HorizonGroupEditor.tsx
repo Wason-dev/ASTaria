@@ -138,7 +138,7 @@ export function HorizonGroupEditor({ groups, disabled = false, onChange, onClose
             </select></label>
           </div>
           <ul className="horizon-editor-tasks">{group.tasks.map(task => <li key={task.id}>
-            <div className="horizon-editor-task-copy"><strong>{task.title}</strong><span>{task.minutes} 分钟{task.needsReschedule && <em>等待重新安排</em>}</span></div>
+            <div className="horizon-editor-task-copy"><strong>{task.title}</strong><span>{task.minutes} 分钟</span></div>
             <div className="horizon-editor-task-actions"><label className="horizon-editor-select"><span className="p0-sr-only">将{task.title}移入另一组，跨日期会同时换天</span><select value="" disabled={disabled || groups.length < 2}
               title={groups.length < 2 ? '还没有另一组，可以先让一项独立成组。' : '选择其他日期的组，会同时将事项移到那一天。'}
               onChange={event => { const target = draft.current.find(item => item.id === event.target.value); if (target) apply(group, current => moveHorizonTaskToGroup(current, group.id, task.id, target.id), `「${task.title}」已移到${DAYS[target.day]}的「${target.title}」。`) }}>

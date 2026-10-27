@@ -18,6 +18,30 @@ const contextData = request => JSON.parse(request.messages.find(message => messa
 const toolData = request => request.messages.filter(message => message.role === 'tool').map(message => JSON.parse(message.content))
 function database(t) { const db = createDatabase(':memory:'); t.after(() => db.close()); return db }
 
+test('fresh clock follows timestamped historical tools and preserves their cacheable prefix across turns', async t => {
+  const db=database(t),requests=[]
+  db.setPreference('model-connection',{contextBudget:{mode:'off',maxUnits:48000}})
+  const oldId=randomUUID(),callId=randomUUID()
+  db.appendMessage({conversationId:'main',requestId:oldId,role:'user',content:'昨天安排的事情'})
+  db.appendMessage({conversationId:'main',requestId:oldId,role:'assistant',content:'',reasoningContent:'过去的思考原文',toolCalls:[{id:callId,type:'function',function:{name:'read_planner',arguments:'{"date":"2026-09-17"}'}}]})
+  db.appendMessage({conversationId:'main',requestId:oldId,role:'tool',toolCallId:callId,content:'{"capturedAt":"2026-09-17T00:00:00Z","days":[]}'})
+  db.appendMessage({conversationId:'main',requestId:oldId,role:'assistant',content:'历史答复'+ '完整对话内容'.repeat(2000)})
+  let at='2026-09-18T12:00:00Z'
+  const xixi=createXixi({db,now:()=>at,complete:async payload=>{requests.push(payload);return reply('继续')}})
+  await xixi.chat(input('继续讨论'))
+  at='2026-09-19T01:05:00Z';await xixi.chat(input('今天再继续'))
+  for(const request of requests){
+    const clockIndex=request.messages.findIndex(m=>m.content?.startsWith('本机实时钟表'))
+    const oldTool=request.messages.findIndex(m=>m.role==='tool'&&m.tool_call_id===callId)
+    assert.ok(clockIndex>oldTool)
+    assert.ok(request.messages.slice(0,oldTool).some(m=>m.role==='system'&&m.content?.startsWith('历史回合，记录于')))
+    assert.equal(request.messages[oldTool].content,'{"capturedAt":"2026-09-17T00:00:00Z","days":[]}', 'historical evidence is not rewritten to look current')
+  }
+  const prefix=requests[0].messages.slice(0,requests[0].messages.findIndex(m=>m.content?.startsWith('当前环境与数据库资料')))
+  assert.deepEqual(requests[1].messages.slice(0,prefix.length),prefix)
+  assert.equal(clockData(requests[1]).localDateTime,'2026-09-19 09:05:00')
+})
+
 test('one clock sample anchors UTC and user-local date/minute consistently across midnight and DST', () => {
   let reads = 0
   const snapshot = readCurrentTime(() => {
@@ -189,11 +213,12 @@ test('time tool rejects extra arguments instead of accepting a forged time or ti
 
 test('a slow history summary cannot freeze the subsequent current-time anchor', async t => {
   const db = database(t)
+  db.setPreference('model-connection', { contextBudget: { mode: 'custom', maxUnits: 48000 } })
   let at = '2026-09-18T12:22:00Z', calls = 0
   for (let index = 0; index < 18; index++) {
     const requestId = randomUUID()
     db.appendMessage({ conversationId: 'main', requestId, role: 'user', content: `以前的安排${index}` })
-    db.appendMessage({ conversationId: 'main', requestId, role: 'assistant', content: '当时是20:32' })
+    db.appendMessage({ conversationId: 'main', requestId, role: 'assistant', ...(index === 0 ? { reasoningContent: '旧推理'.repeat(10000) } : {}), content: '当时是20:32' })
   }
   const xixi = createXixi({ db, now: () => at, complete: async request => {
     calls++
@@ -214,11 +239,12 @@ test('a slow history summary cannot freeze the subsequent current-time anchor', 
 
 test('conflicting old replies and summary stay historical while each correction round gets a fresh system clock', async t => {
   const db = database(t)
+  db.setPreference('model-connection', { contextBudget: { mode: 'custom', maxUnits: 48000 } })
   let at = '2026-09-18T12:31:00Z', calls = 0
   for (let index = 0; index < 18; index++) {
     const requestId = randomUUID()
     db.appendMessage({ conversationId: 'main', requestId, role: 'user', content: index === 0 ? '现在几点' : `旧安排${index}` })
-    db.appendMessage({ conversationId: 'main', requestId, role: 'assistant', content: index === 0 ? '现在是 21:52' : index === 1 ? '现在是 20:32' : `当时记录 ${index}` })
+    db.appendMessage({ conversationId: 'main', requestId, role: 'assistant', ...(index === 0 ? { reasoningContent: '旧推理'.repeat(10000) } : {}), content: index === 0 ? '现在是 21:52' : index === 1 ? '现在是 20:32' : `当时记录 ${index}` })
   }
   const requests = []
   const xixi = createXixi({ db, now: () => at, complete: async request => {

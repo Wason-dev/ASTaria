@@ -1,7 +1,7 @@
 {
   "name": "astaria",
   "private": true,
-  "version": "1.0.0-rc.1",
+  "version": "1.0.0",
   "license": "Apache-2.0",
   "type": "module",
   "engines": {
@@ -11,8 +11,8 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "build:preview": "tsc --noEmit && vite build --mode design-preview",
-    "build:desktop": "tsc --noEmit && vite build --mode desktop",
-    "build:mobile": "tsc --noEmit -p tsconfig.mobile.json && vite build --mode mobile",
+    "build:desktop": "tsc --noEmit && vite build --mode desktop && node scripts/verify-bundled-media.mjs dist",
+    "build:mobile": "tsc --noEmit -p tsconfig.mobile.json && vite build --mode mobile && node scripts/verify-bundled-media.mjs dist-mobile",
     "dev:mobile": "vite --mode mobile",
     "sync:mobile": "npm run build:mobile && cap sync && npm run verify:mobile-payload",
     "doctor:mobile": "node scripts/mobile-doctor.mjs",

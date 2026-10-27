@@ -596,3 +596,24 @@ test('real markdown keeps safe links, code, full text and image alt without remo
 })
 
 test.after(() => { hooks.deregister(); delete globalThis.__conversationRenderTest })
+
+
+test('batch creations expose each DDL/estimate editor immediately and keep undo on the actual batch', async () => {
+  const tasks = ['读书', '练习英语', '散步'].map((title, n) => ({ id: `new-${n}`, title, due: '2026-10-26', estimateMin: 30, updatedAt: at }))
+  const op = operation('new-batch', { createdTasks: tasks, scheduledCount: 2, undoLabel: '撤销创建与安排', details: ['已保存三项'] })
+  const view = await mount(chatFor(state([message('new-batch', 'user', 1)], [op])))
+  try {
+    assert.equal(byClass(view.container, 'xixi-receipt-task-settings').length, 3)
+    assert.equal(byClass(view.container, 'xixi-receipt-task').length, 3)
+    for (const task of tasks) {
+      const editor = byAttr(view.container, 'aria-label', `${task.title}的快捷设置`)[0]
+      assert.ok(editor)
+      for (let parent = editor; parent; parent = parent.parentNode) assert.equal(parent.getAttribute?.('inert'), null)
+      assert.match(editor.textContent, /DDL/)
+      assert.match(editor.textContent, /预估时间/)
+    }
+    assert.equal(byClass(view.container, 'xixi-undo').length, 1)
+    await click(byClass(view.container, 'xixi-undo')[0])
+    assert.deepEqual(calls.at(-1), ['undo', op.id])
+  } finally { await view.unmount() }
+})

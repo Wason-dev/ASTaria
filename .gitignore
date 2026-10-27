@@ -55,5 +55,19 @@ mobile/ios/DerivedData/
 *.keystore
 
 # Optional 4K video pack remains local until a separate resource publication.
-/media-assets/4k/
+/media-assets/
 /.mobile-build/
+
+# Maintainer-only planning, implementation notes, and local release evidence.
+/ASSET_PROVENANCE.md
+/design/icon/**/README.md
+/docs/*
+!/docs/FEATURES.md
+!/docs/INSTALL.md
+!/docs/RELEASE_NOTES_v0.1.0-beta.*.md
+!/docs/RELEASE_NOTES_v1.0.0.md
+!/docs/images/
+/docs/images/*
+!/docs/images/*.png
+/docs/releases/
+/public/backgrounds/README.md

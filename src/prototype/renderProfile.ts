@@ -32,7 +32,7 @@ export function resolveRenderProfile(profile: RenderProfile, scene: RenderScene,
   // Homepage/chat keep the selected rate; lower profiles are never upgraded.
   // Camera springs and external horizon flights retain the selected home
   // cadence until they settle; a destination page must not slow the journey.
-  // Product contract: docs/POWER_AND_RENDERING_DECISIONS.md P11/P12/P13.
+  // Workspace ambience is capped at 30 FPS; transitions use the selected home budget until settled.
   return { ...config, frameRate: scene === 'home' || presentationTransition ? config.frameRate : Math.min(config.frameRate, 30) }
 }
 

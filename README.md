@@ -95,39 +95,9 @@ macOS 与 Windows 标准安装版支持在「设置 → 通用 → App 更新」
 
 macOS 数据目录为 `~/Library/Application Support/ASTaria`，Windows 为 `%APPDATA%\ASTaria`，移动端使用应用私有目录。JSON 备份包含业务资料与附件，是未加密文件；请妥善保管备份与另存的同步恢复密钥。系统提醒需要授权，实际送达受设备、省电和专注模式影响。
 
-## 从源码运行
+## 功能与隐私
 
-需要 Node.js **24.19+（24.x）** 和 npm；macOS 源码运行还需要 Command Line Tools。
-
-```bash
-npm ci
-npm run dev
-```
-
-浏览器打开终端显示的本机地址。Vite 同时提供本机 API，单独托管桌面静态文件不提供事项与模型服务。
-
-```bash
-npm test
-npm run typecheck
-npm run build:desktop
-npm run build:mobile
-node scripts/verify-doc-versions.mjs
-```
-
-界面规范见 [UI 设计规范](docs/UI_DESIGN_SYSTEM.md)，原生构建见 [移动端与 TestFlight 指南](docs/MOBILE_BUILD_AND_TESTFLIGHT.md)，Mac 分发见 [签名与公证指南](docs/MACOS_SIGNING.md)。隔离界面验证可运行 `node scripts/run-ui-verifications.mjs`。
-
-完成对应桌面／移动端生产构建后，README 截图可通过 `node scripts/capture-readme.mjs` 重现；设置 `README_CAPTURE_MOBILE=1` 可生成移动端截图。脚本使用独立浏览器与虚构数据，不访问真实用户数据库，也不调用在线模型。
-
-## 项目结构
-
-| 目录 | 用途 |
-| --- | --- |
-| `src/` | React 界面、日程模型与黑洞渲染 |
-| `server/` | SQLite、本机 API、析熙与排程 |
-| `desktop/` | Electron、提醒与更新安装 |
-| `mobile/` | Android、iOS 与移动端本机服务 |
-| `scripts/` | 测试、隔离界面验证与打包工具 |
-| `docs/` | 功能、安装、设计与版本说明 |
+产品功能、数据保护与安装步骤分别见[功能说明](docs/FEATURES.md)、[安全与隐私说明](SECURITY.md)和[安装说明](docs/INSTALL.md)。
 
 问题请提交 [Bug report](https://github.com/Wason-dev/ASTaria/issues/new?template=bug_report.yml)，附版本、系统和复现步骤，避免上传密钥、课表或私密聊天。
 

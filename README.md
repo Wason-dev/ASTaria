@@ -16,7 +16,7 @@ ASTaria 将事项、课表、日程和专注放在同一个空间里。你可以
 
 **v1.0 首次推出 Android 与 iOS，覆盖 Android 手机、iPhone 和 iPad，并继续提供 macOS 与 Windows 桌面版。** 当前源码版本为 **1.0.0**，正式安装包尚未发布；目前公开下载仍为 Beta12.1。
 
-[发布说明](docs/RELEASE_NOTES_v1.0.0.md) · [安装说明](docs/INSTALL.md) · [更新记录](CHANGELOG.md) · [功能详情](docs/FEATURES.md) · [当前公开下载：Beta12.1](https://github.com/Wason-dev/ASTaria/releases/tag/v0.1.0-beta.12.1)
+[发布说明](docs/releases/v1.0.0.md) · [安装说明](INSTALL.md) · [更新记录](CHANGELOG.md) · [功能详情](docs/guides/FEATURES.md) · [当前公开下载：Beta12.1](https://github.com/Wason-dev/ASTaria/releases/tag/v0.1.0-beta.12.1)
 
 - **说完就能继续做事。** 析熙可创建事项、记录活动和安排时间；回执展示真实保存结果，支持修改截止日期、预估时长与撤销。
 - **安排有依据。** 结合课程、活动、可用时间与事项之间的关系安排任务。复习可以关联到考试开始之前；相关日期变更后重新检查安排，无法完成时说明约束。
@@ -69,7 +69,7 @@ ASTaria 将事项、课表、日程和专注放在同一个空间里。你可以
 
 ## 安装与更新
 
-v1.0 的安装包尚未公开。当前可从 [Beta12.1 Release](https://github.com/Wason-dev/ASTaria/releases/tag/v0.1.0-beta.12.1) 下载 macOS 13+ Apple Silicon 版和 Windows x64 版；它们不包含本文展示的全部 v1.0 功能。请按[安装说明](docs/INSTALL.md)选择对应文件并核对 SHA-256。
+v1.0 的安装包尚未公开。当前可从 [Beta12.1 Release](https://github.com/Wason-dev/ASTaria/releases/tag/v0.1.0-beta.12.1) 下载 macOS 13+ Apple Silicon 版和 Windows x64 版；它们不包含本文展示的全部 v1.0 功能。请按[安装说明](INSTALL.md)选择对应文件并核对 SHA-256。
 
 v1.0 继续提供 Mac 与 Windows 桌面版，并首次提供 Android 与 iOS。Mac 正式分发使用 Developer ID 签名与 Apple 公证，Android 使用 release 签名；iOS 的 TestFlight 或 App Store 入口将在可用时公布。上述分发流程尚未完成，当前没有移动端公开下载或 TestFlight 邀请。
 
@@ -97,7 +97,7 @@ macOS 数据目录为 `~/Library/Application Support/ASTaria`，Windows 为 `%AP
 
 ## 功能与隐私
 
-产品功能、数据保护与安装步骤分别见[功能说明](docs/FEATURES.md)、[安全与隐私说明](SECURITY.md)和[安装说明](docs/INSTALL.md)。
+产品功能、数据保护与安装步骤分别见[功能说明](docs/guides/FEATURES.md)、[安全与隐私说明](SECURITY.md)和[安装说明](INSTALL.md)。
 
 问题请提交 [Bug report](https://github.com/Wason-dev/ASTaria/issues/new?template=bug_report.yml)，附版本、系统和复现步骤，避免上传密钥、课表或私密聊天。
 

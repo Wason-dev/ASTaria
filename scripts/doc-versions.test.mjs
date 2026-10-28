@@ -16,13 +16,22 @@ import {
   checkDocVersions,
   detectVersions,
   formatReport,
+  isPrereleaseVersion,
   main,
   parseArgs,
   readPackageVersion,
+  releaseNotesPath,
   versionPattern,
 } from './verify-doc-versions.mjs'
 
 const CLI = fileURLToPath(new URL('./verify-doc-versions.mjs', import.meta.url))
+
+/** 与仓库约定一致的发布说明位置：正式版在 docs/releases/，Beta/RC 归档在 history/。 */
+function notesFileFor(version) {
+  return version.includes('-')
+    ? `docs/releases/history/v${version}.md`
+    : `docs/releases/v${version}.md`
+}
 
 /** 建立一个最小文档仓库 fixture；omit 里的相对路径不会写入。 */
 async function makeFixture(t, { version = '0.1.0-beta.5', files = {}, omit = [] } = {}) {
@@ -33,7 +42,7 @@ async function makeFixture(t, { version = '0.1.0-beta.5', files = {}, omit = [] 
     'README.md': `# ASTaria\n\n当前版本 ${version} 面向 macOS 内测。\n`,
     'CHANGELOG.md': `# 变更记录\n\n## ${version} · 2026-09-30\n\n- 测试条目。\n`,
     'SECURITY.md': `# 安全问题与隐私\n\n当前受支持的内测线为 ${version}。\n`,
-    [`docs/RELEASE_NOTES_v${version}.md`]: `# ASTaria ${version}\n\n测试发布说明。\n`,
+    [notesFileFor(version)]: `# ASTaria ${version}\n\n测试发布说明。\n`,
     ...files,
   }
   for (const [relative, content] of Object.entries(contents)) {
@@ -48,7 +57,7 @@ async function makeFixture(t, { version = '0.1.0-beta.5', files = {}, omit = [] 
 const runCli = (...args) => spawnSync(process.execPath, [CLI, ...args], { encoding: 'utf8' })
 const checkFor = (result, file) => result.checks.find(check => check.file === file)
 
-test('当前版本出现在全部文档时通过，并列出四项检查', async t => {
+test('Beta 当前版本出现在全部文档时通过，发布说明归档在 history', async t => {
   const root = await makeFixture(t)
   const result = await checkDocVersions({ root })
   assert.equal(result.ok, true)
@@ -57,9 +66,18 @@ test('当前版本出现在全部文档时通过，并列出四项检查', async
     'README.md',
     'CHANGELOG.md',
     'SECURITY.md',
-    'docs/RELEASE_NOTES_v0.1.0-beta.5.md',
+    'docs/releases/history/v0.1.0-beta.5.md',
   ])
   assert.ok(result.checks.every(check => check.ok), formatReport(result))
+})
+
+test('正式版当前版本通过 docs/releases/v<版本>.md 声明', async t => {
+  const root = await makeFixture(t, { version: '1.0.0' })
+  const result = await checkDocVersions({ root })
+  assert.equal(result.ok, true)
+  assert.equal(result.version, '1.0.0')
+  assert.equal(checkFor(result, 'docs/releases/v1.0.0.md').ok, true)
+  assert.equal(checkFor(result, 'docs/releases/history/v1.0.0.md'), undefined)
 })
 
 test('SECURITY 只写历史版本时失败，并提示文中出现的版本', async t => {
@@ -73,31 +91,37 @@ test('SECURITY 只写历史版本时失败，并提示文中出现的版本', as
   assert.match(formatReport(result), /FAIL SECURITY\.md/)
 })
 
-test('缺少对应发布说明时失败并指出期望文件名', async t => {
-  const root = await makeFixture(t, { omit: ['docs/RELEASE_NOTES_v0.1.0-beta.5.md'] })
+test('缺少对应发布说明时失败并指出期望的历史路径', async t => {
+  const root = await makeFixture(t, { omit: ['docs/releases/history/v0.1.0-beta.5.md'] })
   const result = await checkDocVersions({ root })
   assert.equal(result.ok, false)
-  const notes = checkFor(result, 'docs/RELEASE_NOTES_v0.1.0-beta.5.md')
+  const notes = checkFor(result, 'docs/releases/history/v0.1.0-beta.5.md')
   assert.equal(notes.ok, false)
   assert.match(notes.detail, /缺少与当前版本对应的发布说明/)
+  assert.match(notes.detail, /docs\/releases\/history\/v0\.1\.0-beta\.5\.md/)
 })
 
 test('对应的发布说明存在但没写当前版本时失败', async t => {
-  const root = await makeFixture(t, { files: { 'docs/RELEASE_NOTES_v0.1.0-beta.5.md': '# ASTaria 0.1.0-beta.4\n\n上一版说明。\n' } })
+  const root = await makeFixture(t, { files: { 'docs/releases/history/v0.1.0-beta.5.md': '# ASTaria 0.1.0-beta.4\n\n上一版说明。\n' } })
   const result = await checkDocVersions({ root })
   assert.equal(result.ok, false)
-  assert.equal(checkFor(result, 'docs/RELEASE_NOTES_v0.1.0-beta.5.md').ok, false)
+  assert.equal(checkFor(result, 'docs/releases/history/v0.1.0-beta.5.md').ok, false)
   assert.equal(checkFor(result, 'README.md').ok, true)
 })
 
-test('发布说明文件名不带 v 时按版本号回退匹配', async t => {
+test('Beta 发布说明严格归档在 history，错误目录或缺少 v 前缀不会被接受', async t => {
   const root = await makeFixture(t, {
-    omit: ['docs/RELEASE_NOTES_v0.1.0-beta.5.md'],
-    files: { 'docs/RELEASE_NOTES_0.1.0-beta.5.md': '# ASTaria 0.1.0-beta.5\n\n草稿说明。\n' },
+    omit: ['docs/releases/history/v0.1.0-beta.5.md'],
+    files: {
+      'docs/releases/v0.1.0-beta.5.md': '# ASTaria 0.1.0-beta.5\n\n放错目录的说明。\n',
+      'docs/releases/history/0.1.0-beta.5.md': '# ASTaria 0.1.0-beta.5\n\n缺少 v 前缀的说明。\n',
+    },
   })
   const result = await checkDocVersions({ root })
-  assert.equal(result.ok, true)
-  assert.equal(checkFor(result, 'docs/RELEASE_NOTES_0.1.0-beta.5.md').ok, true)
+  assert.equal(result.ok, false)
+  const notes = checkFor(result, 'docs/releases/history/v0.1.0-beta.5.md')
+  assert.equal(notes.ok, false)
+  assert.match(notes.detail, /缺少与当前版本对应的发布说明/)
 })
 
 test('更长的版本号不会被当成当前版本', async t => {
@@ -119,12 +143,20 @@ test('v 前缀写法与代码块中的版本号同样被认可', async t => {
   const root = await makeFixture(t, {
     files: {
       'README.md': '# ASTaria\n\n当前 [v0.1.0-beta.5](https://example.invalid) 已发布。\n',
-      'docs/RELEASE_NOTES_v0.1.0-beta.5.md': '# ASTaria\n\n本版为 `v0.1.0-beta.5`。\n',
+      'docs/releases/history/v0.1.0-beta.5.md': '# ASTaria\n\n本版为 `v0.1.0-beta.5`。\n',
     },
   })
   const result = await checkDocVersions({ root })
   assert.equal(result.ok, true)
   assert.ok(versionPattern('0.1.0-beta.5').test('`v0.1.0-beta.5`'))
+})
+
+test('发布说明路径按正式版与 Beta/RC 归档区分', () => {
+  assert.equal(isPrereleaseVersion('1.0.0'), false)
+  assert.equal(isPrereleaseVersion('0.1.0-beta.5'), true)
+  assert.equal(releaseNotesPath('1.0.0'), 'docs/releases/v1.0.0.md')
+  assert.equal(releaseNotesPath('0.1.0-beta.5'), 'docs/releases/history/v0.1.0-beta.5.md')
+  assert.equal(releaseNotesPath('1.0.0-rc.1'), 'docs/releases/history/v1.0.0-rc.1.md')
 })
 
 test('package.json 版本缺失或不可识别时抛出可读错误', async t => {

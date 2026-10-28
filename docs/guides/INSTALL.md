@@ -1,6 +1,6 @@
 # ASTaria 1.0.0 安装说明
 
-本文说明 ASTaria 1.0.0 的安装要求与操作。当前公开版本仍为 Beta12.1，其已发布信息见文末“历史公开版本”。Beta12.1 之后的版本变化见 [v1.0 发布说明](./RELEASE_NOTES_v1.0.0.md)。
+本文说明 ASTaria 1.0.0 的安装要求与操作。当前公开版本仍为 Beta12.1，其已发布信息见文末“历史公开版本”。Beta12.1 之后的版本变化见 [v1.0 发布说明](../releases/v1.0.0.md)。
 
 ## 平台与安装包
 
@@ -81,8 +81,8 @@ Beta12.1（`0.1.0-beta.12.1`）仍是当前最新公开版本，可从 [Beta12.1
 - Windows x64：`ASTaria-0.1.0-beta.12.1-win-x64-setup.exe` 与 `ASTaria-0.1.0-beta.12.1-win-x64-portable.zip`，未代码签名；Windows 实机安装、体验与升级回退未完成验证。
 - Beta12.1 每条消息支持一张 2 MB 的 PNG、JPEG 或 WebP 图片。
 
-Beta12.1 的功能范围、回归检查与验收限制见 [Beta12.1 发布说明](./RELEASE_NOTES_v0.1.0-beta.12.1.md)。
+Beta12.1 的功能范围、回归检查与验收限制见 [Beta12.1 发布说明](../releases/history/v0.1.0-beta.12.1.md)。
 
 ## 反馈
 
-请在 [Issues](https://github.com/Wason-dev/ASTaria/issues) 说明版本、系统与复现步骤；附日志前先移除聊天、课表、API Key 等个人信息。安全问题请按 [SECURITY.md](../SECURITY.md) 私下报告。
+请在 [Issues](https://github.com/Wason-dev/ASTaria/issues) 说明版本、系统与复现步骤；附日志前先移除聊天、课表、API Key 等个人信息。安全问题请按 [SECURITY.md](../../SECURITY.md) 私下报告。

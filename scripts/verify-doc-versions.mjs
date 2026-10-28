@@ -1,7 +1,12 @@
 #!/usr/bin/env node
 /**
  * 文档版本校验：package.json 里的当前版本必须出现在
- *   README.md、CHANGELOG.md、docs/RELEASE_NOTES_v<版本>.md、SECURITY.md
+ *   README.md、CHANGELOG.md、SECURITY.md 与对应的发布说明中
+ *
+ * 发布说明目录约定：
+ *   正式版   docs/releases/v<版本>.md
+ *   Beta/RC  docs/releases/history/v<版本>.md
+ * 归档的预发布版本严格按版本号命名，不做模糊文件名回退。
  *
  * 只校验「当前版本被声明」，不要求历史版本条目一致，也不回查历史发布说明。
  * 面向发布流程：改 package.json 版本后若忘记同步文档，这里会立即失败。
@@ -17,16 +22,17 @@ import { fileURLToPath } from 'node:url'
 
 /** 必须声明当前版本的固定文档。 */
 export const DOC_TARGETS = ['README.md', 'CHANGELOG.md', 'SECURITY.md']
-/** 发布说明目录，文件名形如 RELEASE_NOTES_v0.1.0-beta.5.md。 */
-export const RELEASE_NOTES_DIR = 'docs'
-const RELEASE_NOTES_PATTERN = /^RELEASE_NOTES_.*\.md$/i
+/** 发布说明目录：正式版直接放在该目录，Beta/RC 归档放在 history 子目录。 */
+export const RELEASE_NOTES_DIR = 'docs/releases'
+export const RELEASE_NOTES_HISTORY_DIR = 'docs/releases/history'
+const RELEASE_NOTES_PATTERN = /^v.*\.md$/i
 const SEMVER_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/
 const ANY_VERSION_PATTERN = /\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?/g
 
 const USAGE = `用法：node scripts/verify-doc-versions.mjs [--root <目录>] [--json] [--quiet]
 
 校验 package.json 的当前版本出现在 README.md、CHANGELOG.md、
-docs/RELEASE_NOTES_v<版本>.md 与 SECURITY.md 中。`
+docs/releases/v<版本>.md（Beta/RC 为 docs/releases/history/v<版本>.md）与 SECURITY.md 中。`
 
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -64,24 +70,42 @@ export async function readPackageVersion(root) {
   return version
 }
 
+/** Beta / RC 等预发布版本归档到 docs/releases/history/。 */
+export function isPrereleaseVersion(version) {
+  return version.includes('-')
+}
+
 /**
- * 找到与当前版本对应的发布说明：优先 docs/RELEASE_NOTES_v<版本>.md，
- * 其次文件名包含版本号的发布说明（取最新一个）。
+ * 与当前版本对应的发布说明路径。正式版优先检查 docs/releases/v<版本>.md；
+ * Beta/RC 严格检查 docs/releases/history/v<版本>.md，不接受其他文件名或目录。
+ */
+export function releaseNotesPath(version) {
+  const fileName = `v${version}.md`
+  return isPrereleaseVersion(version)
+    ? `${RELEASE_NOTES_HISTORY_DIR}/${fileName}`
+    : `${RELEASE_NOTES_DIR}/${fileName}`
+}
+
+/**
+ * 找到与当前版本对应的发布说明目录信息。文件名必须严格等于 v<版本>.md，
+ * 是否符合要求由 checkTextDocument 读取文件时统一判定。
  */
 export async function findReleaseNotes(root, version) {
-  const directory = path.join(root, RELEASE_NOTES_DIR)
-  const preferred = `RELEASE_NOTES_v${version}.md`
-  let entries = []
+  const expected = releaseNotesPath(version)
+  const directory = path.join(root, path.dirname(expected))
+  let entries
   try {
     entries = await fs.readdir(directory)
   } catch (error) {
-    return { file: path.join(RELEASE_NOTES_DIR, preferred), dirMissing: true, candidates: [], detail: `无法读取 ${directory}：${error.message}` }
+    return {
+      file: expected,
+      dirMissing: true,
+      candidates: [],
+      detail: `无法读取 ${directory}：${error.message}`,
+    }
   }
   const candidates = entries.filter(name => RELEASE_NOTES_PATTERN.test(name)).sort()
-  if (candidates.includes(preferred)) return { file: path.join(RELEASE_NOTES_DIR, preferred), dirMissing: false, candidates }
-  const containing = candidates.filter(name => name.toLowerCase().includes(version.toLowerCase()))
-  if (containing.length > 0) return { file: path.join(RELEASE_NOTES_DIR, containing[containing.length - 1]), dirMissing: false, candidates }
-  return { file: path.join(RELEASE_NOTES_DIR, preferred), dirMissing: false, candidates }
+  return { file: expected, dirMissing: false, candidates }
 }
 
 async function checkTextDocument(root, relative, version) {

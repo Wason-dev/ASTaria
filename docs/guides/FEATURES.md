@@ -1,6 +1,6 @@
 # ASTaria 功能说明
 
-[返回首页](../README.md) · [安装说明](INSTALL.md) · [更新记录](../CHANGELOG.md)
+[返回首页](../../README.md) · [安装说明](../../INSTALL.md) · [更新记录](../../CHANGELOG.md)
 
 ## 版本范围
 
@@ -8,7 +8,7 @@
 
 **v1.0 首次加入 Android 与 iOS，覆盖 Android 手机、iPhone 和 iPad。** 移动端尚未正式发布，安装方式和最低系统要求将在发布时公布，当前没有公开安装包。macOS 的 Developer ID 签名与 Apple 公证尚未完成，Windows 未完成实机验证，iOS 键盘与窗口交互仍在完善；正式支持的平台和安装要求以发布公告为准。
 
-逐版变化见 [v1.0 发布说明](RELEASE_NOTES_v1.0.0.md)和 [Beta12.1 说明](RELEASE_NOTES_v0.1.0-beta.12.1.md)。
+逐版变化见 [v1.0 发布说明](../releases/v1.0.0.md)和 [Beta12.1 说明](../releases/history/v0.1.0-beta.12.1.md)。
 
 ## 析熙与模型连接
 
@@ -117,4 +117,4 @@
 
 ## 反馈
 
-请在 [Issues](https://github.com/Wason-dev/ASTaria/issues) 中说明版本、设备、复现步骤和期望结果。截图与日志先移除聊天、课表、密钥等个人信息；安全问题按 [SECURITY.md](../SECURITY.md) 私下报告。
+请在 [Issues](https://github.com/Wason-dev/ASTaria/issues) 中说明版本、设备、复现步骤和期望结果。截图与日志先移除聊天、课表、密钥等个人信息；安全问题按 [SECURITY.md](../../SECURITY.md) 私下报告。

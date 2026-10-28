@@ -1,6 +1,6 @@
 # ASTaria 1.0.0 安装说明
 
-本文说明 ASTaria 1.0.0 的安装要求与操作。当前公开版本仍为 Beta12.1，其已发布信息见文末“历史公开版本”。Beta12.1 之后的版本变化见 [v1.0 发布说明](docs/RELEASE_NOTES_v1.0.0.md)。
+本文说明 ASTaria 1.0.0 的安装要求与操作。当前公开版本仍为 Beta12.1，其已发布信息见文末“历史公开版本”。Beta12.1 之后的版本变化见 [v1.0 发布说明](docs/releases/v1.0.0.md)。
 
 ## 平台与安装包
 
@@ -51,7 +51,7 @@ API Key 是开放平台调用凭证，不是登录密码或聊天会员；API �
 
 手机端事项、日程、对话与设置保存在应用私有目录，API Key 使用 iOS Keychain 或 Android Keystore 保护，不提供浏览器明文回退；支持 JSON 备份分享与恢复，手机与桌面不会自动同步，手机也不提供目录同步入口。手机云模型仅支持 DeepSeek，不提供本地 Ollama / LM Studio 连接。
 
-可选 4K 背景视频不属于安装包内容，也尚未开放下载；安装后可使用内置的 1080p 视频与 4K 静态图。功能边界见[功能说明](docs/FEATURES.md)。
+可选 4K 背景视频不属于安装包内容，也尚未开放下载；安装后可使用内置的 1080p 视频与 4K 静态图。功能边界见[功能说明](docs/guides/FEATURES.md)。
 
 ## 跨设备同步（共享文件夹 / Syncthing 现有目录）
 
@@ -81,7 +81,7 @@ Beta12.1（`0.1.0-beta.12.1`）仍是当前最新公开版本，可从 [Beta12.1
 - Windows x64：`ASTaria-0.1.0-beta.12.1-win-x64-setup.exe` 与 `ASTaria-0.1.0-beta.12.1-win-x64-portable.zip`，未代码签名；Windows 实机安装、体验与升级回退未完成验证。
 - Beta12.1 每条消息支持一张 2 MB 的 PNG、JPEG 或 WebP 图片。
 
-Beta12.1 的功能范围、回归检查与验收限制见 [Beta12.1 发布说明](docs/RELEASE_NOTES_v0.1.0-beta.12.1.md)。
+Beta12.1 的功能范围、回归检查与验收限制见 [Beta12.1 发布说明](docs/releases/history/v0.1.0-beta.12.1.md)。
 
 ## 反馈
 

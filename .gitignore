@@ -61,13 +61,23 @@ mobile/ios/DerivedData/
 # Maintainer-only planning, implementation notes, and local release evidence.
 /ASSET_PROVENANCE.md
 /design/icon/**/README.md
+# Public user documentation is limited to the reviewed user guides, release
+# notes, and README screenshots; other docs/ content stays local and untracked.
+# Parent directories must be re-included before their contents: Git does not
+# descend into an ignored directory, so files inside could not be un-ignored.
 /docs/*
-!/docs/FEATURES.md
-!/docs/INSTALL.md
-!/docs/RELEASE_NOTES_v0.1.0-beta.*.md
-!/docs/RELEASE_NOTES_v1.0.0.md
+!/docs/guides/
+/docs/guides/*
+!/docs/guides/FEATURES.md
+!/docs/guides/INSTALL.md
+!/docs/releases/
+/docs/releases/*
+!/docs/releases/README.md
+!/docs/releases/v[0-9]*.md
+!/docs/releases/history/
+/docs/releases/history/*
+!/docs/releases/history/v[0-9]*.md
 !/docs/images/
 /docs/images/*
 !/docs/images/*.png
-/docs/releases/
 /public/backgrounds/README.md
